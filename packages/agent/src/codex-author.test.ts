@@ -495,6 +495,47 @@ function mutatingRunner(
   };
 }
 
+test("an ARMED phase's exec child gets the scrubbed worker environment, the git ceiling and the endpoint token", async () => {
+  await withReplicaWorkspace(async (root) => {
+    const commands: CodexCommand[] = [];
+    const author = new CodexPhaseAuthor({
+      cwd: root,
+      writeGlobs: WRITE_GLOBS,
+      promotionManifests: PROMOTION_MANIFESTS,
+      isWriteAllowed: () => true,
+      env: { PATH: "kept", STORYTREE_DB_USER: "must-not-leak", GITHUB_TOKEN: "must-not-leak" },
+      feedbackCommands: [
+        {
+          name: "run_proof",
+          description: "proof",
+          run: async () => ({ code: 0, stdout: "", stderr: "" }),
+        },
+      ],
+      runner: async (command) => {
+        commands.push(command);
+        if (command.args[0] === "login") return chatGpt();
+        await fs.writeFile(
+          path.join(command.cwd, "packages/widget/src/widget.ts"),
+          "widget after\n",
+        );
+        return completed();
+      },
+    });
+
+    assert.deepEqual(await author.author("IMPLEMENT", "Implement it."), { ok: true });
+    const exec = commands[1];
+    assert.ok(exec);
+    const tokenVar = exec.args
+      .find((arg) => arg.startsWith("mcp_servers.spine.bearer_token_env_var="))
+      ?.slice("mcp_servers.spine.bearer_token_env_var=".length)
+      .replaceAll('"', "");
+    assert.equal(tokenVar, "STORYTREE_SPINE_MCP_TOKEN");
+    const { STORYTREE_SPINE_MCP_TOKEN: token, ...rest } = exec.env;
+    assert.match(token ?? "", /^[0-9a-f]{32,}$/);
+    assert.deepEqual(rest, { PATH: "kept", GIT_CEILING_DIRECTORIES: path.dirname(exec.cwd) });
+  });
+});
+
 test("filesystem-observed allowed changes promote as one multi-file phase even when Codex reports none", async () => {
   await withReplicaWorkspace(async (root) => {
     const author = new CodexPhaseAuthor({

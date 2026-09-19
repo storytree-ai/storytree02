@@ -1,7 +1,8 @@
 {
   "sourceOwnership": {
     "subtrees": {
-      "packages/agent/src/codex-*.ts": "live-codex-leaf"
+      "packages/agent/src/codex-*.ts": "live-codex-leaf",
+      "packages/agent/src/worker-env.ts": "live-codex-leaf"
     }
   }
 }
