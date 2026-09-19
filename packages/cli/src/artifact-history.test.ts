@@ -164,11 +164,23 @@ function blocks(body: string): string[][] {
 }
 
 test("a write that changes ONLY an array field renders unlike a true no-op write (the measured miss)", () => {
-  const entries = foldHistory([
+  const events = [
     write(1, { ...PROSE, dependsOn: [OLD_EDGE] }),
     write(2, { ...PROSE, dependsOn: NEW_EDGES }), // the re-point: nothing but the array moved
     write(3, { ...PROSE, dependsOn: NEW_EDGES }), // the same doc again: a write that changed nothing
-  ]);
+  ];
+  // THE claim, first and free of any wording: the two writes' lines differ, in both views.
+  for (const field of [undefined, "dependsOn"]) {
+    const entries = foldHistory(events, field);
+    const [, repointed, noop] = blocks(
+      renderHistory(
+        field === undefined ? { id: "right-kind-red", entries } : { id: "right-kind-red", field, entries },
+      ),
+    );
+    assert.notDeepEqual(repointed, noop, `--field ${field ?? "(none)"}: the re-point reads as a no-op`);
+  }
+
+  const entries = foldHistory(events);
   const repoint = listRow(entries, 1);
   assert.equal(repoint.count, 2);
   assert.equal(repoint.delta, 1);
@@ -180,7 +192,6 @@ test("a write that changes ONLY an array field renders unlike a true no-op write
 
   const [, repointed, noop] = blocks(renderHistory({ id: "right-kind-red", entries }));
   assert.deepEqual(noop, ["      (no field changed)"]);
-  assert.notDeepEqual(repointed, noop);
   assert.deepEqual(repointed, [
     "      dependsOn  2 entries  +1",
     '        + "asset:adr-0412"',
@@ -203,18 +214,21 @@ test("the verb shows an array-only --set write that a repeated identical --set d
     assert.equal(env.ok, true, env.body);
   }
   const plain = await run(["library", "artifact", "history", "edit-first-curation"], { store });
-  assert.equal(plain.ok, true, plain.body);
-  const [, , repointed, noop] = blocks(plain.body);
-  assert.deepEqual(noop, ["      (no field changed)"]);
-  assert.equal(repointed?.[0], "      dependsOn  2 entries  +1");
-  assert.ok(repointed?.includes(`        - "${OLD_EDGE}"`), "the dropped edge is named");
-
   const narrowed = await run(
     ["library", "artifact", "history", "edit-first-curation", "--field", "dependsOn"],
     { store },
   );
+  assert.equal(plain.ok, true, plain.body);
   assert.equal(narrowed.ok, true, narrowed.body);
+  const [, , repointed, noop] = blocks(plain.body);
   const [created, introduced, repointedN, noopN] = blocks(narrowed.body);
+  // THE claim, first and free of any wording: the re-point's lines differ from the no-op's.
+  assert.notDeepEqual(repointed, noop, "the re-point reads as a no-op");
+  assert.notDeepEqual(repointedN, noopN, "--field dependsOn: the re-point reads as a no-op");
+
+  assert.deepEqual(noop, ["      (no field changed)"]);
+  assert.equal(repointed?.[0], "      dependsOn  2 entries  +1");
+  assert.ok(repointed?.includes(`        - "${OLD_EDGE}"`), "the dropped edge is named");
   // The fixture was created without the field — that is ABSENT, not "unchanged".
   assert.deepEqual(created, ["      (no dependsOn on this write)"]);
   // The narrowed view is one field's whole life, so the entries it ARRIVED with are listed too.
