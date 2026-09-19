@@ -296,6 +296,11 @@ test("exec selects Terra and one ephemeral JSON turn without retired managed con
       OPENAI_API_KEY: "must-not-leak",
       CODEX_API_KEY: "must-not-leak",
       CODEX_ACCESS_TOKEN: "must-not-leak",
+      CLAUDE_CODE_OAUTH_TOKEN: "must-not-leak",
+      STORYTREE_DB_USER: "must-not-leak",
+      GIT_DIR: "must-not-leak",
+      GIT_CEILING_DIRECTORIES: "must-not-leak",
+      CODEX_HOME: "kept",
     },
   });
 
@@ -305,7 +310,16 @@ test("exec selects Terra and one ephemeral JSON turn without retired managed con
     assert.equal(command.env.OPENAI_API_KEY, undefined);
     assert.equal(command.env.CODEX_API_KEY, undefined);
     assert.equal(command.env.CODEX_ACCESS_TOKEN, undefined);
+    assert.equal(command.env.CLAUDE_CODE_OAUTH_TOKEN, undefined);
+    assert.equal(command.env.STORYTREE_DB_USER, undefined);
+    assert.equal(command.env.GIT_DIR, undefined);
+    assert.equal(command.env.CODEX_HOME, "kept");
   }
+  // The login probe needs no ceiling; the exec child's is the replica's parent, never an inherited one.
+  assert.equal(cap.commands[0]?.env.GIT_CEILING_DIRECTORIES, undefined);
+  const ceiling = cap.commands[1]?.env.GIT_CEILING_DIRECTORIES;
+  assert.equal(ceiling, path.dirname(cap.commands[1]?.cwd ?? ""));
+  assert.notEqual(ceiling, "must-not-leak");
   const exec = cap.commands[1];
   assert.ok(exec);
   assert.equal(exec.args[0], "exec");
@@ -318,7 +332,7 @@ test("exec selects Terra and one ephemeral JSON turn without retired managed con
   ]) {
     assert.ok(exec.args.includes(required), `missing ${required}`);
   }
-  assert.equal(exec.args[exec.args.indexOf("--sandbox") + 1], "danger-full-access");
+  assert.equal(exec.args[exec.args.indexOf("--sandbox") + 1], "workspace-write");
   assert.equal(exec.args.includes("--dangerously-bypass-hook-trust"), false);
   assert.equal(exec.args.at(-1), "-");
   assert.equal(exec.args[exec.args.indexOf("--model") + 1], DEFAULT_CODEX_MODEL);
@@ -327,12 +341,21 @@ test("exec selects Terra and one ephemeral JSON turn without retired managed con
   assert.ok(exec.args.some((arg) => arg === 'web_search="disabled"'));
   assert.ok(exec.args.some((arg) => arg === 'forced_login_method="chatgpt"'));
   assert.equal(exec.args.some((arg) => arg.startsWith("default_permissions=")), false);
-  assert.equal(exec.args.some((arg) => arg.startsWith("sandbox_workspace_write.")), false);
+  assert.ok(exec.args.includes("sandbox_workspace_write.network_access=false"));
   assert.equal(exec.args.some((arg) => arg.startsWith("hooks.PreToolUse=")), false);
   assert.equal(exec.args.includes("features.hooks=true"), false);
   assert.ok(exec.args.includes("features.hooks=false"));
   assert.match(exec.stdin ?? "", /Write the red test/);
   assert.match(exec.stdin ?? "", /deterministic spine/);
+  // The worker is told what its sandbox refuses, so a refused command reads as the environment.
+  assert.ok(
+    (exec.stdin ?? "").includes(
+      "\n\nYour shell runs in a sandbox: it can write only inside this replica, it has no network, and " +
+        "git cannot see a repository here. Edit files with apply_patch; on Windows, PowerShell runs in " +
+        "constrained language mode, so prefer cmdlets over .NET method calls. Run the proof through the " +
+        "spine's tools when you have them, never through your own shell.\n\nAfter you stop, ",
+    ),
+  );
   assert.equal(author.runtime, "codex");
   assert.deepEqual(author.feedbackRuns, []);
 });
@@ -694,10 +717,10 @@ test("command builder uses no managed profile or hook and disables optional surf
     model: DEFAULT_CODEX_MODEL,
     cwd: CWD,
   });
-  assert.equal(args[args.indexOf("--sandbox") + 1], "danger-full-access");
+  assert.equal(args[args.indexOf("--sandbox") + 1], "workspace-write");
   assert.equal(args.includes("--add-dir"), false);
   assert.equal(args.some((arg) => arg.startsWith("default_permissions=")), false);
-  assert.equal(args.some((arg) => arg.startsWith("sandbox_workspace_write.")), false);
+  assert.equal(args.some((arg) => arg.startsWith("sandbox_workspace_write.writable_roots")), false);
   assert.equal(args.some((arg) => arg.startsWith("hooks.")), false);
   assert.equal(args.includes("--dangerously-bypass-hook-trust"), false);
   assert.ok(args.includes("mcp_servers={}"));

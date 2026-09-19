@@ -21,6 +21,7 @@ interface CodexExecArgsWithFeedback {
   model: string;
   cwd: string;
   feedback?: CodexExecFeedbackOption;
+  platform?: NodeJS.Platform;
 }
 
 /**
@@ -30,7 +31,11 @@ interface CodexExecArgsWithFeedback {
  */
 const buildArgsWithFeedback: (args: CodexExecArgsWithFeedback) => string[] = buildCodexExecArgs;
 
-/** Today's exact command, written out literally — never produced by calling the builder again. */
+/**
+ * Today's exact command on Windows, written out literally — never produced by calling the builder
+ * again. Every test comparing against it passes `platform: "win32"`, so the array does not depend on
+ * the machine the suite runs on; the `linux` test below pins the one pair that differs.
+ */
 const TODAYS_ARGS = [
   "exec",
   "--json",
@@ -40,13 +45,21 @@ const TODAYS_ARGS = [
   "--skip-git-repo-check",
   "--strict-config",
   "--sandbox",
-  "danger-full-access",
+  "workspace-write",
   "--model",
   DEFAULT_CODEX_MODEL,
   "--cd",
   CWD,
   "--config",
   'approval_policy="never"',
+  "--config",
+  "sandbox_workspace_write.network_access=false",
+  "--config",
+  "sandbox_workspace_write.exclude_tmpdir_env_var=true",
+  "--config",
+  "sandbox_workspace_write.exclude_slash_tmp=true",
+  "--config",
+  'windows.sandbox="unelevated"',
   "--config",
   'web_search="disabled"',
   "--config",
@@ -74,7 +87,7 @@ const TODAYS_ARGS = [
 
 /**
  * Today's command with the single `--config mcp_servers={}` pair replaced, at its own position, by
- * four loopback-spine pairs — every other flag, and the trailing `-`, unchanged. Written out
+ * five loopback-spine pairs — every other flag, and the trailing `-`, unchanged. Written out
  * literally, matching the walkthrough's step 2.
  */
 const FEEDBACK_ARGS = [
@@ -86,13 +99,21 @@ const FEEDBACK_ARGS = [
   "--skip-git-repo-check",
   "--strict-config",
   "--sandbox",
-  "danger-full-access",
+  "workspace-write",
   "--model",
   DEFAULT_CODEX_MODEL,
   "--cd",
   CWD,
   "--config",
   'approval_policy="never"',
+  "--config",
+  "sandbox_workspace_write.network_access=false",
+  "--config",
+  "sandbox_workspace_write.exclude_tmpdir_env_var=true",
+  "--config",
+  "sandbox_workspace_write.exclude_slash_tmp=true",
+  "--config",
+  'windows.sandbox="unelevated"',
   "--config",
   'web_search="disabled"',
   "--config",
@@ -107,6 +128,8 @@ const FEEDBACK_ARGS = [
   "mcp_servers.spine.tool_timeout_sec=660",
   "--config",
   "mcp_servers.spine.startup_timeout_sec=660",
+  "--config",
+  'mcp_servers.spine.default_tools_approval_mode="approve"',
   "--config",
   "agents.enabled=false",
   "--config",
@@ -125,14 +148,15 @@ const FEEDBACK_ARGS = [
 ];
 
 test("feedback-swaps-empty-mcp-servers-for-a-loopback-spine: without a feedback option the command is exactly today's array", () => {
-  const args = buildCodexExecArgs({ model: DEFAULT_CODEX_MODEL, cwd: CWD });
+  const args = buildCodexExecArgs({ model: DEFAULT_CODEX_MODEL, cwd: CWD, platform: "win32" });
   assert.deepEqual(args, TODAYS_ARGS);
 });
 
-test("feedback-swaps-empty-mcp-servers-for-a-loopback-spine: a feedback phase swaps the empty mcp_servers pair for four loopback pairs in place", () => {
+test("feedback-swaps-empty-mcp-servers-for-a-loopback-spine: a feedback phase swaps the empty mcp_servers pair for five loopback pairs in place", () => {
   const args = buildArgsWithFeedback({
     model: DEFAULT_CODEX_MODEL,
     cwd: CWD,
+    platform: "win32",
     feedback: {
       url: "http://127.0.0.1:43123/mcp",
       tokenEnvVar: "STORYTREE_SPINE_MCP_TOKEN",
@@ -182,6 +206,7 @@ test("feedback-swaps-empty-mcp-servers-for-a-loopback-spine: the builder accepts
   const args = buildArgsWithFeedback({
     model: DEFAULT_CODEX_MODEL,
     cwd: CWD,
+    platform: "win32",
     feedback: {
       url: "http://127.0.0.1:43123/mcp",
       tokenEnvVar: "STORYTREE_SPINE_MCP_TOKEN",
@@ -238,5 +263,40 @@ test("feedback-swaps-empty-mcp-servers-for-a-loopback-spine: a refused endpoint 
         }),
       { message: `Codex feedback tool timeout must be a positive integer: ${toolTimeoutSec}` },
     );
+  }
+});
+
+test("worker-sandbox: off Windows the command is the Windows array without the windows.sandbox pair", () => {
+  const args = buildCodexExecArgs({ model: DEFAULT_CODEX_MODEL, cwd: CWD, platform: "linux" });
+  const windowsPair = TODAYS_ARGS.indexOf('windows.sandbox="unelevated"') - 1;
+  assert.deepEqual(args, [
+    ...TODAYS_ARGS.slice(0, windowsPair),
+    ...TODAYS_ARGS.slice(windowsPair + 2),
+  ]);
+});
+
+test("worker-sandbox: the worker never runs outside Codex's workspace-write sandbox, armed or not", () => {
+  for (const platform of ["win32", "linux", "darwin"] as const) {
+    for (const args of [
+      buildCodexExecArgs({ model: DEFAULT_CODEX_MODEL, cwd: CWD, platform }),
+      buildCodexExecArgs({
+        model: DEFAULT_CODEX_MODEL,
+        cwd: CWD,
+        platform,
+        feedback: {
+          url: "http://127.0.0.1:43123/mcp",
+          tokenEnvVar: "STORYTREE_SPINE_MCP_TOKEN",
+          toolTimeoutSec: 660,
+        },
+      }),
+    ]) {
+      assert.equal(args.filter((arg) => arg === "--sandbox").length, 1);
+      assert.equal(args[args.indexOf("--sandbox") + 1], "workspace-write");
+      assert.equal(args.includes("danger-full-access"), false);
+      assert.ok(args.includes("sandbox_workspace_write.network_access=false"));
+      assert.ok(args.includes("sandbox_workspace_write.exclude_tmpdir_env_var=true"));
+      assert.ok(args.includes("sandbox_workspace_write.exclude_slash_tmp=true"));
+      assert.equal(args.includes('windows.sandbox="unelevated"'), platform === "win32");
+    }
   }
 });

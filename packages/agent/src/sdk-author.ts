@@ -24,6 +24,8 @@ import { z } from "zod";
 import { createSdkMcpServer, query, tool } from "@anthropic-ai/claude-agent-sdk";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 
+import { scrubToolWorkerEnv } from "./worker-env.js";
+
 /**
  * Re-surface the SDK hook/permission types the OFFLINE wall tests pin against, so this file stays
  * the SINGLE SDK import site (ADR-0004, widened to this package) — `sdk-author.test.ts` types the
@@ -196,6 +198,11 @@ export interface ClaudeAgentAuthorArgs {
   phasePrompts?: { AUTHOR_TEST: string; IMPLEMENT: string };
   /** Injected for offline tests; defaults to the real SDK `query()`. */
   queryFn?: SdkQueryFn;
+  /**
+   * The environment the worker's SDK process starts from; defaults to this process's. Whatever is
+   * passed, the worker receives it only after {@link scrubToolWorkerEnv} (ADR-0583).
+   */
+  env?: NodeJS.ProcessEnv;
   /**
    * Injectable for offline tests (ADR-0569 D6): intercepts what {@link createSdkMcpServer} would be
    * called with, so a test can capture the registered tool definitions (`escalate` + any feedback
@@ -595,6 +602,15 @@ export class ClaudeAgentAuthor implements PhaseAuthor {
         ...this.feedbackToolNames,
       ],
       permissionMode: "bypassPermissions",
+      // No filesystem settings (ADR-0583). Left unset, the SDK loads user, project and local
+      // settings "to match CLI defaults", so every worker phase ran the repository's own
+      // SessionStart and UserPromptSubmit hooks — the claim-ledger and definition hooks read the
+      // live store — measured in a 2026-09-17 worker transcript. A worker gets its brief, not the
+      // orchestrator's session machinery; the write fence below is set here, not in a settings file.
+      settingSources: [],
+      // The store pointers go; the SDK's own credentials stay, because this worker's model has no
+      // shell to read them with (ADR-0583).
+      env: scrubToolWorkerEnv(this.#args.env ?? process.env),
       systemPrompt: composeLeafSystemPrompt(base.base, feedback.length > 0),
       hooks: {
         PreToolUse: [

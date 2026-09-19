@@ -215,6 +215,54 @@ test("author runs with NO USD budget ceiling by default — the turn cap is the 
   assert.equal(options?.maxTurns, 16, "the turn cap remains the default runaway brake");
 });
 
+test("the worker loads NO filesystem settings, so no repository hook runs inside a phase (ADR-0583)", async () => {
+  const cap = capturingQueryFn();
+  const author = new ClaudeAgentAuthor({ cwd: CWD, isWriteAllowed: () => true, queryFn: cap.fn });
+
+  await author.author("IMPLEMENT", "implement it");
+  // Unset means user + project + local settings to the SDK, which is how the repository's own
+  // SessionStart hooks came to run inside worker phases. An empty list is the SDK's isolation mode.
+  assert.deepEqual(cap.last()?.settingSources, []);
+});
+
+test("the worker's environment loses the store pointers and keeps the SDK's own credentials (ADR-0583)", async () => {
+  const cap = capturingQueryFn();
+  const author = new ClaudeAgentAuthor({
+    cwd: CWD,
+    isWriteAllowed: () => true,
+    queryFn: cap.fn,
+    env: {
+      PATH: "/bin",
+      CLAUDE_CODE_OAUTH_TOKEN: "the SDK authenticates with this",
+      STORYTREE_DB_USER: "dev@example.com",
+      STORYTREE_STORE_URL: "https://door.example",
+    },
+  });
+
+  await author.author("AUTHOR_TEST", "author the failing test");
+  assert.deepEqual(cap.last()?.env, {
+    PATH: "/bin",
+    CLAUDE_CODE_OAUTH_TOKEN: "the SDK authenticates with this",
+  });
+});
+
+test("with no env given, the worker starts from this process's environment, scrubbed", async () => {
+  const cap = capturingQueryFn();
+  const author = new ClaudeAgentAuthor({ cwd: CWD, isWriteAllowed: () => true, queryFn: cap.fn });
+  const had = process.env["STORYTREE_DB_USER"];
+  process.env["STORYTREE_DB_USER"] = "must-not-reach-the-worker";
+  try {
+    await author.author("AUTHOR_TEST", "author the failing test");
+  } finally {
+    if (had === undefined) delete process.env["STORYTREE_DB_USER"];
+    else process.env["STORYTREE_DB_USER"] = had;
+  }
+  const env = cap.last()?.env;
+  assert.ok(env !== undefined, "the worker is always handed an explicit environment");
+  assert.equal(env["STORYTREE_DB_USER"], undefined);
+  assert.equal(env["PATH"] ?? env["Path"], process.env["PATH"] ?? process.env["Path"]);
+});
+
 test("author passes an explicit --budget through as maxBudgetUsd (the opt-in cap survives, ADR-0130)", async () => {
   const cap = capturingQueryFn();
   const author = new ClaudeAgentAuthor({

@@ -43,10 +43,13 @@ is otherwise exactly today's command.
    final `-` included.
 2. Call it again with a `feedback` option: `url` `http://127.0.0.1:43123/mcp`, `tokenEnvVar`
    `STORYTREE_SPINE_MCP_TOKEN` and `toolTimeoutSec` `660`. Observe the same array with the `--config`
-   `mcp_servers={}` pair replaced, at its own position, by four `--config` pairs, in this order:
+   `mcp_servers={}` pair replaced, at its own position, by five `--config` pairs, in this order:
    `mcp_servers.spine.url="http://127.0.0.1:43123/mcp"`,
    `mcp_servers.spine.bearer_token_env_var="STORYTREE_SPINE_MCP_TOKEN"`,
-   `mcp_servers.spine.tool_timeout_sec=660` and `mcp_servers.spine.startup_timeout_sec=660`.
+   `mcp_servers.spine.tool_timeout_sec=660`, `mcp_servers.spine.startup_timeout_sec=660` and
+   `mcp_servers.spine.default_tools_approval_mode="approve"`.
+   *(Corrected 2026-09-20 by ADR-0583: the fifth pair arrived with the worker's `workspace-write`
+   sandbox, outside which Codex cancels an unapproved MCP tool call under `approval_policy="never"`.)*
 3. Observe a throw for each URL `https://127.0.0.1:43123/mcp`, `http://localhost:43123/mcp` and
    `http://0.0.0.0:43123/mcp`, and for each tool timeout `0`, `-1` and `1.5`.
 4. Force a `token` property carrying a marker string onto the `feedback` option. Observe that the
@@ -79,7 +82,8 @@ and every other function in the file stay as they are.
 - **Four pairs take the place of one.** They sit where the `--config` `mcp_servers={}` pair sat, in
   the order above; every flag before and after keeps its position, and `-` stays last. The URL and the
   variable name are double-quoted TOML strings, and both timeouts are the bare integer
-  `toolTimeoutSec`.
+  `toolTimeoutSec`. *(Corrected 2026-09-20 by ADR-0583: five pairs now, the fifth approving the
+  spine's tools, as step 2 says.)*
 - **The endpoint must be local.** Accept only an `http:` URL whose host is exactly `127.0.0.1`, and
   refuse anything else by throwing. Falling back to `mcp_servers={}` instead would hand a feedback
   phase a leaf that cannot reach its tools, with nothing saying so.
