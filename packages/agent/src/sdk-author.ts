@@ -765,16 +765,21 @@ export class ClaudeAgentAuthor implements PhaseAuthor {
     };
 
     // The budget's own deadline (ADR-0581 D2). The SDK aborts by signal and surfaces that as a THROWN
-    // error with no result message and no `error_max_turns`-style subtype, so `stoppedByBudget` is what
-    // tells the catch below apart from a genuine crash — without it a budget stop would read as a hard
-    // failure and the gate would discard the slice instead of observing what is on disk.
-    let stoppedByBudget = false;
+    // error with no result message and no `error_max_turns`-style subtype, so the endings below can only
+    // tell a budget stop from a genuine crash by what the deadline left behind — without it a stop
+    // would read as a hard failure and the gate would discard the slice instead of observing the tree.
+    //
+    // It holds the REASON rather than a boolean: the reason is what both endings return, and a boolean
+    // would need `budget !== undefined` beside it at each one purely to satisfy the type system — a
+    // guard no runtime state can falsify, and so one no test can discriminate.
+    let budgetStop: string | undefined;
     let deadline: ReturnType<typeof setTimeout> | undefined;
     if (budget !== undefined) {
       const abort = new AbortController();
       options.abortController = abort;
+      const spent = budgetSpentError(phase, budget.budgetMs);
       deadline = this.#clock.setTimeout(() => {
-        stoppedByBudget = true;
+        budgetStop = spent;
         abort.abort();
       }, budget.remainingMs());
     }
@@ -793,14 +798,15 @@ export class ClaudeAgentAuthor implements PhaseAuthor {
         return { ok: false, error: escalationError(escalation), escalation };
       }
       // A budget stop is exhaustion, not a crash: the work already on disk is kept and observed.
-      if (stoppedByBudget && budget !== undefined) {
-        return { ok: false, exhausted: true, error: budgetSpentError(phase, budget.budgetMs) };
+      if (budgetStop !== undefined) {
+        return { ok: false, exhausted: true, error: budgetStop };
       }
       return { ok: false, error: `SDK session failed: ${(e as Error).message}` };
     } finally {
       // Released on every exit, so a finished slice's deadline never outlives it (an armed timer would
       // keep the whole slice reachable until it fired, then abort a controller nobody is reading).
-      if (deadline !== undefined) this.#clock.clearTimeout(deadline);
+      // Unconditional: clearing a timer that was never armed is a no-op the clock declares it takes.
+      this.#clock.clearTimeout(deadline);
     }
 
     if (result === undefined) {
@@ -809,8 +815,8 @@ export class ClaudeAgentAuthor implements PhaseAuthor {
       }
       // An abort that ends the stream instead of throwing lands here, and it is the same stop: the
       // budget, not a silent SDK fault, is why no result arrived.
-      if (stoppedByBudget && budget !== undefined) {
-        return { ok: false, exhausted: true, error: budgetSpentError(phase, budget.budgetMs) };
+      if (budgetStop !== undefined) {
+        return { ok: false, exhausted: true, error: budgetStop };
       }
       return { ok: false, error: "SDK session ended without a result message (fail-closed)" };
     }

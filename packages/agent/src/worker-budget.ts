@@ -32,7 +32,11 @@ export interface WorkerTimeBudget {
  */
 export interface WorkerBoundClock {
   setTimeout(callback: () => void, ms: number): ReturnType<typeof setTimeout>;
-  clearTimeout(handle: ReturnType<typeof setTimeout>): void;
+  /**
+   * Takes `undefined` so a caller can release a deadline it may never have armed without a
+   * `!== undefined` guard around a no-op — a guard nothing can falsify, and so nothing can test.
+   */
+  clearTimeout(handle: ReturnType<typeof setTimeout> | undefined): void;
 }
 
 /** Minutes, floored, so an unspent minute never reads as spent. The unit every stop reports in. */

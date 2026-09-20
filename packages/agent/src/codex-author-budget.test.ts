@@ -350,7 +350,7 @@ test("budget-stops-a-worker: with no budget wired a timeout keeps its UNVERIFIED
  * mutant that stops a kill from happening makes these spawns outlive the mutation rung's per-mutant
  * budget, and an unproven timeout names no test (`mutation-rung-scores-a-hang-as-unproven`).
  */
-async function within<T>(pending: Promise<T>, ms = 5_000): Promise<T> {
+async function within<T>(pending: Promise<T>, ms = 2_500): Promise<T> {
   let deadline: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
@@ -415,7 +415,9 @@ test("silence-detector: output RE-ARMS it, so a slow child that keeps talking is
   const chatty: CodexCommand = {
     args: [
       "-e",
-      'process.stdout.write("a"); setTimeout(() => { process.stdout.write("b"); }, 50);',
+      // BOTH streams: each is wired to the detector separately, so a test that only writes stdout
+      // cannot tell whether stderr re-arms it.
+      'process.stdout.write("a"); setTimeout(() => { process.stderr.write("e"); process.stdout.write("b"); }, 50);',
     ],
     cwd: process.cwd(),
     env: { ...process.env, STORYTREE_CODEX_EXECUTABLE: process.execPath },
@@ -430,9 +432,11 @@ test("silence-detector: output RE-ARMS it, so a slow child that keeps talking is
   assert.equal(Object.hasOwn(result, "stoppedBy"), false);
   // Arming the pair is two; every chunk of output clears the window and arms a fresh one, so a run
   // that produced output has MORE than the initial pair. Without the re-arm this would be exactly 2.
+  // Arming the pair is two; stdout's chunk and stderr's chunk each clear and re-arm the window, so a
+  // run that wrote to both streams shows strictly more than three.
   assert.ok(
-    hand.armings.length > 2,
-    `expected output to re-arm the silence window, saw only ${hand.armings.length} arming(s)`,
+    hand.armings.length > 3,
+    `expected BOTH streams to re-arm the silence window, saw only ${hand.armings.length} arming(s)`,
   );
 });
 

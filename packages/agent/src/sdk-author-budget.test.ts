@@ -152,6 +152,41 @@ test("budget-stops-a-worker: an abort that ends the stream WITHOUT throwing is t
   });
 });
 
+test("budget-stops-a-worker: a slice that ends with no result and was NOT stopped keeps the fail-closed answer", async () => {
+  const hand = handClock();
+  // The deadline never fires, so a missing result message is the SDK's own silence, not the budget's.
+  const noResult: SdkQueryFn = async function* () {
+    await Promise.resolve();
+  };
+  const author = new ClaudeAgentAuthor({
+    cwd: CWD,
+    isWriteAllowed: () => true,
+    queryFn: noResult,
+    timeBudget: budget(60_000),
+    clock: hand.clock,
+  });
+
+  const r = await author.author("IMPLEMENT", "implement it");
+  assert.equal(r.ok, false);
+  assert.equal(r.ok ? undefined : r.exhausted, undefined, "silence with time left is not exhaustion");
+  assert.match(r.ok ? "" : r.error, /ended without a result message \(fail-closed\)/);
+});
+
+test("budget-stops-a-worker: with no clock injected the author arms its deadline on the real one", async () => {
+  // The production default. A budget with an hour left arms a real timer that never fires inside this
+  // test, and the slice's own `finally` releases it — so a leaked timer would hold the suite open.
+  const cap = capturingQueryFn();
+  const author = new ClaudeAgentAuthor({
+    cwd: CWD,
+    isWriteAllowed: () => true,
+    queryFn: cap.fn,
+    timeBudget: budget(3_600_000),
+  });
+
+  assert.deepEqual(await author.author("IMPLEMENT", "implement it"), { ok: true });
+  assert.ok(cap.last()?.abortController instanceof AbortController);
+});
+
 test("budget-stops-a-worker: a genuine crash is still a crash, not a budget stop", async () => {
   const hand = handClock();
   // A seam that throws instead of iterating: the SDK's own failure shape, and not a generator, so
@@ -188,13 +223,17 @@ test("the-turn-cap-stops-enforcing: a budget means no SDK turn ceiling, and no b
     "with time as the brake the SDK is given no turn ceiling at all",
   );
 
+  const noBudgetClock = handClock();
   const withoutBudget = capturingQueryFn();
   await new ClaudeAgentAuthor({
     cwd: CWD,
     isWriteAllowed: () => true,
     queryFn: withoutBudget.fn,
+    clock: noBudgetClock.clock,
   }).author("IMPLEMENT", "implement it");
   assert.equal(withoutBudget.last()?.maxTurns, 16, "a caller that wired no budget still has a brake");
+  assert.deepEqual(noBudgetClock.armed, [], "and no deadline is armed on the clock at all");
+  assert.equal(noBudgetClock.cleared, 1, "the release runs either way — it is a no-op when nothing was armed");
   assert.equal(
     withoutBudget.last()?.abortController,
     undefined,
