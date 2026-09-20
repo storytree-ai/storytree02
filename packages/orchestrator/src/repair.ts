@@ -98,7 +98,15 @@ export function wallClockBudget(opts: { budgetMs?: number; now?: () => number } 
  *    test-writer's in-build revision;
  *  - `typecheck` — GATE's package typecheck was red.
  */
-export type RepairCheck = "no-red" | "red-per-test" | "no-green" | "green-per-test" | "escalation" | "typecheck";
+export type RepairCheck =
+  | "no-red"
+  | "red-per-test"
+  | "no-green"
+  | "green-per-test"
+  | "escalation"
+  | "typecheck"
+  /** ADR-0585: a test that existed before the build was changed with no stated reason. */
+  | "test-changes";
 
 /** One repair, as the build envelope lists it (ADR-0582 D8). */
 export interface RepairRecord {
