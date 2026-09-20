@@ -29,6 +29,7 @@ import { resolveSigner } from "./proof/signer.js";
 import type { SignerInputs } from "./proof/signer.js";
 import { classifyDeclaredCoverage, readTestSurface } from "./proof/contract-coverage.js";
 import { computeProvedBinding } from "./proof/proved-span.js";
+import type { AttemptReport } from "./proof/attempt-report.js";
 import type { TestSurfaceRead } from "./proof/contract-coverage.js";
 import { PathWriteScope } from "./phase-machine.js";
 import type { ExpectedRed } from "./phase-machine.js";
@@ -366,6 +367,13 @@ export interface RealResolveOptions extends BaseResolveOptions {
    * every other prompt are untouched.
    */
   testRevision?: TestRevision | undefined;
+  /**
+   * ADR-0586 D1/D4: the previous FAILED attempt at this unit, rendered into BOTH briefs. Resolved by
+   * the DRIVE (which owns the attempt ledger read and the per-user record file) and handed in here, so
+   * the resolver renders what it is given and does no IO of its own — exactly as {@link testRevision}
+   * already works. Absent when the unit's last attempt signed, or when there has been none.
+   */
+  attemptReport?: AttemptReport | undefined;
   /**
    * The whole build's wall clock, in MINUTES, as the orchestrator set it at launch (`--time-budget`,
    * ADR-0581 D2). Omitted, the build runs on {@link DEFAULT_BUILD_BUDGET_MS} — two hours, the owner's
@@ -998,7 +1006,14 @@ function resolveReal(
     signerInputs: opts.signerInputs,
     treeState,
     now: opts.now ?? ((): string => new Date().toISOString()),
-    prompts: realPrompts(spec, real, proofDisplay, opts.runtime ?? "codex", opts.testRevision),
+    prompts: realPrompts(
+      spec,
+      real,
+      proofDisplay,
+      opts.runtime ?? "codex",
+      opts.testRevision,
+      opts.attemptReport,
+    ),
     runId: opts.runId,
     // ADR-0127: the per-contract coverage axis seam, computed LAZILY at GATE so it reads the test the
     // leaf actually authored (in a real build the test file does not exist at resolve time). It reuses
@@ -1432,6 +1447,66 @@ function testRevisionSection(revision: TestRevision): string {
 }
 
 /**
+ * The observed half of a failure report: where the walk stopped, why, and the spine's own output —
+ * tail-kept through the same {@link clipRevisionStream} bound a revision's observation gets. An
+ * escalating failure reports NO reason (ADR-0586 D6): the gate appends the escalation's kind and
+ * statement verbatim to the refusal reason, so what travels instead is that one was returned and the
+ * command that hands it over. The record cannot hold the claim, so this cannot render it.
+ */
+function attemptObservedBlock(unitId: string, report: AttemptReport): string {
+  const observed = report.observed;
+  if (observed === undefined) return "";
+  const stop = `It stopped at ${observed.failedAt}.`;
+  const why = observed.escalationReturned
+    ? `That run ended on an escalation its worker raised. This report does not carry it: an ` +
+      `escalation reaches a test-writer only when an operator hands it over explicitly, with ` +
+      `\`storytree node build ${unitId} --real --increment ${report.incrementId} ` +
+      `--revise-test ${report.runId}\`.`
+    : observed.reason === undefined
+      ? "No reason was recorded for that refusal."
+      : `Reason: ${observed.reason}`;
+  const output =
+    observed.observation === undefined
+      ? "No output from that run was recorded."
+      : renderRevisionObservation(
+          observed.observation,
+          "The run the spine observed behind that refusal",
+        );
+  return `${stop} ${why}\n\n${output}`;
+}
+
+/**
+ * The section a prior FAILED attempt appends to BOTH briefs (ADR-0586 D1/D4), after everything else
+ * those briefs say. It is a REPORT — an observation plus the orchestrator's own recorded words — so it
+ * instructs nothing and leaves every judgment where it was; that is what distinguishes it from the
+ * escalation ADR-0571 D1 refused to thread, and D6 is why an escalation is named here and never shown.
+ *
+ * The ledger facts always render; the observed half renders when this machine holds the record and says
+ * so plainly when it does not, because the record is per-machine and the ledger is not.
+ */
+function attemptReportSection(unitId: string, report: AttemptReport): string {
+  const parts = [
+    `The last recorded attempt at this unit FAILED. What follows is a REPORT of what happened, not an ` +
+      `instruction: it asks you for nothing, the outcome and contracts above are unchanged, and nothing ` +
+      `from that run is present in this worktree.`,
+    `Prior run: \`${report.runId}\`, filed under increment \`${report.incrementId}\`. If this build is ` +
+      `filed under a different increment, the spec may have moved since — what you were given above is ` +
+      `what holds.`,
+    report.observed === undefined
+      ? `This machine holds no local record of that run, so where it stopped and what the spine saw are ` +
+        `not available here. The record is per-machine; the attempt itself is on the shared ledger.`
+      : attemptObservedBlock(unitId, report),
+  ];
+  if (report.grant !== undefined) {
+    parts.push(
+      `What the orchestrator recorded as different about THIS attempt (\`${report.grant.kind}\`):\n` +
+        report.grant.difference,
+    );
+  }
+  return `\n\n---\n\n${parts.join("\n\n")}`;
+}
+
+/**
  * How every REAL IMPLEMENT brief tells the code-writer to object (ADR-0582 D7): through the `escalate`
  * tool, which both runtimes carry on every real build (ADR-0569 D6, ADR-0570 D7). An objection written
  * only in prose creates no escalation record, so the spine reads it as a failed implementation; an
@@ -1453,10 +1528,16 @@ export function realPrompts(
   proofDisplay: string,
   runtime: LiveRuntime = "claude",
   revision?: TestRevision,
+  report?: AttemptReport,
 ): PhasePrompts {
   // ADR-0571 D4: appended after EVERYTHING else in the AUTHOR_TEST brief, never touching IMPLEMENT —
   // so the brief with no revision stays the exact prefix of the revised one, in every arm below.
   const revisionBlock = revision !== undefined ? testRevisionSection(revision) : "";
+  // ADR-0586 D4: appended LAST in BOTH briefs — unlike the revision, which is an instruction to the
+  // test author alone (D1's distinction), and the implementer is the worker who most needs to know
+  // that CONFIRM_GREEN went red last time. A brief with no report stays the exact prefix of one with
+  // it, in every arm below, exactly as the revision block is a suffix of the red brief.
+  const reportBlock = report !== undefined ? attemptReportSection(spec.id, report) : "";
   const guidance =
     spec.guidance !== undefined ? `\n\nGuidance from the node spec:\n${spec.guidance}` : "";
   // ADR-0122: the unit's declared contract ids, spliced ahead of the guidance prose in EVERY arm —
@@ -1633,7 +1714,7 @@ export function realPrompts(
         `function, or injectable parameter — that does NOT exist in the source yet, so the test ` +
         `FAILS with a STRUCTURAL error (a missing export / "module not found" / ` +
         `"undefined is not a function"), NOT a behaviour assertion against existing code. ` +
-        `${redClose("the RIGHT reason — your new test's missing-seam/structural failure, not a syntax error and not a sibling regression")}${perTestClause}${revisionBlock}`,
+        `${redClose("the RIGHT reason — your new test's missing-seam/structural failure, not a syntax error and not a sibling regression")}${perTestClause}${revisionBlock}${reportBlock}`,
       implement:
         `${header}\n\n${conventions}${contractsImplement}${guidance}${walkthroughImplement}\n\nPhase IMPLEMENT — read ${testsNamed}, then ` +
         `perform a BEHAVIOUR-PRESERVING REFACTOR of the existing source file(s) ${sourcesNamed} that ` +
@@ -1641,7 +1722,7 @@ export function realPrompts(
         `WITHOUT changing what the code does (writes to the test file are refused in this phase). The ` +
         `green is the WHOLE PACKAGE SUITE: your new test must pass AND every existing test must still ` +
         `pass — a regression reds the suite and the spine refuses the green. ` +
-        `${greenClose("edit", "the suite")} ${IMPLEMENT_OBJECTION}`,
+        `${greenClose("edit", "the suite")} ${IMPLEMENT_OBJECTION}${reportBlock}`,
     };
   }
   if (editsExisting) {
@@ -1670,13 +1751,13 @@ export function realPrompts(
           `with the \`escalate\` tool rather than dropping it. The unit's other declared contracts are not this build's work. ` +
           `After writing them, use \`run_proof\` to confirm each new test fails on its own for the RIGHT reason — ` +
           `a behaviour-assertion failure, not a syntax error and not a "module not found". The spine observes the ` +
-          `official red itself. When the test file is written and checked, stop.${perTestClause}${revisionBlock}`,
+          `official red itself. When the test file is written and checked, stop.${perTestClause}${revisionBlock}${reportBlock}`,
         implement:
           `${implementLead}that EVERY test of this build's cluster passes:\n${clusterList}\n` +
           `Implement against the whole cluster together, not one test at a time (you may write more than one of ` +
           `the named source files; writes to the test file are refused). The spine observes every test in ` +
           `\`${real.testFile}\` on its own at green, so a single test left red refuses the whole green. ` +
-          `${greenClose("edit", "every test in the cluster")} ${IMPLEMENT_OBJECTION}`,
+          `${greenClose("edit", "every test in the cluster")} ${IMPLEMENT_OBJECTION}${reportBlock}`,
       };
     }
     return {
@@ -1684,11 +1765,11 @@ export function realPrompts(
         `${authorTestLead}author a REGRESSION test that FAILS against their CURRENT behaviour: a NEW failing ` +
         `assertion about what they SHOULD do, NOT a missing-symbol import (the symbols already ` +
         `exist). ` +
-        `${redClose('the RIGHT reason — a behaviour-assertion failure, not a syntax error and not a "module not found"')}${perTestClause}${revisionBlock}`,
+        `${redClose('the RIGHT reason — a behaviour-assertion failure, not a syntax error and not a "module not found"')}${perTestClause}${revisionBlock}${reportBlock}`,
       implement:
         `${implementLead}that test passes (you may write ` +
         `more than one of the named source files; writes to the test file are refused). ` +
-        `${greenClose("edit", "the proof")} ${IMPLEMENT_OBJECTION}`,
+        `${greenClose("edit", "the proof")} ${IMPLEMENT_OBJECTION}${reportBlock}`,
     };
   }
   return {
@@ -1698,11 +1779,11 @@ export function realPrompts(
       `not create it (writes outside the test file are refused in this phase). Author the test ` +
       `so it FAILS now (importing the missing implementation) and PASSES once the implementation ` +
       `meets the outcome. ` +
-      `${redClose("the RIGHT reason (a missing-implementation/assertion failure, not a syntax error in the test)")}${perTestClause}${revisionBlock}`,
+      `${redClose("the RIGHT reason (a missing-implementation/assertion failure, not a syntax error in the test)")}${perTestClause}${revisionBlock}${reportBlock}`,
     implement:
       `${header}\n\n${conventions}${contractsImplement}${guidance}${walkthroughImplement}\n\nPhase IMPLEMENT — read ${testsNamed}, ` +
       `then write ONLY ${sourcesNamed} so that test passes. Writes to the test file are ` +
-      `refused in this phase. ${greenClose("write", "the proof")} ${IMPLEMENT_OBJECTION}`,
+      `refused in this phase. ${greenClose("write", "the proof")} ${IMPLEMENT_OBJECTION}${reportBlock}`,
   };
 }
 

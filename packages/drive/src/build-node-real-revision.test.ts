@@ -215,6 +215,10 @@ describe(
             authorOverride: escalatingAuthor,
             testRevision,
             escalationsDir: dir,
+            // ADR-0586 D3: the SIBLING record family, under a directory that does NOT exist yet —
+            // which is the ordinary case on a machine whose `~/.storytree/attempts/` has never been
+            // written, and the only shape that holds the record's recursive `mkdir` to account.
+            attemptsDir: path.join(dir, "attempts", "family"),
           });
 
           assert.equal(
@@ -255,6 +259,33 @@ describe(
             { written: true, path: expectedPath },
             "buildNodeReal must record the CURRENT attempt's returned escalation under the supplied " +
               "escalationsDir and report exactly that write",
+          );
+
+          // ADR-0586 D3/D7: the SIBLING record, written by the same failed walk and reported on its
+          // own key. The directory two levels below an unwritten root proves the record creates the
+          // path it needs rather than assuming somebody else did.
+          const attemptsRoot = path.join(dir, "attempts", "family");
+          assert.deepEqual(
+            built.attemptWrite,
+            { written: true, path: NodeBuildModule.attemptRecordPath(attemptsRoot, fx.spec.id, runId) },
+            "buildNodeReal must record what the spine observed under the supplied attemptsDir, " +
+              "creating the directory path, and report exactly that write",
+          );
+          if (built.attemptWrite === undefined || !built.attemptWrite.written) return;
+          // ADR-0586 D6, at the only place it can be proven: the BYTES. This walk's refusal reason
+          // quotes the escalation verbatim (asserted as ground truth below), and none of it may reach
+          // a file the next build of this unit reads for itself.
+          const attemptRaw = await fsp.readFile(built.attemptWrite.path, "utf8");
+          assert.equal(
+            built.result.reason.includes(CURRENT_STATEMENT),
+            true,
+            "ground truth: the gate quotes the escalation's claim into the refusal reason, which is " +
+              "exactly why that reason may not be stored (ADR-0569 D4)",
+          );
+          assert.equal(
+            attemptRaw.includes(CURRENT_STATEMENT),
+            false,
+            "not one byte of the escalation's claim may reach the attempt record (ADR-0586 D6)",
           );
 
           if (built.revisionWrite === undefined || !built.revisionWrite.written) return;
@@ -350,6 +381,14 @@ describe(
             false,
             "with no escalationsDir supplied, buildNodeReal must record nothing and carry no " +
               "revisionWrite key at all",
+          );
+          // ADR-0586 D3: the sibling family answers the same way, and independently — this walk
+          // FAILED, so a directory is the only thing standing between it and a written record.
+          assert.equal(
+            "attemptWrite" in built,
+            false,
+            "with no attemptsDir supplied, buildNodeReal must record nothing and carry no " +
+              "attemptWrite key at all, even on a failed walk",
           );
         } finally {
           await teardownFixture(fx);
