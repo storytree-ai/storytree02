@@ -5,11 +5,13 @@
  * a PreToolUse hook BEFORE any write lands, Bash is not in the tool surface (a shell write would
  * bypass the scope hook), and red/green is never this runtime's to report.
  *
- * Feedback tools (option A): the spine may expose its registered proof/typecheck commands as
+ * Feedback tools (option A): the spine may expose its registered proof/typecheck/test commands as
  * bounded in-process MCP tools (`mcp__spine__run_proof` …) so the leaf can iterate
- * write→run→fix instead of authoring blind. The tools spawn FIXED commands (the leaf controls
- * zero arguments — not Bash, a doorbell), their output is feedback only, and the attested
- * red/green observations remain the spine's own out-of-band runs after the leaf stops.
+ * write→run→fix instead of authoring blind. The tools spawn commands the SPINE composed — still
+ * a doorbell, not Bash: a tool either takes no argument at all, or (ADR-0587) one optional choice
+ * from a set the spine enumerated, so the leaf selects what runs and never says how to run it.
+ * Their output is feedback only, and the attested red/green observations remain the spine's own
+ * out-of-band runs after the leaf stops.
  *
  * Pivot-out posture (ADR-0030 §2): this file is the ONLY place the Agent SDK is imported
  * (ADR-0004's single-import-site rule, widened to this package). The scope predicate is a plain
@@ -25,8 +27,10 @@ import { createSdkMcpServer, query, tool } from "@anthropic-ai/claude-agent-sdk"
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 
 import { scrubToolWorkerEnv } from "./worker-env.js";
-import { budgetIsSpent, budgetSpentError } from "./worker-budget.js";
+import { budgetIsSpent, budgetSpentError, feedbackRunCap } from "./worker-budget.js";
 import type { WorkerBoundClock, WorkerTimeBudget } from "./worker-budget.js";
+import { readFeedbackChoice } from "./feedback-choice.js";
+import type { FeedbackChoice, FeedbackChoiceParameter } from "./feedback-choice.js";
 
 /**
  * Re-surface the SDK hook/permission types the OFFLINE wall tests pin against, so this file stays
@@ -139,18 +143,38 @@ export interface FeedbackRunOutput {
 
 /**
  * One spine-registered feedback command exposed to the leaf as an in-process MCP tool
- * (`mcp__spine__<name>`). FEEDBACK ONLY (the option-A seam): `run` spawns a FIXED command the
- * spine registered — the leaf controls zero arguments — and its captured output flows back to the
- * model so it can iterate write→run→fix before stopping. Nothing the leaf sees here is attested:
- * the spine re-runs the proof itself, out-of-band, at CONFIRM_RED/CONFIRM_GREEN (ADR-0020 §3).
+ * (`mcp__spine__<name>`). FEEDBACK ONLY (the option-A seam): `run` spawns a command the SPINE
+ * composed, and its captured output flows back to the model so it can iterate write→run→fix
+ * before stopping. Nothing the leaf sees here is attested: the spine re-runs the proof itself,
+ * out-of-band, at CONFIRM_RED/CONFIRM_GREEN (ADR-0020 §3).
+ *
+ * The leaf controls zero arguments unless this command declares a {@link parameter}, in which case
+ * it controls exactly one — a choice from a set the spine enumerated (ADR-0587). It never supplies
+ * a path, a flag or a command line either way.
  */
 export interface FeedbackCommand {
-  /** Tool name suffix (e.g. `run_proof`, `run_typecheck`). */
+  /** Tool name suffix (e.g. `run_proof`, `run_typecheck`, `run_tests`). */
   name: string;
   /** What the model is told the tool does. */
   description: string;
-  /** Spawn the fixed registered command and capture its outcome (never throws on a red exit). */
-  run: () => Promise<FeedbackRunOutput>;
+  /**
+   * Run the registered command and capture its outcome (never throws on a red exit).
+   *
+   * `choice` is the VALIDATED selection when this command declares a {@link parameter}, and is
+   * absent otherwise — which is why the parameter is optional in the signature: a command that
+   * takes no argument is still written `run: () => …` and needs no change.
+   */
+  run: (choice?: FeedbackChoice) => Promise<FeedbackRunOutput>;
+  /**
+   * ADR-0587: the ONE argument this tool admits — a choice from a set the SPINE computed. Absent
+   * (both pre-existing commands) the leaf controls zero arguments exactly as ADR-0570 decided, and
+   * any argument a call carries is ignored rather than honoured.
+   *
+   * Admits `undefined` explicitly so an adapter can assign it unconditionally: "declares no
+   * choice" and "not supplied" are the same thing here, so a guard would be a mutant no test
+   * could kill, and the empty-object spread that avoids one is refused by `pnpm lint`.
+   */
+  parameter?: FeedbackChoiceParameter | undefined;
 }
 
 /** Accounting for one bounded feedback run the leaf made. */
@@ -201,7 +225,13 @@ export interface ClaudeAgentAuthorArgs {
    * (`mcp__spine__<name>`). Absent/empty = the pre-option-A blind leaf (no execution feedback).
    */
   feedbackCommands?: FeedbackCommand[];
-  /** Per-authoring-slice cap on feedback runs, shared across commands. Default: 5. */
+  /**
+   * Per-authoring-slice cap on feedback runs, shared across commands. NO LONGER THE BOUND once
+   * {@link timeBudget} is supplied (ADR-0587): with a budget, feedback runs are UNCAPPED and the
+   * build's own clock bounds them, because a run cap protects neither the evidence nor the outside
+   * world — it only stops a worker checking its work. Without a budget the old default of 5 stands,
+   * so a caller wiring neither is never left with an unbounded loop. An explicit value always wins.
+   */
   maxFeedbackRuns?: number;
   /**
    * The per-phase system prompt the leaf runs on (ADR-0051 §4): the RENDERED `red-builder` agent
@@ -258,7 +288,7 @@ const EXHAUSTION_SUBTYPES: ReadonlySet<string> = new Set([
 ]);
 
 /** Default per-slice feedback-run cap (shared across commands). */
-const DEFAULT_MAX_FEEDBACK_RUNS = 5;
+
 
 /** Per-stream character cap on feedback output returned to the model (tail-kept). */
 const MAX_FEEDBACK_STREAM_CHARS = 8_000;
@@ -339,6 +369,18 @@ export function formatFeedbackOutput(
 }
 
 /**
+ * The zod shape one feedback tool declares (ADR-0587). `{}` — the leaf controls zero arguments —
+ * for every command that declares no choice, which is both pre-existing commands and stays the
+ * default for any new one.
+ */
+export function feedbackToolShape(command: FeedbackCommand): Record<string, z.ZodTypeAny> {
+  const parameter = command.parameter;
+  return parameter === undefined
+    ? {}
+    : { [parameter.name]: z.array(z.string()).optional().describe(parameter.description) };
+}
+
+/**
  * Execute one bounded feedback run (the tool handler's whole decision, pure-injectable for
  * offline tests). Budget-exhausted refuses WITHOUT spawning; a spawn failure is returned as an
  * error result (never thrown into the SDK); every run that consumed budget is recorded.
@@ -349,6 +391,12 @@ export async function executeFeedback(args: {
   used: number;
   max: number;
   record: (run: SdkFeedbackRun) => void;
+  /**
+   * ADR-0587: the call's raw argument object, unvalidated, exactly as the transport delivered it.
+   * Ignored by a command declaring no `parameter` — which is what keeps a widened seam from
+   * accidentally honouring an argument on a tool that was never meant to take one.
+   */
+  rawArguments?: unknown;
 }): Promise<{ text: string; isError: boolean }> {
   if (args.used >= args.max) {
     return {
@@ -358,9 +406,22 @@ export async function executeFeedback(args: {
         "the deliverable and stop; the spine observes the official result itself.",
     };
   }
+  // ADR-0587: validated BEFORE the run cap is spent and before anything is spawned. A refused call
+  // costs no run and records nothing — it never reached a process — and is bounded instead by the
+  // build's own clock (ADR-0581 D2), which is what stops a model looping on refusals forever.
+  const parameter = args.command.parameter;
+  let choice: FeedbackChoice | undefined;
+  if (parameter !== undefined) {
+    const raw = (args.rawArguments as Record<string, unknown> | undefined)?.[parameter.name];
+    const read = readFeedbackChoice(raw, parameter);
+    if (!read.ok) {
+      return { isError: true, text: read.reason };
+    }
+    choice = read.choice;
+  }
   let out: FeedbackRunOutput;
   try {
-    out = await args.command.run();
+    out = await args.command.run(choice);
   } catch (e) {
     args.record({ phase: args.phase, tool: args.command.name, code: null });
     return {
@@ -596,7 +657,9 @@ export class ClaudeAgentAuthor implements PhaseAuthor {
 
   async author(phase: AuthoringPhase, prompt: string): Promise<AuthorResult> {
     const feedback = this.#args.feedbackCommands ?? [];
-    const maxFeedbackRuns = this.#args.maxFeedbackRuns ?? DEFAULT_MAX_FEEDBACK_RUNS;
+    // ADR-0587, mirroring the turn ceiling below: the cap steps aside once the build's clock is the
+    // bound. The decision itself lives in `feedbackRunCap` so both runtimes share one answer.
+    const maxFeedbackRuns = feedbackRunCap(this.#args.maxFeedbackRuns, this.#args.timeBudget);
     // The per-SLICE feedback budget: a fresh counter per author() call, shared across commands.
     let feedbackUsed = 0;
     // The per-SLICE escalation slot (ADR-0569 D1/D6): a fresh, unset closure variable per author()
@@ -745,12 +808,18 @@ export class ClaudeAgentAuthor implements PhaseAuthor {
             },
           ),
           ...feedback.map((command) =>
-            tool(command.name, command.description, {}, async () => {
+            // ADR-0587: a command declaring a choice publishes it as an optional list of strings, and
+            // its own description names what may be chosen. The zod shape is deliberately not an
+            // enum: the set can run to hundreds of entries, every one of which would be re-serialised
+            // into the tool definition on every slice, and `readFeedbackChoice` is the fence either
+            // way — the schema's job here is to say an argument EXISTS, not to be the check.
+            tool(command.name, command.description, feedbackToolShape(command), async (toolArgs) => {
               const r = await executeFeedback({
                 phase,
                 command,
                 used: feedbackUsed,
                 max: maxFeedbackRuns,
+                rawArguments: toolArgs,
                 record: (run) => {
                   feedbackUsed += 1;
                   this.feedbackRuns.push(run);
