@@ -243,7 +243,7 @@
     "kind": "definition",
     "id": "per-node-budget",
     "title": "per-node budget",
-    "oneLine": "A code-enforced ceiling on a node's spine loop that bounds a runaway. The default brake is the turn cap (`maxTurns`); the USD ceiling was dropped as a default — a phantom under subscription billing — and is now an opt-in `--budget` escape hatch (ADR-0130/0131)."
+    "oneLine": "A code-enforced ceiling on a node's spine loop that bounds a runaway. On a `--real` build the brake is the build's wall-clock time budget (default two hours, ADR-0581/ADR-0584); the turn cap (`maxTurns`) remains the brake wherever no budget is wired (`--live`, `--dry-run`). The USD ceiling was dropped as a default — a phantom under subscription billing — and is now an opt-in `--budget` escape hatch (ADR-0130/0131)."
   },
   {
     "kind": "definition",
