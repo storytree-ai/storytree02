@@ -102,6 +102,7 @@ import {
 } from "./scope-walls.js";
 import type { LiveRunInfo, UsageRunIds } from "./usage.js";
 import { staleExistenceClaimRefusal } from "./stale-existence-claim.js";
+import { chooseTimeBudgetMs } from "./time-budget.js";
 import {
   makeBackstopRefusal,
   renderBackstopRefusalObservation,
@@ -1636,6 +1637,13 @@ export interface RealBuildArgs {
   budgetUsd?: number;
   maxTurns?: number;
   /**
+   * The whole build's wall clock in milliseconds (ADR-0581 D2), as the orchestrator set it with
+   * `--time-budget`. `undefined` = no override, so the spine's own two-hour default stands; the
+   * default is NOT restated here, so there is one place to move it. Admits `undefined` explicitly
+   * because it is assigned UNCONDITIONALLY — see the assignment for why.
+   */
+  timeBudgetMs?: number | undefined;
+  /**
    * ADR-0064: the isolated test-DB env for a `real.db:true` node — forced onto the proof command so
    * both the spine's CONFIRM observation and the leaf's `run_proof` connect to the disposable test
    * database (never production). Absent for non-db nodes.
@@ -1786,6 +1794,10 @@ export async function buildNodeReal(args: RealBuildArgs): Promise<RealBuildResul
   if (args.model !== undefined) resolveOptions.model = args.model;
   if (args.budgetUsd !== undefined) resolveOptions.maxBudgetUsd = args.budgetUsd;
   if (args.maxTurns !== undefined) resolveOptions.maxTurns = args.maxTurns;
+  // Unconditional, for the reason the `testRevision` line above states: assigning `undefined` is
+  // exactly what "no override" means to the resolver, so a guard here would be a mutant no test
+  // could kill — the two branches are indistinguishable from outside.
+  resolveOptions.timeBudgetMs = args.timeBudgetMs;
   if (args.storyBaseline !== undefined) resolveOptions.storyBaseline = args.storyBaseline;
   const resolved = resolveProveSpec(spec, resolveOptions);
   if (!resolved.ok) {
@@ -2004,11 +2016,26 @@ export interface NodeBuildOpts {
   /**
    * `--budget` — OPTIONAL per-authoring-slice USD ceiling, SDK-enforced (live/real only). Default:
    * NONE — no USD ceiling (ADR-0130); the leaf is subscription-funded (ADR-0030), so a metered dollar
-   * cap is a phantom. The per-slice turn cap (`--max-turns`, default 16) is the runaway brake.
+   * cap is a phantom. The runaway brake is `--time-budget` on a `--real` build (ADR-0581 D2) and the
+   * per-slice turn cap everywhere else.
    */
   budgetUsd?: number;
-  /** `--max-turns` — per-authoring-slice turn ceiling, SDK-enforced (live/real only). Default: 16. */
+  /**
+   * `--max-turns` — per-authoring-slice turn ceiling, SDK-enforced (live/real only). NO LONGER the
+   * brake on a `--real` build, which runs on its wall clock (ADR-0584 D5): unset there, the SDK is
+   * given no ceiling at all, so a worker can no longer be killed for being slow. An explicit value is
+   * still honoured, and the old default of 16 still stands on `--live`, which wires no budget.
+   */
   maxTurns?: number;
+  /**
+   * `--time-budget <minutes>` — the whole `--real` build's wall clock: both authoring slices and
+   * every in-build repair spend it (ADR-0581 D2). Default: two hours, held by the spine.
+   *
+   * Carried as the operator's RAW text, not a number: `chooseTimeBudgetMs` converts and validates it
+   * in one place, beside the refusal that quotes it back. Converting here would leave the refusal
+   * with nothing to report but `NaN`.
+   */
+  timeBudget?: string | undefined;
   /** `--actor` — the signer chain's flag tier (flag → STORYTREE_SIGNER → git email). */
   actor?: string;
   /**
@@ -2174,6 +2201,17 @@ export async function nodeBuild(
         "--max-turns is fixed at 1 with --runtime codex: each prove-it phase is exactly one " +
         "non-interactive Codex turn. Omit the flag or pass --max-turns 1.",
       next: [`storytree node build ${unitId} ${real ? "--real --increment <increment-id>" : "--live"} --runtime codex`],
+    };
+  }
+  // ADR-0581 D2: the build's wall clock. Refused before any spend when the figure cannot bound a
+  // build, or when the route wires no budget at all — the whole decision is `chooseTimeBudgetMs`'s,
+  // so this reads the same in all three callers rather than being re-derived per command.
+  const timeBudget = chooseTimeBudgetMs(opts.timeBudget, { real });
+  if (!timeBudget.ok) {
+    return {
+      ok: false,
+      body: timeBudget.reason,
+      next: [`storytree node build ${unitId} --real --increment <increment-id> --time-budget 120`],
     };
   }
   if (isCodexMultifileRuntimeSeam(unitId) && real) {
@@ -2515,6 +2553,7 @@ export async function nodeBuild(
         if (opts.model !== undefined) realArgs.model = opts.model;
         if (opts.budgetUsd !== undefined) realArgs.budgetUsd = opts.budgetUsd;
         if (opts.maxTurns !== undefined) realArgs.maxTurns = opts.maxTurns;
+        realArgs.timeBudgetMs = timeBudget.ms;
         realArgs.testRevision = testRevision;
         realArgs.escalationsDir = escalationsDir;
         realArgs.incrementId = incrementId;
@@ -2873,7 +2912,7 @@ export function nodeHelp(storiesDir: string = defaultStoriesDir()): Envelope {
       `      Codex multi-file promotion smoke: node build ${CODEX_MULTIFILE_RUNTIME_SEAM_ID}`,
       "      --live --runtime codex --actor <email> (built-in disposable fixture; never --real).",
       "",
-      "  storytree node build <id> --real --increment <id> [--runtime claude|codex] [--model <id>] [--budget <usd>] [--max-turns <n>] [--actor <email>]",
+      "  storytree node build <id> --real --increment <id> [--runtime claude|codex] [--model <id>] [--budget <usd>] [--time-budget <minutes>] [--actor <email>]",
       "      Phase F — the REAL build: a fresh git worktree of this repo, the leaf authors the",
       "      node's REAL test/impl at their real paths, the spine runs the node's REAL proof",
       "      command for red/green, commits the authored files, and the GATE reads genuine git",

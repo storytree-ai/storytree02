@@ -275,7 +275,12 @@ async function armedWalk(testSource: string, implementation: string, specText = 
       // every slice — so a repair could only hand back what the spine just refused (ADR-0582 D5/D6).
       // The synthetic workspace is no git repository either, so the wrote-nothing ending cannot see
       // that for itself: granting no repair is what keeps this walk one pass over the review.
-      repairBudget: {
+      // Only `mayRepair` is read on this walk: the author is injected, so no worker slice ever asks
+      // the clock for its remaining time. Those two members are the rest of `BuildBudget`'s shape,
+      // set to a budget that is NOT spent so nothing here reads as an exhausted worker.
+      buildBudget: {
+        budgetMs: 60_000,
+        remainingMs: (): number => 60_000,
         mayRepair: (): Promise<RepairDecision> =>
           Promise.resolve({ ok: false, reason: "this offline review walk grants no in-build repair" }),
       },

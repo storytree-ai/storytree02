@@ -50,7 +50,7 @@ import type {
   PromotionResult,
 } from "@storytree/orchestrator";
 
-import { effectiveVerdictStore, ensureLiveDb } from "@storytree/drive";
+import { chooseTimeBudgetMs, effectiveVerdictStore, ensureLiveDb } from "@storytree/drive";
 import type { EnsureDbResult } from "@storytree/drive";
 import type { Envelope } from "./envelope.js";
 import {
@@ -122,6 +122,11 @@ export interface GateBuildDriverDeps {
   budgetUsd?: number;
   /** Per-authoring-slice turn ceiling (live build only). */
   maxTurns?: number;
+  /**
+   * `--time-budget <minutes>` — the gate build's whole wall clock (ADR-0581 D2). A gate drive is one
+   * REAL build, so this is that build's clock; absent, the spine's two-hour default stands.
+   */
+  timeBudget?: string | undefined;
   /**
    * ADR-0098 (U4): the candidate design forks the orchestrator session's pre-build pocket analysis
    * surfaced for this `(pocket, gate)`, each tagged with the three d.5 owner-fork-bar signals (+ the
@@ -245,6 +250,13 @@ export async function driveBuildTestsGate(
       body: "--max-turns is fixed at 1 with --runtime codex",
       next: [retryCmd],
     };
+  }
+  // ADR-0581 D2: this drive's REAL build runs on a wall clock. Refused before any spend if the
+  // operator's figure cannot bound one. A gate drive is always REAL, so there is no --live branch
+  // to narrow to here, unlike `node build`.
+  const timeBudget = chooseTimeBudgetMs(deps.timeBudget, { real: true });
+  if (!timeBudget.ok) {
+    return { ok: false, body: timeBudget.reason, next: [retryCmd] };
   }
 
   // 1. The gate must name a node to borrow a real: build config from (the `(build:)` annotation).
@@ -468,6 +480,7 @@ export async function driveBuildTestsGate(
         if (deps.model !== undefined) realArgs.model = deps.model;
         if (deps.budgetUsd !== undefined) realArgs.budgetUsd = deps.budgetUsd;
         if (deps.maxTurns !== undefined) realArgs.maxTurns = deps.maxTurns;
+        realArgs.timeBudgetMs = timeBudget.ms;
         return resolveStoryRealNodeBuilder(deps.realNodeBuilder)(realArgs);
       },
     );

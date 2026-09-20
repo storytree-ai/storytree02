@@ -22,7 +22,9 @@ import type { DecisionFork, NodeSpec } from "@storytree/orchestrator";
 import type { ReliabilityGate } from "@storytree/library";
 import { silentBuildProgress } from "@storytree/drive";
 
-import { driveBuildTestsGate } from "./gate-build-driver.js";
+import { driveBuildTestsGate, gateRetryCommand } from "./gate-build-driver.js";
+import type { GateBuildDriverDeps } from "./gate-build-driver.js";
+import { makeGateDeps } from "./commands.js";
 
 /**
  * The corpus the leaf's per-phase system prompts render from, INJECTED rather than opened.
@@ -391,6 +393,129 @@ test("refuses when the referenced build node spec does not exist", async () => {
     });
     assert.equal(env.ok, false);
     assert.match(env.body, /references build node "ghost-node"/);
+  } finally {
+    await rm(stories, { recursive: true, force: true });
+  }
+});
+
+/**
+ * A node builder that returns immediately without cutting a worktree or authoring anything.
+ *
+ * It exists for the mutation rung, not for the assertions: when a budget guard below is mutated
+ * away, the drive does not fail — it PROCEEDS into a real build and runs until Stryker's per-mutant
+ * budget expires, which is scored UNPROVEN rather than killed (playbook §1: "a mutated guard does
+ * not fail, it hangs"). With this seam the mutated path finishes in milliseconds and the assertion
+ * that the refusal never came does the killing.
+ */
+function refusingBuilder(): GateBuildDriverDeps["realNodeBuilder"] {
+  return async () => ({
+    result: {
+      ok: false as const,
+      failedAt: "AUTHOR_TEST" as const,
+      reason: "this suite never authors",
+      phasesVisited: [],
+    },
+  });
+}
+
+test("a gate drive reads --time-budget and refuses a figure that cannot bound a build, before any spend (ADR-0581 D2)", async () => {
+  // A gate drive is ALWAYS a real build, so unlike `node build` there is no non-real route to narrow
+  // to here — `{ real: true }` is passed unconditionally, and that is what this asserts: a gate drive
+  // must never be exempted from the clock by reading itself as some other route.
+  const stories = await fixtureStories();
+  const store: Store = new InMemoryStore();
+  try {
+    const corpus = await fixtureCorpusWithIncrements();
+    for (const raw of ["0", "-5", "abc"]) {
+      const env = await driveBuildTestsGate(buildTestsGate(), "builder@example.com", {
+        corpusStore: corpus,
+        progress: silentBuildProgress(),
+        storiesDir: stories,
+        repoRoot: ".", // never touched: the refusal precedes the worktree cut
+        store,
+        increment: "inc-live",
+        innerLoopReads: { corpus, ledger: store },
+        realNodeBuilder: refusingBuilder(),
+        timeBudget: raw,
+      });
+      assert.equal(env.ok, false, raw);
+      assert.match(env.body, /--time-budget must be a positive number of minutes/, raw);
+      assert.match(env.body, new RegExp(`got "${raw}"`), raw);
+      // The retry command, which is what an operator acts on — an empty `next` leaves the refusal
+      // with no way forward.
+      assert.deepEqual(env.next, [gateRetryCommand(buildTestsGate().id, "inc-live")], raw);
+      // Refused is not signed: a rejected flag must leave no verdict behind.
+      assert.equal(rollupStatus("fix-story#gate-1", await store.readEvents()), null, raw);
+    }
+  } finally {
+    await rm(stories, { recursive: true, force: true });
+  }
+});
+
+test("a gate drive with a VALID --time-budget is not refused by the budget check", async () => {
+  // The other side: without this, a check that refused every value would satisfy the test above.
+  // This drive goes on to fail for its own unrelated reasons; what matters is that the failure is
+  // not the budget's.
+  const stories = await fixtureStories();
+  const store: Store = new InMemoryStore();
+  try {
+    const corpus = await fixtureCorpusWithIncrements();
+    const env = await driveBuildTestsGate(buildTestsGate(), "builder@example.com", {
+      corpusStore: corpus,
+      progress: silentBuildProgress(),
+      storiesDir: stories,
+      repoRoot: ".",
+      store,
+      increment: "inc-live",
+      innerLoopReads: { corpus, ledger: store },
+      realNodeBuilder: refusingBuilder(),
+      timeBudget: "45",
+      decisionForks: [
+        routineFork({
+          id: "runseed-seam",
+          question: "Should runSeed inject a Pool, or the built Store + a comment-loader fn?",
+          changesPublicSeam: true,
+        }),
+      ],
+    });
+    assert.equal(env.ok, false);
+    assert.doesNotMatch(env.body, /--time-budget/);
+    assert.match(env.body, /HALTED/, "it got past the budget check to the fork sweep");
+  } finally {
+    await rm(stories, { recursive: true, force: true });
+  }
+});
+
+test("gate run's dispatch threads --time-budget from argv into the gate drive (makeGateDeps)", async () => {
+  // The one failure no unit test of the driver can see: a flag the DISPATCH never delivers. The
+  // driver's own budget tests above pass a `timeBudget` directly, so they stay green whatever argv
+  // key `makeGateDeps` reads — including none at all. This drives the composition instead, and
+  // observes the refusal that only a delivered flag can produce.
+  const stories = await fixtureStories();
+  const store: Store = new InMemoryStore();
+  try {
+    const corpus = await fixtureCorpusWithIncrements();
+    const gateDeps = makeGateDeps(
+      { store: new InMemoryStore() },
+      { real: true, increment: "inc-live", "time-budget": "0" },
+      stories,
+      {
+        corpusStore: corpus,
+        innerLoopReads: { corpus, ledger: store },
+        progress: silentBuildProgress(),
+        store,
+        repoRoot: ".", // never touched: the refusal precedes the worktree cut
+        promote: false,
+        realNodeBuilder: refusingBuilder(),
+      },
+    );
+    const drive = gateDeps.driveBuildTestsGate;
+    assert.equal(typeof drive, "function", "makeGateDeps must wire a driveBuildTestsGate");
+    if (typeof drive !== "function") return;
+    const env = await drive(buildTestsGate(), "builder@example.com");
+    assert.equal(env.ok, false);
+    assert.match(env.body, /--time-budget must be a positive number of minutes/);
+    assert.match(env.body, /got "0"/);
   } finally {
     await rm(stories, { recursive: true, force: true });
   }

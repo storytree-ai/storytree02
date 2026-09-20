@@ -1,6 +1,8 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 
+import { budgetIsSpent } from "@storytree/agent";
+
 import {
   DEFAULT_BUILD_BUDGET_MS,
   REPAIR_STREAM_CHARS,
@@ -54,6 +56,38 @@ describe("repair-support-routes-and-briefs-the-repairing-worker: the budget, the
     const spent = await budget.mayRepair();
     assert.equal(spent.ok, false);
     assert.ok(!spent.ok && spent.reason.startsWith("the build's time budget of 120 min is spent (120 min elapsed)"));
+  });
+
+  test("the same clock answers the WORKER's remaining-time question, counting down from the whole budget", () => {
+    // ADR-0584 D1: one object, two contracts. `mayRepair()` is the repair loop's poll between rounds;
+    // `remainingMs()`/`budgetMs` are what a RUNNING worker slice reads to arm its own abort. They are
+    // derived from one elapsed reading, so the two halves cannot disagree about how much is gone.
+    let clock = 2_000;
+    const budget = wallClockBudget({ budgetMs: 10 * 60_000, now: () => clock });
+    assert.equal(budget.budgetMs, 10 * 60_000, "the whole budget, which a stop names in its reason");
+    assert.equal(budget.remainingMs(), 10 * 60_000, "nothing spent at construction");
+    clock += 4 * 60_000;
+    assert.equal(budget.remainingMs(), 6 * 60_000);
+    clock += 6 * 60_000;
+    assert.equal(budget.remainingMs(), 0, "exactly spent");
+    // Past the budget it goes NEGATIVE rather than clamping at zero. `budgetIsSpent` reads `<= 0`, so
+    // clamping would change nothing a worker sees — and a negative number is the honest reading of a
+    // build that overran, which a clamped zero would hide.
+    clock += 90_000;
+    assert.equal(budget.remainingMs(), -90_000);
+  });
+
+  test("the worker's clock and the repair loop's answer flip at the same instant", () => {
+    // The failure this forecloses: the two halves drifting a millisecond apart, so a repair is
+    // admitted into a build whose workers have already been told to stop (or the reverse).
+    let clock = 0;
+    const budget = wallClockBudget({ budgetMs: 60_000, now: () => clock });
+    clock = 59_999;
+    assert.equal(budget.remainingMs() > 0, true);
+    assert.equal(budgetIsSpent(budget), false);
+    clock = 60_000;
+    assert.equal(budget.remainingMs() > 0, false);
+    assert.equal(budgetIsSpent(budget), true);
   });
 
   test("clipTail keeps a stream at the cap exactly, and keeps the TAIL of a longer one with the cut named", () => {

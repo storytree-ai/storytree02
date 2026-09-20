@@ -243,3 +243,12 @@ test("`arc gate`'s two flags split across the prose/literal line — --needs lit
   assert.equal(PROSE_FLAGS.has("reason"), true, "--reason is the durable why, and must be @path-expandable");
   assert.equal(LITERAL_FLAGS.has("reason"), false, "--reason must not be taken verbatim");
 });
+
+test("`node build --time-budget` is LITERAL — a number of minutes, never prose", () => {
+  // ADR-0581 D2. Named rather than left to the generic sweep above, because the sweep only asks that
+  // a flag be classified SOMEHOW: were `--time-budget` to drift into PROSE, `--time-budget @notes.md`
+  // would hand `Number(...)` a file path, which is NaN — and a NaN budget is refused, so the operator
+  // would meet a "not a number" refusal for a file they never meant to read.
+  assert.equal(LITERAL_FLAGS.has("time-budget"), true, "time-budget must be literal");
+  assert.equal(PROSE_FLAGS.has("time-budget"), false, "a count of minutes is a figure, never a record");
+});
