@@ -76,17 +76,21 @@ The honesty walls sit OUTSIDE the model (ADR-0020), and each fails closed:
   there is no API-key or metered fallback. On the live path a missing or empty rendered phase prompt, a
   missing or malformed promotion manifest, malformed write globs or an empty brief refuse before the
   probe runs.
-- **The disposable replica is the whole isolation (ADR-0390).** Each turn authors in a fresh copy of the
+- **The disposable replica, inside Codex's own sandbox (ADR-0390, ADR-0583).** Each turn authors in a fresh copy of the
   build workspace, cut under the checkout's gitignored `.gate-logs/codex-replicas` without `.git`,
   `.codex`, `.claude`, `.gate-logs` or `node_modules`; an armed phase links the installed dependencies
   back in before its before-snapshot (ADR-0570 D3). The command is pinned (`buildCodexExecArgs`): one
   ephemeral `--json` turn that ignores user config and rules, never asks for approval, forces ChatGPT
   login on the `openai` provider, disables web search, subagents, hooks, apps, remote plugins, unified
   exec and every MCP server except the spine's own loopback endpoint an armed phase is given (ADR-0570
-  D2), and keeps the legacy shell tool that carries `apply_patch`. It runs
-  `--sandbox danger-full-access`: no OS sandbox fences the process and network is NOT disabled, so the
-  real workspace stays within the process's reach. The promotion wall below decides what the spine
-  copies; it is not a write wall.
+  D2), and keeps the legacy shell tool that carries `apply_patch`. It runs Codex's own
+  `--sandbox workspace-write` (on Windows the `unelevated` sandbox): the replica is the one writable
+  root, temp directories excluded, and the shell has no network. The child environment carries no
+  secret-shaped variable, store pointer or git locator, plus a git ceiling at the replica's parent, so
+  the worker's git cannot discover the build's repository (ADR-0583). *(Corrected 2026-09-20: this
+  said the phase ran `--sandbox danger-full-access` with network enabled and the real workspace within
+  reach, which was true until ADR-0583.)* The promotion wall below still decides what the spine
+  copies.
 - **Observed promotion against an exact finite manifest (ADR-0356).** The spine hands each phase an
   explicit packing list — `allowedTargets` containing a non-empty `requiredTargets` — and a list carrying
   a wildcard, an absolute or traversing path, a Windows-unsafe component, or two entries that collide

@@ -153,12 +153,17 @@ asked about it. What was checked here is that the verb exists and offers the rig
 itself is yours to perform. If you only ever want Journey B, this is the cheaper route: `pnpm
 install`, then sign in through the pinned wrapper, and skip A4 entirely.
 
-**Isolation, stated accurately.** The phase runs `--sandbox danger-full-access` — deliberate under
-ADR-0390, which withdrew storytree's managed Codex permission profiles. **Nothing is fenced at the
-OS level and the network is not disabled.** The phase boundary is the *disposable replica* plus the
-*exact promotion manifest*: the CLI authors in a throwaway copy under `<repo>/.gate-logs/codex-replicas`,
-and the spine alone decides which files come back. Do not read "sandbox" in the argument list as a
-fence; it is the word for the flag that turns the fence off.
+**Isolation, stated accurately.** The phase runs Codex's own `--sandbox workspace-write` — on
+Windows the `unelevated` sandbox, which needs no administrator setup (ADR-0583, holding the worker
+to ADR-0581 D1's outside-world limit). The CLI authors in a throwaway copy under
+`<repo>/.gate-logs/codex-replicas`, and that copy is the shell's **only writable root**: temp
+directories are excluded, and the shell has **no network**. The child environment carries no
+secret-shaped variable, store pointer or git locator, and a git ceiling at the replica's parent, so
+the worker's git cannot discover the checkout it sits in. The spine still alone decides which files
+come back, through the *exact promotion manifest*. This replaced `--sandbox danger-full-access`,
+which the phase ran from ADR-0390's withdrawal of storytree's managed Codex permission profiles until
+2026-09-20. One cost is worth knowing when reading a worker transcript: in the Windows sandbox,
+PowerShell runs in constrained language mode, so a .NET method call fails where a cmdlet works.
 
 **One knob nothing else documents:** `STORYTREE_CODEX_EXECUTABLE` overrides which Codex binary the
 leaf runs. It must be an absolute path and is validated as one. `--model` overrides the default

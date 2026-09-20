@@ -70,6 +70,14 @@ export {
   runPinnedCodexCli,
 } from "./codex-author.js";
 
+export {
+  STORE_POINTER_ENV_NAMES,
+  GIT_LOCATOR_ENV_NAMES,
+  isSecretShapedEnvName,
+  scrubShellWorkerEnv,
+  scrubToolWorkerEnv,
+} from "./worker-env.js";
+
 export type {
   CodexAppServerCommand,
   CodexAppServerProcess,

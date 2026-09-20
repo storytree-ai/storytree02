@@ -4,15 +4,18 @@
  *
  * Authentication and promotion controls are intentionally redundant:
  * - `codex login status` must report the exact ChatGPT-managed method before a model can run;
- * - metered credential environment variables are removed from both child processes;
- * - the CLI runs from a disposable replica, never the real workspace — and the replica is the
- *   WHOLE of the isolation: since ADR-0390 the phase runs `--sandbox danger-full-access`, so
- *   nothing is fenced at the OS level and the network is NOT disabled;
+ * - both child processes get the shell-worker environment: no secret-shaped variable, no store
+ *   pointer, no git locator (`./worker-env.ts`), and the exec child a git ceiling at the replica's
+ *   parent, so the worker's git cannot discover the build's repository;
+ * - the CLI runs from a disposable replica, never the real workspace, inside Codex's own
+ *   `workspace-write` sandbox: its shell can write only the replica and has no network;
  * - the spine observes the replica and alone promotes an explicit target set.
  *
- * ADR-0390 withdrew Storytree's managed Codex permission profiles and hook boundary. The retained
- * phase author therefore requests Codex's unfenced native mode explicitly and relies on the
- * disposable replica plus exact, observed promotion instead of the retired containment machinery.
+ * ADR-0390 withdrew Storytree's managed Codex permission profiles and hook boundary, and for a while
+ * this author ran `--sandbox danger-full-access` with the replica as the whole of its isolation.
+ * ADR-0581 D1 holds a build's workers to the outside-world limit — no live store, secrets or
+ * network beyond what the adapter supplies — and ADR-0583 is how this author meets it: Codex's
+ * NATIVE sandbox, not the retired Storytree machinery, measured on this box before it was adopted.
  */
 
 import { spawn } from "node:child_process";
@@ -32,6 +35,7 @@ import type {
 } from "./codex-feedback-endpoint.js";
 import { linkReplicaDependencies } from "./codex-replica-links.js";
 import type { SdkFeedbackRun } from "./sdk-author.js";
+import { scrubShellWorkerEnv } from "./worker-env.js";
 
 // Re-exported for callers constructing `CodexPhaseAuthorArgs.feedbackCommands` — the command shape
 // is declared once, in `codex-feedback-endpoint.ts`, never duplicated here.
@@ -438,6 +442,16 @@ const CODEX_ESCALATION_CLOSING =
   "green, out-of-band, just as it always does.";
 
 /**
+ * What the worker is told about the sandbox it runs in (ADR-0583), so a refused command reads as
+ * the environment rather than as a fault to work around. Every phase carries it, armed or not.
+ */
+const CODEX_SANDBOX_NOTE =
+  "Your shell runs in a sandbox: it can write only inside this replica, it has no network, and " +
+  "git cannot see a repository here. Edit files with apply_patch; on Windows, PowerShell runs in " +
+  "constrained language mode, so prefer cmdlets over .NET method calls. Run the proof through the " +
+  "spine's tools when you have them, never through your own shell.";
+
+/**
  * The `AuthorResult.error` string for a recorded escalation — the Claude leaf's own format
  * (`sdk-author.ts`'s `escalationError`), duplicated here rather than imported since `sdk-author.ts`
  * is out of this contract's write scope and exports no such symbol.
@@ -472,6 +486,39 @@ function buildFeedbackMcpServersConfigArgs(feedback: CodexExecFeedbackConfig): s
     `mcp_servers.spine.tool_timeout_sec=${feedback.toolTimeoutSec}`,
     "--config",
     `mcp_servers.spine.startup_timeout_sec=${feedback.toolTimeoutSec}`,
+    // Outside `danger-full-access`, Codex asks approval for an MCP tool call, and
+    // `approval_policy="never"` turns that ask into a cancellation: every `run_proof` came back
+    // "user cancelled MCP tool call" until this was set (measured, ADR-0583). The spine's tools
+    // run in the spine, never in the worker's sandbox, so approving them widens nothing.
+    "--config",
+    'mcp_servers.spine.default_tools_approval_mode="approve"',
+  ];
+}
+
+/**
+ * The OS sandbox the worker's shell runs in (ADR-0583): Codex's own `workspace-write`, whose one
+ * writable root is the replica — temp directories excluded — and whose shell has no network.
+ *
+ * Temp is excluded for a measured reason, not for tidiness: on Windows the unelevated sandbox
+ * refuses to run `apply_patch` at all while the writable set has more than one root ("cannot
+ * enforce split writable root sets directly"), and `apply_patch` is how the model writes. With the
+ * replica as the only root, it patches everywhere inside it.
+ *
+ * On Windows the sandbox must be named: without `windows.sandbox`, every shell command — writes
+ * inside the replica included — came back "blocked by policy". `unelevated` needs no administrator
+ * setup and left no access-control change outside the replica it ran in; the `elevated` mode was
+ * not taken, because it runs commands as the `CodexSandboxUsers` account, which leftover grants on
+ * this box allow to modify the whole checkout.
+ */
+function workerSandboxConfigArgs(platform: NodeJS.Platform): string[] {
+  return [
+    "--config",
+    "sandbox_workspace_write.network_access=false",
+    "--config",
+    "sandbox_workspace_write.exclude_tmpdir_env_var=true",
+    "--config",
+    "sandbox_workspace_write.exclude_slash_tmp=true",
+    ...(platform === "win32" ? ["--config", 'windows.sandbox="unelevated"'] : []),
   ];
 }
 
@@ -481,6 +528,8 @@ export interface CodexExecArgsInput {
   cwd: string;
   /** Arms a loopback spine MCP server for a feedback phase; omitted, the command is unchanged. */
   feedback?: CodexExecFeedbackConfig;
+  /** The OS the sandbox is configured for. Defaults to the running process's platform. */
+  platform?: NodeJS.Platform;
 }
 
 /** Pure command construction exported so offline tests pin every security-relevant flag. */
@@ -494,13 +543,14 @@ export function buildCodexExecArgs(args: CodexExecArgsInput): string[] {
     "--skip-git-repo-check",
     "--strict-config",
     "--sandbox",
-    "danger-full-access",
+    "workspace-write",
     "--model",
     args.model,
     "--cd",
     args.cwd,
     "--config",
     'approval_policy="never"',
+    ...workerSandboxConfigArgs(args.platform ?? process.platform),
     "--config",
     'web_search="disabled"',
     "--config",
@@ -521,8 +571,8 @@ export function buildCodexExecArgs(args: CodexExecArgsInput): string[] {
     "--config",
     "features.multi_agent=false",
     "--config",
-    // The legacy shell tool registration also carries Codex's apply_patch tool. The disposable
-    // replica and exact promotion manifest remain the phase boundary.
+    // The legacy shell tool registration also carries Codex's apply_patch tool. The sandbox keeps
+    // both inside the replica; the exact promotion manifest decides what leaves it.
     "features.shell_tool=true",
     "--config",
     "features.unified_exec=false",
@@ -756,9 +806,10 @@ const REPLICA_EXCLUDED_PARTS = new Set([
  *
  * It used to be described as "managed-profile-writable", back when a Codex permission profile
  * decided which paths the CLI could write. ADR-0390 withdrew those profiles and the machinery was
- * deleted on 2026-08-20, so there is no profile to be writable under: the phase now runs
- * `--sandbox danger-full-access`, and this location is chosen because it is gitignored and inside
- * the checkout, not because anything grants it.
+ * deleted on 2026-08-20. This location is chosen because it is gitignored and inside the checkout,
+ * not because anything grants it: the phase's sandbox makes each replica its own only writable
+ * root (ADR-0583), and the worker's git ceiling is this directory, so a replica's git cannot
+ * discover the checkout it sits in.
  */
 export function codexProductionReplicaRoot(cwd: string): string {
   let candidate = path.resolve(cwd);
@@ -1163,7 +1214,9 @@ export class CodexPhaseAuthor implements PhaseAuthor {
       return { ok: false, error: `Codex ${phase} promotion manifest is malformed` };
     }
 
-    const childEnv = scrubMeteredCodexAuth(this.#args.env ?? process.env);
+    // The shell-worker scrub subsumes the metered-auth names `scrubMeteredCodexAuth` removes: all
+    // three are secret-shaped (ADR-0581 D1, ADR-0583).
+    const childEnv = scrubShellWorkerEnv(this.#args.env ?? process.env);
     let auth: CodexCommandResult;
     try {
       auth = await this.#runner({
@@ -1229,6 +1282,10 @@ export class CodexPhaseAuthor implements PhaseAuthor {
     const fullPrompt =
       `${agentBody.trim()}\n\n## Phase brief\n${prompt.trim()}\n\n` +
       "The spine will run all registered proof commands after you stop; their verdict is not yours.\n\n" +
+      // Ahead of the two target lists, never between them: the spine's own allowed/required sections
+      // are read back by `packages/cli/src/codex-leaf-prompt.test.ts`, which takes everything from
+      // `Required outputs:` up to `After you stop` as the required list.
+      `${CODEX_SANDBOX_NOTE}\n\n` +
       "You are working in a disposable replica, not the real build workspace. The spine's exact " +
       `allowed target set for this phase is:\n${renderTargets(allowedPromptTargets)}\n\n` +
       `Required outputs:\n${renderTargets(requiredPromptTargets)}\n\n` +
@@ -1283,12 +1340,20 @@ export class CodexPhaseAuthor implements PhaseAuthor {
           toolTimeoutSec: computeFeedbackToolTimeoutSec(this.#feedbackCommands),
         };
       }
+      // The git ceiling is the replica's PARENT: git may look for a repository in the replica
+      // itself (there is none — `.git` is never copied) but never climbs into the parent, so the
+      // checkout the replica sits in is not discoverable from its shell (ADR-0583). Measured before
+      // it was set: `git rev-parse --show-toplevel` in a replica answered the build's worktree.
+      const workerEnv: NodeJS.ProcessEnv = {
+        ...childEnv,
+        GIT_CEILING_DIRECTORIES: path.dirname(replicaDir),
+      };
       // The token VALUE lives only in the exec child's environment, under the endpoint's own
       // variable name — never in argv (ADR-0570 D2); `execArgsInput` carries the name alone.
       const execEnv: NodeJS.ProcessEnv =
         feedbackHandle === undefined
-          ? childEnv
-          : { ...childEnv, [feedbackHandle.tokenEnvVar]: feedbackHandle.token };
+          ? workerEnv
+          : { ...workerEnv, [feedbackHandle.tokenEnvVar]: feedbackHandle.token };
       const execCommand: CodexCommand = {
         args: buildCodexExecArgs(execArgsInput),
         cwd: replicaDir,

@@ -4,6 +4,8 @@ import * as os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
+import { scrubShellWorkerEnv, scrubToolWorkerEnv } from "@storytree/agent";
+
 import { defaultSecretsFile, loadLocalSecrets, presentEnv, SECRET_KEYS } from "./secrets.js";
 
 function withFixture(content: string | null, env: NodeJS.ProcessEnv): string[] {
@@ -102,4 +104,28 @@ test("a whitespace-only export is a gap too — hydration is not fooled by `VAR=
   loadLocalSecrets(target);
   fs.rmSync(dir, { recursive: true, force: true });
   assert.equal(target["STORYTREE_DB_USER"], "file@user.example");
+});
+
+/**
+ * The hydrator fills these keys into the spine's own environment, and a build worker inherits the
+ * spine's environment through the leaf that launches it (ADR-0581 D1, ADR-0583). So every key added
+ * here must be one the worker scrubs — or the worker gains a credential nobody decided to give it.
+ * The agent package cannot import this list (it imports no other storytree package), so the check
+ * lives on this side of the edge.
+ */
+test("every hydrated secret is kept from the Codex worker's shell", () => {
+  for (const key of SECRET_KEYS) {
+    assert.deepEqual(scrubShellWorkerEnv({ [key]: "hydrated", PATH: "p" }), { PATH: "p" }, key);
+  }
+});
+
+test("every hydrated secret except the Claude worker's own SDK credential is kept from the Claude worker", () => {
+  // CLAUDE_CODE_OAUTH_TOKEN is how the SDK process authenticates; the Claude worker's model has no
+  // shell to read it with. Every OTHER hydrated key must go.
+  const sdkOwnCredential = "CLAUDE_CODE_OAUTH_TOKEN";
+  assert.ok(SECRET_KEYS.includes(sdkOwnCredential));
+  for (const key of SECRET_KEYS) {
+    const expected = key === sdkOwnCredential ? { [key]: "hydrated", PATH: "p" } : { PATH: "p" };
+    assert.deepEqual(scrubToolWorkerEnv({ [key]: "hydrated", PATH: "p" }), expected, key);
+  }
 });
