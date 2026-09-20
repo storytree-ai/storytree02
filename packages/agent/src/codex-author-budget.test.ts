@@ -371,18 +371,27 @@ async function within<T>(pending: Promise<T>, ms = 2_500): Promise<T> {
 function handClock() {
   const armings: number[] = [];
   const fired: Array<() => void> = [];
+  const cleared: ReturnType<typeof setTimeout>[] = [];
+  const handles: ReturnType<typeof setTimeout>[] = [];
   return {
     armings,
     fire: (index: number) => fired[index]?.(),
     fireLatest: () => fired[fired.length - 1]?.(),
+    /** How many of this spawn's armings are still live — zero once the spawn has settled. */
+    stillArmed: () => handles.filter((handle) => !cleared.includes(handle)).length,
     clock: {
       setTimeout: (fn: () => void, ms: number) => {
         armings.push(ms);
         fired.push(fn);
         // A real handle nothing waits on: the runner clears it, and it never fires by itself.
-        return setTimeout(() => undefined, 60_000);
+        const handle = setTimeout(() => undefined, 60_000);
+        handles.push(handle);
+        return handle;
       },
-      clearTimeout: (handle: ReturnType<typeof setTimeout>) => clearTimeout(handle),
+      clearTimeout: (handle: ReturnType<typeof setTimeout>) => {
+        cleared.push(handle);
+        clearTimeout(handle);
+      },
     } satisfies CodexBoundClock,
   };
 }
@@ -440,6 +449,12 @@ test("silence-detector: output RE-ARMS it, so a slow child that keeps talking is
     [3_600_000, 600_000, 600_000, 600_000],
     "the initial pair plus ONE re-arm per stream — drop either stream's wiring and this is three",
   );
+  // Both streams are also COLLECTED, not only heard: a killed or completed child's output is the only
+  // evidence of how far it got.
+  assert.equal(result.stdout, "a");
+  assert.equal(result.stderr, "e");
+  // And a settled spawn leaves nothing armed on the clock, whichever way it settled.
+  assert.equal(hand.stillArmed(), 0, "the settle released every timer this spawn armed");
 });
 
 test("silence-detector: the spawn hands its bound control through to the clocks — suspend pauses the window, resume gives it back whole", async () => {
