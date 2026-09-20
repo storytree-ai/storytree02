@@ -68,7 +68,7 @@ import {
   wallClockBudget,
   worktreeScopeFingerprint,
 } from "./repair.js";
-import type { RepairBudget } from "./repair.js";
+import type { BuildBudget } from "./repair.js";
 
 /**
  * The resolver (drive-machinery Phase B, plan §2): turn a loaded {@link NodeSpec} into the full
@@ -315,7 +315,11 @@ export interface RealResolveOptions extends BaseResolveOptions {
   model?: string;
   /** Per-authoring-slice budget ceiling in USD (Claude only). */
   maxBudgetUsd?: number;
-  /** Per-authoring-slice turn ceiling (SDK-enforced). Default: 16. */
+  /**
+   * Per-authoring-slice turn ceiling (SDK-enforced), and NO LONGER the runaway brake on this route:
+   * a real build's brake is its wall clock (ADR-0584 D5). Unset, the SDK is given no ceiling at all,
+   * because {@link timeBudgetMs} is always wired here. An operator's explicit value is still honoured.
+   */
   maxTurns?: number;
   /** The rendered red-builder/green-builder system prompts the live SDK leaf runs on (ADR-0051 §4). */
   phasePrompts?: LeafPhasePrompts;
@@ -363,12 +367,22 @@ export interface RealResolveOptions extends BaseResolveOptions {
    */
   testRevision?: TestRevision | undefined;
   /**
-   * ADR-0582 D6: the build's budget the in-build repair loop asks before every repair. Defaults to a
-   * {@link wallClockBudget} of {@link DEFAULT_BUILD_BUDGET_MS} started at resolution, which is
-   * immediately before the walk. The seam `workers-have-what-they-need-arc-inc-01`'s per-build budget,
-   * and the orchestrator's peek-and-extend behind it, arrive through — so a build has ONE budget.
+   * The whole build's wall clock, in MINUTES, as the orchestrator set it at launch (`--time-budget`,
+   * ADR-0581 D2). Omitted, the build runs on {@link DEFAULT_BUILD_BUDGET_MS} — two hours, the owner's
+   * figure, which is a DEFAULT and never a ceiling. Ignored when {@link buildBudget} is injected,
+   * since that supplies the clock itself. Admits `undefined` explicitly so its callers can assign it
+   * unconditionally: "no override" and "not supplied" are the same thing to this resolver, so a
+   * guard around the assignment would be a mutant no test could kill.
    */
-  repairBudget?: RepairBudget | undefined;
+  timeBudgetMs?: number | undefined;
+  /**
+   * TEST SEAM — the build's budget object itself, replacing the wall clock this resolver would
+   * otherwise start. Absent (every real build), a {@link wallClockBudget} is constructed here, which
+   * is immediately before the walk, and the SAME object is handed to both authors' `timeBudget` and
+   * to the in-build repair loop: a build has ONE clock, and nothing can reset it (ADR-0584 D1).
+   * The orchestrator's peek-and-extend arrives behind this same seam.
+   */
+  buildBudget?: BuildBudget | undefined;
 }
 
 /**
@@ -491,7 +505,20 @@ export function composePiSubscriptionEndpoint(
  * else's object and this resolver has no standing to claim its fence record.
  */
 export type ResolveResult =
-  | { ok: true; spec: ProveSpec; liveAuthor?: LiveAuthor; ownedAuthor?: OwnedLoopAuthor }
+  | {
+      ok: true;
+      spec: ProveSpec;
+      liveAuthor?: LiveAuthor;
+      ownedAuthor?: OwnedLoopAuthor;
+      /**
+       * The build's ONE wall clock (ADR-0584 D1), returned on the REAL route so its holder can read
+       * it — the same object this resolver handed to both authoring slices and to the in-build repair
+       * loop. Two callers need it and neither can reach it through `spec`: a caller reporting WHY a
+       * build stopped, and `orchestrator-peeks-and-extends-a-spent-budget`, whose peek needs a handle
+       * on the clock it may extend. Absent on the dry-run and live-smoke routes, which wire no budget.
+       */
+      buildBudget?: BuildBudget;
+    }
   | { ok: false; reason: string; registered: string[] };
 
 /**
@@ -803,6 +830,21 @@ function resolveReal(
     };
   }
 
+  // ADR-0584 D1 — ONE budget for the whole build, started HERE, which is immediately before the walk,
+  // and handed to every consumer of it: both authoring slices, every in-build repair, and (once
+  // `orchestrator-peeks-and-extends-a-spent-budget` lands) the peek that may extend it. Time is the
+  // runaway brake now, not the turn cap (ADR-0581 D2), so this object is the only thing that stops a
+  // runaway worker — which is why it is constructed before the `authorOverride` fork rather than
+  // inside the live branch: an offline walk repairs on the same clock a live one does.
+  //
+  // Deliberately NOT wired for `--live`/`--dry-run`: those resolve elsewhere and keep the turn cap,
+  // which ADR-0584 D5 leaves standing for any caller that wires no budget, so no path is left with
+  // no brake at all. ADR-0581 names the REAL build, and `--runtime pi` (live-smoke only) keeps its
+  // own turn ceiling.
+  const buildBudget: BuildBudget =
+    opts.buildBudget ??
+    wallClockBudget(opts.timeBudgetMs !== undefined ? { budgetMs: opts.timeBudgetMs } : {});
+
   let author: PhaseAuthor;
   let liveAuthor: LiveAuthor | undefined;
   if (opts.authorOverride !== undefined) {
@@ -853,6 +895,10 @@ function resolveReal(
       };
       if (opts.phasePrompts !== undefined) codexArgs.phasePrompts = opts.phasePrompts;
       if (opts.model !== undefined) codexArgs.model = opts.model;
+      // Unconditional, like every other wiring of the build's one clock: this is the SAME object the
+      // repair loop below is given. Codex reads it as its spawn bound (ADR-0584 D4), replacing the
+      // fixed ten-minute per-phase timer, which becomes a silence detector beside it.
+      codexArgs.timeBudget = buildBudget;
       liveAuthor = new CodexPhaseAuthor(codexArgs);
     } else {
       const claudeArgs: ClaudeAgentAuthorArgs = {
@@ -863,7 +909,11 @@ function resolveReal(
       if (opts.phasePrompts !== undefined) claudeArgs.phasePrompts = opts.phasePrompts;
       if (opts.model !== undefined) claudeArgs.model = opts.model;
       if (opts.maxBudgetUsd !== undefined) claudeArgs.maxBudgetUsd = opts.maxBudgetUsd;
+      // Still honoured when an operator passes it, and ONLY then (ADR-0584 D5): with the budget wired
+      // below, an unset `--max-turns` now sends the SDK no ceiling at all, so a worker can no longer
+      // be killed for being slow. Turn counts stay in the build envelope as a readout.
       if (opts.maxTurns !== undefined) claudeArgs.maxTurns = opts.maxTurns;
+      claudeArgs.timeBudget = buildBudget;
       liveAuthor = new ClaudeAgentAuthor(claudeArgs);
     }
     author = liveAuthor;
@@ -991,7 +1041,9 @@ function resolveReal(
   // the implementation is (the set-aside) — so the loop routes by exactly the walls the workers wrote
   // under.
   proveSpec.repair = {
-    budget: opts.repairBudget ?? wallClockBudget(),
+    // The same object both authors hold (ADR-0584 D1). The loop asks it `mayRepair()` alone, so a
+    // repair and a worker slice spend one clock rather than two.
+    budget: buildBudget,
     setAsideImplementation: async () => {
       const aside = await setAsideImplementation({
         worktreeRoot: opts.workspace,
@@ -1009,8 +1061,8 @@ function resolveReal(
     scopeFingerprint: () => worktreeScopeFingerprint({ worktreeRoot: opts.workspace }),
   };
   return liveAuthor !== undefined
-    ? { ok: true, spec: proveSpec, liveAuthor }
-    : { ok: true, spec: proveSpec };
+    ? { ok: true, spec: proveSpec, liveAuthor, buildBudget }
+    : { ok: true, spec: proveSpec, buildBudget };
 }
 
 /**

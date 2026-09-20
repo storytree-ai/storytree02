@@ -2765,6 +2765,7 @@ interface BuildValues {
   runtime?: string;
   budget?: string;
   "max-turns"?: string;
+  "time-budget"?: string;
   "revise-test"?: string;
   increment?: string;
   actor?: string;
@@ -2794,6 +2795,10 @@ export function nodeStoryBuildOpts(values: BuildValues): NodeBuildOpts {
   if (values.runtime !== undefined) opts.runtime = values.runtime;
   if (values.budget !== undefined) opts.budgetUsd = Number(values.budget);
   if (values["max-turns"] !== undefined) opts.maxTurns = Number(values["max-turns"]);
+  // ADR-0581 D2: unguarded, and the RAW text rather than a number — `chooseTimeBudgetMs` in the
+  // drive owns the parse, the validation and the real-route narrowing, so a malformed value is
+  // refused there with the operator's own text quoted back rather than as `NaN`.
+  opts.timeBudget = values["time-budget"];
   // ADR-0571 D3: unguarded, because `reviseTest` admits undefined — a guard here would be a mutant
   // no test could kill. `story build` reads the same field as `<member-id>:<run-id>` (ADR-0571,
   // amended for story chains) and refuses it without --real.
@@ -3144,7 +3149,7 @@ function makeGateOpts(values: BuildValues): GateOpts {
  * falls back to the driver's live default.
  *
  * Deliberately NOT the argv-threaded fields (`increment`, `verdictStore`, `model`, `runtime`,
- * `budgetUsd`, `maxTurns`) nor `storiesDir`: those stay `makeGateDeps`' own threading, so a suite
+ * `budgetUsd`, `maxTurns`, `timeBudget`) nor `storiesDir`: those stay `makeGateDeps`' own threading, so a suite
  * that supplies seams still proves what the composition wires rather than what the suite substituted.
  */
 export type GateDriverSeams = Partial<
@@ -3195,6 +3200,8 @@ export function makeGateDeps(
       if (values.runtime !== undefined) driverDeps.runtime = values.runtime;
       if (values.budget !== undefined) driverDeps.budgetUsd = Number(values.budget);
       if (values["max-turns"] !== undefined) driverDeps.maxTurns = Number(values["max-turns"]);
+      // Unguarded and raw, for the reason `nodeStoryBuildOpts` states: the drive owns the reading.
+      driverDeps.timeBudget = values["time-budget"];
       return driveBuildTestsGate(gate, signer, driverDeps);
     },
     now: () => new Date(),
@@ -3222,7 +3229,7 @@ function buildHelp(): Envelope {
       "",
       "flags: --dry-run (scripted, offline) · --live (subscription leaf smoke) · --real (real build)",
       "       --runtime claude|codex|pi (default: codex) · --model <runtime-model-id>",
-      "       --budget <usd> (Claude only) · --max-turns <n>   ·   --runtime pi is --live only (ADR-0449)",
+      "       --budget <usd> (Claude only) · --max-turns <n> · --time-budget <minutes> (--real)   ·   --runtime pi is --live only (ADR-0449)",
       "       --revise-test <run-id> (node/gate --real) · <member-id>:<run-id> (story --real) — a test revision against that failed run's escalation (ADR-0571)",
       "       --increment <id> (REQUIRED with --real, refused without it) — the arc increment a paid attempt is filed under (ADR-0576)",
       "",
@@ -3419,6 +3426,7 @@ export const CLI_OPTIONS = {
   model: { type: "string" },
   budget: { type: "string" },
   "max-turns": { type: "string" },
+  "time-budget": { type: "string" },
   // `node build <id> --real --revise-test <run-id>` (ADR-0571): re-run the unit as a test revision
   // against that run's escalation record. `node build` only — `story build` refuses it.
   "revise-test": { type: "string" },

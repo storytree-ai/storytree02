@@ -102,6 +102,7 @@ import type { SessionIdentity } from "./noticeboard.js";
 import { emitWisp, gateEmitWisp } from "./wisp-smoke.js";
 import type { EmitWispArgs, EmitWispDeps, GateEmitWispOpts } from "./wisp-smoke.js";
 import { staleExistenceClaimRefusal } from "./stale-existence-claim.js";
+import { chooseTimeBudgetMs } from "./time-budget.js";
 
 /**
  * ADR-0082: the story's OWN UAT crown rolled up from its per-test signed verdicts, as a report line.
@@ -546,11 +547,24 @@ export interface StoryBuildOpts {
   runtime?: string;
   /**
    * `--budget` — OPTIONAL TOTAL USD ceiling across every node (live/real only). Default: NONE — no USD
-   * ceiling (ADR-0130); the per-slice turn cap is the runaway brake. Set it to opt into a total cap.
+   * ceiling (ADR-0130). On a `--real` chain the runaway brake is {@link timeBudgetMinutes}; elsewhere
+   * it is the per-slice turn cap. Set this to opt into a total cap.
    */
   budgetUsd?: number;
   /** `--max-turns` — per-authoring-slice turn ceiling, SDK-enforced (live/real only). */
   maxTurns?: number;
+  /**
+   * `--time-budget <minutes>` — the wall clock of EACH MEMBER BUILD in the chain, not a total across
+   * the chain. ⚠ That is the opposite of {@link budgetUsd} on this same command, which IS a total, so
+   * the two flags read alike and mean different things: `--budget 10 --time-budget 120` is ten dollars
+   * for the whole chain and two hours for every member of it.
+   *
+   * It is per-build because the budget IS a build's own clock (ADR-0584 D1): the spine constructs one
+   * when it resolves a build and hands that same object to both its authoring slices and its in-build
+   * repairs. A total across a chain would be a different instrument — a clock threaded between builds
+   * — and nothing has decided one. Default: two hours per member, held by the spine.
+   */
+  timeBudget?: string | undefined;
   /** `--actor` — the signer chain's flag tier. */
   actor?: string;
   /**
@@ -732,6 +746,16 @@ export async function storyBuild(
         "--max-turns is fixed at 1 with --runtime codex: each prove-it phase is exactly one " +
         "non-interactive Codex turn. Omit the flag or pass --max-turns 1.",
       next: [`storytree story build ${storyId} ${real ? "--real --increment <increment-id>" : "--live"} --runtime codex`],
+    };
+  }
+  // ADR-0581 D2: each member build's wall clock. The whole decision — parse, validate, and the
+  // real-route narrowing — is `chooseTimeBudgetMs`'s, so this command cannot drift from `node build`.
+  const timeBudget = chooseTimeBudgetMs(opts.timeBudget, { real });
+  if (!timeBudget.ok) {
+    return {
+      ok: false,
+      body: timeBudget.reason,
+      next: [`storytree story build ${storyId} --real --increment <increment-id> --time-budget 120`],
     };
   }
   // ADR-0575 D1 / ADR-0576 D1: --increment names the increment a paid chain attempt is filed under
@@ -1193,6 +1217,11 @@ export async function storyBuild(
             // ADR-0130: a slice draws the remaining total when `--budget` is set; unbounded otherwise.
             if (remainingUsd !== undefined) realArgs.budgetUsd = remainingUsd;
             if (opts.maxTurns !== undefined) realArgs.maxTurns = opts.maxTurns;
+            // ADR-0584 D1: per MEMBER build, not a total across the chain — each build resolves its
+            // own clock, so every member gets the same figure rather than a share of one.
+            // Unconditional: `undefined` IS "no override" to the build, so a guard would be a mutant
+            // no test could kill.
+            realArgs.timeBudgetMs = timeBudget.ms;
             // ADR-0571 (amended for story chains): every member records its own returned escalation
             // under its id and this chain's run id, and ONLY the member the revision names receives it
             // — its record's unitId is that member's id (readTestRevision refuses any other).
@@ -1630,7 +1659,7 @@ export function storyHelp(): Envelope {
       "      but the TASK per node is still synthetic. Codex defaults to gpt-5.6-terra and requires",
       "      saved ChatGPT-managed auth; --budget is an optional Claude-only total ceiling.",
       "",
-      "  storytree story build <story-id> --real --increment <id> [--runtime claude|codex] [--budget <usd>] [--model <id>] [--max-turns <n>] [--actor <email>]",
+      "  storytree story build <story-id> --real --increment <id> [--runtime claude|codex] [--budget <usd>] [--model <id>] [--max-turns <n>] [--time-budget <minutes>] [--actor <email>]",
       "      ADR-0057 §3 expansion D — chain node build --real over the WHOLE story: each node",
       "      authored for real in ONE shared worktree in dependency order (a later node builds on",
       "      earlier nodes' committed source), signed, the proven chain promoted ONCE at the stacked",

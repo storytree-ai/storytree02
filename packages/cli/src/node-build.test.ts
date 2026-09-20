@@ -716,6 +716,66 @@ test("node build carries --increment to nodeBuild on every node route, which ref
   }
 });
 
+test("node build carries --time-budget to nodeBuild on every node route, which refuses it without --real (ADR-0581 D2)", async () => {
+  // The end-to-end proof that the argv table and nodeStoryBuildOpts actually deliver the flag. It is
+  // the only test that can see the silent failure: a flag missing from the argv table parses as
+  // undefined, so this dry-run would PROCEED rather than refuse, and no unit test of nodeBuild alone
+  // would notice — it would simply never be given the value.
+  const expected = {
+    ok: false,
+    body:
+      "--time-budget bounds a --real build's wall clock and is wired on that route only " +
+      "(ADR-0581 D2). A --live smoke still runs on its per-slice turn cap; use --max-turns there.",
+    // A valid example command, not an echo of what was typed: the refusal body already names what
+    // was wrong with the value, and a `next` that repeats a rejected figure reads as a suggestion
+    // to run it again unchanged.
+    next: ["storytree node build library-cli --real --increment <increment-id> --time-budget 120"],
+  };
+  for (const argv of [
+    ["node", "build", "library-cli", "--dry-run", "--time-budget", "45", "--actor", "tester@example.com"],
+    ["build", "node", "library-cli", "--dry-run", "--time-budget", "45", "--actor", "tester@example.com"],
+    ["build", "library-cli", "--dry-run", "--time-budget", "45", "--actor", "tester@example.com"],
+  ]) {
+    const env = await run(argv, deps);
+    assert.deepEqual(env, expected, argv.join(" "));
+  }
+});
+
+test("node build refuses a --time-budget that cannot bound a build, before any spend (ADR-0581 D2)", async () => {
+  // Zero and a non-numeric value are refused for different reasons and must BOTH be refused here,
+  // at the CLI, rather than reaching the spine: a zero budget is well defined downstream (every
+  // slice refuses and the build spends an attempt authoring nothing), and `--time-budget abc` is
+  // `Number("abc")` — NaN, which no comparison rejects on its own.
+  // `--time-budget=-5` rather than `--time-budget -5`: node's own argv parser refuses a bare
+  // leading-dash value as ambiguous before any of our code sees it (it cannot tell the value from
+  // the next flag), and that refusal names the `=` form as the way to express one. So this is the
+  // ONLY spelling in which a negative reaches our own check — which is the point of testing it here
+  // rather than assuming the unit test's negative case covers the command line too.
+  for (const argv of [
+    ["node", "build", "library-cli", "--real", "--increment", "inc-x", "--time-budget", "0", "--actor", "tester@example.com"],
+    ["node", "build", "library-cli", "--real", "--increment", "inc-x", "--time-budget=-5", "--actor", "tester@example.com"],
+    ["node", "build", "library-cli", "--real", "--increment", "inc-x", "--time-budget", "abc", "--actor", "tester@example.com"],
+  ]) {
+    const env = await run(argv, deps);
+    assert.equal(env.ok, false, argv.join(" "));
+    assert.match(env.body, /--time-budget must be a positive number of minutes/, argv.join(" "));
+  }
+  // And the refusal names what the operator typed, so a typo is visible rather than merely rejected.
+  const zero = await run(
+    ["node", "build", "library-cli", "--real", "--increment", "inc-x", "--time-budget", "0", "--actor", "tester@example.com"],
+    deps,
+  );
+  // The two shapes differ on purpose: a number is quoted back, a non-number is described,
+  // because echoing `NaN` at someone who typed a word tells them nothing about what they typed.
+  assert.match(zero.body, /minutes; got "0"/);
+  const word = await run(
+    ["node", "build", "library-cli", "--real", "--increment", "inc-x", "--time-budget", "abc", "--actor", "tester@example.com"],
+    deps,
+  );
+  assert.match(word.body, /got "abc"/);
+  assert.doesNotMatch(word.body, /NaN/);
+});
+
 test("node build --dry-run --emit-wisp --dwell 0 is refused (dwell must be positive) — no DB touched", async () => {
   const env = await run(
     ["node", "build", "library-cli", "--dry-run", "--emit-wisp", "--dwell", "0", "--actor", "tester@example.com"],

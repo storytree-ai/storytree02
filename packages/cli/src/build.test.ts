@@ -127,6 +127,10 @@ test("build --help names all three runtimes and the constraints that bind them",
   // The two cost-guard constraints, each naming which runtime it binds.
   assert.match(help.body, /--budget <usd> \(Claude only\)/);
   assert.match(help.body, /--runtime pi is --live only \(ADR-0449\)/);
+  // ADR-0581 D2: the wall clock, and the route it binds on. An operator who does not read "(--real)"
+  // here meets it as a refusal instead, which is the whole reason the constraint is stated on the
+  // line rather than only in the message that rejects the command.
+  assert.match(help.body, /--time-budget <minutes> \(--real\)/);
 });
 
 test("the gate `--store memory` refusal's retry names the increment a paid gate build must be filed under", async () => {

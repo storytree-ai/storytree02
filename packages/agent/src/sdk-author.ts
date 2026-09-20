@@ -191,8 +191,9 @@ export interface ClaudeAgentAuthorArgs {
    * OPTIONAL per-slice hard budget ceiling in USD (the SDK aborts past it). Default: NONE — no USD
    * ceiling is enforced unless an explicit value is threaded down (ADR-0130). The leaf is
    * subscription-funded (ADR-0030), so the SDK's metered `total_cost_usd` is a phantom that doesn't
-   * reflect our flat cost; the {@link maxTurns} cap is the genuine runaway brake. An operator may still
-   * opt into a cap via `--budget`, in which case `error_max_budget_usd` maps to `exhausted` as before.
+   * reflect our flat cost. The genuine runaway brake is {@link timeBudget} where one is wired
+   * (ADR-0581 D2) and {@link maxTurns} otherwise. An operator may still opt into a cap via `--budget`,
+   * in which case `error_max_budget_usd` maps to `exhausted` as before.
    */
   maxBudgetUsd?: number;
   /**

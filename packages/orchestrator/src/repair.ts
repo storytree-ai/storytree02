@@ -22,7 +22,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 
-import type { AuthoringPhase } from "@storytree/agent";
+import type { AuthoringPhase, WorkerTimeBudget } from "@storytree/agent";
 
 import type { Phase, RepairOwner } from "./phase-machine.js";
 
@@ -50,6 +50,17 @@ export interface RepairBudget {
   mayRepair(): Promise<RepairDecision>;
 }
 
+/**
+ * The build's ONE budget, whole (ADR-0584 D1). Two contracts on one object, because a build has one
+ * wall clock and not two: the repair loop polls it between rounds through {@link RepairBudget}, and a
+ * running worker slice reads its remaining time through `WorkerTimeBudget` — the seam declared in
+ * `@storytree/agent`, which imports no other storytree package and so cannot be handed this type.
+ *
+ * Extending BOTH is the point: the compiler, not a comment, is what holds the spine's clock to the
+ * shape a worker was built to read. A worker never owns this object and never resets it.
+ */
+export interface BuildBudget extends RepairBudget, WorkerTimeBudget {}
+
 /** The owner's figure (ADR-0581 D2): two hours of wall clock per build. */
 export const DEFAULT_BUILD_BUDGET_MS = 2 * 60 * 60 * 1000;
 
@@ -60,16 +71,25 @@ function minutes(ms: number): string {
 
 /**
  * A wall-clock budget measured from its own construction — which the real resolver does immediately
- * before the walk — that refuses a repair once `budgetMs` has elapsed. It never holds: the peek and the
- * extension are `orchestrator-peeks-and-extends-a-spent-budget`'s to add behind the same seam.
+ * before the walk — that refuses a repair once `budgetMs` has elapsed, and reports the same clock's
+ * remaining time to a running worker slice. It never holds: the peek and the extension are
+ * `orchestrator-peeks-and-extends-a-spent-budget`'s to add behind the same seam.
+ *
+ * `elapsedMs` is the single reading both answers derive from, so the repair loop and the workers can
+ * never disagree about how much of the build is gone.
  */
-export function wallClockBudget(opts: { budgetMs?: number; now?: () => number } = {}): RepairBudget {
+export function wallClockBudget(opts: { budgetMs?: number; now?: () => number } = {}): BuildBudget {
   const now = opts.now ?? Date.now;
   const budgetMs = opts.budgetMs ?? DEFAULT_BUILD_BUDGET_MS;
   const startedAt = now();
+  const elapsedMs = (): number => now() - startedAt;
   return {
+    budgetMs,
+    remainingMs(): number {
+      return budgetMs - elapsedMs();
+    },
     mayRepair(): Promise<RepairDecision> {
-      const elapsed = now() - startedAt;
+      const elapsed = elapsedMs();
       return Promise.resolve(
         elapsed < budgetMs
           ? { ok: true }
@@ -351,7 +371,12 @@ export function routeTypecheckByFile(output: ProcessOutput, routing: TypecheckRo
 /** Run git in `cwd`, resolving its raw stdout; rejects on a non-zero exit. Injectable for tests. */
 export type GitRunner = (args: readonly string[], cwd: string) => Promise<Buffer>;
 
-const runGitBuffer: GitRunner = (args, cwd) =>
+/**
+ * The REAL git runner the set-aside falls through to when no fake is injected — the one that runs in
+ * production. Exported so a test can name and drive it: with it unexported, every set-aside test was
+ * evidence about a fake, and this implementation was reached by nothing (`unproven-seam-default`).
+ */
+export const runGitBuffer: GitRunner = (args, cwd) =>
   new Promise<Buffer>((resolve, reject) => {
     execFile(
       "git",

@@ -43,6 +43,7 @@ export * from "./node-build.js";
 // ADR-0378: the stale negative-existence-claim REAL-mode precondition — a declared sourceFile that
 // already exists on disk while the spec's own prose still (anchored) says it does not.
 export * from "./stale-existence-claim.js";
+export * from "./time-budget.js";
 // The paid-build entry's before-spend preflight (ADR-0576): resolving the increment a build is
 // filed under, and preflighting every unit it will drive against the attempt ledger.
 export * from "./inner-loop-entry.js";
