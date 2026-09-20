@@ -103,11 +103,16 @@ test("budget-stops-a-worker: a deadline that fires mid-slice aborts the SDK and 
   const hand = handClock();
   // The SDK aborts by signal and surfaces that as a THROWN error with no result message — the shape
   // this double reproduces. Without the budget's own record of why, this would read as a hard failure.
+  // The await is BOUNDED, and that bound is the test's own guard: if no abort ever arrives — because a
+  // mutant dropped the controller, the deadline or the abort call — this yields a SUCCESS result
+  // instead of hanging, so the assertion below fails fast rather than timing the suite out
+  // (`mutation-rung-scores-a-hang-as-unproven` §13).
   const aborting: SdkQueryFn = async function* ({ options }) {
-    await new Promise<never>((_resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       options.abortController?.signal.addEventListener("abort", () => {
         reject(new Error("The operation was aborted"));
       });
+      setTimeout(() => resolve(), 50);
       hand.fire();
     });
     yield { type: "result", subtype: "success", is_error: false, num_turns: 1, total_cost_usd: 0 };

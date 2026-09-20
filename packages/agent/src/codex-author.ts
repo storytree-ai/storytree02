@@ -1443,7 +1443,11 @@ export class CodexPhaseAuthor implements PhaseAuthor {
       // bound is the honest answer, and it is UNVERIFIED rather than a failure. A BUDGETED stop is
       // handled further down instead, after the replica has been observed: the phase's work is not
       // thrown away (ADR-0581 D2).
-      if (execution.timedOut === true && budget === undefined) {
+      // Decided ONCE, here, and read again after the observation below: the second read then tests one
+      // thing, where `execution.timedOut === true && budget !== undefined` would carry an operand no
+      // runtime state can falsify (a stop with no budget has already returned by then).
+      const budgetedStop = execution.timedOut === true ? budget : undefined;
+      if (execution.timedOut === true && budgetedStop === undefined) {
         // A recorded escalation wins over a timed-out runner (ADR-0569): the leaf raised it before
         // the bound killed the spawn, and a killed child left no stream to write a run record from.
         if (escalation !== undefined) {
@@ -1555,11 +1559,11 @@ export class CodexPhaseAuthor implements PhaseAuthor {
       // here so the phase's work is not thrown away. `exhausted` is what makes the gate observe the
       // tree rather than discard the build; the verdict is still the spine's own observation, never
       // this promotion, so partial work can only ever produce an honest red.
-      if (execution.timedOut === true && budget !== undefined) {
+      if (budgetedStop !== undefined) {
         const stopError =
           execution.stoppedBy === "silence"
             ? codexSilenceError(phase, DEFAULT_CODEX_SILENCE_MS)
-            : budgetSpentError(phase, budget.budgetMs);
+            : budgetSpentError(phase, budgetedStop.budgetMs);
         run.subtype = "error";
         if (changes.length === 0) {
           return { ok: false, exhausted: true, error: `${stopError}; it had written nothing` };

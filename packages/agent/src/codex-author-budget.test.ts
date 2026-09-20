@@ -415,12 +415,15 @@ test("silence-detector: output RE-ARMS it, so a slow child that keeps talking is
   const chatty: CodexCommand = {
     args: [
       "-e",
-      // BOTH streams: each is wired to the detector separately, so a test that only writes stdout
-      // cannot tell whether stderr re-arms it.
-      'process.stdout.write("a"); setTimeout(() => { process.stderr.write("e"); process.stdout.write("b"); }, 50);',
+      // EXACTLY one chunk on each stream, because each stream is wired to the detector separately and
+      // the count below is what tells them apart: four armings is the initial pair plus one re-arm per
+      // stream. A test that wrote only stdout could not see stderr's wiring at all.
+      'process.stdout.write("a"); process.stderr.write("e");',
     ],
     cwd: process.cwd(),
     env: { ...process.env, STORYTREE_CODEX_EXECUTABLE: process.execPath },
+    // A bound distinct from the window, so the four armings below are readable one from another.
+    timeoutMs: 3_600_000,
     silenceMs: 600_000,
   };
   const result = await within(runPinnedCodexCli(chatty, hand.clock));
@@ -432,11 +435,10 @@ test("silence-detector: output RE-ARMS it, so a slow child that keeps talking is
   assert.equal(Object.hasOwn(result, "stoppedBy"), false);
   // Arming the pair is two; every chunk of output clears the window and arms a fresh one, so a run
   // that produced output has MORE than the initial pair. Without the re-arm this would be exactly 2.
-  // Arming the pair is two; stdout's chunk and stderr's chunk each clear and re-arm the window, so a
-  // run that wrote to both streams shows strictly more than three.
-  assert.ok(
-    hand.armings.length > 3,
-    `expected BOTH streams to re-arm the silence window, saw only ${hand.armings.length} arming(s)`,
+  assert.deepEqual(
+    hand.armings,
+    [3_600_000, 600_000, 600_000, 600_000],
+    "the initial pair plus ONE re-arm per stream — drop either stream's wiring and this is three",
   );
 });
 
