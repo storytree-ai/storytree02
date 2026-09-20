@@ -6,8 +6,9 @@
  *
  * Local only: listens on `127.0.0.1` with port 0 (never `localhost`, never every interface). The
  * bearer token is fresh per endpoint, and a request without the right `Authorization: Bearer
- * <token>` header runs nothing. The leaf controls zero arguments — every tool's input schema
- * accepts no properties, and a call's `arguments` are never read.
+ * <token>` header runs nothing. The leaf controls zero arguments unless a command DECLARES a choice
+ * (ADR-0587), in which case it may name values from a set the spine enumerated and published —
+ * never a path, a flag or a command line, and every call is re-validated against that same set.
  *
  * One budget decision for both leaves: every run is adapted to the Claude leaf's own
  * `FeedbackCommand` shape (closing over the replica root) and executed through `executeFeedback`
@@ -22,6 +23,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 
 import { executeFeedback } from "./sdk-author.js";
+import { feedbackChoiceJsonSchema } from "./feedback-choice.js";
+import type { FeedbackChoice, FeedbackChoiceParameter } from "./feedback-choice.js";
 import type { FeedbackCommand, FeedbackRunOutput, SdkFeedbackRun } from "./sdk-author.js";
 import { parseAuthoringEscalation } from "./phase-author.js";
 import type { AuthoringEscalation, AuthoringPhase } from "./phase-author.js";
@@ -36,8 +39,17 @@ export interface CodexFeedbackCommand {
   name: string;
   /** What the model is told the tool does. */
   description: string;
-  /** Spawn the fixed registered command against the disposable replica (never throws on a red exit — a genuine spawn failure is still allowed to throw and is caught by `executeFeedback`). */
-  run: (replicaRoot: string) => Promise<FeedbackRunOutput>;
+  /** Spawn the registered command against the disposable replica (never throws on a red exit — a genuine spawn failure is still allowed to throw and is caught by `executeFeedback`). */
+  run: (replicaRoot: string, choice?: FeedbackChoice) => Promise<FeedbackRunOutput>;
+  /**
+   * ADR-0587: the ONE argument this tool admits — a choice from a set the SPINE enumerated,
+   * published in `tools/list` as an enum so the model can read what it may ask for. Absent (both
+   * pre-existing commands) the leaf controls zero arguments exactly as ADR-0570 decided.
+   *
+   * Admits `undefined` explicitly so a registry can assign it unconditionally — see the same
+   * note on `FeedbackCommand.parameter`.
+   */
+  parameter?: FeedbackChoiceParameter | undefined;
   /**
    * The wall-clock bound, in milliseconds, the spine applies to this command's own run (ADR-0104
    * `RealProofConfig.timeoutMs`). Read by `CodexPhaseAuthor` to size Codex's own MCP tool-call
@@ -91,7 +103,7 @@ const SERVER_NAME = "spine";
  * requirement pins this value beyond non-empty, so it is not read from `package.json`.
  */
 const SERVER_VERSION = "1";
-/** Every tool's input schema: the leaf controls zero arguments. */
+/** The input schema of a tool that declares no choice: the leaf controls zero arguments. */
 const EMPTY_INPUT_SCHEMA = { type: "object", properties: {}, additionalProperties: false };
 
 /** The spawn-free escalation tool's name (ADR-0569, extended to the Codex leaf). */
@@ -182,10 +194,19 @@ export async function openCodexFeedbackEndpoint(
   // ever set true by the FIRST valid `escalate` call this endpoint answers.
   let escalationRecorded = false;
 
+  // The adapter onto the shared `FeedbackCommand` shape `executeFeedback` drives: the replica root
+  // is closed over (it is the endpoint's, not the leaf's, to choose) while the CHOICE is passed
+  // through, because that one IS the leaf's (ADR-0587). The declared `parameter` travels too, or
+  // `executeFeedback` would find none and silently ignore every argument the transport delivered.
   const commandMap = new Map<string, FeedbackCommand>(
     commands.map((c) => [
       c.name,
-      { name: c.name, description: c.description, run: () => c.run(replicaRoot) },
+      {
+        name: c.name,
+        description: c.description,
+        run: (choice) => c.run(replicaRoot, choice),
+        parameter: c.parameter,
+      },
     ]),
   );
 
@@ -225,12 +246,18 @@ export async function openCodexFeedbackEndpoint(
       sendJson(res, 200, rpcError(id, -32602, `unknown tool: ${name}`));
       return;
     }
-    // The leaf controls zero arguments: `params.arguments` is deliberately never read.
+    // ADR-0587: forwarded RAW and validated inside `executeFeedback`, against the command's own
+    // declared choices. A command declaring none ignores whatever a call carried, so an argument on
+    // a zero-argument tool is still not honoured — the widening is per-tool, never per-endpoint.
     const outcome = await executeFeedback({
       phase,
       command,
       used: feedbackUsed,
       max: maxRuns,
+      // Stryker disable next-line OptionalChaining: EQUIVALENT — reached only after `params?.name`
+      // above read a string that `commandMap` holds, which a nullish (or non-object) `params`
+      // cannot supply, so `?.` here can never short-circuit. Same reasoning as the `escalate` line.
+      rawArguments: (params as { arguments?: unknown } | undefined)?.arguments,
       record: (run) => {
         feedbackUsed += 1;
         record(run);
@@ -307,7 +334,11 @@ export async function openCodexFeedbackEndpoint(
         const tools: ListedTool[] = commands.map((c) => ({
           name: c.name,
           description: c.description,
-          inputSchema: EMPTY_INPUT_SCHEMA,
+          // ADR-0587: a command declaring a choice publishes it, choices and all, so the model does
+          // not have to guess a name and pay a refusal round for guessing wrong. One that declares
+          // none still publishes the empty schema, which is what keeps the fence the default.
+          inputSchema:
+            c.parameter === undefined ? EMPTY_INPUT_SCHEMA : feedbackChoiceJsonSchema(c.parameter),
         }));
         if (recordEscalation !== undefined) {
           tools.push({

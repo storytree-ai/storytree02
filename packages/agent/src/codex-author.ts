@@ -37,7 +37,7 @@ import { linkReplicaDependencies } from "./codex-replica-links.js";
 import type { SdkFeedbackRun } from "./sdk-author.js";
 import { armSpawnBounds } from "./codex-spawn-bounds.js";
 import { scrubShellWorkerEnv } from "./worker-env.js";
-import { budgetIsSpent, budgetMinutes, budgetSpentError } from "./worker-budget.js";
+import { budgetIsSpent, budgetMinutes, budgetSpentError, feedbackRunCap } from "./worker-budget.js";
 import type { WorkerTimeBudget } from "./worker-budget.js";
 
 // Re-exported for callers constructing `CodexPhaseAuthorArgs.feedbackCommands` — the command shape
@@ -470,9 +470,6 @@ function computeFeedbackToolTimeoutSec(commands: CodexFeedbackCommand[]): number
     Math.ceil(longestMs / 1000) + FEEDBACK_TOOL_TIMEOUT_HEADROOM_SEC,
   );
 }
-
-/** Per-slice feedback-run cap shared across commands, mirroring the Claude leaf's default (ADR-0570 D5). */
-const DEFAULT_CODEX_MAX_FEEDBACK_RUNS = 5;
 
 /**
  * The escalation closing (ADR-0569, extended to the Codex leaf): appended to an ARMED author's
@@ -1372,7 +1369,10 @@ export class CodexPhaseAuthor implements PhaseAuthor {
           phase,
           replicaRoot: replicaDir,
           commands: wrappedFeedbackCommands,
-          maxRuns: DEFAULT_CODEX_MAX_FEEDBACK_RUNS,
+          // ADR-0587: uncapped under a budget, exactly as the Claude leaf is — and through the SAME
+          // function, because a worker that could check its work five times on one runtime and
+          // without limit on the other would make the runtime choice a quality choice.
+          maxRuns: feedbackRunCap(undefined, this.#args.timeBudget),
           record: (run) => this.feedbackRuns.push(run),
           recordEscalation: (recorded) => {
             escalation = recorded;

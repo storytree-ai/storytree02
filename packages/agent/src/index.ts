@@ -73,7 +73,12 @@ export {
 } from "./codex-author.js";
 
 export type { WorkerTimeBudget, WorkerBoundClock } from "./worker-budget.js";
-export { budgetIsSpent, budgetMinutes, budgetSpentError } from "./worker-budget.js";
+// ADR-0587: the choice seam. The SPINE builds the parameter (it is the only side that knows what
+// is on offer), so the type and the resolver both cross the package boundary; the validator does
+// not need to — `executeFeedback` applies it on this side of the seam.
+export type { FeedbackChoice, FeedbackChoiceParameter, FeedbackChoiceResult } from "./feedback-choice.js";
+export { readFeedbackChoice, resolveFeedbackChoice, feedbackChoiceJsonSchema } from "./feedback-choice.js";
+export { budgetIsSpent, budgetMinutes, budgetSpentError, feedbackRunCap, DEFAULT_FEEDBACK_RUNS_WITHOUT_A_BUDGET } from "./worker-budget.js";
 
 export {
   STORE_POINTER_ENV_NAMES,

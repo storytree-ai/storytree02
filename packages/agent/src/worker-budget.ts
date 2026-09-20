@@ -54,6 +54,29 @@ export function budgetSpentError(phase: AuthoringPhase, budgetMs: number): strin
 }
 
 /**
+ * The per-slice FEEDBACK-RUN cap (ADR-0587), which mirrors the turn ceiling's shape exactly
+ * (ADR-0584 D5): an explicit value always wins; otherwise a budgeted build is UNCAPPED and an
+ * unbudgeted one keeps the old default.
+ *
+ * Why uncapped rather than merely generous: a run cap protects neither the evidence (the spine
+ * observes red and green itself, out of band) nor the outside world (a feedback run spawns a
+ * command the spine composed). All it ever bounded was a runaway, and the build's wall clock now
+ * bounds that — while charging the time honestly, since feedback time is build time (ADR-0581 D3).
+ * Five was the figure that made `run_tests` unusable: running the existing tests twice and the
+ * unit's own proof three times spends the whole allowance before anything has been fixed.
+ *
+ * Takes the BUDGET rather than a boolean so the two call sites are pass-throughs with no test of
+ * their own to get wrong — the decision is here, where one test reaches it.
+ */
+export function feedbackRunCap(explicit: number | undefined, budget: WorkerTimeBudget | undefined): number {
+  if (explicit !== undefined) return explicit;
+  return budget === undefined ? DEFAULT_FEEDBACK_RUNS_WITHOUT_A_BUDGET : Number.POSITIVE_INFINITY;
+}
+
+/** The pre-ADR-0587 cap, still the bound for any caller that wires no time budget. */
+export const DEFAULT_FEEDBACK_RUNS_WITHOUT_A_BUDGET = 5;
+
+/**
  * True when the budget has nothing left. Read before a slice starts AND after one is stopped: a
  * budget of zero or less is spent whatever else is true, which is what makes a zero budget a refusal
  * rather than an unbounded run.
