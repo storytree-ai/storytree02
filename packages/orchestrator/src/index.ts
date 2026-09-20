@@ -437,7 +437,23 @@ export {
   innerLoopEventId,
   readInnerLoopLedger,
 } from "./proof/inner-loop-ledger.js";
-export type { InnerLoopAttempt, InnerLoopLedger } from "./proof/inner-loop-ledger.js";
+export type {
+  InnerLoopActiveGrant,
+  InnerLoopAttempt,
+  InnerLoopLedger,
+} from "./proof/inner-loop-ledger.js";
+export {
+  attemptReportFromLedger,
+  observedAttempt,
+  parseAttemptRecord,
+} from "./proof/attempt-report.js";
+export type {
+  AttemptObservation,
+  AttemptReport,
+  AttemptReportGrant,
+  ObservedAttempt,
+  StoredAttemptRecord,
+} from "./proof/attempt-report.js";
 export {
   ATTEMPT_CEILING,
   ATTEMPT_DECISION_POINT,
