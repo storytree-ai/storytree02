@@ -20,7 +20,9 @@
  * too); with no detector it is the bound, which is the pre-budget behaviour ADR-0570 D4 built.
  */
 
-/** The clock the bounds run on. `now` is optional so a test clock may declare only the timers. */
+/**
+ * The clock the bounds run on. `now` is optional so a test clock may declare only the timers.
+ */
 export interface SpawnBoundsClock {
   setTimeout(callback: () => void, ms: number): ReturnType<typeof setTimeout>;
   clearTimeout(handle: ReturnType<typeof setTimeout>): void;
@@ -75,11 +77,15 @@ export function armSpawnBounds(args: SpawnBoundsArgs): SpawnBounds {
     boundRemainingMs = ms;
     boundTimer = clock.setTimeout(() => stop("bound"), ms);
   };
+  // Both clears are guarded, and the guard is NOT redundant: a spawn's clock is observable, and
+  // clearing a timer that is not armed is a clock call that should not happen (the leaf's own tests
+  // pin "one setTimeout, one clearTimeout" for an unsuspended run).
   const clearBound = (): void => {
     if (boundTimer === undefined) return;
     clock.clearTimeout(boundTimer);
     boundTimer = undefined;
   };
+  /** The ONE place `settled` and "no window asked for" are checked — every caller leans on it. */
   const armSilence = (): void => {
     if (silenceMs === undefined || settled) return;
     silenceTimer = clock.setTimeout(() => stop("silence"), silenceMs);
@@ -94,17 +100,20 @@ export function armSpawnBounds(args: SpawnBoundsArgs): SpawnBounds {
   armSilence();
 
   return {
+    // No `settled` guard on either of these two: `armSilence` holds it for both, and clearing an
+    // unarmed timer is a no-op, so a guard here would only be a second copy of a check that already
+    // decides — which the mutation rung cannot tell from no check at all.
     heard: () => {
-      if (settled) return;
       clearSilence();
       armSilence();
     },
     suspend: () => {
-      if (settled) return;
       if (silenceMs !== undefined) {
         clearSilence();
         return;
       }
+      // A bound that is already paused is left alone: charging it again would charge the feedback run
+      // whose time this pause exists to exclude.
       if (boundTimer === undefined) return;
       // Only the leaf's own elapsed time is charged: what is left is remembered for `resume`.
       boundRemainingMs = Math.max(0, boundRemainingMs - (now() - boundArmedAt));

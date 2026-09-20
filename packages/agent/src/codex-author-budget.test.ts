@@ -23,6 +23,7 @@ import {
 } from "./codex-author.js";
 import type {
   CodexBoundClock,
+  CodexBoundControl,
   CodexCommand,
   CodexCommandResult,
   CodexRunner,
@@ -344,8 +345,12 @@ test("budget-stops-a-worker: with no budget wired a timeout keeps its UNVERIFIED
 
 // ── The runner's silence detector, against real spawns ───────────────────────
 
-/** Await under the test's own bound, so a hang fails instead of hanging. */
-async function within<T>(pending: Promise<T>, ms = 15_000): Promise<T> {
+/**
+ * Await under the test's own bound, so a hang fails instead of hanging. Kept SHORT on purpose: a
+ * mutant that stops a kill from happening makes these spawns outlive the mutation rung's per-mutant
+ * budget, and an unproven timeout names no test (`mutation-rung-scores-a-hang-as-unproven`).
+ */
+async function within<T>(pending: Promise<T>, ms = 5_000): Promise<T> {
   let deadline: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
@@ -429,6 +434,28 @@ test("silence-detector: output RE-ARMS it, so a slow child that keeps talking is
     hand.armings.length > 2,
     `expected output to re-arm the silence window, saw only ${hand.armings.length} arming(s)`,
   );
+});
+
+test("silence-detector: the spawn hands its bound control through to the clocks — suspend pauses the window, resume gives it back whole", async () => {
+  const hand = handClock();
+  const control: CodexBoundControl = {};
+  const pending = within(
+    runPinnedCodexCli(
+      quietChild(200, { timeoutMs: 3_600_000, silenceMs: 600_000, bound: control }),
+      hand.clock,
+    ),
+  );
+  assert.ok(control.suspend !== undefined && control.resume !== undefined, "the control is populated");
+  control.suspend?.();
+  control.resume?.();
+  assert.deepEqual(
+    hand.armings,
+    [3_600_000, 600_000, 600_000],
+    "the window was paused and re-armed whole; the wall-clock bound was never re-armed",
+  );
+  const result = await pending;
+  assert.equal(result.code, 0);
+  assert.equal(Object.hasOwn(result, "timedOut"), false);
 });
 
 test("budget-stops-a-worker: a stop with observed changes but no exact manifest promotes nothing and says why", async () => {

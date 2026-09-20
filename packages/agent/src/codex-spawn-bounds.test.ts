@@ -26,8 +26,15 @@ function fakeClock(startAt = 1_000) {
     handle: ReturnType<typeof setTimeout>;
   }> = [];
   let current = startAt;
+  /**
+   * Every call the bounds make on the clock, in order. A spawn's clock is observable — the leaf's own
+   * tests pin "one setTimeout, one clearTimeout" for an unsuspended run — so clearing a timer that is
+   * not armed is a call that should not happen, and this log is what says so.
+   */
+  const calls: string[] = [];
   return {
     armed,
+    calls,
     advance: (ms: number) => {
       current += ms;
     },
@@ -49,10 +56,12 @@ function fakeClock(startAt = 1_000) {
       setTimeout: (fn: () => void, ms: number) => {
         const handle = inertHandle();
         armed.push({ ms, fire: fn, cleared: false, handle });
+        calls.push(`set ${ms}`);
         return handle;
       },
       clearTimeout: (handle: ReturnType<typeof setTimeout>) => {
         const entry = armed.find((candidate) => candidate.handle === handle);
+        calls.push(entry === undefined ? "clear UNARMED" : `clear ${entry.ms}`);
         if (entry !== undefined) entry.cleared = true;
       },
       now: () => current,
@@ -184,6 +193,21 @@ test("spawn-bounds: a paused bound cannot be charged below zero", () => {
   assert.equal(clock.armed[1]?.ms, 0, "an overrun leaves zero, never a negative span");
 });
 
+test("spawn-bounds: a SECOND suspend while already paused must not charge the feedback run's own time", () => {
+  const clock = fakeClock();
+  const b = bounds(clock, { boundMs: 600_000 });
+  clock.advance(100_000); // the leaf's own time: chargeable
+  b.handle.suspend();
+  clock.advance(5_000_000); // the spine's feedback run: never chargeable
+  b.handle.suspend(); // a second pause (a nested or repeated feedback run)
+  b.handle.resume();
+  assert.deepEqual(
+    clock.armed.map((a) => a.ms),
+    [600_000, 500_000],
+    "the second suspend charges nothing, so the bound keeps what the first left it",
+  );
+});
+
 test("spawn-bounds: repeated suspend and repeated resume change nothing", () => {
   const clock = fakeClock();
   const b = bounds(clock, { boundMs: 600_000, silenceMs: 300_000 });
@@ -220,6 +244,31 @@ test("spawn-bounds: suspend and resume after settle do nothing", () => {
   c.handle.settle();
   c.handle.resume();
   assert.deepEqual(plain.live(), []);
+});
+
+test("spawn-bounds: settle clears exactly what is armed — never a timer that is not", () => {
+  // The clock is observable, so an unnecessary clear is a defect, not a harmless no-op.
+  const withWindow = fakeClock();
+  bounds(withWindow, { boundMs: 3_600_000, silenceMs: 600_000 }).handle.settle();
+  assert.deepEqual(withWindow.calls, ["set 3600000", "set 600000", "clear 3600000", "clear 600000"]);
+
+  const plain = fakeClock();
+  bounds(plain, { boundMs: 600_000 }).handle.settle();
+  assert.deepEqual(plain.calls, ["set 600000", "clear 600000"], "one setTimeout, one clearTimeout");
+
+  // Already settled: nothing is armed, so nothing may be cleared again.
+  const twice = fakeClock();
+  const b = bounds(twice, { boundMs: 600_000, silenceMs: 300_000 });
+  b.handle.settle();
+  b.handle.settle();
+  assert.deepEqual(twice.calls, ["set 600000", "set 300000", "clear 600000", "clear 300000"]);
+
+  // A suspended bound is already cleared, so settling it clears nothing a second time.
+  const suspended = fakeClock();
+  const s = bounds(suspended, { boundMs: 600_000 });
+  s.handle.suspend();
+  s.handle.settle();
+  assert.deepEqual(suspended.calls, ["set 600000", "clear 600000"]);
 });
 
 test("spawn-bounds: settle releases both clocks, and a released timer stops nothing", () => {
