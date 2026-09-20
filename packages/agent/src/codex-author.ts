@@ -1282,10 +1282,13 @@ export class CodexPhaseAuthor implements PhaseAuthor {
     const fullPrompt =
       `${agentBody.trim()}\n\n## Phase brief\n${prompt.trim()}\n\n` +
       "The spine will run all registered proof commands after you stop; their verdict is not yours.\n\n" +
+      // Ahead of the two target lists, never between them: the spine's own allowed/required sections
+      // are read back by `packages/cli/src/codex-leaf-prompt.test.ts`, which takes everything from
+      // `Required outputs:` up to `After you stop` as the required list.
+      `${CODEX_SANDBOX_NOTE}\n\n` +
       "You are working in a disposable replica, not the real build workspace. The spine's exact " +
       `allowed target set for this phase is:\n${renderTargets(allowedPromptTargets)}\n\n` +
       `Required outputs:\n${renderTargets(requiredPromptTargets)}\n\n` +
-      `${CODEX_SANDBOX_NOTE}\n\n` +
       "After you stop, the spine will observe the complete replica diff and promote only the " +
       "observed allowed subset. One unlisted change refuses the whole phase; your final response " +
       "and file-change report are not promotion evidence." +

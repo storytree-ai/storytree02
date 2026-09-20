@@ -350,10 +350,11 @@ test("exec selects Terra and one ephemeral JSON turn without retired managed con
   // The worker is told what its sandbox refuses, so a refused command reads as the environment.
   assert.ok(
     (exec.stdin ?? "").includes(
-      "\n\nYour shell runs in a sandbox: it can write only inside this replica, it has no network, and " +
-        "git cannot see a repository here. Edit files with apply_patch; on Windows, PowerShell runs in " +
-        "constrained language mode, so prefer cmdlets over .NET method calls. Run the proof through the " +
-        "spine's tools when you have them, never through your own shell.\n\nAfter you stop, ",
+      "their verdict is not yours.\n\nYour shell runs in a sandbox: it can write only inside this " +
+        "replica, it has no network, and git cannot see a repository here. Edit files with apply_patch; " +
+        "on Windows, PowerShell runs in constrained language mode, so prefer cmdlets over .NET method " +
+        "calls. Run the proof through the spine's tools when you have them, never through your own " +
+        "shell.\n\nYou are working in a disposable replica, ",
     ),
   );
   assert.equal(author.runtime, "codex");
