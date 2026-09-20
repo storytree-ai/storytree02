@@ -18,12 +18,33 @@ export interface InnerLoopAttempt {
   readonly signed: boolean;
 }
 
+/**
+ * The grant covering the attempt a build is ABOUT to make: the orchestrator's OWN recorded words
+ * about what will be different (ADR-0563 D4), which until ADR-0586 reached no brief at all. The
+ * fold has always tracked it to rule on the attempt policy; this is the same object, surfaced.
+ *
+ * It is the CURRENT grant, never the last one ever recorded: it appears when a grant is recorded and
+ * is extinguished by a spent allowance, a signed pass, or a landing adjudication that reopens the
+ * loop — the same three events that zero {@link InnerLoopLedger.remainingGrantCount}, which is what
+ * keeps the two in step.
+ */
+export interface InnerLoopActiveGrant {
+  readonly kind: AnyGrantEvent["kind"];
+  readonly difference: string;
+}
+
 export interface InnerLoopLedger {
   readonly attempts: readonly InnerLoopAttempt[];
   readonly adjudications: readonly AdjudicationEvent[];
   readonly consecutiveFailures: number;
   readonly remainingGrantCount: number;
   readonly unresolvedSignedRuns: readonly string[];
+  /**
+   * ADR-0586 D2: the live grant's kind and difference, or `undefined` when no grant is live. The
+   * LEDGER is the index a retry's failure report is chosen by, and this is the half of that report
+   * the ledger itself owns — the orchestrator's recorded difference is never copied anywhere else.
+   */
+  readonly activeGrant: InnerLoopActiveGrant | undefined;
   readonly policy: AttemptDecision;
 }
 
@@ -168,6 +189,12 @@ export function foldInnerLoopLedger(
     unresolvedSignedRuns: attempts
       .filter(({ runId, signed: attemptSigned }) => attemptSigned && !settled.has(runId))
       .map(({ runId }) => runId),
+    // Narrowed to the two fields a reader outside this fold has any business with: an owner-grant's
+    // settled-authority refs are the ruler's business and already ride `policy.reason`.
+    activeGrant:
+      activeGrant === undefined
+        ? undefined
+        : { kind: activeGrant.kind, difference: activeGrant.difference },
     policy,
   };
 }
