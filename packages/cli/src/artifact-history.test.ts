@@ -92,8 +92,11 @@ test("renderHistory names the actor and the loss, and calls out the prefix witho
     entries: foldHistory([event(1, LONG, "cli"), event(2, STALE, "sibling"), event(3, RESTORED, "cli")]),
   });
   assert.match(body, /seq 2 .* by sibling/);
-  assert.match(body, /-706/);
-  assert.match(body, /a prefix of the previous value/);
+  const [created, cut, restored] = blocks(body);
+  assert.ok(created?.includes("      workflow  1,679 chars  new"), "a first appearance is `new`");
+  assert.deepEqual(cut, ["      workflow  973 chars  -706   ← a prefix of the previous value"]);
+  assert.deepEqual(restored, ["      workflow  1,848 chars  +875"], "a growth carries no prefix flag");
+  assert.match(body, /\n1 write\(s\) above stored a value that is a PREFIX of what stood before it\./);
   // It reports; it does not adjudicate. A shrink is ordinary curation more often than it is damage.
   assert.doesNotMatch(body, /suspicious|corrupt|damaged/i);
 });
@@ -153,14 +156,23 @@ function write(seq: number, doc: Readonly<Record<string, unknown>>): StoreEvent 
   };
 }
 
-/** The lines a render printed UNDER each write's header, one array per write, oldest first. */
+/**
+ * The lines a render printed UNDER each write's header, one array per write, oldest first. The
+ * blank line after the last write ends them, so the prefix footer never joins the final block.
+ */
 function blocks(body: string): string[][] {
   const out: string[][] = [];
   for (const line of body.split("\n")) {
     if (line.startsWith("  seq ")) out.push([]);
-    else if (line !== "" && out.length > 0) out[out.length - 1]?.push(line);
+    else if (out.length > 0 && line === "") break;
+    else out.at(-1)?.push(line);
   }
   return out;
+}
+
+/** The characters of text in `parts` — what a doc's `total` counts, computed the long way. */
+function chars(...parts: readonly string[]): number {
+  return parts.reduce((n, s) => n + s.length, 0);
 }
 
 test("a write that changes ONLY an array field renders unlike a true no-op write (the measured miss)", () => {
@@ -171,10 +183,12 @@ test("a write that changes ONLY an array field renders unlike a true no-op write
   ];
   // THE claim, first and free of any wording: the two writes' lines differ, in both views.
   for (const field of [undefined, "dependsOn"]) {
-    const entries = foldHistory(events, field);
+    const narrowed = foldHistory(events, field);
     const [, repointed, noop] = blocks(
       renderHistory(
-        field === undefined ? { id: "right-kind-red", entries } : { id: "right-kind-red", field, entries },
+        field === undefined
+          ? { id: "right-kind-red", entries: narrowed }
+          : { id: "right-kind-red", field, entries: narrowed },
       ),
     );
     assert.notDeepEqual(repointed, noop, `--field ${field ?? "(none)"}: the re-point reads as a no-op`);
@@ -188,9 +202,20 @@ test("a write that changes ONLY an array field renders unlike a true no-op write
   assert.deepEqual(repoint.removed, [JSON.stringify(OLD_EDGE)]);
   assert.deepEqual(entries[2]?.changed, []);
   // The one-number shape moves too: the edges are text, and text now counts wherever it sits.
-  assert.notEqual(entries[1]?.total, entries[0]?.total);
+  const prose = chars(PROSE.kind, PROSE.id, PROSE.description, PROSE.body);
+  assert.equal(entries[0]?.total, prose + OLD_EDGE.length);
+  assert.equal(entries[1]?.total, prose + chars(...NEW_EDGES));
 
-  const [, repointed, noop] = blocks(renderHistory({ id: "right-kind-red", entries }));
+  const [created, repointed, noop] = blocks(renderHistory({ id: "right-kind-red", entries }));
+  // The first write is the baseline: every field sized and `new`, with nothing listed under it —
+  // listing every array a doc was CREATED with would bury the rows that follow.
+  assert.deepEqual(created, [
+    "      body  20 chars  new",
+    "      dependsOn  1 entry  new",
+    "      description  1 chars  new",
+    "      id  14 chars  new",
+    "      kind  10 chars  new",
+  ]);
   assert.deepEqual(noop, ["      (no field changed)"]);
   assert.deepEqual(repointed, [
     "      dependsOn  2 entries  +1",
@@ -259,6 +284,56 @@ test("a REMOVED field is reported with what it held — string or array — neve
   assert.deepEqual(droppedN, ["      dependsOn  removed  (was 2 entries)"]);
 });
 
+test("a doc that is not an object carries no fields, and a key holding undefined is a key it lacks", () => {
+  const odd = (seq: number, doc: unknown): StoreEvent => ({ ...write(seq, PROSE), doc });
+  const entries = foldHistory([write(1, PROSE), odd(2, null), odd(3, ["x"]), odd(4, "xy"), write(5, PROSE)]);
+  assert.deepEqual(
+    entries[1]?.changed.map((r) => `${r.shape}:${r.field}`),
+    ["removed:body", "removed:description", "removed:id", "removed:kind"],
+  );
+  assert.deepEqual(entries[2]?.changed, [], "an array doc holds no named fields either");
+  assert.deepEqual(entries[3]?.changed, [], "…nor does a string doc, whose characters are not keys");
+  assert.equal(entries[4]?.changed.length, 4, "and every field arrives again");
+
+  // JSON has no `undefined`, so a key holding one reads as a key the doc does not carry.
+  const unset = foldHistory(
+    [write(1, { ...PROSE, dependsOn: ["asset:a"] }), write(2, { ...PROSE, dependsOn: undefined })],
+    "dependsOn",
+  );
+  assert.deepEqual(unset[1]?.changed, [{ shape: "removed", field: "dependsOn", was: "1 entry" }]);
+  assert.equal(unset[1]?.fieldPresent, false);
+});
+
+test("the chars total counts text wherever it sits, and nothing for a number, a boolean or a null", () => {
+  const [entry] = foldHistory([
+    write(1, {
+      kind: "adr",
+      id: "adr-0001",
+      dependsOn: ["asset:x", "asset:yy"],
+      authority: { by: "owner", note: ["n1"] },
+      number: 1,
+      loadBearing: true,
+      supersededBy: null,
+    }),
+  ]);
+  assert.equal(entry?.total, chars("adr", "adr-0001", "asset:x", "asset:yy", "owner", "n1"));
+  assert.ok(entry !== undefined && !("fieldPresent" in entry), "an unnarrowed fold claims nothing about a field");
+});
+
+test("a field whose value changes SHAPE is summarised on both sides, in every direction", () => {
+  const entries = foldHistory([
+    write(1, { ...PROSE, a: "one", b: ["x"], c: "s", d: { k: "v", w: "z" }, e: 7 }),
+    write(2, { ...PROSE, a: ["one"], b: "x", c: { k: "v" }, d: "s", e: "7" }),
+  ]);
+  assert.deepEqual(entries[1]?.changed, [
+    { shape: "value", field: "a", before: "3 chars", after: "1 entry" },
+    { shape: "value", field: "b", before: "1 entry", after: "1 chars" },
+    { shape: "value", field: "c", before: "1 chars", after: "1 key" },
+    { shape: "value", field: "d", before: "2 keys", after: "1 chars" },
+    { shape: "value", field: "e", before: "7", after: "1 chars" },
+  ]);
+});
+
 test("a reorder alone, a dropped duplicate, and an object's key order are each told apart", () => {
   const entries = foldHistory([
     write(1, { ...PROSE, dependsOn: ["asset:a", "asset:b", "asset:b"], authority: { by: "owner", at: "d1" } }),
@@ -271,34 +346,87 @@ test("a reorder alone, a dropped duplicate, and an object's key order are each t
   assert.equal(entries[1]?.changed.length, 1, "a key order is not a change");
   // Write 3 dropped one of two copies: a multiset compare names the lost copy.
   assert.deepEqual(listRow(entries, 2).removed, ['"asset:b"']);
-  const [, reordered] = blocks(renderHistory({ id: "right-kind-red", entries }));
+  const [, reordered, deduped] = blocks(renderHistory({ id: "right-kind-red", entries }));
   assert.deepEqual(reordered, ["      dependsOn  3 entries  0   (the same entries, reordered)"]);
+  assert.deepEqual(deduped, ["      dependsOn  2 entries  -1", '        - "asset:b"']);
 });
 
-test("an object field names the keys that came, went or changed; a boolean shows before → after", () => {
-  const entries = foldHistory([
-    write(1, { ...PROSE, loadBearing: false, authority: { by: "owner", at: "d1", note: "n" } }),
-    write(2, { ...PROSE, loadBearing: true, authority: { by: "agent", at: "d1", scope: "s" } }),
+test("an object field names the keys that came, went or changed, in key order; a boolean flips before → after", () => {
+  const events = [
+    write(1, { ...PROSE, loadBearing: false, authority: { old: "o", by: "owner", at: "d1", note: "n" } }),
+    write(2, { ...PROSE, loadBearing: true, authority: { scope: "s", by: "agent", extra: "e", at: "d2" } }),
+    write(3, { ...PROSE, loadBearing: true, authority: { by: "agent" } }),
+  ];
+  const [created, flipped, shrunk] = blocks(
+    renderHistory({ id: "right-kind-red", entries: foldHistory(events) }),
+  );
+  assert.deepEqual(created, [
+    "      authority  4 keys  new",
+    "      body  20 chars  new",
+    "      description  1 chars  new",
+    "      id  14 chars  new",
+    "      kind  10 chars  new",
+    "      loadBearing  false  new",
   ]);
-  const [, flipped] = blocks(renderHistory({ id: "right-kind-red", entries }));
   assert.deepEqual(flipped, [
-    "      authority  3 keys  0",
+    "      authority  4 keys  0",
+    "        + extra",
     "        + scope",
     "        - note",
+    "        - old",
+    "        ~ at",
     "        ~ by",
     "      loadBearing  false → true",
   ]);
-  // A field whose value changes SHAPE is summarised on both sides rather than mis-sized as text.
-  const retyped = foldHistory([write(1, { ...PROSE, sources: "one" }), write(2, { ...PROSE, sources: ["one"] })]);
-  assert.deepEqual(retyped[1]?.changed, [
-    { shape: "value", field: "sources", before: "3 chars", after: "1 entry" },
+  assert.deepEqual(shrunk, [
+    "      authority  1 key  -3",
+    "        - at",
+    "        - extra",
+    "        - scope",
   ]);
+  // Narrowed, the keys a field ARRIVED with are listed too — it is that field's whole life.
+  const [createdN] = blocks(
+    renderHistory({ id: "right-kind-red", field: "authority", entries: foldHistory(events, "authority") }),
+  );
+  assert.deepEqual(createdN, [
+    "      authority  4 keys  new",
+    "        + at",
+    "        + by",
+    "        + note",
+    "        + old",
+  ]);
+});
+
+test("the prefix footer counts only TEXT that shrank to a prefix — a list that lost its tail is not one", () => {
+  const body = renderHistory({
+    id: "right-kind-red",
+    entries: foldHistory([
+      write(1, { ...PROSE, dependsOn: ["asset:a", "asset:b"], authority: { by: "owner" }, loadBearing: true }),
+      write(2, {
+        kind: "definition",
+        id: "right-kind-red",
+        body: "the prose", // a PREFIX of what stood before it — the one row the footer counts
+        dependsOn: ["asset:a"], // a list that lost its tail is not a prefix write
+        authority: { by: "agent" },
+        loadBearing: false,
+      }),
+    ]),
+  });
+  assert.match(body, /\n1 write\(s\) above stored a value that is a PREFIX of what stood before it\./);
+  // …and a history with no prefix write carries no footer at all.
+  const grown = renderHistory({
+    id: "right-kind-red",
+    entries: foldHistory([write(1, PROSE), write(2, { ...PROSE, body: "the prose, untouched, and more" })]),
+  });
+  assert.doesNotMatch(grown, /PREFIX/);
 });
 
 test("the unnarrowed view caps a long entry list and names the --field that lists them all", () => {
   const many = Array.from({ length: 15 }, (_, i) => `asset:e${i}`);
   const events = [write(1, { ...PROSE, dependsOn: [] }), write(2, { ...PROSE, dependsOn: many })];
-  const [, grew] = blocks(renderHistory({ id: "right-kind-red", entries: foldHistory(events) }));
+  const [created, grew] = blocks(renderHistory({ id: "right-kind-red", entries: foldHistory(events) }));
+  assert.ok(created?.includes("      dependsOn  0 entries  new"), "an empty array arrives as an empty array");
+  assert.equal(grew?.[0], "      dependsOn  15 entries  +15");
   assert.equal(grew?.length, 1 + 12 + 1, "the row, twelve entries, and the line counting the rest");
   assert.equal(grew?.at(-1), "        + … 3 more (--field dependsOn lists them all)");
   const narrowed = foldHistory(events, "dependsOn");

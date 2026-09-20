@@ -126,29 +126,27 @@ export interface HistoryEntry {
   readonly fieldPresent?: boolean;
 }
 
-/** The top-level fields of an event's doc, of every shape. A non-object doc has none. */
-function fieldsOf(doc: unknown): Map<string, unknown> {
-  const out = new Map<string, unknown>();
-  if (typeof doc !== "object" || doc === null || Array.isArray(doc)) return out;
-  for (const [k, v] of Object.entries(doc as Record<string, unknown>)) {
-    // JSON has no `undefined`; a key holding one is a key the stored doc does not carry.
-    if (v !== undefined) out.set(k, v);
-  }
-  return out;
-}
-
-/** The keys an object field had before it first appeared: none. */
-const NO_KEYS: Readonly<Record<string, unknown>> = {};
-
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+/**
+ * The top-level fields of an event's doc, of every shape. A doc that is not an object has none.
+ * JSON has no `undefined`, so a key holding one is read everywhere below as a key the doc lacks.
+ */
+function fieldsOf(doc: unknown): ReadonlyMap<string, unknown> {
+  return new Map(isPlainObject(doc) ? Object.entries(doc) : []);
 }
 
 /** `v` as JSON with every object's keys sorted, so a key ORDER is never mistaken for a change. */
 function canonical(v: unknown): string {
   return JSON.stringify(v, (_key, value: unknown) =>
     isPlainObject(value)
-      ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      ? Object.fromEntries(
+          Object.keys(value)
+            .sort()
+            .map((k) => [k, value[k]]),
+        )
       : value,
   );
 }
@@ -205,56 +203,90 @@ function entryDiff(before: readonly unknown[], after: readonly unknown[]): Entry
   return { added, removed };
 }
 
+/** The three halves of a difference between two objects' keys, each in key order. */
+interface KeyDiff {
+  readonly added: readonly string[];
+  readonly removed: readonly string[];
+  readonly changed: readonly string[];
+}
+
+function keyDiff(
+  before: Readonly<Record<string, unknown>>,
+  after: Readonly<Record<string, unknown>>,
+): KeyDiff {
+  const keys = Object.keys(after).sort();
+  return {
+    added: keys.filter((k) => !Object.hasOwn(before, k)),
+    removed: Object.keys(before)
+      .sort()
+      .filter((k) => !Object.hasOwn(after, k)),
+    changed: keys.filter((k) => Object.hasOwn(before, k) && canonical(before[k]) !== canonical(after[k])),
+  };
+}
+
 /**
- * What one field's move from `before` to `after` was, by the shape of its value — or `null` when
- * the two are the same value. `before` is `undefined` when the previous write did not carry it.
+ * A field's FIRST appearance: everything it holds arrived with this write, so its delta is `null`
+ * and an array's entries (or an object's keys) are all `added`.
+ */
+function arrival(field: string, after: unknown): FieldChange {
+  if (typeof after === "string") {
+    return { shape: "text", field, length: after.length, delta: null, prefixOfPrevious: false };
+  }
+  if (Array.isArray(after)) {
+    return { shape: "list", field, count: after.length, delta: null, ...entryDiff([], after) };
+  }
+  if (isPlainObject(after)) {
+    return { shape: "object", field, keys: Object.keys(after).length, delta: null, ...keyDiff({}, after) };
+  }
+  return { shape: "value", field, before: null, after: summary(after) };
+}
+
+/** A field present on both writes, holding values already known to DIFFER. */
+function move(field: string, before: unknown, after: unknown): FieldChange {
+  if (typeof before === "string" && typeof after === "string") {
+    return {
+      shape: "text",
+      field,
+      length: after.length,
+      delta: after.length - before.length,
+      // The two differ, so a value the old one starts with can only be a PROPER prefix of it.
+      prefixOfPrevious: before.startsWith(after),
+    };
+  }
+  if (Array.isArray(before) && Array.isArray(after)) {
+    return {
+      shape: "list",
+      field,
+      count: after.length,
+      delta: after.length - before.length,
+      ...entryDiff(before, after),
+    };
+  }
+  if (isPlainObject(before) && isPlainObject(after)) {
+    const keys = Object.keys(after).length;
+    return {
+      shape: "object",
+      field,
+      keys,
+      delta: keys - Object.keys(before).length,
+      ...keyDiff(before, after),
+    };
+  }
+  // A scalar, or a field whose value changed SHAPE. Summarised on both sides — a scalar summarises
+  // as itself — so `false → true` and `1,204 chars → 3 entries` share one row.
+  return { shape: "value", field, before: summary(before), after: summary(after) };
+}
+
+/**
+ * What one field's move from `before` to `after` was — or `null` when it is the same value.
+ * `undefined` on either side means that write's doc did not carry the field.
  */
 function fieldChange(field: string, before: unknown, after: unknown): FieldChange | null {
   if (after === undefined) {
     return before === undefined ? null : { shape: "removed", field, was: summary(before) };
   }
-  if (before !== undefined && canonical(before) === canonical(after)) return null;
-  const arrived = before === undefined;
-  if (typeof after === "string" && (arrived || typeof before === "string")) {
-    const prior = typeof before === "string" ? before : null;
-    return {
-      shape: "text",
-      field,
-      length: after.length,
-      delta: prior === null ? null : after.length - prior.length,
-      prefixOfPrevious: prior !== null && prior.length > after.length && prior.startsWith(after),
-    };
-  }
-  if (Array.isArray(after) && (arrived || Array.isArray(before))) {
-    const prior = Array.isArray(before) ? before : [];
-    return {
-      shape: "list",
-      field,
-      count: after.length,
-      delta: arrived ? null : after.length - prior.length,
-      ...entryDiff(prior, after),
-    };
-  }
-  if (isPlainObject(after) && (arrived || isPlainObject(before))) {
-    const prior = isPlainObject(before) ? before : NO_KEYS;
-    const keys = Object.keys(after);
-    const priorKeys = Object.keys(prior);
-    const byName = (a: string, b: string) => a.localeCompare(b);
-    return {
-      shape: "object",
-      field,
-      keys: keys.length,
-      delta: arrived ? null : keys.length - priorKeys.length,
-      added: keys.filter((k) => !(k in prior)).sort(byName),
-      removed: priorKeys.filter((k) => !(k in after)).sort(byName),
-      changed: keys
-        .filter((k) => k in prior && canonical(prior[k]) !== canonical(after[k]))
-        .sort(byName),
-    };
-  }
-  // A scalar, or a field whose value changed shape. A shape change is summarised on BOTH sides —
-  // a scalar summarises as itself, so `false → true` and `1,204 chars → 3 entries` share one path.
-  return { shape: "value", field, before: arrived ? null : summary(before), after: summary(after) };
+  if (before === undefined) return arrival(field, after);
+  return canonical(before) === canonical(after) ? null : move(field, before, after);
 }
 
 /**
@@ -270,7 +302,7 @@ export function foldHistory(
   field?: string,
 ): readonly HistoryEntry[] {
   const entries: HistoryEntry[] = [];
-  let previous = new Map<string, unknown>();
+  let previous: ReadonlyMap<string, unknown> = new Map();
   for (const e of events) {
     const current = fieldsOf(e.doc);
     // BOTH writes' keys: walking only the current doc's is what hid a removed field entirely.
@@ -290,7 +322,9 @@ export function foldHistory(
       changed: changed.sort((a, b) => a.field.localeCompare(b.field)),
       total,
     };
-    entries.push(field === undefined ? entry : { ...entry, fieldPresent: current.has(field) });
+    entries.push(
+      field === undefined ? entry : { ...entry, fieldPresent: current.get(field) !== undefined },
+    );
     previous = current;
   }
   return entries;
@@ -308,11 +342,11 @@ function signed(n: number): string {
 
 /**
  * How many entries (or keys) one row lists per sign in the UNNARROWED view before it counts the
- * rest, and how wide it lets each one run. `--field` is the forensic view of one field's life, so
- * it lists every entry, whole.
+ * rest. `--field` is the forensic view of one field's life, so it lists every one. Each is printed
+ * whole: a cut would let two different long entries print the same, which is the very failure this
+ * instrument exists to end.
  */
 const LISTED_ITEMS = 12;
-const ITEM_WIDTH = 120;
 
 /**
  * One line per entry or key a row gained (`+`), lost (`-`) or saw change value (`~`). In the
@@ -325,15 +359,19 @@ function itemLines(
   view: { readonly field: string; readonly complete: boolean },
 ): string[] {
   const shown = view.complete ? items : items.slice(0, LISTED_ITEMS);
-  const lines = shown.map((item) => {
-    const cut = !view.complete && item.length > ITEM_WIDTH;
-    return `        ${sign} ${cut ? `${item.slice(0, ITEM_WIDTH - 1)}…` : item}`;
-  });
+  const lines = shown.map((item) => `        ${sign} ${item}`);
   if (shown.length < items.length) {
     lines.push(`        ${sign} … ${items.length - shown.length} more (--field ${view.field} lists them all)`);
   }
   return lines;
 }
+
+/**
+ * What a text row carries when its value is a prefix of the one before it. The footer counts the
+ * rows that ended up carrying it, so the number it prints is always the number the reader can see
+ * — and only text can be a prefix, so no other row can be counted by mistake.
+ */
+const PREFIX_FLAG = "   ← a prefix of the previous value";
 
 /**
  * Render one field's change, by its shape:
@@ -354,7 +392,7 @@ function renderChange(r: FieldChange, complete: boolean): string[] {
   switch (r.shape) {
     case "text": {
       const delta = r.delta === null ? "new" : signed(r.delta);
-      const flag = r.prefixOfPrevious ? "   ← a prefix of the previous value" : "";
+      const flag = r.prefixOfPrevious ? PREFIX_FLAG : "";
       return [`${head}${r.length.toLocaleString("en-US")} chars  ${delta}${flag}`];
     }
     case "list": {
@@ -425,13 +463,11 @@ export function renderHistory(input: {
       for (const r of e.changed) lines.push(...renderChange(r, field !== undefined));
     }
   }
-  const prefixes = entries.flatMap((e) =>
-    e.changed.filter((r) => r.shape === "text" && r.prefixOfPrevious),
-  );
-  if (prefixes.length > 0) {
+  const prefixes = lines.filter((l) => l.endsWith(PREFIX_FLAG)).length;
+  if (prefixes > 0) {
     lines.push(
       "",
-      `${prefixes.length} write(s) above stored a value that is a PREFIX of what stood before it. That is`,
+      `${prefixes} write(s) above stored a value that is a PREFIX of what stood before it. That is`,
       "the shape a value cut in transit leaves, and also the shape of a deliberately deleted tail —",
       "the log cannot tell them apart, which is why this names them rather than judging them. The",
       "actor and the sequence beside each one are what decide it.",
