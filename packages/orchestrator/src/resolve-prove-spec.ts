@@ -47,7 +47,7 @@ import {
 } from "./proof/proof-route.js";
 import { allocatePerTestReportPath, perTestReportFile } from "./proof/per-test-report.js";
 import type { PerTestChannel } from "./proof/per-test-report.js";
-import { perTestPolicy } from "./proof/per-test-review.js";
+import { perTestPolicy, testChangePolicy } from "./proof/per-test-review.js";
 import type { ProofRoute } from "./proof/proof-route.js";
 import { gitTreeState } from "./prove-it-gate.js";
 import type { EscalationRecord, PhasePrompts, ProveSpec, TreeState } from "./prove-it-gate.js";
@@ -1032,6 +1032,10 @@ function resolveReal(
     proveSpec.binding = async () =>
       proved === undefined ? undefined : await computeProvedBinding({ workspace: opts.workspace, ...proved });
   }
+  // ADR-0581 D1 / ADR-0585: every REAL build records what the test-writer did to the tests that were
+  // already in its test file. Independent of the per-test channel below — the record is two reads of one
+  // file — so a whole-suite route, never reviewed per test, still records its changes and their reasons.
+  proveSpec.testChanges = testChangePolicy({ testFile: path.join(opts.workspace, real.testFile) });
   // ADR-0581 D4 / ADR-0582: every REAL build repairs a failed check inside the build. The write scope
   // answers both questions the loop asks of a path — whose file it is (the typecheck router) and what
   // the implementation is (the set-aside) — so the loop routes by exactly the walls the workers wrote

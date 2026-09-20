@@ -363,7 +363,24 @@ export type {
   PerTestJudgement,
   PerTestPolicy,
   PerTestPolicyArgs,
+  TestChangePolicy,
 } from "./proof/per-test-review.js";
+// ADR-0581 D1 / ADR-0585: the existing-test record — what a test-writer changed, and the reason it gave.
+export type {
+  BaselineTest,
+  TestChange,
+  TestChangeRecord,
+  TestChangeReview,
+  UpdatedAsserts,
+} from "./proof/test-baseline.js";
+export {
+  describeTestChanges,
+  readChangeMarkers,
+  reviewTestChanges,
+  testChangeKey,
+  updatedToNewBehaviour,
+  updatedToSameBehaviour,
+} from "./proof/test-baseline.js";
 export {
   EARLY_PASS_ROUTES,
   GUARD_RAIL_LABEL,
@@ -374,6 +391,7 @@ export {
   perTestPolicy,
   reviewConfirmGreen,
   reviewConfirmRed,
+  testChangePolicy,
 } from "./proof/per-test-review.js";
 // ADR-0098 Layer 3 (U4): the pre-build batch decision-sweep — the deterministic owner-fork-bar
 // classifier (the d.5 escalate-ownership-not-uncertainty discriminator) + the partition + the
