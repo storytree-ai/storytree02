@@ -146,6 +146,123 @@ test("a grant binds the latest failed run and exposes only its unused allowance"
   assert.doesNotMatch(ledger.policy.reason, /no recorded grant/);
 });
 
+// ── ADR-0586 D2: the active grant, surfaced ─────────────────────────────────────────────────────
+
+test("a live grant surfaces the orchestrator's own recorded kind and difference", () => {
+  const ledger = foldInnerLoopLedger(
+    [
+      stored(attempt("r1", INC), 1),
+      stored(attempt("r2", INC), 2),
+      stored(attempt("r3", INC), 3),
+      stored(grant("r3", INC, 2), 4),
+    ],
+    unitId,
+  );
+
+  assert.deepEqual(ledger.activeGrant, {
+    kind: "fixed-defect",
+    difference: "fixed the failing parser",
+  });
+});
+
+test("an owner grant surfaces its difference without its settled-authority refs", () => {
+  const six = [1, 2, 3, 4, 5, 6].map((n) => stored(attempt(`r${n}`, INC), n));
+  const ledger = foldInnerLoopLedger(
+    [
+      ...six,
+      stored(
+        {
+          event: "owner-grant",
+          unitId,
+          incrementId: INC,
+          runId: "r6",
+          attempts: 1,
+          kind: "new-observation",
+          difference: "the owner saw the same stack trace twice",
+          authorityQuestionRef: "asset:oq-one-more-attempt",
+          authorityDecisionRef: "asset:adr-0563",
+        },
+        7,
+      ),
+    ],
+    unitId,
+  );
+
+  assert.deepEqual(ledger.activeGrant, {
+    kind: "new-observation",
+    difference: "the owner saw the same stack trace twice",
+  });
+});
+
+test("no grant, a spent allowance, and a signed pass each leave no active grant", () => {
+  const three = [1, 2, 3].map((n) => stored(attempt(`r${n}`, INC), n));
+
+  // Never granted at all.
+  assert.equal(foldInnerLoopLedger(three, unitId).activeGrant, undefined);
+
+  // Granted ONE attempt, which the next attempt consumed: the grant is spent, so the build after
+  // that one must not read a difference that was written about an attempt already made.
+  assert.equal(
+    foldInnerLoopLedger(
+      [...three, stored(grant("r3", INC, 1), 4), stored(attempt("r4", INC), 5)],
+      unitId,
+    ).activeGrant,
+    undefined,
+  );
+
+  // Signed: the loop is over, and its grant with it.
+  assert.equal(
+    foldInnerLoopLedger(
+      [
+        ...three,
+        stored(grant("r3", INC, 2), 4),
+        stored(attempt("r4", INC), 5),
+        stored(pass("r4", INC), 6),
+      ],
+      unitId,
+    ).activeGrant,
+    undefined,
+  );
+});
+
+test("an unspent grant survives the attempt that consumed one of its allowance", () => {
+  const ledger = foldInnerLoopLedger(
+    [
+      stored(attempt("r1", INC), 1),
+      stored(attempt("r2", INC), 2),
+      stored(attempt("r3", INC), 3),
+      stored(grant("r3", INC, 2), 4),
+      stored(attempt("r4", INC), 5),
+    ],
+    unitId,
+  );
+
+  assert.equal(ledger.remainingGrantCount, 1);
+  assert.deepEqual(ledger.activeGrant, {
+    kind: "fixed-defect",
+    difference: "fixed the failing parser",
+  });
+});
+
+test("a landing adjudication extinguishes the grant the reopening attempt would otherwise inherit", () => {
+  const ledger = foldInnerLoopLedger(
+    [
+      stored(attempt("r1", INC), 1),
+      stored(attempt("r2", INC), 2),
+      stored(attempt("r3", INC), 3),
+      stored(grant("r3", INC, 3), 4),
+      stored(attempt("r4", INC), 5),
+      stored(pass("r4", INC), 6),
+      stored(adjudication("r4", "land", INC), 7),
+      stored(attempt("r5", INC), 8),
+    ],
+    unitId,
+  );
+
+  assert.equal(ledger.activeGrant, undefined);
+  assert.equal(ledger.remainingGrantCount, 0);
+});
+
 test("a signed pass resets failures, extinguishes a grant, and remains unresolved", () => {
   const events = [
     stored(attempt("r1", INC), 1),
