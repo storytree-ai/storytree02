@@ -9,7 +9,13 @@ import { InMemoryStore } from "@storytree/storage-protocol";
 import { INNER_LOOP_EVENT_KIND } from "@storytree/proof-protocol";
 import type { InnerLoopEventDoc } from "@storytree/proof-protocol";
 import type { StoreEvent } from "@storytree/storage-protocol";
-import { ShellTestExecutor, foldInnerLoopLedger, innerLoopEventId, proveUnit } from "@storytree/orchestrator";
+import {
+  ShellTestExecutor,
+  appendInnerLoopEvent,
+  foldInnerLoopLedger,
+  innerLoopEventId,
+  proveUnit,
+} from "@storytree/orchestrator";
 import type { ProveResult, ProveSpec } from "@storytree/orchestrator";
 import { parseAuthoringEscalation } from "@storytree/agent";
 import type { AuthorResult, AuthoringPhase, PhaseAuthor } from "@storytree/agent";
@@ -17,6 +23,7 @@ import type { AuthorResult, AuthoringPhase, PhaseAuthor } from "@storytree/agent
 import {
   attemptRecordPath,
   defaultAttemptsDir,
+  preflightPaidBuild,
   readAttemptRecord,
   renderAttemptRecord,
   renderPriorAttemptLine,
@@ -196,11 +203,36 @@ test("an-escalations-claim-never-reaches-the-record: an escalating failure store
 
 // ── reading one back (D7) ───────────────────────────────────────────────────────────────────────
 
+test("the record creates the directory path it needs, however deep, rather than assuming one", async () => {
+  const tmp = await tmpDir();
+  // Two levels below anything that exists — the ordinary shape on a machine whose
+  // `~/.storytree/attempts/` has never been written, which is every machine's first failed build.
+  const dir = path.join(tmp, "storytree", "attempts");
+  const result = await driveWalk({ runId: "run-deep", exitCodes: [1, 1] });
+
+  const write = await writeAttemptRecord(dir, UNIT_ID, "run-deep", result);
+
+  assert.deepEqual(write, { written: true, path: attemptRecordPath(dir, UNIT_ID, "run-deep") });
+  assert.equal(readAttemptRecord(dir, UNIT_ID, "run-deep").ok, true);
+});
+
 test("every unreadable record is refused by name, and none of them throws", async () => {
   const dir = await tmpDir();
   const missing = readAttemptRecord(dir, UNIT_ID, "never-written");
   assert.equal(missing.ok, false);
   assert.match(!missing.ok ? missing.reason : "", /no attempt record found at/);
+
+  // A path that EXISTS but cannot be read as a file: the read is refused with the reason the OS
+  // gave, never thrown, which is the branch between "no record" and "a record I cannot parse".
+  await fsp.mkdir(attemptRecordPath(dir, UNIT_ID, "is-a-directory"), { recursive: true });
+  const unreadable = readAttemptRecord(dir, UNIT_ID, "is-a-directory");
+  assert.equal(unreadable.ok, false);
+  assert.match(!unreadable.ok ? unreadable.reason : "", /could not read the attempt record at/);
+  assert.match(
+    !unreadable.ok ? unreadable.reason : "",
+    /EISDIR|illegal operation|is a directory/i,
+    "the reason must carry what the OS actually said, not a fabricated one",
+  );
 
   // A runId is one path segment, checked BEFORE the filesystem is touched — which is what keeps this
   // from ever naming an arbitrary file.
@@ -295,6 +327,40 @@ test("a missing record drops the observed half and NOTHING else — the ledger f
   assert.deepEqual(report?.grant, { kind: "fixed-defect", difference: "DIFFERENCE-MARKER-7c1e9b" });
 });
 
+test("the-preflight-carries-its-fold-out: a paid build's before-spend preflight hands back the ledger it already read", async () => {
+  // ADR-0586 D5's choice of WHICH attempt is only available to a caller that can see the fold, and
+  // the preflight has already taken it to rule on the attempt policy. Re-reading would be a second
+  // source of truth for the same question.
+  const corpus = new InMemoryStore();
+  await corpus.upsertDoc({
+    id: "inc-live",
+    kind: "increment",
+    doc: { kind: "increment", arcRef: "asset:some-arc", status: "active" },
+  });
+  const ledger = new InMemoryStore();
+  await appendInnerLoopEvent(ledger, attemptDoc("run-preflight"));
+
+  const preflight = await preflightPaidBuild({
+    incrementId: "inc-live",
+    unitIds: [UNIT_ID],
+    revise: false,
+    reads: { corpus, ledger },
+  });
+
+  assert.equal(preflight.ok, true);
+  if (!preflight.ok) return;
+  assert.equal(preflight.incrementId, "inc-live");
+  const fold = preflight.ledgers.get(UNIT_ID);
+  assert.notEqual(fold, undefined, "the fold for every unit the build will drive must come back");
+  assert.deepEqual(fold?.attempts.at(-1), {
+    runId: "run-preflight",
+    incrementId: "the-increment",
+    signed: false,
+  });
+  // And it is the same fold the report is chosen from — not a second read that could disagree.
+  assert.equal(resolveAttemptReport(await tmpDir(), UNIT_ID, fold)?.runId, "run-preflight");
+});
+
 test("nothing is reported when the last attempt signed, or when there is no ledger at all", async () => {
   const dir = await tmpDir();
 
@@ -338,8 +404,13 @@ test("the envelope names what was recorded, and what the workers were told", () 
   assert.match(full ?? "", /inc-y/);
   assert.match(full ?? "", /stopped at GATE/);
   assert.match(full ?? "", /new-observation/);
-  assert.match(
-    renderPriorAttemptLine({ runId: "run-x", incrementId: "inc-y" })[0] ?? "",
-    /no local record/,
-  );
+  const bare = renderPriorAttemptLine({ runId: "run-x", incrementId: "inc-y" })[0] ?? "";
+  assert.match(bare, /no local record/);
+  // A report with no grant says nothing about one: the ordinary case is a unit short of its decision
+  // point, where there IS no recorded difference, and inventing a fragment there would read as one.
+  assert.doesNotMatch(bare, /recorded/);
+  assert.doesNotMatch(bare, /difference/);
+  // And NOTHING at all sits where the grant fragment would go — the observed clause runs straight
+  // into the line's tail. Asserting only the absence of grant WORDS would admit any other filler.
+  assert.match(bare, /ledger facts alone; reported in BOTH briefs/);
 });
