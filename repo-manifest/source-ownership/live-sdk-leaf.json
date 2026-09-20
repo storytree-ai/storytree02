@@ -2,7 +2,8 @@
   "sourceOwnership": {
     "subtrees": {
       "packages/agent/src/pi-*.ts": "live-sdk-leaf",
-      "packages/agent/src/sdk-author.ts": "live-sdk-leaf"
+      "packages/agent/src/sdk-author.ts": "live-sdk-leaf",
+      "packages/agent/src/worker-budget.ts": "live-sdk-leaf"
     }
   }
 }

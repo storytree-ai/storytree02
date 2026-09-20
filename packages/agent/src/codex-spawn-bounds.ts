@@ -1,0 +1,138 @@
+/**
+ * The two clocks a Codex leaf spawn runs under, as one PURE unit over an injected clock and an
+ * injected kill (ADR-0584 D4).
+ *
+ * It lives outside `runPinnedCodexCli` for a measured reason: inside that function's promise executor
+ * the same logic was reachable only by spawning a real child, so every branch of arming, clearing,
+ * suspending and resuming was either untested or tested through a process whose timing the test did
+ * not control — the mutation rung named 29 surviving mutants across it. Here each branch is an
+ * ordinary function call.
+ *
+ * - **The BOUND** is the hard wall-clock limit: the build's remaining budget when one is wired, else
+ *   the leaf's own per-spawn default. Firing it means the time is gone.
+ * - **The SILENCE detector** is optional and catches a child that has stopped saying anything at all,
+ *   which is the one thing a wall-clock budget cannot see until the whole budget is spent. Every
+ *   chunk of output re-arms it, so SLOW progress is never killed by it (ADR-0581 D2).
+ *
+ * Exactly one of them is paused while the spine runs a feedback command, and which one is the whole
+ * subtlety: with a silence detector armed it is the detector (a proof run produces no child output by
+ * design, and the build's wall clock must keep running because a feedback run spends the build's time
+ * too); with no detector it is the bound, which is the pre-budget behaviour ADR-0570 D4 built.
+ */
+
+/**
+ * The clock the bounds run on. `now` is optional so a test clock may declare only the timers.
+ */
+export interface SpawnBoundsClock {
+  setTimeout(callback: () => void, ms: number): ReturnType<typeof setTimeout>;
+  clearTimeout(handle: ReturnType<typeof setTimeout>): void;
+  now?(): number;
+}
+
+/** Which bound killed the child. */
+export type SpawnStopReason = "bound" | "silence";
+
+export interface SpawnBoundsArgs {
+  clock: SpawnBoundsClock;
+  /** The hard wall-clock limit in milliseconds. */
+  boundMs: number;
+  /**
+   * The silence window in milliseconds. Omitted OR explicitly `undefined`, no detector is armed —
+   * the union is deliberate, so a caller can pass an optional value straight through instead of
+   * guarding it, which under `exactOptionalPropertyTypes` would otherwise need an
+   * `x !== undefined ? {x} : {}` shape the mutation rung can never discriminate.
+   */
+  silenceMs?: number | undefined;
+  /** Called once, with the reason, when a bound fires. */
+  stop: (reason: SpawnStopReason) => void;
+}
+
+export interface SpawnBounds {
+  /** Output arrived: re-arm the silence detector (a no-op when none is armed). */
+  heard(): void;
+  /** A feedback run is starting: pause the clock that must not count its time. */
+  suspend(): void;
+  /** A feedback run has settled: resume what `suspend` paused, from where it left off. */
+  resume(): void;
+  /** The spawn has settled: release every timer, so none outlives the child it bounded. */
+  settle(): void;
+}
+
+/**
+ * Arm both clocks and return the handle the spawn drives. Arming happens HERE, synchronously, so a
+ * caller can never forget it and a test can read both armings immediately.
+ */
+export function armSpawnBounds(args: SpawnBoundsArgs): SpawnBounds {
+  const { clock, silenceMs, stop } = args;
+  const now = (): number => clock.now?.() ?? Date.now();
+
+  let boundTimer: ReturnType<typeof setTimeout> | undefined;
+  let boundArmedAt = 0;
+  let boundRemainingMs = args.boundMs;
+  let silenceTimer: ReturnType<typeof setTimeout> | undefined;
+  let settled = false;
+
+  const armBound = (ms: number): void => {
+    boundArmedAt = now();
+    boundRemainingMs = ms;
+    boundTimer = clock.setTimeout(() => stop("bound"), ms);
+  };
+  // Both clears are guarded, and the guard is NOT redundant: a spawn's clock is observable, and
+  // clearing a timer that is not armed is a clock call that should not happen (the leaf's own tests
+  // pin "one setTimeout, one clearTimeout" for an unsuspended run).
+  const clearBound = (): void => {
+    if (boundTimer === undefined) return;
+    clock.clearTimeout(boundTimer);
+    boundTimer = undefined;
+  };
+  /** The ONE place `settled` and "no window asked for" are checked — every caller leans on it. */
+  const armSilence = (): void => {
+    if (silenceMs === undefined || settled) return;
+    silenceTimer = clock.setTimeout(() => stop("silence"), silenceMs);
+  };
+  const clearSilence = (): void => {
+    if (silenceTimer === undefined) return;
+    clock.clearTimeout(silenceTimer);
+    silenceTimer = undefined;
+  };
+
+  armBound(boundRemainingMs);
+  armSilence();
+
+  return {
+    // No `settled` guard on either of these two: `armSilence` holds it for both, and clearing an
+    // unarmed timer is a no-op, so a guard here would only be a second copy of a check that already
+    // decides — which the mutation rung cannot tell from no check at all.
+    heard: () => {
+      clearSilence();
+      armSilence();
+    },
+    suspend: () => {
+      if (silenceMs !== undefined) {
+        clearSilence();
+        return;
+      }
+      // A bound that is already paused is left alone: charging it again would charge the feedback run
+      // whose time this pause exists to exclude.
+      if (boundTimer === undefined) return;
+      // Only the leaf's own elapsed time is charged: what is left is remembered for `resume`.
+      boundRemainingMs = Math.max(0, boundRemainingMs - (now() - boundArmedAt));
+      clearBound();
+    },
+    resume: () => {
+      if (settled) return;
+      if (silenceMs !== undefined) {
+        if (silenceTimer !== undefined) return;
+        armSilence();
+        return;
+      }
+      if (boundTimer !== undefined) return;
+      armBound(boundRemainingMs);
+    },
+    settle: () => {
+      settled = true;
+      clearBound();
+      clearSilence();
+    },
+  };
+}

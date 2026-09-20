@@ -35,7 +35,10 @@ import type {
 } from "./codex-feedback-endpoint.js";
 import { linkReplicaDependencies } from "./codex-replica-links.js";
 import type { SdkFeedbackRun } from "./sdk-author.js";
+import { armSpawnBounds } from "./codex-spawn-bounds.js";
 import { scrubShellWorkerEnv } from "./worker-env.js";
+import { budgetIsSpent, budgetMinutes, budgetSpentError } from "./worker-budget.js";
+import type { WorkerTimeBudget } from "./worker-budget.js";
 
 // Re-exported for callers constructing `CodexPhaseAuthorArgs.feedbackCommands` — the command shape
 // is declared once, in `codex-feedback-endpoint.ts`, never duplicated here.
@@ -62,6 +65,17 @@ export interface CodexCommand {
    * spine makes to AUTHOR, which had none.
    */
   timeoutMs?: number;
+  /**
+   * A SILENCE detector, in milliseconds: kill the spawn after this long with no output of any kind
+   * (ADR-0581 D2 — "a runtime may keep a shorter detector only for a SILENT hang, never for slow
+   * progress"). Reset by every stdout/stderr chunk, so a slow turn that keeps streaming is never
+   * killed by it; absent, no silence detector is armed.
+   *
+   * When one IS armed it is what {@link CodexBoundControl} pauses around a feedback run, because a
+   * spine-side proof run legitimately produces no child output for minutes. {@link timeoutMs} then
+   * runs as plain wall clock, which is what makes it usable as the build's own budget.
+   */
+  silenceMs?: number;
   /**
    * An otherwise-empty handle the caller supplies. Before this returns its pending promise,
    * `runPinnedCodexCli` populates it with real `suspend`/`resume` functions bound to this one spawn.
@@ -103,6 +117,12 @@ export interface CodexCommandResult {
    * "I could not tell" and "it failed" are different answers.
    */
   timedOut?: true;
+  /**
+   * WHICH bound killed it — the wall-clock `timeoutMs` (`bound`) or the silence detector
+   * (`silence`). Set whenever {@link timedOut} is, because the two mean different things to a
+   * reader: a spent budget is a cost stop, and silence is a hang.
+   */
+  stoppedBy?: "bound" | "silence";
 }
 
 /** Per-machine override for {@link DEFAULT_CODEX_TIMEOUT_MS}, in milliseconds. */
@@ -118,6 +138,25 @@ export const CODEX_TIMEOUT_ENV = "STORYTREE_CODEX_TIMEOUT_MS";
  * #350 shipped the spine-wide default alone and the per-node dial came later, on evidence.
  */
 export const DEFAULT_CODEX_TIMEOUT_MS = 600_000;
+
+/**
+ * The SILENCE window a budgeted phase runs with (ADR-0581 D2): ten minutes with no output of any
+ * kind. It is the old per-phase bound, folded into its honest job — a Codex turn streams JSONL
+ * continuously, so complete silence for this long is a hang, while SLOW progress keeps talking and is
+ * left alone. The build's budget, not this, is what stops a worker that is merely taking too long.
+ */
+export const DEFAULT_CODEX_SILENCE_MS = 600_000;
+
+/**
+ * The reason a silence kill reports. Its own wording, never the budget's: a spent budget is a cost
+ * stop, and this is the runtime saying its child stopped speaking.
+ */
+export function codexSilenceError(phase: AuthoringPhase, silenceMs: number): string {
+  return (
+    `Codex produced no output for ${budgetMinutes(silenceMs)} at ${phase} and was killed as a silent ` +
+    `hang — the build's time budget was not spent`
+  );
+}
 
 /**
  * The bound on the `codex login status` probe specifically. A subscription check that cannot answer
@@ -237,6 +276,14 @@ export interface CodexPhaseAuthorArgs {
    * arguments are unchanged (`mcp_servers={}`).
    */
   feedbackCommands?: CodexFeedbackCommand[];
+  /**
+   * The build's wall-clock budget (ADR-0581 D2). Supplied, it becomes this phase's hard bound: the
+   * slice refuses to start once the budget is spent, the spawn is bounded by what is left rather than
+   * by the old fixed ten minutes, and a silence detector takes over the hang-catching job. Absent,
+   * the pre-budget behaviour stands exactly (a fixed {@link DEFAULT_CODEX_TIMEOUT_MS} bound, paused
+   * around feedback runs).
+   */
+  timeBudget?: WorkerTimeBudget;
 }
 
 interface ParsedCodexStream {
@@ -716,56 +763,48 @@ export async function runPinnedCodexCli(
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
     let timedOut = false;
-    let settled = false;
-    const now = (): number => clock.now?.() ?? Date.now();
-    // The bound. Released in `settle`, on `exit` or on `error`, so it never outlives the child it
-    // bounds and needs no `unref`. While `armedTimer` is defined the bound is live; suspending it
-    // (see `command.bound` below) releases it and remembers the remaining time, so only the leaf's
-    // own time — never time spent while the spine runs a feedback command — counts against it.
+    let stoppedBy: "bound" | "silence" | undefined;
+    // Both clocks, armed as one unit and released in `settle` (below), on `exit` or on `error`, so
+    // neither outlives the child it bounded and neither needs `unref`. Which one a feedback run pauses,
+    // and why, is `armSpawnBounds`' own doc.
     //
-    // It signals the WRAPPER, not the native binary that stopped answering, and still reaches that
-    // binary on both platforms (measured on codex-cli 0.145.0, inner-loop-exit-arc inc-07). On POSIX
-    // the wrapper forwards SIGTERM and exits only once its native child has — pinned by the "reaches
-    // the native binary" test — and the native binary installs no SIGTERM handler: held mid-request on
-    // an endpoint that never answered, it was gone within about 20 ms of this signal. On Windows
-    // this is TerminateProcess on the wrapper alone, but the wrapper's own libuv holds its child
-    // in a kill-on-close job object, so the native binary ends with it. SIGKILL alone would
+    // The kill signals the WRAPPER, not the native binary that stopped answering, and still reaches
+    // that binary on both platforms (measured on codex-cli 0.145.0, inner-loop-exit-arc inc-07). On
+    // POSIX the wrapper forwards SIGTERM and exits only once its native child has — pinned by the
+    // "reaches the native binary" test — and the native binary installs no SIGTERM handler: held
+    // mid-request on an endpoint that never answered, it was gone within about 20 ms of this signal. On
+    // Windows this is TerminateProcess on the wrapper alone, but the wrapper's own libuv holds its
+    // child in a kill-on-close job object, so the native binary ends with it. SIGKILL alone would
     // ORPHAN the native binary on POSIX, because a SIGKILL cannot be forwarded.
-    let armedTimer: ReturnType<typeof setTimeout> | undefined;
-    let armedAt = 0;
-    let remainingMs = resolveCodexTimeoutMs(command);
-    const arm = (ms: number): void => {
-      armedAt = now();
-      remainingMs = ms;
-      armedTimer = clock.setTimeout(() => {
+    const bounds = armSpawnBounds({
+      clock,
+      boundMs: resolveCodexTimeoutMs(command),
+      // Passed straight through, absent and `undefined` meaning the same thing to the callee: a
+      // `!== undefined` guard here would be an equivalent mutant by construction.
+      silenceMs: command.silenceMs,
+      stop: (reason) => {
         timedOut = true;
+        stoppedBy = reason;
         child.kill();
-      }, ms);
-    };
-    arm(remainingMs);
+      },
+    });
     if (command.bound !== undefined) {
-      command.bound.suspend = () => {
-        if (settled || armedTimer === undefined) return;
-        remainingMs = Math.max(0, remainingMs - (now() - armedAt));
-        clock.clearTimeout(armedTimer);
-        armedTimer = undefined;
-      };
-      command.bound.resume = () => {
-        if (settled || armedTimer !== undefined) return;
-        arm(remainingMs);
-      };
+      command.bound.suspend = () => bounds.suspend();
+      command.bound.resume = () => bounds.resume();
     }
     const settle = (fn: () => void): void => {
-      settled = true;
-      if (armedTimer !== undefined) {
-        clock.clearTimeout(armedTimer);
-        armedTimer = undefined;
-      }
+      bounds.settle();
       fn();
     };
     child.once("error", (error) => settle(() => reject(error)));
-    child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
-    child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout.push(chunk);
+      bounds.heard();
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr.push(chunk);
+      bounds.heard();
+    });
     child.once("exit", (code, signal) => {
       settle(() => {
         const outcome: CodexCommandResult = {
@@ -777,6 +816,7 @@ export async function runPinnedCodexCli(
         // Whatever the child printed before the kill is kept — it is the only evidence of how far it
         // got, and discarding it would make a bounded run less diagnosable than a failed one.
         if (timedOut) outcome.timedOut = true;
+        if (stoppedBy !== undefined) outcome.stoppedBy = stoppedBy;
         resolve(outcome);
       });
     });
@@ -1060,7 +1100,12 @@ interface PromoteReplicaChangesArgs {
   replicaRoot: string;
   realRoot: string;
   changes: ReplicaChange[];
-  faults?: CodexPromotionFaults;
+  /**
+   * The test-only fault seam. `| undefined` so a caller may pass an optional value straight through:
+   * a `!== undefined` guard around this assignment is an equivalent mutant by construction, since
+   * every read of it is already optional-chained.
+   */
+  faults?: CodexPromotionFaults | undefined;
 }
 
 async function promoteReplicaChanges(
@@ -1197,6 +1242,12 @@ export class CodexPhaseAuthor implements PhaseAuthor {
     }
     if (typeof prompt !== "string" || prompt.trim().length === 0) {
       return { ok: false, error: "Codex phase brief is empty" };
+    }
+    // The build's budget, asked BEFORE the auth probe and before any spend (ADR-0581 D2): a slice that
+    // cannot run reports the exhaustion a stopped slice reports, so the gate still observes the tree.
+    const budget = this.#args.timeBudget;
+    if (budget !== undefined && budgetIsSpent(budget)) {
+      return { ok: false, exhausted: true, error: budgetSpentError(phase, budget.budgetMs) };
     }
     const phaseGlobs = this.#args.writeGlobs[phase];
     if (!Array.isArray(phaseGlobs) || !validPhaseGlobs(phaseGlobs)) {
@@ -1361,6 +1412,14 @@ export class CodexPhaseAuthor implements PhaseAuthor {
         stdin: fullPrompt,
       };
       if (feedbackHandle !== undefined) execCommand.bound = bound;
+      // With a budget, the spawn's hard bound IS what is left of the build (never the old fixed ten
+      // minutes) and the silence detector takes over catching a hang. Wall clock stays wall clock: the
+      // bound is not paused around feedback runs, because a feedback run spends the build's time too
+      // (ADR-0581 D3). Without a budget, neither field is set and the pre-budget behaviour stands.
+      if (budget !== undefined) {
+        execCommand.timeoutMs = budget.remainingMs();
+        execCommand.silenceMs = DEFAULT_CODEX_SILENCE_MS;
+      }
 
       let execution: CodexCommandResult;
       try {
@@ -1378,12 +1437,17 @@ export class CodexPhaseAuthor implements PhaseAuthor {
       }
 
       try {
-      // Checked BEFORE the JSONL is parsed: a killed child emits no turn envelope, so the parser would
-      // report "must contain exactly one turn (started=0, completed=0)" — a statement about the leaf's
-      // OUTPUT for a leaf that never produced any. The bound is the honest answer, and it is UNVERIFIED
-      // rather than a failure: nothing was observed, so nothing failed. It sits inside this `try` so the
-      // replica is discarded by the same `finally` as every other exit, not by a copy of it.
-      if (execution.timedOut === true) {
+      // A killed child with NO budget wired keeps the pre-budget answer, checked before anything is
+      // parsed: it emits no turn envelope, so the parser would report "must contain exactly one turn
+      // (started=0, completed=0)" — a statement about the OUTPUT of a leaf that produced none. The
+      // bound is the honest answer, and it is UNVERIFIED rather than a failure. A BUDGETED stop is
+      // handled further down instead, after the replica has been observed: the phase's work is not
+      // thrown away (ADR-0581 D2).
+      // Decided ONCE, here, and read again after the observation below: the second read then tests one
+      // thing, where `execution.timedOut === true && budget !== undefined` would carry an operand no
+      // runtime state can falsify (a stop with no budget has already returned by then).
+      const budgetedStop = execution.timedOut === true ? budget : undefined;
+      if (execution.timedOut === true && budgetedStop === undefined) {
         // A recorded escalation wins over a timed-out runner (ADR-0569): the leaf raised it before
         // the bound killed the spawn, and a killed child left no stream to write a run record from.
         if (escalation !== undefined) {
@@ -1488,6 +1552,46 @@ export class CodexPhaseAuthor implements PhaseAuthor {
             : `Codex phase scope was violated: ${phaseViolations[0]?.reason ?? "write refused"}`,
         );
       }
+      // A BUDGETED stop, after the fence above and before every check that reads the turn envelope: a
+      // killed child has no envelope, so its exit code, its completed-turn count and the manifest's
+      // required target say nothing about it (ADR-0581 D2). What the spine keeps instead is what it
+      // OBSERVED — the run record written above, and the allowed subset of the replica diff, promoted
+      // here so the phase's work is not thrown away. `exhausted` is what makes the gate observe the
+      // tree rather than discard the build; the verdict is still the spine's own observation, never
+      // this promotion, so partial work can only ever produce an honest red.
+      if (budgetedStop !== undefined) {
+        const stopError =
+          execution.stoppedBy === "silence"
+            ? codexSilenceError(phase, DEFAULT_CODEX_SILENCE_MS)
+            : budgetSpentError(phase, budgetedStop.budgetMs);
+        run.subtype = "error";
+        if (changes.length === 0) {
+          return { ok: false, exhausted: true, error: `${stopError}; it had written nothing` };
+        }
+        if (!replica.seeded || !manifest.ok) {
+          // Observed changes with nothing to promote them against: the synthetic runner seam, or a
+          // phase with no exact manifest. Promoting would be promoting an unchecked list.
+          return {
+            ok: false,
+            exhausted: true,
+            error: `${stopError}; its ${changes.length} change(s) had no exact manifest to promote against`,
+          };
+        }
+        const salvaged = await promoteReplicaChanges({
+          replicaRoot: replicaDir,
+          realRoot: this.#args.cwd,
+          changes,
+          faults: this.#args.promotionFaults,
+        });
+        return {
+          ok: false,
+          exhausted: true,
+          error: salvaged.ok
+            ? `${stopError}; the ${changes.length} observed in-scope change(s) were promoted`
+            : `${stopError}; the observed changes could not be promoted: ${salvaged.error}`,
+        };
+      }
+
       if (execution.code !== 0) {
         const detail = execution.stderr.trim() || parsed.error || `exit ${execution.code ?? "none"}`;
         return failRun(`Codex exec failed: ${detail}`);

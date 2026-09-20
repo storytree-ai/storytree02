@@ -62,6 +62,8 @@ export type {
 } from "./codex-author.js";
 export {
   DEFAULT_CODEX_MODEL,
+  DEFAULT_CODEX_SILENCE_MS,
+  codexSilenceError,
   CodexPhaseAuthor,
   scrubMeteredCodexAuth,
   isChatGptManagedLogin,
@@ -69,6 +71,9 @@ export {
   parseCodexJsonl,
   runPinnedCodexCli,
 } from "./codex-author.js";
+
+export type { WorkerTimeBudget, WorkerBoundClock } from "./worker-budget.js";
+export { budgetIsSpent, budgetMinutes, budgetSpentError } from "./worker-budget.js";
 
 export {
   STORE_POINTER_ENV_NAMES,

@@ -25,6 +25,8 @@ import { createSdkMcpServer, query, tool } from "@anthropic-ai/claude-agent-sdk"
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
 
 import { scrubToolWorkerEnv } from "./worker-env.js";
+import { budgetIsSpent, budgetSpentError } from "./worker-budget.js";
+import type { WorkerBoundClock, WorkerTimeBudget } from "./worker-budget.js";
 
 /**
  * Re-surface the SDK hook/permission types the OFFLINE wall tests pin against, so this file stays
@@ -169,8 +171,22 @@ export interface ClaudeAgentAuthorArgs {
   isWriteAllowed: (phase: AuthoringPhase, relPath: string) => boolean;
   /** Model for the SDK session. Default: claude-sonnet-5. */
   model?: string;
-  /** Per-slice turn ceiling — the runaway brake. Default: 16. */
+  /**
+   * Per-slice turn ceiling. NO LONGER THE RUNAWAY BRAKE once {@link timeBudget} is supplied
+   * (ADR-0581 D2): with a budget, no ceiling is passed to the SDK unless an operator set one
+   * explicitly, and turn counts are only reported. Without a budget the old default of 16 stands, so
+   * a caller that wires neither is never left with no brake at all.
+   */
   maxTurns?: number;
+  /**
+   * The build's wall-clock budget (ADR-0581 D2). Supplied, it is the runaway brake: a slice refuses
+   * to start once the budget is spent, and a running slice is aborted the moment it runs out. The
+   * spine holds one budget per build and hands the same object to every slice and to the in-build
+   * repair loop.
+   */
+  timeBudget?: WorkerTimeBudget;
+  /** The clock {@link timeBudget}'s own deadline runs on. Tests inject; production takes the default. */
+  clock?: WorkerBoundClock;
   /**
    * OPTIONAL per-slice hard budget ceiling in USD (the SDK aborts past it). Default: NONE — no USD
    * ceiling is enforced unless an explicit value is threaded down (ADR-0130). The leaf is
@@ -520,6 +536,8 @@ export class ClaudeAgentAuthor implements PhaseAuthor {
   readonly #usesRealSdk: boolean;
   /** The spine MCP server constructor — the real SDK export, or an injected test double. */
   readonly #mcpServerFactory: typeof createSdkMcpServer;
+  /** The clock the build budget's deadline runs on (the system clock in production). */
+  readonly #clock: WorkerBoundClock;
 
   /** Every fail-closed refusal the scope hook made, in order (the wall held). */
   readonly violations: SdkWriteViolation[] = [];
@@ -535,6 +553,7 @@ export class ClaudeAgentAuthor implements PhaseAuthor {
     this.#usesRealSdk = args.queryFn === undefined;
     this.#queryFn = args.queryFn ?? ((q): AsyncIterable<unknown> => query(q));
     this.#mcpServerFactory = args.mcpServerFactory ?? createSdkMcpServer;
+    this.#clock = args.clock ?? { setTimeout, clearTimeout };
   }
 
   /**
@@ -591,10 +610,30 @@ export class ClaudeAgentAuthor implements PhaseAuthor {
       return { ok: false, error: base.error };
     }
 
+    // The build's budget, asked BEFORE any spend (ADR-0581 D2). A slice that cannot run reports the
+    // same exhaustion a stopped slice does: nothing was authored, so nothing is claimed, and the gate
+    // still observes what is on disk rather than discarding the build.
+    const budget = this.#args.timeBudget;
+    if (budget !== undefined && budgetIsSpent(budget)) {
+      return { ok: false, exhausted: true, error: budgetSpentError(phase, budget.budgetMs) };
+    }
+
+    // The turn cap stops enforcing once a budget is the brake (ADR-0581 D2), so with a budget the SDK
+    // is given no ceiling at all and turn counts are only reported. An operator's explicit
+    // `--max-turns` is still honoured, and the old default of 16 stays for a caller that wired no
+    // budget — no path is ever left with no brake. Chosen here, spread unconditionally below, because
+    // an inline conditional spread of `{}` is what `no-conditional-empty-object-spread` refuses.
+    const turnCeiling =
+      this.#args.maxTurns !== undefined
+        ? { maxTurns: this.#args.maxTurns }
+        : budget === undefined
+          ? { maxTurns: 16 }
+          : {};
+
     const options: Options = {
       cwd: this.#args.cwd,
       model: this.#args.model ?? "claude-sonnet-5",
-      maxTurns: this.#args.maxTurns ?? 16,
+      ...turnCeiling,
       tools: LEAF_TOOLS,
       allowedTools: [
         ...LEAF_TOOLS,
@@ -725,6 +764,26 @@ export class ClaudeAgentAuthor implements PhaseAuthor {
       }),
     };
 
+    // The budget's own deadline (ADR-0581 D2). The SDK aborts by signal and surfaces that as a THROWN
+    // error with no result message and no `error_max_turns`-style subtype, so the endings below can only
+    // tell a budget stop from a genuine crash by what the deadline left behind — without it a stop
+    // would read as a hard failure and the gate would discard the slice instead of observing the tree.
+    //
+    // It holds the REASON rather than a boolean: the reason is what both endings return, and a boolean
+    // would need `budget !== undefined` beside it at each one purely to satisfy the type system — a
+    // guard no runtime state can falsify, and so one no test can discriminate.
+    let budgetStop: string | undefined;
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    if (budget !== undefined) {
+      const abort = new AbortController();
+      options.abortController = abort;
+      const spent = budgetSpentError(phase, budget.budgetMs);
+      deadline = this.#clock.setTimeout(() => {
+        budgetStop = spent;
+        abort.abort();
+      }, budget.remainingMs());
+    }
+
     let result: ResultLike | undefined;
     try {
       for await (const message of this.#queryFn({ prompt, options })) {
@@ -738,12 +797,26 @@ export class ClaudeAgentAuthor implements PhaseAuthor {
       if (escalation !== undefined) {
         return { ok: false, error: escalationError(escalation), escalation };
       }
+      // A budget stop is exhaustion, not a crash: the work already on disk is kept and observed.
+      if (budgetStop !== undefined) {
+        return { ok: false, exhausted: true, error: budgetStop };
+      }
       return { ok: false, error: `SDK session failed: ${(e as Error).message}` };
+    } finally {
+      // Released on every exit, so a finished slice's deadline never outlives it (an armed timer would
+      // keep the whole slice reachable until it fired, then abort a controller nobody is reading).
+      // Unconditional: clearing a timer that was never armed is a no-op the clock declares it takes.
+      this.#clock.clearTimeout(deadline);
     }
 
     if (result === undefined) {
       if (escalation !== undefined) {
         return { ok: false, error: escalationError(escalation), escalation };
+      }
+      // An abort that ends the stream instead of throwing lands here, and it is the same stop: the
+      // budget, not a silent SDK fault, is why no result arrived.
+      if (budgetStop !== undefined) {
+        return { ok: false, exhausted: true, error: budgetStop };
       }
       return { ok: false, error: "SDK session ended without a result message (fail-closed)" };
     }
