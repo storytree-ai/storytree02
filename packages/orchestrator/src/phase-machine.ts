@@ -169,6 +169,66 @@ export function advancePhase(current: Phase): PhaseTransition {
 }
 
 /**
+ * Which worker can fix a failed check (ADR-0581 D4): the test-writer, who authors in `AUTHOR_TEST`,
+ * or the code-writer, who authors in `IMPLEMENT`. The spine decides it from the check that failed
+ * (ADR-0582 D3); the model never does.
+ */
+export type RepairOwner = "test" | "code";
+
+/** A backward edge ({@link repairPhase}): the authoring phase a repair returns to, or why there is none. */
+export type RepairTransition =
+  | { ok: true; next: "AUTHOR_TEST" | "IMPLEMENT" }
+  | { ok: false; reason: string };
+
+/**
+ * The BACKWARD edges of the ladder (ADR-0582 D2): the authoring phase a failed check at `failedAt`
+ * returns to, when its owner can fix it inside the build. Total and fail-closed:
+ *
+ *  - a TEST problem at `CONFIRM_RED`, `CONFIRM_GREEN` or `GATE` returns to `AUTHOR_TEST`;
+ *  - a CODE problem at `CONFIRM_GREEN` or `GATE` returns to `IMPLEMENT`;
+ *  - nothing else has a backward edge. CONFIRM_RED has no code to repair (the implementation does not
+ *    exist yet), and the two authoring phases fail no check — an authoring error is not a failed
+ *    observation, so there is nothing for a repair to re-observe.
+ *
+ * From the authoring phase it returns to, the walk moves on exactly as it always has
+ * ({@link advancePhase}, then {@link nextPhase}), so a repaired test is observed at CONFIRM_RED again
+ * before any code is written against it, and repaired code at CONFIRM_GREEN again. The one forward
+ * edge repairs add is {@link phaseAfterRed}'s.
+ */
+export function repairPhase(failedAt: Phase, owner: RepairOwner): RepairTransition {
+  if (failedAt === "CONFIRM_RED") {
+    return owner === "test"
+      ? { ok: true, next: "AUTHOR_TEST" }
+      : {
+          ok: false,
+          reason: "a failed CONFIRM_RED has no code to repair — no implementation exists before the red is observed",
+        };
+  }
+  if (failedAt === "CONFIRM_GREEN" || failedAt === "GATE") {
+    return { ok: true, next: owner === "test" ? "AUTHOR_TEST" : "IMPLEMENT" };
+  }
+  return {
+    ok: false,
+    reason: `${failedAt} is an authoring phase: it fails no observed check, so there is nothing for a repair to re-observe`,
+  };
+}
+
+/**
+ * Where the walk goes once CONFIRM_RED has observed and accepted a red (ADR-0582 D2). Ordinarily
+ * `IMPLEMENT` — {@link nextPhase}'s edge. But a test REVISED after IMPLEMENT has already run is
+ * re-observed red with that implementation set aside and then restored, so an implementation exists
+ * before the code-writer is handed anything: the walk goes to `CONFIRM_GREEN` to observe whether the
+ * restored implementation already satisfies the revised test. Only if it does not is the code-writer
+ * handed a slice, as a repair of that failed green.
+ *
+ * This skips no observation: the revised test is observed red against the source the build began
+ * from, and green against the implementation, exactly as ADR-0020 §3 requires of every test it signs.
+ */
+export function phaseAfterRed(implementationExists: boolean): Phase {
+  return implementationExists ? "CONFIRM_GREEN" : "IMPLEMENT";
+}
+
+/**
  * Per-phase write-ownership (ADR-0020 §2, ADR-0009). The spine asks `isWriteAllowed` before
  * letting the owned loop's write tool touch a path. This re-creates V1's process-isolation walls
  * as ONE agent's time-sliced write-ownership: the author of the test is not, at that moment, the

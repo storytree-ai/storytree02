@@ -37,6 +37,17 @@ pieces, one file (`packages/orchestrator/src/phase-machine.ts`):
 - **`advancePhase`** (`phase-machine.ts:157-169`), the two authoring-complete advances — these
   carry no observation, and `nextPhase` refuses to govern them (the split is itself load-bearing:
   an agent cannot drive an observation gate with an authoring signal or vice versa);
+- **`repairPhase`** + **`phaseAfterRed`** (ADR-0582 D2), the BACKWARD edges the in-build repair loop
+  follows: a TEST problem at CONFIRM_RED, CONFIRM_GREEN or GATE returns to AUTHOR_TEST, a CODE problem
+  at CONFIRM_GREEN or GATE returns to IMPLEMENT, and nothing else has one — a failed CONFIRM_RED has
+  no code to repair (no implementation exists yet), and an authoring phase fails no observed check, so
+  each refuses with that reason. From the phase it returns to, the walk moves forward through the SAME
+  `advancePhase`/`nextPhase` gates, so a repaired test is observed at CONFIRM_RED again before any code
+  is written against it and repaired code at CONFIRM_GREEN again. `phaseAfterRed` is the ONE forward
+  edge repairs add: an accepted red goes to IMPLEMENT, or to CONFIRM_GREEN when an implementation
+  already exists (a test revised after IMPLEMENT, whose red was observed with that implementation set
+  aside — ADR-0582 D4). Neither decides WHO owns a failed check; [`prove-it-gate`](prove-it-gate.md)
+  owns the loop that routes it and consults these edges;
 - **`PathWriteScope`** + the dependency-free tiny glob matcher (`phase-machine.ts:200-266`),
   ADR-0020 §2's write-ownership predicate: TEST paths writable only in AUTHOR_TEST, SOURCE paths
   only in IMPLEMENT, everything else denied — a path matching both globs stays test-owned (the
@@ -66,7 +77,7 @@ with `advancePhase`/`nextPhase` deciding each transition off REAL observations f
 process, and the in-file composition test (`phase-machine.test.ts:87`) walks the full legal path
 `AUTHOR_TEST → … → GATE` through the same two functions.
 
-## Contracts (10 → 9 surviving; ADR-0580 D1)
+## Contracts (11 → 10 surviving; ADR-0580 D1)
 
 1. **`confirm-red-requires-observed-red`** — CONFIRM_RED advances only on an observed red; a green is a forged/early pass
    - **asserts —** red → `IMPLEMENT`; green → `{ ok:false }` with the forged-pass reason.
@@ -105,3 +116,7 @@ process, and the in-file composition test (`phase-machine.test.ts:87`) walks the
     - **asserts —** the same red/green observation transitions identically with and without optional `originalProcessResult` stdout, stderr, and exit-code detail, including `exitCode: null`; `RecordingTestExecutor` and non-shell executors construct observations without it.
     - **covers —** `TestObservation`'s optional detail at `packages/orchestrator/src/phase-machine.ts` and `nextPhase`
     - **proven by —** scoped additions to `packages/orchestrator/src/phase-machine.test.ts`, coupled with the ordinary spawned-command integration cases in `shell-test-executor.test.ts` (pending the capability's normal red→green proof)
+11. **`repair-edges-return-a-failed-check-to-its-owner`** — the backward edges are total and fail-closed, and every repair re-enters the ordinary forward ladder
+    - **asserts —** `repairPhase` returns `AUTHOR_TEST` for a TEST problem at CONFIRM_RED, CONFIRM_GREEN or GATE, and `IMPLEMENT` for a CODE problem at CONFIRM_GREEN or GATE; a CODE problem at CONFIRM_RED refuses with the reason that no implementation exists before the red is observed, and AUTHOR_TEST and IMPLEMENT refuse for either owner as phases that fail no observed check. Every edge lands on an authoring phase, from which `advancePhase` then `nextPhase` carry the walk forward unchanged, so a repaired test is observed at CONFIRM_RED again and repaired code at CONFIRM_GREEN again. `phaseAfterRed` returns `IMPLEMENT`, and `CONFIRM_GREEN` when an implementation already exists.
+    - **covers —** `repairPhase`, `phaseAfterRed`, `RepairOwner` and `RepairTransition` (`packages/orchestrator/src/phase-machine.ts`)
+    - **proven by —** `packages/orchestrator/src/phase-machine.repair.test.ts` (session-authored; no signed verdict)

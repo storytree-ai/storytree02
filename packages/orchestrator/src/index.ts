@@ -9,6 +9,8 @@ export type {
   Phase,
   TestObservation,
   PhaseTransition,
+  RepairOwner,
+  RepairTransition,
   WriteScope,
   PathWriteScopeConfig,
   TestExecutor,
@@ -16,10 +18,41 @@ export type {
 export {
   nextPhase,
   advancePhase,
+  phaseAfterRed,
+  repairPhase,
   PathWriteScope,
   globMatch,
   RecordingTestExecutor,
 } from "./phase-machine.js";
+
+// ADR-0581 D4 / ADR-0582: what the in-build repair loop consults — its budget, the repair briefs, the
+// typecheck router, and the set-aside that re-observes a revised test against the build's base source.
+export type {
+  GitRunner,
+  ProcessOutput,
+  RepairBudget,
+  RepairCause,
+  RepairCheck,
+  RepairDecision,
+  RepairPolicy,
+  RepairRecord,
+  SetAside,
+  TypecheckRouting,
+} from "./repair.js";
+export {
+  DEFAULT_BUILD_BUDGET_MS,
+  REPAIR_STREAM_CHARS,
+  clipTail,
+  codeRepairSection,
+  diagnosticFiles,
+  redObservationSection,
+  renderObservation,
+  routeTypecheckByFile,
+  setAsideImplementation,
+  testRepairSection,
+  wallClockBudget,
+  worktreeScopeFingerprint,
+} from "./repair.js";
 
 export type {
   ShellRunResult,

@@ -201,6 +201,14 @@ export interface PerTestFinding {
   readonly detail: string;
   /** C4 only: the contract ids the early-passing test names — possibly none. */
   readonly namedContracts?: readonly string[];
+  /**
+   * Present when only a change to the TEST FILE can clear this finding — a declaration the join cannot
+   * bind, a test the file does not declare, a skipped test, or one of the new-test rules C4–C7. The
+   * in-build repair loop sends a CONFIRM_GREEN refusal carrying one to the test-writer rather than the
+   * code-writer (ADR-0582 D3). Absent on the findings the RUN produces — a missing report, a test the
+   * run never reached, a failed test — which are the code's to fix.
+   */
+  readonly testSide?: true;
 }
 
 /** A review's outcome: advance (recording any guard-rail it accepted), or refuse with every finding. */
@@ -273,6 +281,7 @@ function bindReport(
     findings.push({
       check: "C2",
       detail: "the static read found no test in the test file, so there is nothing to observe per test",
+      testSide: true,
     });
   }
 
@@ -298,6 +307,7 @@ function bindReport(
         detail:
           "declared through a table (`.each`), which the runner expands into several rows, so no single " +
           "row can be bound to it — declare each case as its own test (ADR-0573 D3)",
+        testSide: true,
       });
       continue;
     }
@@ -308,6 +318,7 @@ function bindReport(
         detail:
           "its title, or an enclosing suite's, is built at runtime, so the static read cannot know the path " +
           "a runner will report — give it a literal title (ADR-0126; ADR-0573 D3)",
+        testSide: true,
       });
       continue;
     }
@@ -318,6 +329,7 @@ function bindReport(
           check: "C2",
           test: test.path,
           detail: `${declaredCount.get(key) ?? 0} declared tests share this title path, so a reported row cannot say which one it is`,
+          testSide: true,
         });
       }
       continue;
@@ -338,6 +350,7 @@ function bindReport(
         check: "C3",
         test: test.path,
         detail: `reported ${row.outcome}, and a declared test must run to a pass or a failure`,
+        testSide: true,
       });
       continue;
     }
@@ -395,6 +408,7 @@ export function reviewConfirmRed(input: ConfirmRedReview): PerTestJudgement {
         check: "C6",
         test: test.path,
         detail: "a new test that does not vouch: it is skipped, or holds no substantive assertion (ADR-0126)",
+        testSide: true,
       });
     }
   }
@@ -425,6 +439,7 @@ export function reviewConfirmRed(input: ConfirmRedReview): PerTestJudgement {
         test: test.path,
         namedContracts: named,
         detail: nearMisses.length === 0 ? verdictOnNames : `${verdictOnNames} — ${nearMisses.join("; ")}`,
+        testSide: true,
       });
       continue;
     }
@@ -433,6 +448,7 @@ export function reviewConfirmRed(input: ConfirmRedReview): PerTestJudgement {
         check: "C5",
         test: test.path,
         detail: `red with ${describeError(row)}, and this node declares an assertion red`,
+        testSide: true,
       });
     }
   }
@@ -444,6 +460,7 @@ export function reviewConfirmRed(input: ConfirmRedReview): PerTestJudgement {
       findings.push({
         check: "C7",
         detail: `the brief named contract \`${id}\`, and no new test that vouches names it`,
+        testSide: true,
       });
     }
   }
@@ -497,11 +514,14 @@ export const EARLY_PASS_ROUTES =
 /**
  * The refusal reason a per-test review produces: every failing test named with the check it failed,
  * beside the refused observation's own output (which the gate returns as `failedObservation`, PR #1910),
- * and ADR-0572's three routes whenever an early pass is among them.
+ * and ADR-0572's three routes whenever an early pass is among them. `audience: "worker"` renders the same
+ * findings for the worker an in-build repair hands them to (ADR-0582 D7), without those routes: they are
+ * the orchestrator's once a build has ended, and a worker reading them would take them as its own.
  */
 export function describePerTestRefusal(
   phase: "CONFIRM_RED" | "CONFIRM_GREEN",
   findings: readonly PerTestFinding[],
+  audience: "orchestrator" | "worker" = "orchestrator",
 ): string {
   const listed = findings.slice(0, MAX_LISTED_FINDINGS).map((f) => {
     const subject = f.test !== undefined ? ` — \`${f.test.join(" > ")}\`` : "";
@@ -512,7 +532,7 @@ export function describePerTestRefusal(
     `${phase} refused per test (ADR-0573 D1) — ${findings.length} finding(s):`,
     ...listed,
     ...(rest > 0 ? [`  - … and ${rest} more`] : []),
-    ...(findings.some((f) => f.check === "C4") ? [EARLY_PASS_ROUTES] : []),
+    ...(audience === "orchestrator" && findings.some((f) => f.check === "C4") ? [EARLY_PASS_ROUTES] : []),
   ].join("\n");
 }
 
@@ -568,7 +588,7 @@ function readDeclaredTests(testFile: string): DeclaredRead {
 }
 
 function unreadableFile(reason: string): PerTestJudgement {
-  return { ok: false, findings: [{ check: "C2", detail: reason }] };
+  return { ok: false, findings: [{ check: "C2", detail: reason, testSide: true }] };
 }
 
 /** The file-backed {@link PerTestPolicy} a resolver hands the gate. */
