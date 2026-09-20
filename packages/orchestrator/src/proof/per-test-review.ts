@@ -62,6 +62,8 @@ import type { AcceptedGuardRail } from "@storytree/proof-protocol";
 import type { TestObservation } from "../phase-machine.js";
 import { analyzeObservedTests, testNameCoversContract } from "./contract-coverage.js";
 import type { PerTestChannel, PerTestReport, ReportedTest } from "./per-test-report.js";
+import { reviewTestChanges, updatedToNewBehaviour, updatedToSameBehaviour } from "./test-baseline.js";
+import type { TestChangeRecord } from "./test-baseline.js";
 
 // ---------------------------------------------------------------------------
 // The guard-rail declaration (ADR-0572 D2)
@@ -117,6 +119,12 @@ export interface DeclaredTest {
    * read cannot read in full, or a table-bound `.each` declaration the runner expands into several rows.
    */
   readonly unbindable?: "unread-title" | "parameterised";
+  /**
+   * ADR-0585: the fingerprint of this test's own source span, carried through from the static read, so a
+   * build can tell a test that was already here and left alone from one it rewrote. Absent when the read
+   * supplied none.
+   */
+  readonly bodyHash?: string | undefined;
 }
 
 /** An injective key for a title path: each segment length-prefixed, so no title can forge another's. */
@@ -167,9 +175,8 @@ export function declaredTestsOf(testSource: string, testFile: string): DeclaredT
           : undefined;
     // Not `t.vouches`, which also withholds credit from a CONDITIONAL skip: see `DeclaredTest.vouches`.
     const vouches = t.substantive && !t.skipped;
-    declared.push(
-      unbindable === undefined ? { path: titlePath, vouches } : { path: titlePath, vouches, unbindable },
-    );
+    const read = { path: titlePath, vouches, bodyHash: t.bodyHash };
+    declared.push(unbindable === undefined ? read : { ...read, unbindable });
   }
   return declared;
 }
@@ -179,7 +186,7 @@ export function declaredTestsOf(testSource: string, testFile: string): DeclaredT
 // ---------------------------------------------------------------------------
 
 /** A check that can refuse (ADR-0573 D1). `green` is CONFIRM_GREEN's individually-green rule. */
-export type PerTestCheck = "C1" | "C2" | "C3" | "C4" | "C5" | "C6" | "C7" | "green";
+export type PerTestCheck = "C1" | "C2" | "C3" | "C4" | "C5" | "C6" | "C7" | "C8" | "green";
 
 /** Each check's name, as a refusal prints it. */
 export const PER_TEST_CHECK_NAMES = {
@@ -190,6 +197,7 @@ export const PER_TEST_CHECK_NAMES = {
   C5: "the declared kind",
   C6: "substance",
   C7: "the brief's contracts",
+  C8: "the existing-test record",
   green: "individually green",
 } as const satisfies Record<PerTestCheck, string>;
 
@@ -382,6 +390,18 @@ export interface ConfirmRedReview {
   readonly contracts: readonly ContractDecl[];
   /** C7: the contracts a CLUSTER brief named. Absent for a one-test brief, where C7 refuses nothing. */
   readonly briefContracts?: readonly string[];
+  /**
+   * ADR-0585: pre-existing tests this build's own record says were UPDATED to assert NEW behaviour —
+   * keyed as {@link testChangeKey}. Each is held exactly as a new test is (C4–C6): it now claims
+   * something the source does not do yet, so it must fail here.
+   */
+  readonly assertsNewBehaviour?: ReadonlySet<string>;
+  /**
+   * ADR-0585: pre-existing tests the record calls REFACTORS — the same behaviour in a different shape.
+   * Each must still PASS against the source the build began from, which is what tells a refactor from a
+   * rewrite that quietly changed what the test claims.
+   */
+  readonly assertsSameBehaviour?: ReadonlySet<string>;
 }
 
 /** PURE: the review point between red and green (ADR-0573 D1, arc end state 4). */
@@ -392,7 +412,12 @@ export function reviewConfirmRed(input: ConfirmRedReview): PerTestJudgement {
   const channel = input.report.channel;
 
   const beforeKeys = new Set(input.before.map((t) => keyOf(t.path)));
-  const isNew = (test: DeclaredTest): boolean => !beforeKeys.has(keyOf(test.path));
+  // ADR-0585: a pre-existing test the build UPDATED to assert new behaviour is held exactly as a new one
+  // is. The worker's own record can only ADD that obligation — it can never lift one.
+  const newBehaviour = input.assertsNewBehaviour ?? new Set<string>();
+  const sameBehaviour = input.assertsSameBehaviour ?? new Set<string>();
+  const isNew = (test: DeclaredTest): boolean =>
+    !beforeKeys.has(keyOf(test.path)) || newBehaviour.has(keyOf(test.path));
   const contractIds = [...new Set(input.contracts.map((c) => c.id))];
   const byId = new Map<string, ContractDecl>();
   for (const contract of input.contracts) {
@@ -415,6 +440,21 @@ export function reviewConfirmRed(input: ConfirmRedReview): PerTestJudgement {
 
   const accepted: AcceptedGuardRail[] = [];
   for (const { test, row } of bound) {
+    // ADR-0585: a test the record calls a REFACTOR asserts what the source already does, so it must
+    // still pass here. A refactor that no longer passes has changed what the test claims, whatever its
+    // reason says — and that is a new-behaviour update, held to the rule above instead.
+    if (sameBehaviour.has(keyOf(test.path)) && row.outcome === "failed") {
+      findings.push({
+        check: "C8",
+        test: test.path,
+        detail:
+          "recorded as a refactor — the same behaviour in a different shape — but it no longer passes " +
+          "against the source this build began from, so what it asserts has changed: record it as " +
+          "`// test-updated (new behaviour): <why>` if that is what you meant",
+        testSide: true,
+      });
+      continue;
+    }
     if (!isNew(test)) continue; // a pre-existing test may pass or fail at red; CONFIRM_GREEN holds it to green
     if (row.outcome === "passed") {
       const named = namedBy(test);
@@ -548,8 +588,12 @@ export function describePerTestRefusal(
 export interface PerTestPolicy {
   /** Read the test file's declared tests as they stand before AUTHOR_TEST is handed out (D1's NEW split). */
   beforeAuthorTest(): void;
-  /** CONFIRM_RED's review point. Absent where red is not observed per test (ADR-0573 D3). */
-  readonly confirmRed?: (obs: TestObservation) => PerTestJudgement;
+  /**
+   * CONFIRM_RED's review point. Absent where red is not observed per test (ADR-0573 D3). `changes` is
+   * this build's existing-test record (ADR-0585): an updated test it says now asserts NEW behaviour is
+   * held exactly as a new test, and one it calls a refactor must still pass against the base source.
+   */
+  readonly confirmRed?: (obs: TestObservation, changes?: TestChangeRecord) => PerTestJudgement;
   /** CONFIRM_GREEN's completeness. */
   readonly confirmGreen: (obs: TestObservation) => PerTestJudgement;
   /** Why CONFIRM_RED is not observed per test, when it is not — disclosed on the red evidence. */
@@ -599,7 +643,7 @@ export function perTestPolicy(args: PerTestPolicyArgs): PerTestPolicy {
     if (!after.ok) return unreadableFile(after.reason);
     return reviewConfirmGreen({ declared: after.tests, report: obs.perTest });
   };
-  const confirmRed = (obs: TestObservation): PerTestJudgement => {
+  const confirmRed = (obs: TestObservation, changes?: TestChangeRecord): PerTestJudgement => {
     if (before === undefined) {
       return unreadableFile(
         "the test file was not read before AUTHOR_TEST was handed out, so a new test cannot be told from a " +
@@ -615,8 +659,18 @@ export function perTestPolicy(args: PerTestPolicyArgs): PerTestPolicy {
       report: obs.perTest,
       contracts: args.contracts,
     };
+    // ADR-0585: what this build's own record says about the tests it changed — added only when there
+    // IS a record, so a walk without one reviews exactly what it always did.
+    const recorded: ConfirmRedReview =
+      changes === undefined
+        ? review
+        : {
+            ...review,
+            assertsNewBehaviour: updatedToNewBehaviour(changes),
+            assertsSameBehaviour: updatedToSameBehaviour(changes),
+          };
     return reviewConfirmRed(
-      args.briefContracts === undefined ? review : { ...review, briefContracts: args.briefContracts },
+      args.briefContracts === undefined ? recorded : { ...recorded, briefContracts: args.briefContracts },
     );
   };
   const baseline = {
@@ -630,6 +684,56 @@ export function perTestPolicy(args: PerTestPolicyArgs): PerTestPolicy {
     : { ...baseline, redNotObserved: args.redNotObserved ?? STRUCTURAL_RED_NOT_OBSERVED };
   // Carried so the red evidence can say the brief was a cluster (ADR-0573 D5's disclosure channel).
   return args.briefContracts === undefined ? policy : { ...policy, briefContracts: args.briefContracts };
+}
+
+/**
+ * The existing-test record for ONE build (ADR-0585), as the gate drives it: the test file as the build
+ * found it, and what the test-writer did to the tests that were already in it. Independent of the
+ * per-test channel — comparing two reads of a file needs no runner — so EVERY real build with a test
+ * file carries one, including the whole-suite routes that are never reviewed per test.
+ */
+/** One read of the test file: the tests it declares, and the source those markers are read from. */
+interface TestFileRead {
+  readonly tests: DeclaredTest[];
+  readonly source: string;
+}
+
+export interface TestChangePolicy {
+  /** Read the file as the build found it, at the same moment the per-test baseline is read. */
+  beforeAuthorTest(): void;
+  /** Compare it with the file now: what changed, and which changes stated no reason. */
+  review(): TestChangeRecord;
+}
+
+/** The file-backed {@link TestChangePolicy} a resolver hands the gate. */
+export function testChangePolicy(args: { readonly testFile: string }): TestChangePolicy {
+  let before: TestFileRead | undefined;
+  const read = (): TestFileRead => {
+    if (!existsSync(args.testFile)) return { tests: [], source: "" };
+    try {
+      const source = readFileSync(args.testFile, "utf8");
+      return { tests: declaredTestsOf(source, args.testFile), source };
+    } catch {
+      // Unreadable reads as EMPTY on both sides, which records no change and refuses nothing: the
+      // per-test review already refuses an unreadable test file where it can see one (C2).
+      return { tests: [], source: "" };
+    }
+  };
+  return {
+    beforeAuthorTest(): void {
+      before = read();
+    },
+    review(): TestChangeRecord {
+      if (before === undefined) return { changes: [], findings: [] };
+      const after = read();
+      return reviewTestChanges({
+        before: before.tests,
+        beforeSource: before.source,
+        after: after.tests,
+        afterSource: after.source,
+      });
+    },
+  };
 }
 
 /**

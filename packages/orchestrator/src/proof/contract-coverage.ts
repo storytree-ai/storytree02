@@ -10,6 +10,8 @@ import ts from "typescript5";
 
 import type { ContractDecl } from "@storytree/library";
 
+import { hashSpan } from "./anchor-compute.js";
+
 /**
  * The CONTRACT-COVERAGE classifier (ADR-0020 coverage-honesty follow-on, owner-ratified 2026-06-27).
  *
@@ -207,6 +209,14 @@ export interface ObservedTest {
    * reads it because an empty suite reports no test row on any runner.
    */
   call?: TestCallRoot;
+  /**
+   * A fingerprint of this declaration s own source span — the call and everything lexically inside it
+   * (ADR-0585). Two reads of an UNCHANGED test agree; any rewrite of its body, its assertions or its
+   * options moves it, which is what lets a build tell a pre-existing test it left alone from one it
+   * updated. OPTIONAL for the same reason {@link call} is: a hand-built literal predates it, and
+   * {@link analyzeObservedTests} always supplies it.
+   */
+  bodyHash?: string;
   /**
    * TRUE for a table-bound declaration — `it.each(table)(title, fn)` — which ONE declaration the runner
    * expands into several rows, so no reported row can be bound to it one-to-one (ADR-0573 D3). OPTIONAL
@@ -558,6 +568,7 @@ export function analyzeObservedTests(testSource: string, testFile: string): Obse
           ancestors: ancestorTitles,
           call: test.call,
           parameterised: test.parameterised,
+          bodyHash: hashSpan(testSource.slice(node.getStart(sf), node.getEnd())),
         },
         pos: node.getStart(sf),
       });

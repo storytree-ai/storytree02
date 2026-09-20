@@ -126,6 +126,18 @@ The operator surface over the whole machinery — two commands, one honest-envel
   none, so an envelope without repairs reads exactly as it always has. A pure reader of
   `ProveResult.repairs`: it runs no command and changes no verdict.
 
+- **Existing-test-change rendering** (contract 19,
+  `node-build-envelope-lists-every-existing-test-change`; ADR-0581 D1 / ADR-0585; `renderTestChanges`
+  in `packages/drive/src/node-build.ts`): a test-writer may update or delete a test that existed before
+  the build, on its own judgment, and the spine records each change with the reason it stated in the
+  test file ([`prove-it-gate`](prove-it-gate.md)). `renderTestChanges` prints that record beside the
+  repairs on BOTH envelopes, the pass and the failure — a header naming how many pre-existing tests
+  changed and saying the change was the test-writer's call to make, then one line per change naming what
+  happened, what an update now asserts, the test, and the reason, with `NO REASON STATED` where none was
+  given rather than the change being dropped. `[]` when the build changed no existing test, so an
+  envelope without one reads exactly as it always has. A pure reader of `ProveResult.testChanges`: it
+  runs no command and changes no verdict.
+
 - **Test revision** (proposed, ADR-0571; contracts
   [`revision-record-round-trip`](revision-record-round-trip.md),
   [`build-node-real-threads-revision`](build-node-real-threads-revision.md) and
@@ -224,7 +236,7 @@ trail + verdict + rollup (`packages/cli/src/node-build.test.ts:17`, `:74`), and 
 library --dry-run` chains every real library node topo-ordered, story last, all signed, over one
 event log (`packages/cli/src/story-build.test.ts:17`).
 
-## Contracts (18)
+## Contracts (19)
 
 1. **`dry-run-walks-and-reports-honestly`** — the envelope carries the phase trail, the verdict line, the derived rollup, and the honest framing
    - **asserts —** trail `AUTHOR_TEST → … → GATE`, a signed verdict, rollup derived from the event log, the dry-run framing.
@@ -298,3 +310,7 @@ event log (`packages/cli/src/story-build.test.ts:17`).
     - **asserts —** over a real fixture worktree, `buildNodeReal`'s backstop returns the typecheck's raw process output beside its bounded rendered reason, so a red naming a SOURCE file goes back to the code-writer inside the same build: the walk visits IMPLEMENT, CONFIRM_GREEN and GATE a second time, signs one row, records one `GATE typecheck → IMPLEMENT` repair, reports `typecheck: "green"` (the last GATE's) and keeps no refused commit. When that repair is refused because the code-writer's slice fails to author, the walk ends at GATE on the original backstop red — a reason beginning `backstop RED:` and carrying ` — in-build repair refused: the code-writer's repair slice failed` — with `typecheck: "red"`, the backstop observation's exit code, the refused commit preserved, and no signing row. When a walk repaired past a red typecheck then ends ELSEWHERE, it reports no typecheck, preserves nothing, and still lists both repairs. `renderRepairs` renders `[]` for a result with no repairs and for an empty list, and otherwise the exact header line naming the count and that a repair is not an attempt, then one numbered line per repair naming the phase, the check, the worker (`test-writer` / `code-writer`) and the detail.
     - **covers —** `renderRepairs` and `buildNodeReal`'s backstop `output` plus its per-GATE typecheck / preservation state, rendered at both envelope call sites in `nodeBuild` (`packages/drive/src/node-build.ts`)
     - **proven by —** `packages/drive/src/node-build-repairs.test.ts` (session-authored; no signed verdict). `packages/drive` is inside the mutation rung, which scores this test at the landing's gate.
+19. **`node-build-envelope-lists-every-existing-test-change`** — the envelope lists every change the test-writer made to a test that existed before this build, each with the reason it stated
+    - **asserts —** `renderTestChanges` renders `[]` for a result carrying no `testChanges` key and for one carrying an empty list, so an envelope from a build that changed no existing test is byte for byte what it always was. For a result carrying changes it renders the exact header line `tests changed: <n> test(s) that existed before this build — the test-writer's call to make (ADR-0581 D1), recorded here`, and then one indented line per change, in the record's own order, naming what happened and what an update now asserts — `updated (new behaviour)`, `updated (refactor)`, `removed`, or a bare `updated` for a change whose reason recorded neither — the test's full title path, and the stated reason verbatim, with `NO REASON STATED` where none was stated rather than the change being dropped. `nodeBuild` renders it at BOTH envelope call sites, the pass and the failure, beside the repairs block.
+    - **covers —** `renderTestChanges` and its pass- and failure-envelope call sites in `nodeBuild` (`packages/drive/src/node-build.ts`)
+    - **proven by —** `packages/drive/src/node-build-test-changes.test.ts` (session-authored; no signed verdict). `packages/drive` is inside the mutation rung, which scores this test at the landing's gate. Not exercised by it: the two call sites themselves, since the test calls the renderer directly — that both envelopes carry the block is confirmed by reading.

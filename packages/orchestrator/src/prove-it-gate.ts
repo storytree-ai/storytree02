@@ -35,7 +35,14 @@ import {
   greenEvidenceDisclosure,
   redEvidenceDisclosure,
 } from "./proof/per-test-review.js";
-import type { PerTestFinding, PerTestJudgement, PerTestPolicy } from "./proof/per-test-review.js";
+import type {
+  PerTestFinding,
+  PerTestJudgement,
+  PerTestPolicy,
+  TestChangePolicy,
+} from "./proof/per-test-review.js";
+import { describeTestChanges } from "./proof/test-baseline.js";
+import type { TestChange, TestChangeRecord } from "./proof/test-baseline.js";
 import type {
   Phase,
   RepairOwner,
@@ -183,6 +190,16 @@ export interface ProveSpec {
    */
   perTest?: PerTestPolicy;
   /**
+   * ADR-0581 D1 / ADR-0585 (optional): the EXISTING-TEST RECORD. The test-writer may update or delete a
+   * test that was already here, on its own judgment; the spine records every such change with the reason
+   * the test-writer stated in the file, and a change with no reason goes back to it through the repair
+   * loop. Read at the same moment the per-test baseline is, reviewed at CONFIRM_RED, and independent of
+   * the per-test channel — so a whole-suite route carries one too.
+   *
+   * DEFAULT-ABSENT ⇒ zero behaviour change: a walk with no policy records nothing and refuses nothing.
+   */
+  testChanges?: TestChangePolicy;
+  /**
    * ADR-0581 D4 / ADR-0582 (optional): repair a failed check INSIDE the build. With a policy, a check
    * that fails goes back to the worker who can fix it — the test-writer or the code-writer, by
    * {@link repairPhase}'s backward edges — and the spine observes again, until the walk signs, the
@@ -238,6 +255,11 @@ export type ProveResult =
        * part of the {@link Verdict}, whose evidence stays the last red and green the spine observed.
        */
       repairs?: readonly RepairRecord[];
+      /**
+       * ADR-0585: every change the test-writer made to a test that existed before this build, each with
+       * the reason it stated — present only when it changed one. Never part of the {@link Verdict}.
+       */
+      testChanges?: readonly TestChange[];
     }
   | {
       ok: false;
@@ -277,6 +299,11 @@ export type ProveResult =
        * there was at least one. The refusal itself is the check that was not repaired (D5).
        */
       repairs?: readonly RepairRecord[];
+      /**
+       * ADR-0585: every change the test-writer made to a pre-existing test before the walk ended, each
+       * with the reason it stated — present only when it changed one.
+       */
+      testChanges?: readonly TestChange[];
     };
 
 /** The store `kind` for the signed promotion event. */
@@ -347,7 +374,14 @@ export async function proveUnit(spec: ProveSpec): Promise<ProveResult> {
   let greenObs: TestObservation | undefined;
   let greenReview: PerTestJudgement | undefined;
 
-  const withRepairs = (extras: FailExtras = {}): FailExtras => ({ ...extras, repairs: [...repairs] });
+  // ADR-0585: what the test-writer did to the tests that were already here, as the last review read it.
+  let testChanges: readonly TestChange[] = [];
+
+  const withRepairs = (extras: FailExtras = {}): FailExtras => ({
+    ...extras,
+    repairs: [...repairs],
+    testChanges: [...testChanges],
+  });
 
   /** A repair slice that failed to author: the walk ends on the check it was answering (ADR-0582 D5). */
   const refused = (failure: CheckFailure, why: string): ProveResult =>
@@ -413,6 +447,10 @@ export async function proveUnit(spec: ProveSpec): Promise<ProveResult> {
       // held to C4–C6 at every re-observation (ADR-0582 D4).
       if (!baselineRead) {
         spec.perTest?.beforeAuthorTest();
+        // ADR-0585: the same moment, for the same reason — this is the file the build FOUND, and every
+        // later read is compared against it, so a test added or changed by a repair is still measured
+        // against what was here before the build.
+        spec.testChanges?.beforeAuthorTest();
         baselineRead = true;
       }
       const repairing = pending;
@@ -478,7 +516,23 @@ export async function proveUnit(spec: ProveSpec): Promise<ProveResult> {
       await spec.onPhase?.("CONFIRM_RED");
       // ADR-0582 D4: a test revised after IMPLEMENT is observed red against the source the build began
       // from, so the implementation is set aside for this one observation and restored straight after.
-      const restore = implemented && policy !== undefined ? await policy.setAsideImplementation() : undefined;
+      // A set-aside that cannot be taken fails CLOSED with its reason: without it the red would be
+      // observed against the implementation, which is not the red ADR-0020 §3 records.
+      let restore: (() => Promise<void>) | undefined;
+      if (implemented && policy !== undefined) {
+        try {
+          restore = await policy.setAsideImplementation();
+        } catch (err) {
+          return fail(
+            "CONFIRM_RED",
+            `the implementation could not be set aside for the red re-observation (${
+              err instanceof Error ? err.message : String(err)
+            }), so the revised test could not be observed against the source this build began from`,
+            visited,
+            withRepairs(),
+          );
+        }
+      }
       let obs: TestObservation;
       try {
         obs = await spec.testExecutor.run(spec.testId);
@@ -507,9 +561,33 @@ export async function proveUnit(spec: ProveSpec): Promise<ProveResult> {
         if (ended !== undefined) return ended;
         continue;
       }
+      // ADR-0585: what the test-writer did to the tests that were already here, read from the file
+      // itself — no runner, so this binds on every real build. A change with no stated reason goes back
+      // to the test-writer; the change is RECORDED either way, and the record is what the envelope
+      // prints and what the per-test review below holds an updated test to.
+      const changeRecord: TestChangeRecord | undefined = spec.testChanges?.review();
+      if (changeRecord !== undefined) testChanges = changeRecord.changes;
+      if (changeRecord !== undefined && changeRecord.findings.length > 0) {
+        const ended = await repairOrEnd(
+          {
+            failedAt: "CONFIRM_RED",
+            check: "test-changes",
+            reason:
+              describePerTestRefusal("CONFIRM_RED", changeRecord.findings) +
+              exhaustionNote(authorExhaustion, "a red test"),
+            briefReason: describePerTestRefusal("CONFIRM_RED", changeRecord.findings, "worker"),
+            detail: `${changeRecord.findings.length} existing-test change(s) with no stated reason`,
+            extras: { failedObservation: obs.originalProcessResult, perTestFindings: changeRecord.findings },
+            observation: obs.originalProcessResult,
+          },
+          "test",
+        );
+        if (ended !== undefined) return ended;
+        continue;
+      }
       // ADR-0573 D1: the review point between red and green, consulted only now that the exit code would
       // advance — so it can refuse this red, and can never rescue a refused one.
-      const review = spec.perTest?.confirmRed?.(obs);
+      const review = spec.perTest?.confirmRed?.(obs, changeRecord);
       if (review !== undefined && !review.ok) {
         const ended = await repairOrEnd(
           {
@@ -817,6 +895,7 @@ export async function proveUnit(spec: ProveSpec): Promise<ProveResult> {
     const passed: Extract<ProveResult, { ok: true }> = { ok: true, verdict, phasesVisited: visited };
     if (overruledEscalation !== undefined) passed.overruledEscalation = overruledEscalation;
     if (repairs.length > 0) passed.repairs = [...repairs];
+    if (testChanges.length > 0) passed.testChanges = [...testChanges];
     return passed;
   }
 }
@@ -868,6 +947,8 @@ interface FailExtras {
   perTestFindings?: readonly PerTestFinding[] | undefined;
   /** Stamped only when non-empty, so a walk that made no repair returns exactly what it always did. */
   repairs?: readonly RepairRecord[] | undefined;
+  /** Stamped only when non-empty, for the same reason. */
+  testChanges?: readonly TestChange[] | undefined;
 }
 
 /**
@@ -887,6 +968,7 @@ function fail(
   if (extras.overruledEscalation !== undefined) result.overruledEscalation = extras.overruledEscalation;
   if (extras.perTestFindings !== undefined) result.perTestFindings = extras.perTestFindings;
   if (extras.repairs !== undefined && extras.repairs.length > 0) result.repairs = extras.repairs;
+  if (extras.testChanges !== undefined && extras.testChanges.length > 0) result.testChanges = extras.testChanges;
   return result;
 }
 

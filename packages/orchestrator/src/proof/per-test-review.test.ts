@@ -274,7 +274,13 @@ test("per-test-red-review-refuses-hollow-tests: a CONDITIONAL options-form skip 
   const title = "add-sums: the live round-trip";
   const source = `test("${title}", { skip: !DB }, async () => { assert.equal(await add(2, 3), 5); });\n`;
   const declared = declaredTestsOf(source, FIXTURE_FILE);
-  assert.deepEqual(declared, [{ path: [title], vouches: true }]);
+  // The read also carries each test's own fingerprint (ADR-0585), which is content-derived, so this
+  // asserts the shape around it rather than pinning a hash any reformat of the fixture would move.
+  assert.deepEqual(
+    declared.map((t) => ({ path: t.path, vouches: t.vouches })),
+    [{ path: [title], vouches: true }],
+  );
+  assert.equal(typeof declared[0]?.bodyHash, "string");
   const ran = { declared, before: [], report: report([assertionRed([title])]), contracts: CLUSTER_CONTRACTS };
   assert.deepEqual(reviewConfirmRed(ran), { ok: true, declaredTests: 1, acceptedGuardRails: [] });
   // C7 reads the same substance: a cluster brief's contract is named by this new test.

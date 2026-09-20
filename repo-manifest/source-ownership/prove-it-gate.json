@@ -6,6 +6,7 @@
       "packages/orchestrator/src/proof/sign-machine-criteria*.ts": "prove-it-gate",
       "packages/orchestrator/src/proof/signer*.ts": "prove-it-gate",
       "packages/orchestrator/src/proof/spine-principal.ts": "prove-it-gate",
+      "packages/orchestrator/src/proof/test-baseline.ts": "prove-it-gate",
       "packages/orchestrator/src/prove-it-gate.ts": "prove-it-gate",
       "packages/orchestrator/src/repair.ts": "prove-it-gate"
     }

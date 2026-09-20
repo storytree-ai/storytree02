@@ -718,6 +718,34 @@ describe("revised-test-is-re-observed-red-against-the-build-base: a test revised
     assert.deepEqual(events.slice(-2), ["set-aside", "restore"], "restored although the run threw");
   });
 
+  test("a set-aside that cannot be taken fails closed with its reason, and never observes against the implementation", async () => {
+    const events: string[] = [];
+    const author = new ScriptedAuthor([
+      { ok: true },
+      { ok: false, error: "IMPLEMENT escalated", escalation: UNSATISFIABLE },
+    ]);
+    const policy = recordingPolicy({ events });
+    const broken: RepairPolicy = {
+      ...policy,
+      setAsideImplementation: () => Promise.reject(new Error("git diff HEAD failed: not a repository")),
+    };
+    const { spec: s, store } = spec({ author, events, repair: broken, observations: [red(), red()] });
+
+    const result = await proveUnit(s);
+
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.equal(result.failedAt, "CONFIRM_RED");
+    assert.match(result.reason, /^the implementation could not be set aside for the red re-observation/);
+    assert.match(result.reason, /git diff HEAD failed: not a repository/);
+    assert.deepEqual(
+      events.filter((e) => e.startsWith("observe")),
+      ["observe:red", "observe:red"],
+      "the re-observation never ran against the implementation",
+    );
+    assert.equal(await signingRows(store), 0);
+  });
+
   test("a test repaired before any IMPLEMENT sets nothing aside", async () => {
     const events: string[] = [];
     const { spec: s } = spec({

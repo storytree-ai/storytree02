@@ -276,6 +276,21 @@ the binding to one commit's diff or to an empty range; and every REAL IMPLEMENT 
 objection to the `escalate` tool (`IMPLEMENT_OBJECTION`), because a prose objection records no escalation
 and the spine reads it as a failed implementation.
 
+**One more stamp on the same resolution: the existing-test record (ADR-0581 D1 / ADR-0585).** A REAL
+resolution ALSO stamps `ProveSpec.testChanges` with a file-backed `testChangePolicy` over the unit's own
+declared test file (`path.join(workspace, real.testFile)`), so every real build records what the
+test-writer did to the tests that were already in that file and the reason it stated for each. It is
+wired INDEPENDENTLY of the per-test channel above — the record is two reads of one file, which needs no
+runner — so a route that is never reviewed per test, a whole-package suite included, still carries one.
+Only `resolveReal` stamps it, so a dry run and the live smoke carry none, exactly as they carry no
+`repair` policy. **This stamping is NOT part of contract 19's assertion:**
+`packages/orchestrator/src/resolve-prove-spec.repair.test.ts` does not name `testChanges`, so the wiring
+here is confirmed by reading, and what the policy then does is proven at the gate —
+[`prove-it-gate`](prove-it-gate.md) contract
+[`an-existing-test-change-is-recorded-with-its-reason`](prove-it-gate.md), by
+`packages/orchestrator/src/proof/test-baseline.test.ts` and
+`packages/orchestrator/src/prove-it-gate.test-changes.test.ts`.
+
 **Authored source and proof ownership.** IMPLEMENT may edit only
 `packages/orchestrator/src/resolve-prove-spec.ts`. AUTHOR_TEST edits only the existing
 `packages/cli/src/codex-leaf-prompt.test.ts`, the single declared test spotlight and required

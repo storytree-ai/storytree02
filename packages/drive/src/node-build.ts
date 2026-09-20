@@ -22,6 +22,7 @@ import {
   foldInnerLoopLedger,
   loadNodeSpec,
   mapProofMode,
+  describeTestChanges,
   promoteRealPass,
   proveUnit,
   realBuildableNodeIds,
@@ -1353,6 +1354,21 @@ export function renderRepairs(result: Pick<ProveResult, "repairs">): string[] {
 }
 
 /**
+ * ADR-0581 D1 / ADR-0585: every change the test-writer made to a test that existed before this build,
+ * each with the reason it stated — under a header saying the change was its call to make and the record
+ * is what the review reads. `[]` when it changed none, so an envelope without changes is unchanged. A
+ * pure reader of `ProveResult.testChanges`.
+ */
+export function renderTestChanges(result: Pick<ProveResult, "testChanges">): string[] {
+  const changes = result.testChanges ?? [];
+  if (changes.length === 0) return [];
+  return [
+    `tests changed: ${changes.length} test(s) that existed before this build — the test-writer's call to make (ADR-0581 D1), recorded here`,
+    ...describeTestChanges(changes).map((line) => `  - ${line}`),
+  ];
+}
+
+/**
  * `[]` for an undefined revision, or one exact line naming the prior run id, the raising phase and
  * the test id (ADR-0571 D3/D6): this build is a test revision — one D4 attempt, kind `revised-test`.
  * A pure reader of the {@link TestRevision} the revision read already resolved; it never itself reads
@@ -2639,6 +2655,7 @@ export async function nodeBuild(
           `verdict:     NONE — failed closed at ${result.failedAt}: ${result.reason}`,
           ...renderEscalation(spec.id, runId, result),
           ...renderRepairs(result),
+          ...renderTestChanges(result),
           ...renderRevisionRecord(spec.id, runId, runtime, revisionWrite, incrementId),
           ...outcome.lines,
           ...renderFailedConfirmObservation(spec.id, runId, result.failedObservation),
@@ -2658,6 +2675,7 @@ export async function nodeBuild(
         `verdict:     ${verdictLine(result.verdict)}`,
         ...renderEscalation(spec.id, runId, result),
         ...renderRepairs(result),
+        ...renderTestChanges(result),
         `evidence:    ${result.verdict.evidence.map((e) => e.kind).join(", ")}`,
         ...promotionLines,
         ...outcome.lines,
