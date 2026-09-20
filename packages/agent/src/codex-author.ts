@@ -36,7 +36,6 @@ import type {
 import { linkReplicaDependencies } from "./codex-replica-links.js";
 import type { SdkFeedbackRun } from "./sdk-author.js";
 import { armSpawnBounds } from "./codex-spawn-bounds.js";
-import type { SpawnBoundsArgs } from "./codex-spawn-bounds.js";
 import { scrubShellWorkerEnv } from "./worker-env.js";
 import { budgetIsSpent, budgetMinutes, budgetSpentError } from "./worker-budget.js";
 import type { WorkerTimeBudget } from "./worker-budget.js";
@@ -777,28 +776,18 @@ export async function runPinnedCodexCli(
     // Windows this is TerminateProcess on the wrapper alone, but the wrapper's own libuv holds its
     // child in a kill-on-close job object, so the native binary ends with it. SIGKILL alone would
     // ORPHAN the native binary on POSIX, because a SIGKILL cannot be forwarded.
-    const boundsArgs: SpawnBoundsArgs =
-      command.silenceMs === undefined
-        ? {
-            clock,
-            boundMs: resolveCodexTimeoutMs(command),
-            stop: (reason) => {
-              timedOut = true;
-              stoppedBy = reason;
-              child.kill();
-            },
-          }
-        : {
-            clock,
-            boundMs: resolveCodexTimeoutMs(command),
-            silenceMs: command.silenceMs,
-            stop: (reason) => {
-              timedOut = true;
-              stoppedBy = reason;
-              child.kill();
-            },
-          };
-    const bounds = armSpawnBounds(boundsArgs);
+    const bounds = armSpawnBounds({
+      clock,
+      boundMs: resolveCodexTimeoutMs(command),
+      // Passed straight through, absent and `undefined` meaning the same thing to the callee: a
+      // `!== undefined` guard here would be an equivalent mutant by construction.
+      silenceMs: command.silenceMs,
+      stop: (reason) => {
+        timedOut = true;
+        stoppedBy = reason;
+        child.kill();
+      },
+    });
     if (command.bound !== undefined) {
       command.bound.suspend = () => bounds.suspend();
       command.bound.resume = () => bounds.resume();
@@ -1111,7 +1100,12 @@ interface PromoteReplicaChangesArgs {
   replicaRoot: string;
   realRoot: string;
   changes: ReplicaChange[];
-  faults?: CodexPromotionFaults;
+  /**
+   * The test-only fault seam. `| undefined` so a caller may pass an optional value straight through:
+   * a `!== undefined` guard around this assignment is an equivalent mutant by construction, since
+   * every read of it is already optional-chained.
+   */
+  faults?: CodexPromotionFaults | undefined;
 }
 
 async function promoteReplicaChanges(
@@ -1567,25 +1561,31 @@ export class CodexPhaseAuthor implements PhaseAuthor {
             ? codexSilenceError(phase, DEFAULT_CODEX_SILENCE_MS)
             : budgetSpentError(phase, budget.budgetMs);
         run.subtype = "error";
-        if (replica.seeded && manifest.ok && changes.length > 0) {
-          const salvageArgs: PromoteReplicaChangesArgs = {
-            replicaRoot: replicaDir,
-            realRoot: this.#args.cwd,
-            changes,
-          };
-          if (this.#args.promotionFaults !== undefined) {
-            salvageArgs.faults = this.#args.promotionFaults;
-          }
-          const salvaged = await promoteReplicaChanges(salvageArgs);
+        if (changes.length === 0) {
+          return { ok: false, exhausted: true, error: `${stopError}; it had written nothing` };
+        }
+        if (!replica.seeded || !manifest.ok) {
+          // Observed changes with nothing to promote them against: the synthetic runner seam, or a
+          // phase with no exact manifest. Promoting would be promoting an unchecked list.
           return {
             ok: false,
             exhausted: true,
-            error: salvaged.ok
-              ? `${stopError}; the ${changes.length} observed in-scope change(s) were promoted`
-              : `${stopError}; the observed changes could not be promoted: ${salvaged.error}`,
+            error: `${stopError}; its ${changes.length} change(s) had no exact manifest to promote against`,
           };
         }
-        return { ok: false, exhausted: true, error: `${stopError}; it had written nothing` };
+        const salvaged = await promoteReplicaChanges({
+          replicaRoot: replicaDir,
+          realRoot: this.#args.cwd,
+          changes,
+          faults: this.#args.promotionFaults,
+        });
+        return {
+          ok: false,
+          exhausted: true,
+          error: salvaged.ok
+            ? `${stopError}; the ${changes.length} observed in-scope change(s) were promoted`
+            : `${stopError}; the observed changes could not be promoted: ${salvaged.error}`,
+        };
       }
 
       if (execution.code !== 0) {

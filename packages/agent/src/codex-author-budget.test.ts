@@ -418,11 +418,46 @@ test("silence-detector: output RE-ARMS it, so a slow child that keeps talking is
   };
   const result = await within(runPinnedCodexCli(chatty, hand.clock));
   assert.equal(result.timedOut, undefined, "a child that keeps talking settles on its own");
-  assert.equal(result.stoppedBy, undefined);
   assert.equal(result.code, 0);
-  // Each chunk clears and re-arms the detector, so more armings than the initial pair.
+  // A settled child carries NEITHER field — the keys are absent, not present-and-undefined, which is
+  // what tells a reader "this was not killed" from "this was killed for no stated reason".
+  assert.equal(Object.hasOwn(result, "timedOut"), false);
+  assert.equal(Object.hasOwn(result, "stoppedBy"), false);
+  // Arming the pair is two; every chunk of output clears the window and arms a fresh one, so a run
+  // that produced output has MORE than the initial pair. Without the re-arm this would be exactly 2.
   assert.ok(
-    hand.armings.length >= 2,
-    `expected the detector to be re-armed by output, saw ${hand.armings.length} arming(s)`,
+    hand.armings.length > 2,
+    `expected output to re-arm the silence window, saw only ${hand.armings.length} arming(s)`,
   );
+});
+
+test("budget-stops-a-worker: a stop with observed changes but no exact manifest promotes nothing and says why", async () => {
+  await withWorkspace(async (root) => {
+    const commands: CodexCommand[] = [];
+    const author = new CodexPhaseAuthor({
+      cwd: root,
+      writeGlobs: WRITE_GLOBS,
+      // No promotionManifests: legal only behind an injected runner, and there is nothing to promote
+      // an observed diff against.
+      isWriteAllowed: () => true,
+      timeBudget: budget(60_000),
+      runner: stoppedRunner(
+        { "packages/widget/src/widget.ts": "widget half-written\n" },
+        "bound",
+        commands,
+      ),
+    });
+
+    const result = await author.author("IMPLEMENT", "Implement the widget.");
+    assert.equal(result.ok, false);
+    assert.equal(result.ok ? undefined : result.exhausted, true);
+    assert.match(
+      result.ok ? "" : result.error,
+      /is spent at IMPLEMENT; its 1 change\(s\) had no exact manifest to promote against/,
+    );
+    assert.equal(
+      await fs.readFile(path.join(root, "packages/widget/src/widget.ts"), "utf8"),
+      "widget before\n",
+    );
+  });
 });

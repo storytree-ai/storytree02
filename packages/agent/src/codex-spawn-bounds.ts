@@ -34,8 +34,13 @@ export interface SpawnBoundsArgs {
   clock: SpawnBoundsClock;
   /** The hard wall-clock limit in milliseconds. */
   boundMs: number;
-  /** The silence window in milliseconds; omitted, no detector is armed. */
-  silenceMs?: number;
+  /**
+   * The silence window in milliseconds. Omitted OR explicitly `undefined`, no detector is armed —
+   * the union is deliberate, so a caller can pass an optional value straight through instead of
+   * guarding it, which under `exactOptionalPropertyTypes` would otherwise need an
+   * `x !== undefined ? {x} : {}` shape the mutation rung can never discriminate.
+   */
+  silenceMs?: number | undefined;
   /** Called once, with the reason, when a bound fires. */
   stop: (reason: SpawnStopReason) => void;
 }
