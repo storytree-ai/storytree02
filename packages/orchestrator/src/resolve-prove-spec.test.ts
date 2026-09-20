@@ -556,7 +556,10 @@ test("realPrompts brief the feedback loop: run_proof in both phases, feedback â‰
   // IMPLEMENT: iterate against the real oracle; the verdict stays the spine's.
   assert.match(prompts.implement, /Iterate: write, `run_proof`, fix/);
   assert.match(prompts.implement, /spine observes the official green itself/);
-  assert.match(prompts.implement, /stop and say so plainly/);
+  // The wrong-test objection goes through the `escalate` tool, which is the only thing that records
+  // one, and the spine hands it to the test-writer inside the same build (ADR-0582 D7).
+  assert.match(prompts.implement, /raise it with the `escalate` tool, quoting the assertion/);
+  assert.match(prompts.implement, /objection written only in prose is not recorded/);
   // No-install node: no run_typecheck in the brief.
   assert.doesNotMatch(prompts.implement, /run_typecheck/);
 });

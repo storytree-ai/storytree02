@@ -82,7 +82,9 @@ The operator surface over the whole machinery — two commands, one honest-envel
 - **Pre-signature backstop recovery** (`backstop-report.ts`, `backstop-preservation.ts`,
   `buildNodeReal` / `nodeBuild`): after the spine commits the
   authored scope, a RED package typecheck still refuses at GATE and writes no
-  signing row. Before the detached worktree is removed, that already-committed authored HEAD is
+  signing row. (Since ADR-0582 that red is first handed back to whoever owns the files its diagnostics
+  name, so this arm is reached only when the walk ENDED at GATE on it — the repair bullet below owns
+  that condition.) Before the detached worktree is removed, that already-committed authored HEAD is
   parked with `purpose: "unsigned-forensics"` at
   `claude/real-forensics/<unit-id>-<run-id>` with push withheld. The signed promotion/proven-prefix
   namespace remains `claude/real/*`, so both refs may coexist for the same run without one replacing
@@ -109,6 +111,20 @@ The operator surface over the whole machinery — two commands, one honest-envel
   escalate to the owner. An overruled escalation renders one line on the envelope it rode through, and
   a result with no escalation renders nothing. Rendering runs no command. Only `node build` renders
   the block: `story build` and the gate build driver print the refusal reason alone.
+
+- **In-build repair rendering** (contract 18,
+  `node-build-envelope-lists-every-repair`; ADR-0581 D4 / ADR-0582; `renderRepairs` and
+  `buildNodeReal` in `packages/drive/src/node-build.ts`): a REAL build repairs a failed check inside the
+  build ([`prove-it-gate`](prove-it-gate.md)), so the drive carries three consequences and nothing more.
+  The typecheck backstop returns its RAW output beside the bounded rendered reason, because the gate
+  routes the red by the files its diagnostics name. What the build REPORTS about that typecheck, and the
+  refused commit it keeps, are the LAST GATE's: both are cleared as each GATE begins and discarded when
+  the walk ended anywhere but GATE, so a red the build was repaired past is never reported as why it
+  ended and preserves nothing. And `renderRepairs` prints a `repairs:` block on both the pass and the
+  failure envelope — one line per repair naming where the check failed, which check, which worker it went
+  back to and what failed, under a header saying a repair is not an attempt — and `[]` when the walk made
+  none, so an envelope without repairs reads exactly as it always has. A pure reader of
+  `ProveResult.repairs`: it runs no command and changes no verdict.
 
 - **Test revision** (proposed, ADR-0571; contracts
   [`revision-record-round-trip`](revision-record-round-trip.md),
@@ -208,7 +224,7 @@ trail + verdict + rollup (`packages/cli/src/node-build.test.ts:17`, `:74`), and 
 library --dry-run` chains every real library node topo-ordered, story last, all signed, over one
 event log (`packages/cli/src/story-build.test.ts:17`).
 
-## Contracts (17)
+## Contracts (18)
 
 1. **`dry-run-walks-and-reports-honestly`** — the envelope carries the phase trail, the verdict line, the derived rollup, and the honest framing
    - **asserts —** trail `AUTHOR_TEST → … → GATE`, a signed verdict, rollup derived from the event log, the dry-run framing.
@@ -278,3 +294,7 @@ event log (`packages/cli/src/story-build.test.ts:17`).
     - **asserts —** for an install-bearing package-typecheck red (the only package observation a build makes since ADR-0580 D2; the regression-suite arm left with it), on both the single-node and the chain (`promote: false`) path, when the spine already committed an authored HEAD distinct from the worktree cut, `buildNodeReal` returns a GATE refusal with zero signing rows, leaves ordinary `promotion` undefined, records `forensicPreservation`, and requests `purpose: "unsigned-forensics"`, which parks that HEAD at the run-unique `claude/real-forensics/<unit>-<run>` branch in the driving repo and never pushes it. Signed promotion and a halted chain's proven prefix stay under `claude/real/<unit>-<run>`, so an unsigned story-node attempt and the same run's signed prefix coexist at distinct refs and SHAs. At the actual `storyBuild` caller, a first-node red exposes the forensic ref while saying there is no proven prefix to park, and a later story-node red renders both the signed prefix and the unsigned forensic ref; neither halted-chain ref reaches origin. The same result does not promise forensic preservation for signer, dirty-tree, other GATE, pre-commit, or unchanged-HEAD failures. `nodeBuild` labels a preserved head `forensics: UNSIGNED` rather than `promoted`, names the red backstop, and renders its captured exit code plus stdout and stderr capped at 4,000 characters each, retaining both ends and inserting an explicit truncation marker when a stream exceeds the cap. A `null` exit renders as `none (killed or timed out after <effective timeout>ms)`, distinguishable from a numeric failing exit; reporting the effective timeout changes no timeout policy. For a typecheck red, honest framing says the package typecheck was observed RED before the gate ruled, says no build runs the package's own test suite, and says no verdict was signed. Rendering consumes the observations already taken and spawns no retry; a signed green run keeps the ordinary promotion envelope and carries no forensic-preservation line.
     - **covers —** `buildNodeReal`'s failed-result path, `honestFramingReal` and the failure-envelope call site in `packages/drive/src/node-build.ts`; forensic propagation, signed-prefix parking and envelope rendering in `packages/drive/src/story-build.ts`; bounded diagnostic and unsigned-ref rendering in `packages/drive/src/backstop-report.ts`; refusal-to-preservation planning and optional result evidence in `packages/drive/src/backstop-preservation.ts`; and purpose-aware local branch parking plus `WorktreeCommandObservation` in `packages/orchestrator/src/build-worktree.ts`.
     - **proven by —** `packages/drive/src/backstop-report.test.ts` proves the exact 4,000-character head/tail bound, truncation marker, numeric and `null` exit rendering, timeout text, refusal binding, and unsigned forensic label; `packages/drive/src/backstop-preservation.test.ts` proves no-refusal, unchanged-HEAD, distinct-authored-HEAD and optional-evidence shapes; `packages/orchestrator/src/build-worktree.test.ts` proves exact stdout/stderr, exit code and effective-timeout propagation plus the categorical `claude/real-forensics/*` versus `claude/real/*` namespace and its no-push/no-PR guard; `packages/drive/src/story-backstop-forensics.test.ts` drives the public `storyBuild` caller through first-node and later-story-node red lifecycles against real git, proving the honest envelope, collision-free refs, distinct trees, teardown and no remote spread; `packages/drive/src/backstop-forensic-integration.test.ts` proves the exact typecheck observation and the retained local ref through `buildNodeReal` itself on both the single-node and chain paths; and `packages/drive/src/node-build-framing.test.ts` pins the typecheck refusal framing whole. The earlier `packages/drive/src/backstop-before-signature.test.ts` remains the independent ordering baseline rather than carrying this recovery proof.
+18. **`node-build-envelope-lists-every-repair`** — the drive hands the gate the typecheck's raw output, reports that typecheck only when the walk ended on it, and lists every in-build repair on the envelope
+    - **asserts —** over a real fixture worktree, `buildNodeReal`'s backstop returns the typecheck's raw process output beside its bounded rendered reason, so a red naming a SOURCE file goes back to the code-writer inside the same build: the walk visits IMPLEMENT, CONFIRM_GREEN and GATE a second time, signs one row, records one `GATE typecheck → IMPLEMENT` repair, reports `typecheck: "green"` (the last GATE's) and keeps no refused commit. When that repair is refused because the code-writer's slice fails to author, the walk ends at GATE on the original backstop red — a reason beginning `backstop RED:` and carrying ` — in-build repair refused: the code-writer's repair slice failed` — with `typecheck: "red"`, the backstop observation's exit code, the refused commit preserved, and no signing row. When a walk repaired past a red typecheck then ends ELSEWHERE, it reports no typecheck, preserves nothing, and still lists both repairs. `renderRepairs` renders `[]` for a result with no repairs and for an empty list, and otherwise the exact header line naming the count and that a repair is not an attempt, then one numbered line per repair naming the phase, the check, the worker (`test-writer` / `code-writer`) and the detail.
+    - **covers —** `renderRepairs` and `buildNodeReal`'s backstop `output` plus its per-GATE typecheck / preservation state, rendered at both envelope call sites in `nodeBuild` (`packages/drive/src/node-build.ts`)
+    - **proven by —** `packages/drive/src/node-build-repairs.test.ts` (session-authored; no signed verdict). `packages/drive` is inside the mutation rung, which scores this test at the landing's gate.

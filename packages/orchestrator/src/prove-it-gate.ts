@@ -29,18 +29,21 @@ import type {
 import { resolveSigner } from "./proof/signer.js";
 import type { SignerInputs } from "./proof/signer.js";
 
-import { advancePhase, nextPhase } from "./phase-machine.js";
+import { advancePhase, nextPhase, phaseAfterRed, repairPhase } from "./phase-machine.js";
 import {
   describePerTestRefusal,
   greenEvidenceDisclosure,
   redEvidenceDisclosure,
 } from "./proof/per-test-review.js";
-import type { PerTestFinding, PerTestPolicy } from "./proof/per-test-review.js";
+import type { PerTestFinding, PerTestJudgement, PerTestPolicy } from "./proof/per-test-review.js";
 import type {
   Phase,
+  RepairOwner,
   TestExecutor,
   TestObservation,
 } from "./phase-machine.js";
+import { codeRepairSection, redObservationSection, testRepairSection } from "./repair.js";
+import type { ProcessOutput, RepairCause, RepairCheck, RepairPolicy, RepairRecord } from "./repair.js";
 
 /** The injected working-tree snapshot (ADR-0020 §4): the commit attested + whether the tree is clean. */
 export interface TreeState {
@@ -179,14 +182,29 @@ export interface ProveSpec {
    * verdict reads exactly as before.
    */
   perTest?: PerTestPolicy;
+  /**
+   * ADR-0581 D4 / ADR-0582 (optional): repair a failed check INSIDE the build. With a policy, a check
+   * that fails goes back to the worker who can fix it — the test-writer or the code-writer, by
+   * {@link repairPhase}'s backward edges — and the spine observes again, until the walk signs, the
+   * policy's budget says no, or a repair is refused. It also carries the latest CONFIRM_RED observation
+   * into every code-writer brief (ADR-0582 D7).
+   *
+   * DEFAULT-ABSENT ⇒ zero behaviour change: the walk ends at the first failed check exactly as it always
+   * has. Only a REAL build supplies one (ADR-0582 D9).
+   */
+  repair?: RepairPolicy;
 }
 
 /**
  * The outcome of {@link ProveSpec.backstop}: green, or a red carrying the reason the GATE refusal
  * quotes verbatim. Deliberately NOT a red/green observation type — the backstop is a precondition
  * on signing, never evidence in the verdict (the two spine observations remain the only evidence).
+ * A red may carry the command's raw `output`, which the in-build repair loop routes by the files it
+ * names (ADR-0582 D3); without it a red is not repairable.
  */
-export type BackstopOutcome = { ok: true } | { ok: false; reason: string };
+export type BackstopOutcome =
+  | { ok: true }
+  | { ok: false; reason: string; output?: ProcessOutput | undefined };
 
 /**
  * A leaf's authoring escalation (ADR-0569), carried by a {@link ProveResult} rather than becoming
@@ -215,6 +233,11 @@ export type ProveResult =
        * a pass.
        */
       overruledEscalation?: EscalationRecord;
+      /**
+       * ADR-0582 D8: every in-build repair, in order — present only when there was at least one. Never
+       * part of the {@link Verdict}, whose evidence stays the last red and green the spine observed.
+       */
+      repairs?: readonly RepairRecord[];
     }
   | {
       ok: false;
@@ -249,285 +272,574 @@ export type ProveResult =
        * for a caller that routes on them (an early pass's named contracts, ADR-0572 D4).
        */
       perTestFindings?: readonly PerTestFinding[];
+      /**
+       * ADR-0582 D8: every in-build repair the walk made before it ended, in order — present only when
+       * there was at least one. The refusal itself is the check that was not repaired (D5).
+       */
+      repairs?: readonly RepairRecord[];
     };
 
 /** The store `kind` for the signed promotion event. */
 const SIGNING_KIND = "signing";
 
 /**
+ * A check that failed, as the walk holds it while it decides whether the check can be repaired
+ * (ADR-0582 D3/D5). `reason` and `extras` are exactly what the walk returns if it ends here;
+ * `briefReason` is the same refusal as the repairing worker reads it, without the notes addressed to
+ * the orchestrator (the raise-the-ceiling advice, the escalation suffix, ADR-0572's routes).
+ */
+interface CheckFailure {
+  readonly failedAt: Phase;
+  readonly check: RepairCheck;
+  readonly reason: string;
+  readonly briefReason: string;
+  /** One line for the build envelope's repair list. */
+  readonly detail: string;
+  readonly extras: FailExtras;
+  readonly observation?: ProcessOutput | undefined;
+  /** The IMPLEMENT escalation standing when the check failed — the one an in-build revision answers. */
+  readonly escalation?: EscalationRecord | undefined;
+}
+
+/** A repair the walk has admitted and not yet handed out. */
+interface PendingRepair {
+  readonly failure: CheckFailure;
+  readonly owner: RepairOwner;
+}
+
+/**
  * Walk one unit through the ADR-0020 honesty loop and return a signed {@link Verdict} on success or a
  * fail-closed {@link ProveResult} on any refusal. On EVERY abort, NO signing row is written — proof is
  * non-authorable, so an unproven unit leaves no promotion event behind.
  *
- * The spine OWNS every transition: it hands the leaf {@link PhaseAuthor} exactly two authoring
- * slices, OBSERVES red/green itself via {@link ProveSpec.testExecutor}, and only signs at the
- * GATE when the tree is clean and a signer resolves. The author enforces its own per-phase write
- * scope (OwnedLoopAuthor: the write-scoped decorator; ClaudeAgentAuthor: PreToolUse deny hooks).
+ * The spine OWNS every transition: it hands the leaf {@link PhaseAuthor} its authoring slices,
+ * OBSERVES red/green itself via {@link ProveSpec.testExecutor}, and only signs at the GATE when the
+ * tree is clean and a signer resolves. The author enforces its own per-phase write scope
+ * (OwnedLoopAuthor: the write-scoped decorator; ClaudeAgentAuthor: PreToolUse deny hooks).
+ *
+ * With a {@link ProveSpec.repair} policy the walk is a LOOP (ADR-0581 D4, ADR-0582): a failed check
+ * goes back through {@link repairPhase}'s backward edge to the worker who can fix it, and the walk moves
+ * forward from there exactly as it always does, so every repair is observed again. Without one it is the
+ * straight ladder, ending at the first failed check.
  */
 export async function proveUnit(spec: ProveSpec): Promise<ProveResult> {
   const visited: Phase[] = [];
+  const repairs: RepairRecord[] = [];
+  const policy = spec.repair;
 
-  // ── Phase 1: AUTHOR_TEST ────────────────────────────────────────────────
-  // The leaf may write the TEST only. On a successful authoring step we advance to CONFIRM_RED.
-  visited.push("AUTHOR_TEST");
-  await spec.onPhase?.("AUTHOR_TEST");
-  // ADR-0573 D1: the test file as it stood BEFORE the slice is handed out — what makes a test NEW.
-  spec.perTest?.beforeAuthorTest();
-  const authored = await spec.author.author("AUTHOR_TEST", spec.prompts.authorTest);
-  // ADR-0569 D1/D4: an escalation can end the walk without a verdict, but it never advances a phase
-  // and never gates anything. A phase mismatch is malformed and fails closed with no record at all
-  // (D1); a matched escalation still takes exactly ONE spine observation before ending the walk, but
-  // that observation is not CONFIRM_RED — it gates nothing (D4).
-  if (!authored.ok && authored.escalation !== undefined) {
-    const escalation = authored.escalation;
-    if (escalation.phase !== "AUTHOR_TEST") {
-      return fail(
-        "AUTHOR_TEST",
-        `malformed escalation: raised from AUTHOR_TEST but declares phase "${escalation.phase}"`,
-        visited,
-      );
-    }
-    const obs = await spec.testExecutor.run(spec.testId);
-    return fail(
-      "AUTHOR_TEST",
-      `leaf escalated at AUTHOR_TEST (${escalation.kind}): ${authored.error}` + describeEscalation(escalation),
-      visited,
-      { escalation: buildEscalationRecord(escalation, spec.testId, obs.originalProcessResult) },
-    );
-  }
-  // Turn/budget exhaustion is a COST guard, not a proof signal (ADR-0020): the leaf hit its ceiling,
-  // but a usable (red) test may already be on disk. Fall through to CONFIRM_RED — the spine's own
-  // observation is the sole arbiter — rather than discard the PAID slice (the turn-ceiling cost-leak).
-  // A GENUINE authoring error (no work produced) still fails closed here.
-  const authorExhaustion = exhaustionReason(authored);
-  if (!authored.ok && authorExhaustion === null) {
-    return fail("AUTHOR_TEST", `authoring the test failed (${authored.error})`, visited);
-  }
-  const toRed = advancePhase("AUTHOR_TEST");
-  if (!toRed.ok) {
-    return fail("AUTHOR_TEST", toRed.reason, visited);
-  }
-
-  // ── Phase 2: CONFIRM_RED ────────────────────────────────────────────────
-  // The spine OBSERVES the red itself. A forged/early green here is the attack ADR-0020 §3 stops.
-  // No leaf runs in this phase (or any later one except IMPLEMENT) — the author is never invoked.
-  visited.push("CONFIRM_RED");
-  await spec.onPhase?.("CONFIRM_RED");
-  const redObs = await spec.testExecutor.run(spec.testId);
-  const redGate = nextPhase("CONFIRM_RED", redObs);
-  if (!redGate.ok) {
-    // If the slice was exhausted AND no red landed, the actionable signal is "raise the ceiling and
-    // retry", not just "not red" — preserve that context the fall-through would otherwise swallow.
-    // An observation's note says why it reads as it does, so surface it here for the same reason
-    // CONFIRM_GREEN does: the refusal should say WHY, not just "not red".
-    const redNote = redObs.note !== undefined ? ` — ${redObs.note}` : "";
-    return fail(
-      "CONFIRM_RED",
-      redGate.reason + redNote + exhaustionNote(authorExhaustion, "a red test"),
-      visited,
-      { failedObservation: redObs.originalProcessResult },
-    );
-  }
-  // ADR-0573 D1: the review point between red and green, consulted only now that the exit code would
-  // advance — so it can refuse this red, and can never rescue a refused one.
-  const redReview = spec.perTest?.confirmRed?.(redObs);
-  if (redReview !== undefined && !redReview.ok) {
-    return fail(
-      "CONFIRM_RED",
-      describePerTestRefusal("CONFIRM_RED", redReview.findings) + exhaustionNote(authorExhaustion, "a red test"),
-      visited,
-      { failedObservation: redObs.originalProcessResult, perTestFindings: redReview.findings },
-    );
-  }
-
-  // ── Phase 3: IMPLEMENT ──────────────────────────────────────────────────
-  // The leaf may write SOURCE only (never the test it must satisfy). Advance to CONFIRM_GREEN.
-  visited.push("IMPLEMENT");
-  await spec.onPhase?.("IMPLEMENT");
-  const implemented = await spec.author.author("IMPLEMENT", spec.prompts.implement);
-  // ADR-0569 D2/D3: an IMPLEMENT escalation can NEVER veto an observation. A phase mismatch is
-  // malformed and fails closed with no record (D1); a matched escalation is carried forward rather
-  // than failing closed here — the spine still visits CONFIRM_GREEN and observes exactly as it would
-  // without it, and whether the escalation ends the walk (a red) or is overruled (a green) is decided
-  // once that observation lands.
-  const implementExhaustion = exhaustionReason(implemented);
+  let next: Phase = "AUTHOR_TEST";
+  // The repair the next authoring slice answers, when it answers one (ADR-0582 D7).
+  let pending: PendingRepair | undefined;
+  // A test revision handed out after IMPLEMENT and not yet answered by an observed green: the
+  // code-writer's next brief says why the test it knew has changed (ADR-0582 D4).
+  let revision: CheckFailure | undefined;
+  // IMPLEMENT has been handed out in this walk, so a test revised from here on is re-observed red with
+  // the implementation set aside (ADR-0582 D4).
+  let implemented = false;
+  let baselineRead = false;
+  let authorExhaustion: string | null = null;
+  let implementExhaustion: string | null = null;
+  // An IMPLEMENT escalation the spine has not yet observed past (ADR-0569 D3).
   let implementEscalation: EscalationRecord | undefined;
-  if (!implemented.ok && implemented.escalation !== undefined) {
-    const escalation = implemented.escalation;
-    if (escalation.phase !== "IMPLEMENT") {
-      return fail(
-        "IMPLEMENT",
-        `malformed escalation: raised from IMPLEMENT but declares phase "${escalation.phase}"`,
+  let overruledEscalation: EscalationRecord | undefined;
+  let redObs: TestObservation | undefined;
+  let redReview: PerTestJudgement | undefined;
+  let greenObs: TestObservation | undefined;
+  let greenReview: PerTestJudgement | undefined;
+
+  const withRepairs = (extras: FailExtras = {}): FailExtras => ({ ...extras, repairs: [...repairs] });
+
+  /** A repair slice that failed to author: the walk ends on the check it was answering (ADR-0582 D5). */
+  const refused = (failure: CheckFailure, why: string): ProveResult =>
+    fail(failure.failedAt, `${failure.reason} — in-build repair refused: ${why}`, visited, withRepairs(failure.extras));
+
+  /**
+   * ADR-0582 D5/D6: a repair that WROTE NOTHING is refused. The spine fingerprints everything authored
+   * in the workspace either side of a repair slice; an identical fingerprint means the worker produced
+   * nothing, and handing the same check back again could only observe the same thing. Measured before
+   * this ending existed: two hours of budget per stuck build, every time.
+   */
+  const refusedIfNothingWritten = (
+    repairing: PendingRepair | undefined,
+    before: string | undefined,
+    after: string | undefined,
+  ): ProveResult | undefined =>
+    repairing !== undefined && before !== undefined && before === after
+      ? refused(
+          repairing.failure,
+          `the ${repairing.owner === "test" ? "test-writer" : "code-writer"} wrote nothing: everything ` +
+            `authored in this build is byte-identical to what the repair was handed`,
+        )
+      : undefined;
+
+  /**
+   * Hand a failed check to the worker who owns it, or end the walk on it (ADR-0582 D3/D5/D6). Resolves
+   * to the result to return, or to `undefined` once a repair is admitted and `next` points at the
+   * authoring phase it returns to. Without a policy it always ends, with exactly the reason a walk
+   * without repairs gives; with one, the budget is asked before EVERY repair.
+   */
+  const repairOrEnd = async (
+    failure: CheckFailure,
+    owner: RepairOwner | undefined,
+    unowned = "no worker owns this failure",
+  ): Promise<ProveResult | undefined> => {
+    const end = (why?: string): ProveResult =>
+      fail(
+        failure.failedAt,
+        why === undefined ? failure.reason : `${failure.reason} — not repaired in-build: ${why}`,
         visited,
+        withRepairs(failure.extras),
+      );
+    if (policy === undefined) return end();
+    if (owner === undefined) return end(unowned);
+    const edge = repairPhase(failure.failedAt, owner);
+    if (!edge.ok) return end(edge.reason);
+    const decision = await policy.budget.mayRepair();
+    if (!decision.ok) return end(decision.reason);
+    repairs.push({ failedAt: failure.failedAt, check: failure.check, to: edge.next, detail: failure.detail });
+    pending = { failure, owner };
+    next = edge.next;
+    return undefined;
+  };
+
+  for (;;) {
+    // ── AUTHOR_TEST ──────────────────────────────────────────────────────────
+    // The leaf may write the TEST only. On a successful authoring step we advance to CONFIRM_RED.
+    if (next === "AUTHOR_TEST") {
+      visited.push("AUTHOR_TEST");
+      await spec.onPhase?.("AUTHOR_TEST");
+      // ADR-0573 D1: the test file as it stood BEFORE the FIRST slice is handed out — what makes a test
+      // NEW. A repair slice never re-reads it, so a test added anywhere in this build stays NEW and is
+      // held to C4–C6 at every re-observation (ADR-0582 D4).
+      if (!baselineRead) {
+        spec.perTest?.beforeAuthorTest();
+        baselineRead = true;
+      }
+      const repairing = pending;
+      pending = undefined;
+      if (repairing !== undefined && implemented) revision = repairing.failure;
+      const brief =
+        repairing === undefined
+          ? spec.prompts.authorTest
+          : spec.prompts.authorTest + testRepairSection(repairs.length, causeOf(repairing.failure), implemented);
+      const writtenBefore = repairing === undefined ? undefined : await policy?.scopeFingerprint?.();
+      const authored = await spec.author.author("AUTHOR_TEST", brief);
+      // ADR-0569 D1/D4: an escalation can end the walk without a verdict, but it never advances a phase
+      // and never gates anything. A phase mismatch is malformed and fails closed with no record at all
+      // (D1); a matched escalation still takes exactly ONE spine observation before ending the walk, but
+      // that observation is not CONFIRM_RED — it gates nothing (D4). A repair slice's escalation ends
+      // the walk the same way: no observation can answer "this contract cannot be tested as specified".
+      if (!authored.ok && authored.escalation !== undefined) {
+        const escalation = authored.escalation;
+        if (escalation.phase !== "AUTHOR_TEST") {
+          return fail(
+            "AUTHOR_TEST",
+            `malformed escalation: raised from AUTHOR_TEST but declares phase "${escalation.phase}"`,
+            visited,
+            withRepairs(),
+          );
+        }
+        const obs = await spec.testExecutor.run(spec.testId);
+        return fail(
+          "AUTHOR_TEST",
+          `leaf escalated at AUTHOR_TEST (${escalation.kind}): ${authored.error}` + describeEscalation(escalation),
+          visited,
+          withRepairs({ escalation: buildEscalationRecord(escalation, spec.testId, obs.originalProcessResult) }),
+        );
+      }
+      // Turn/budget exhaustion is a COST guard, not a proof signal (ADR-0020): the leaf hit its ceiling,
+      // but a usable (red) test may already be on disk. Fall through to CONFIRM_RED — the spine's own
+      // observation is the sole arbiter — rather than discard the PAID slice (the turn-ceiling cost-leak).
+      // A GENUINE authoring error (no work produced) still fails closed here; in a repair slice that is
+      // the repair refused, and the walk ends on the check it was answering (ADR-0582 D5).
+      authorExhaustion = exhaustionReason(authored);
+      if (!authored.ok && authorExhaustion === null) {
+        if (repairing !== undefined) {
+          return refused(repairing.failure, `the test-writer's repair slice failed (${authored.error})`);
+        }
+        return fail("AUTHOR_TEST", `authoring the test failed (${authored.error})`, visited, withRepairs());
+      }
+      const writtenAfter = repairing === undefined ? undefined : await policy?.scopeFingerprint?.();
+      const testWroteNothing = refusedIfNothingWritten(repairing, writtenBefore, writtenAfter);
+      if (testWroteNothing !== undefined) return testWroteNothing;
+      const toRed = advancePhase("AUTHOR_TEST");
+      if (!toRed.ok) {
+        return fail("AUTHOR_TEST", toRed.reason, visited, withRepairs());
+      }
+      next = toRed.next;
+      continue;
+    }
+
+    // ── CONFIRM_RED ──────────────────────────────────────────────────────────
+    // The spine OBSERVES the red itself. A forged/early green here is the attack ADR-0020 §3 stops.
+    // No leaf runs in this phase (or any later one except IMPLEMENT) — the author is never invoked.
+    if (next === "CONFIRM_RED") {
+      visited.push("CONFIRM_RED");
+      await spec.onPhase?.("CONFIRM_RED");
+      // ADR-0582 D4: a test revised after IMPLEMENT is observed red against the source the build began
+      // from, so the implementation is set aside for this one observation and restored straight after.
+      const restore = implemented && policy !== undefined ? await policy.setAsideImplementation() : undefined;
+      let obs: TestObservation;
+      try {
+        obs = await spec.testExecutor.run(spec.testId);
+      } finally {
+        await restore?.();
+      }
+      const redGate = nextPhase("CONFIRM_RED", obs);
+      if (!redGate.ok) {
+        // If the slice was exhausted AND no red landed, the actionable signal is "raise the ceiling and
+        // retry", not just "not red" — preserve that context the fall-through would otherwise swallow.
+        // An observation's note says why it reads as it does, so surface it here for the same reason
+        // CONFIRM_GREEN does: the refusal should say WHY, not just "not red".
+        const redNote = obs.note !== undefined ? ` — ${obs.note}` : "";
+        const ended = await repairOrEnd(
+          {
+            failedAt: "CONFIRM_RED",
+            check: "no-red",
+            reason: redGate.reason + redNote + exhaustionNote(authorExhaustion, "a red test"),
+            briefReason: redGate.reason + redNote,
+            detail: "no red observed — the test passed before its implementation exists",
+            extras: { failedObservation: obs.originalProcessResult },
+            observation: obs.originalProcessResult,
+          },
+          "test",
+        );
+        if (ended !== undefined) return ended;
+        continue;
+      }
+      // ADR-0573 D1: the review point between red and green, consulted only now that the exit code would
+      // advance — so it can refuse this red, and can never rescue a refused one.
+      const review = spec.perTest?.confirmRed?.(obs);
+      if (review !== undefined && !review.ok) {
+        const ended = await repairOrEnd(
+          {
+            failedAt: "CONFIRM_RED",
+            check: "red-per-test",
+            reason:
+              describePerTestRefusal("CONFIRM_RED", review.findings) + exhaustionNote(authorExhaustion, "a red test"),
+            briefReason: describePerTestRefusal("CONFIRM_RED", review.findings, "worker"),
+            detail: summarizeFindings(review.findings),
+            extras: { failedObservation: obs.originalProcessResult, perTestFindings: review.findings },
+            observation: obs.originalProcessResult,
+          },
+          "test",
+        );
+        if (ended !== undefined) return ended;
+        continue;
+      }
+      redObs = obs;
+      redReview = review;
+      next = phaseAfterRed(implemented);
+      continue;
+    }
+
+    // ── IMPLEMENT ────────────────────────────────────────────────────────────
+    // The leaf may write SOURCE only (never the test it must satisfy). Advance to CONFIRM_GREEN.
+    if (next === "IMPLEMENT") {
+      visited.push("IMPLEMENT");
+      await spec.onPhase?.("IMPLEMENT");
+      const repairing = pending;
+      pending = undefined;
+      // ADR-0582 D7: in a build that repairs, the code-writer always sees the red it implements against,
+      // and a repair slice also sees what failed — and, right after a test revision, why the test changed.
+      let brief = spec.prompts.implement;
+      if (policy !== undefined) {
+        brief += redObservationSection(redObs?.originalProcessResult);
+        if (repairing !== undefined) {
+          brief += codeRepairSection(
+            repairs.length,
+            causeOf(repairing.failure),
+            revision === undefined ? undefined : causeOf(revision),
+          );
+        }
+      }
+      revision = undefined;
+      implemented = true;
+      const writtenBefore = repairing === undefined ? undefined : await policy?.scopeFingerprint?.();
+      const implementedResult = await spec.author.author("IMPLEMENT", brief);
+      // ADR-0569 D2/D3: an IMPLEMENT escalation can NEVER veto an observation. A phase mismatch is
+      // malformed and fails closed with no record (D1); a matched escalation is carried forward rather
+      // than failing closed here — the spine still visits CONFIRM_GREEN and observes exactly as it would
+      // without it, and whether the escalation stands (a red) or is overruled (a green) is decided once
+      // that observation lands.
+      implementExhaustion = exhaustionReason(implementedResult);
+      implementEscalation = undefined;
+      if (!implementedResult.ok && implementedResult.escalation !== undefined) {
+        const escalation = implementedResult.escalation;
+        if (escalation.phase !== "IMPLEMENT") {
+          return fail(
+            "IMPLEMENT",
+            `malformed escalation: raised from IMPLEMENT but declares phase "${escalation.phase}"`,
+            visited,
+            withRepairs(),
+          );
+        }
+        implementEscalation = buildEscalationRecord(escalation, spec.testId);
+      } else if (!implementedResult.ok && implementExhaustion === null) {
+        // Same fall-through as AUTHOR_TEST: an exhausted IMPLEMENT slice may have left GREEN code on
+        // disk, so let CONFIRM_GREEN observe it rather than discard the paid work (the discarded-green
+        // leak). The ceiling never gates the verdict — only the spine's observation does.
+        if (repairing !== undefined) {
+          return refused(repairing.failure, `the code-writer's repair slice failed (${implementedResult.error})`);
+        }
+        return fail(
+          "IMPLEMENT",
+          `implementing against the test failed (${implementedResult.error})`,
+          visited,
+          withRepairs(),
+        );
+      }
+      // ADR-0582 D5: a repair slice that ESCALATED is not one that wrote nothing — raising an objection
+      // is the other thing a worker handed a repair may honestly do, and the spine still observes
+      // CONFIRM_GREEN before deciding what it means (ADR-0569 D3). Only a silent empty slice is refused.
+      const writtenAfter =
+        repairing === undefined || implementEscalation !== undefined
+          ? undefined
+          : await policy?.scopeFingerprint?.();
+      const codeWroteNothing = refusedIfNothingWritten(repairing, writtenBefore, writtenAfter);
+      if (codeWroteNothing !== undefined) return codeWroteNothing;
+      const toGreen = advancePhase("IMPLEMENT");
+      if (!toGreen.ok) {
+        return fail("IMPLEMENT", toGreen.reason, visited, withRepairs());
+      }
+      next = toGreen.next;
+      continue;
+    }
+
+    // ── CONFIRM_GREEN ────────────────────────────────────────────────────────
+    // The spine OBSERVES the green itself. A red here means the implementation is not proven.
+    if (next === "CONFIRM_GREEN") {
+      visited.push("CONFIRM_GREEN");
+      await spec.onPhase?.("CONFIRM_GREEN");
+      const obs = await spec.testExecutor.run(spec.testId);
+      const greenGate = nextPhase("CONFIRM_GREEN", obs);
+      // ADR-0569 D3: a STANDING (confirmed) IMPLEMENT escalation names itself AFTER every existing
+      // suffix — the ordinary refusal a leaf-free twin would give is unchanged byte for byte; only text
+      // naming the escalation's kind and quoting its statement verbatim is appended. In a build that
+      // repairs, a standing escalation goes to the test-writer's in-build revision (ADR-0582 D3).
+      const standing = implementEscalation;
+      const escalationSuffix = standing !== undefined ? describeEscalation(standing.raised) : "";
+      const escalationDetail = standing !== undefined ? `the code-writer escalated: ${standing.raised.statement}` : "";
+      if (!greenGate.ok) {
+        // When the executor produced this red without a run behind it (a per-test report that could not
+        // be cleared, ADR-0573 D2), `obs.note` says WHY — surface it so the refusal is forensic.
+        const noteSuffix = obs.note !== undefined ? ` — ${obs.note}` : "";
+        const ended = await repairOrEnd(
+          {
+            failedAt: "CONFIRM_GREEN",
+            check: standing !== undefined ? "escalation" : "no-green",
+            reason: greenGate.reason + noteSuffix + exhaustionNote(implementExhaustion, "green") + escalationSuffix,
+            briefReason: greenGate.reason + noteSuffix,
+            detail: standing !== undefined ? escalationDetail : "no green observed",
+            extras: { failedObservation: obs.originalProcessResult, escalation: standing },
+            observation: obs.originalProcessResult,
+            escalation: standing,
+          },
+          standing !== undefined ? "test" : "code",
+        );
+        if (ended !== undefined) return ended;
+        implementEscalation = undefined;
+        continue;
+      }
+      // ADR-0573 D1: completeness at green — every declared test reported once and individually passed —
+      // consulted only once the exit code would advance. A refusal here leaves an IMPLEMENT escalation
+      // STANDING (no green observation overruled it), exactly as a red does. A finding only the test
+      // file can clear goes to the test-writer (ADR-0582 D3).
+      const review = spec.perTest?.confirmGreen(obs);
+      if (review !== undefined && !review.ok) {
+        const testSide = standing !== undefined || review.findings.some((f) => f.testSide === true);
+        const ended = await repairOrEnd(
+          {
+            failedAt: "CONFIRM_GREEN",
+            check: standing !== undefined ? "escalation" : "green-per-test",
+            reason:
+              describePerTestRefusal("CONFIRM_GREEN", review.findings) +
+              exhaustionNote(implementExhaustion, "green") +
+              escalationSuffix,
+            briefReason: describePerTestRefusal("CONFIRM_GREEN", review.findings, "worker"),
+            detail: standing !== undefined ? escalationDetail : summarizeFindings(review.findings),
+            extras: {
+              failedObservation: obs.originalProcessResult,
+              escalation: standing,
+              perTestFindings: review.findings,
+            },
+            observation: obs.originalProcessResult,
+            escalation: standing,
+          },
+          testSide ? "test" : "code",
+        );
+        if (ended !== undefined) return ended;
+        implementEscalation = undefined;
+        continue;
+      }
+      // ADR-0569 D3: a GREEN CONFIRM_GREEN observation OVERRULES a pending IMPLEMENT escalation — the walk
+      // proceeds to GATE and signs exactly as it would have. The escalation rides forward as
+      // `overruledEscalation` on whatever this walk ultimately returns, pass or a later refusal, and
+      // never as the plain `escalation` key.
+      if (standing !== undefined) overruledEscalation = standing;
+      implementEscalation = undefined;
+      revision = undefined;
+      greenObs = obs;
+      greenReview = review;
+      next = "GATE";
+      continue;
+    }
+
+    // ── GATE (ADR-0020 §4 — the forensic floor) ─────────────────────────────
+    // Observe-only. Sign the verdict against a clean committed tree + a resolved signer, then append
+    // the SIGNED promotion event. Any refusal here writes NO row.
+    visited.push("GATE");
+    await spec.onPhase?.("GATE");
+
+    const tree = await spec.treeState();
+    if (!tree.clean) {
+      return fail(
+        "GATE",
+        `tree is not clean (commit ${tree.commitSha}); a Pass without a clean committed tree is forgeable`,
+        visited,
+        withRepairs({ overruledEscalation }),
       );
     }
-    implementEscalation = buildEscalationRecord(escalation, spec.testId);
-  } else if (!implemented.ok && implementExhaustion === null) {
-    // Same fall-through as AUTHOR_TEST: an exhausted IMPLEMENT slice may have left GREEN code on
-    // disk, so let CONFIRM_GREEN observe it rather than discard the paid work (the discarded-green
-    // leak). The ceiling never gates the verdict — only the spine's observation does.
-    return fail("IMPLEMENT", `implementing against the test failed (${implemented.error})`, visited);
-  }
-  const toGreen = advancePhase("IMPLEMENT");
-  if (!toGreen.ok) {
-    return fail("IMPLEMENT", toGreen.reason, visited);
-  }
 
-  // ── Phase 4: CONFIRM_GREEN ──────────────────────────────────────────────
-  // The spine OBSERVES the green itself. A red here means the implementation is not proven.
-  visited.push("CONFIRM_GREEN");
-  await spec.onPhase?.("CONFIRM_GREEN");
-  const greenObs = await spec.testExecutor.run(spec.testId);
-  const greenGate = nextPhase("CONFIRM_GREEN", greenObs);
-  if (!greenGate.ok) {
-    // When the executor produced this red without a run behind it (a per-test report that could not be
-    // cleared, ADR-0573 D2), `greenObs.note` says WHY — surface it so the refusal is forensic, not just
-    // "not green".
-    const noteSuffix = greenObs.note !== undefined ? ` — ${greenObs.note}` : "";
-    // ADR-0569 D3: a STANDING (confirmed) IMPLEMENT escalation names itself AFTER every existing
-    // suffix above — the ordinary refusal a leaf-free twin would give is unchanged byte for byte;
-    // only text naming the escalation's kind and quoting its statement verbatim is appended.
-    const escalationSuffix = implementEscalation !== undefined ? describeEscalation(implementEscalation.raised) : "";
-    return fail(
-      "CONFIRM_GREEN",
-      greenGate.reason + noteSuffix + exhaustionNote(implementExhaustion, "green") + escalationSuffix,
-      visited,
-      { failedObservation: greenObs.originalProcessResult, escalation: implementEscalation },
-    );
-  }
-  // ADR-0573 D1: completeness at green — every declared test reported once and individually passed —
-  // consulted only once the exit code would advance. A refusal here leaves an IMPLEMENT escalation
-  // STANDING (no green observation overruled it), exactly as a red does.
-  const greenReview = spec.perTest?.confirmGreen(greenObs);
-  if (greenReview !== undefined && !greenReview.ok) {
-    const escalationSuffix =
-      implementEscalation !== undefined ? describeEscalation(implementEscalation.raised) : "";
-    return fail(
-      "CONFIRM_GREEN",
-      describePerTestRefusal("CONFIRM_GREEN", greenReview.findings) +
-        exhaustionNote(implementExhaustion, "green") +
-        escalationSuffix,
-      visited,
-      {
-        failedObservation: greenObs.originalProcessResult,
-        escalation: implementEscalation,
-        perTestFindings: greenReview.findings,
-      },
-    );
-  }
-  // ADR-0569 D3: a GREEN CONFIRM_GREEN observation OVERRULES a pending IMPLEMENT escalation — the
-  // walk proceeds to GATE and signs exactly as it would have. `implementEscalation` (if any) rides
-  // forward as `overruledEscalation` on whatever this walk ultimately returns, pass or a later GATE
-  // refusal, and never as the plain `escalation` key.
-  const overruledEscalation = implementEscalation;
+    const signer = resolveSigner(spec.signerInputs);
+    if (!signer.ok) {
+      return fail("GATE", `no signer resolved: ${signer.error}`, visited, withRepairs({ overruledEscalation }));
+    }
 
-  // ── Phase 5: GATE (ADR-0020 §4 — the forensic floor) ────────────────────
-  // Observe-only. Sign the verdict against a clean committed tree + a resolved signer, then append
-  // the SIGNED promotion event. Any refusal here writes NO row.
-  visited.push("GATE");
-  await spec.onPhase?.("GATE");
+    // `sign-after-typecheck`: the verdict must never out-run its backstop. Placed AFTER the two cheap
+    // refusals above — a dirty tree or an unresolved signer still refuses without paying for a
+    // package typecheck — and BEFORE the append below, so a red backstop leaves no signing row at all.
+    // The proof run is tsx-driven (types stripped), so this is the only observation that sees
+    // type-illegal code; a red here is not "withhold the push", it is "this is not proven". In a build
+    // that repairs, it goes to whoever owns the files its diagnostics name (ADR-0582 D3).
+    const backstop = await spec.backstop?.();
+    if (backstop !== undefined && !backstop.ok) {
+      const owner =
+        policy !== undefined && backstop.output !== undefined ? policy.routeTypecheck(backstop.output) : undefined;
+      const ended = await repairOrEnd(
+        {
+          failedAt: "GATE",
+          check: "typecheck",
+          reason:
+            `backstop RED: ${backstop.reason}; a Pass signed ahead of its backstop attests code the ` +
+            `repo's own checks reject`,
+          briefReason:
+            "the package typecheck (tsc --noEmit, full strict flags) is RED over this build's committed tree. " +
+            "The proof runs under tsx, which strips types, so only the typecheck sees type-illegal code.",
+          detail:
+            owner === "test"
+              ? "the package typecheck is red, and every error it names is in a test file"
+              : "the package typecheck is red",
+          extras: { overruledEscalation },
+          observation: backstop.output,
+        },
+        owner,
+        "the package typecheck names no file a worker can edit — a timeout or a crash has no worker to go to",
+      );
+      if (ended !== undefined) return ended;
+      continue;
+    }
 
-  const tree = await spec.treeState();
-  if (!tree.clean) {
-    return fail(
-      "GATE",
-      `tree is not clean (commit ${tree.commitSha}); a Pass without a clean committed tree is forgeable`,
-      visited,
-      { overruledEscalation },
-    );
-  }
+    // Unreachable by construction — GATE follows an accepted green, which follows an accepted red — but
+    // the verdict's evidence IS those two observations, so a walk without them fails closed, never signs.
+    if (redObs === undefined || greenObs === undefined) {
+      return fail("GATE", "the walk reached GATE without both a red and a green observation", visited, withRepairs());
+    }
 
-  const signer = resolveSigner(spec.signerInputs);
-  if (!signer.ok) {
-    return fail("GATE", `no signer resolved: ${signer.error}`, visited, { overruledEscalation });
-  }
+    // ADR-0127: the per-contract coverage axis, computed lazily HERE (the test file is on disk and
+    // committed by now). Consulted only on this signed-green path, so an aborted walk stamps nothing
+    // (test m). A thunk returning undefined (no contracts / unreadable surface) leaves the key OFF.
+    const coverage = spec.contractCoverage?.();
+    // ADR-0416 D6: the scope this pass covers, on the same lazy, signed-green-only path as the coverage
+    // axis above — an aborted walk establishes no baseline.
+    const baseline = spec.storyBaseline?.();
+    // ADR-0534: the binding, resolved on the same lazy path — a thunk runs only here, AFTER the tree
+    // seam has committed the authored files, so what it hashes is the attested commit's bytes.
+    const binding = typeof spec.binding === "function" ? await spec.binding() : spec.binding;
 
-  // `sign-after-typecheck`: the verdict must never out-run its backstop. Placed AFTER the two cheap
-  // refusals above — a dirty tree or an unresolved signer still refuses without paying for a
-  // package typecheck — and BEFORE the append below, so a red backstop leaves no signing row at all.
-  // The proof run is tsx-driven (types stripped), so this is the only observation that sees
-  // type-illegal code; a red here is not "withhold the push", it is "this is not proven".
-  const backstop = await spec.backstop?.();
-  if (backstop !== undefined && !backstop.ok) {
-    return fail(
-      "GATE",
-      `backstop RED: ${backstop.reason}; a Pass signed ahead of its backstop attests code the ` +
-        `repo's own checks reject`,
-      visited,
-      { overruledEscalation },
-    );
-  }
-
-  // ADR-0127: the per-contract coverage axis, computed lazily HERE (the test file is on disk and
-  // committed by now). Consulted only on this signed-green path, so an aborted walk stamps nothing
-  // (test m). A thunk returning undefined (no contracts / unreadable surface) leaves the key OFF.
-  const coverage = spec.contractCoverage?.();
-  // ADR-0416 D6: the scope this pass covers, on the same lazy, signed-green-only path as the coverage
-  // axis above — an aborted walk establishes no baseline.
-  const baseline = spec.storyBaseline?.();
-  // ADR-0534: the binding, resolved on the same lazy path — a thunk runs only here, AFTER the tree
-  // seam has committed the authored files, so what it hashes is the attested commit's bytes.
-  const binding = typeof spec.binding === "function" ? await spec.binding() : spec.binding;
-
-  const verdict: Verdict = {
-    unitId: spec.unitId,
-    proofMode: spec.proofMode,
-    outcome: "pass",
-    commitSha: tree.commitSha,
-    signer: signer.signer,
-    runId: spec.runId,
-    // ADR-0068 §3: the verdict-data output-format version. The gate stamps the current `v1`
-    // explicitly (the contract's Verdict OUTPUT type requires it; the default applies only on parse).
-    outputVersion: "v1",
-    evidence: [
-      toEvidence(redObs, redEvidenceDisclosure(spec.perTest, redReview)),
-      toEvidence(greenObs, greenEvidenceDisclosure(greenReview)),
-    ],
-    at: spec.now(),
-  };
-  if (binding !== undefined) {
-    verdict.boundHash = binding.boundHash;
-    if (binding.anchors !== undefined && binding.anchors.length > 0) verdict.anchors = binding.anchors;
-  }
-  if (coverage !== undefined) verdict.contractCoverage = coverage;
-  if (baseline !== undefined) verdict.storyBaseline = baseline;
-  // ADR-0573 D5 / ADR-0572 D3: every test accepted as a declared guard-rail, enumerated — stamped whenever
-  // red WAS observed per test, `[]` included, so its presence rather than its length says it was.
-  if (redReview !== undefined && redReview.ok) {
-    verdict.acceptedGuardRails = redReview.acceptedGuardRails.map((g) => ({
-      test: [...g.test],
-      contracts: [...g.contracts],
-    }));
-  }
-
-  // The signed promotion event: healthy/proven is reachable ONLY through this append (never authored).
-  await spec.store.appendEvent({
-    id: `${spec.runId}:${spec.unitId}`,
-    kind: SIGNING_KIND,
-    type: "created",
-    doc: verdict,
-    actor: signer.signer,
-  });
-
-  // ADR-0016: record WHAT code this proof attests — a ChangeEvent advancing the unit's bound hash
-  // (provenance: the attested commit). Only when a binding AND a change-log sink are present; both are
-  // absent for every pre-ADR-0016 caller, so existing behaviour is unchanged.
-  if (binding !== undefined && spec.changeStore !== undefined) {
-    const change: ChangeEvent = {
+    const verdict: Verdict = {
       unitId: spec.unitId,
-      hashBefore: binding.priorHash ?? binding.boundHash,
-      hashAfter: binding.boundHash,
-      author: signer.signer,
-      at: spec.now(),
+      proofMode: spec.proofMode,
+      outcome: "pass",
       commitSha: tree.commitSha,
+      signer: signer.signer,
+      runId: spec.runId,
+      // ADR-0068 §3: the verdict-data output-format version. The gate stamps the current `v1`
+      // explicitly (the contract's Verdict OUTPUT type requires it; the default applies only on parse).
+      outputVersion: "v1",
+      // The LAST red and the LAST green the spine observed — after any repairs, the ones that advanced.
+      evidence: [
+        toEvidence(redObs, redEvidenceDisclosure(spec.perTest, redReview)),
+        toEvidence(greenObs, greenEvidenceDisclosure(greenReview)),
+      ],
+      at: spec.now(),
     };
-    if (binding.description !== undefined) change.description = binding.description;
-    await spec.changeStore.appendChangeEvent(change);
-  }
+    if (binding !== undefined) {
+      verdict.boundHash = binding.boundHash;
+      if (binding.anchors !== undefined && binding.anchors.length > 0) verdict.anchors = binding.anchors;
+    }
+    if (coverage !== undefined) verdict.contractCoverage = coverage;
+    if (baseline !== undefined) verdict.storyBaseline = baseline;
+    // ADR-0573 D5 / ADR-0572 D3: every test accepted as a declared guard-rail, enumerated — stamped
+    // whenever red WAS observed per test, `[]` included, so its presence rather than its length says it was.
+    if (redReview !== undefined && redReview.ok) {
+      verdict.acceptedGuardRails = redReview.acceptedGuardRails.map((g) => ({
+        test: [...g.test],
+        contracts: [...g.contracts],
+      }));
+    }
 
-  return overruledEscalation === undefined
-    ? { ok: true, verdict, phasesVisited: visited }
-    : { ok: true, verdict, phasesVisited: visited, overruledEscalation };
+    // The signed promotion event: healthy/proven is reachable ONLY through this append (never authored).
+    await spec.store.appendEvent({
+      id: `${spec.runId}:${spec.unitId}`,
+      kind: SIGNING_KIND,
+      type: "created",
+      doc: verdict,
+      actor: signer.signer,
+    });
+
+    // ADR-0016: record WHAT code this proof attests — a ChangeEvent advancing the unit's bound hash
+    // (provenance: the attested commit). Only when a binding AND a change-log sink are present; both are
+    // absent for every pre-ADR-0016 caller, so existing behaviour is unchanged.
+    if (binding !== undefined && spec.changeStore !== undefined) {
+      const change: ChangeEvent = {
+        unitId: spec.unitId,
+        hashBefore: binding.priorHash ?? binding.boundHash,
+        hashAfter: binding.boundHash,
+        author: signer.signer,
+        at: spec.now(),
+        commitSha: tree.commitSha,
+      };
+      if (binding.description !== undefined) change.description = binding.description;
+      await spec.changeStore.appendChangeEvent(change);
+    }
+
+    const passed: Extract<ProveResult, { ok: true }> = { ok: true, verdict, phasesVisited: visited };
+    if (overruledEscalation !== undefined) passed.overruledEscalation = overruledEscalation;
+    if (repairs.length > 0) passed.repairs = [...repairs];
+    return passed;
+  }
+}
+
+/** What a repair brief says about a failed check (ADR-0582 D7) — the worker's view of it. */
+function causeOf(failure: CheckFailure): RepairCause {
+  const raised = failure.escalation?.raised;
+  return {
+    failedAt: failure.failedAt,
+    check: failure.check,
+    reason: failure.briefReason,
+    observation: failure.observation,
+    escalation:
+      raised !== undefined && raised.phase === "IMPLEMENT"
+        ? { statement: raised.statement, assertion: raised.assertion }
+        : undefined,
+  };
+}
+
+/** One line naming a per-test refusal's findings by check, for the build envelope's repair list. */
+function summarizeFindings(findings: readonly PerTestFinding[]): string {
+  const checks = [...new Set(findings.map((f) => f.check))];
+  return `${findings.length} per-test finding(s): ${checks.join(", ")}`;
 }
 
 /**
@@ -554,6 +866,8 @@ interface FailExtras {
   escalation?: EscalationRecord | undefined;
   overruledEscalation?: EscalationRecord | undefined;
   perTestFindings?: readonly PerTestFinding[] | undefined;
+  /** Stamped only when non-empty, so a walk that made no repair returns exactly what it always did. */
+  repairs?: readonly RepairRecord[] | undefined;
 }
 
 /**
@@ -572,6 +886,7 @@ function fail(
   if (extras.escalation !== undefined) result.escalation = extras.escalation;
   if (extras.overruledEscalation !== undefined) result.overruledEscalation = extras.overruledEscalation;
   if (extras.perTestFindings !== undefined) result.perTestFindings = extras.perTestFindings;
+  if (extras.repairs !== undefined && extras.repairs.length > 0) result.repairs = extras.repairs;
   return result;
 }
 

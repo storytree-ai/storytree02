@@ -67,7 +67,11 @@ the payload carries no test id. `exitCode: null` remains a real
 signal-termination observation. At CONFIRM_RED the refusal is an unexpected green or a per-test
 review's (ADR-0573); any other non-zero red advances, because ADR-0580 D1 removed the measured
 wrong-kind refusal. The gate does not rerun a command, change the transition
-decision, sign or promote a refusal, expose output to the author, or add it to evidence/history.
+decision, sign or promote a refusal, or add it to evidence/history. Nor does it expose the output to
+the author — EXCEPT under the `ProveSpec.repair` policy below (ADR-0582 D7), where a refused
+observation's output is carried into the REPAIRING worker's brief and every code-writer brief carries
+the latest CONFIRM_RED observation. Even then nothing else moves: no command is re-run
+diagnostically, no output changes a transition, and none of it enters evidence or history.
 Authoring, GATE, and backstop refusals have no such payload, as does every pass.
 
 **Escalation boundary (contract [`gate-routes-authoring-escalation`](gate-routes-authoring-escalation.md), signed PASS run `real-mu1lv3wm`; ADR-0569).**
@@ -104,6 +108,43 @@ red; whole-package suites and other runners sign exactly as before. Where that u
 `real.cluster` (ADR-0573 D3), the policy also carries the cluster's contracts as `briefContracts`: C7
 then refuses a red in which one of them has no new vouching test, and the red evidence names the cluster.
 
+**In-build repair (ADR-0581 D4, ADR-0582).** With an optional `ProveSpec.repair` policy the walk is a
+LOOP rather than one pass: a failed check goes back through
+[`red-green-phase-machine`](red-green-phase-machine.md)'s `repairPhase` edge to the worker who can fix
+it, in the SAME build, and the walk then moves forward exactly as it always does — so every repair is
+observed again and no new authority is created. Who gets it (D3): CONFIRM_RED observing no red, and
+CONFIRM_RED's per-test refusal, go to the test-writer; a CONFIRM_GREEN red goes to the code-writer; any
+CONFIRM_GREEN refusal while an IMPLEMENT escalation STANDS is the test-writer's in-build revision
+(ADR-0569 D3's cross-build `--revise-test` is unchanged for a build that has ended); a CONFIRM_GREEN
+per-test finding only the test file can clear — `PerTestFinding.testSide`: an unbindable, duplicate or
+skipped declaration, or C4–C7 — goes to the test-writer and any other finding to the code-writer; and a
+red GATE typecheck goes to whoever the policy's router names from the files its diagnostics name, and
+to NOBODY when it names none (a timeout or a crash has no worker). A test revised after IMPLEMENT has
+run is re-observed red with the implementation SET ASIDE — every IMPLEMENT-scope file put back to the
+commit the walk began at — and restored byte for byte straight after, so every version of a test the
+gate signs was observed red against the subject the first CONFIRM_RED saw; `phaseAfterRed` then sends
+the walk to CONFIRM_GREEN, and the code-writer is handed a slice only if the restored implementation
+does not satisfy the revised test. The build ends unsigned only when the budget refuses (asked before
+EVERY repair) or a repair is refused, and it ends on the ORIGINAL check with its reason extended (D5).
+**TWO bounds, not one** (D6). Time alone was measured on this landing's own gate and was not enough: a
+worker that reports success while writing nothing loops — repair, re-observe the identical failure,
+repair — and two offline walks each burned 7,201 seconds, the whole two-hour budget, while the gate
+still went GREEN because each walk ended with the refusal its test expected. So a repair slice whose
+workspace fingerprint is identical either side of it WROTE NOTHING, and that is a refused repair:
+handing the same check back could only observe the same thing again. The fingerprint is CONTENT — every
+tracked change against HEAD plus every untracked file's bytes, ignored files excluded — never `git
+status`; it is `undefined` where git cannot answer (a workspace that is no repository, only ever an
+offline test's), and UNKNOWN refuses nothing; it is taken only around a REPAIR slice, so a first slice
+of either phase is never judged this way; and a slice that ESCALATED instead of writing is not a slice
+that wrote nothing. It is still not a repair COUNT: a worker that writes something useless each round
+remains bounded by the budget alone, and the seam (`RepairPolicy.scopeFingerprint`) is optional — a
+policy without it has only its budget. `ProveResult.repairs` lists every repair (D8); the
+VERDICT is untouched, its evidence still the LAST red and the LAST green the spine observed. Absent ⇒
+unchanged: a dry-run and the live smoke carry no policy and walk the old straight ladder byte for byte
+(D9). The pieces the loop consults — the budget, the briefs, the typecheck router, the set-aside — are
+`packages/orchestrator/src/repair.ts`, and [`prove-spec-resolution`](prove-spec-resolution.md) arms
+them on every REAL build.
+
 ## Integration test
 
 **Goal —** The full honesty loop against real in-story collaborators, nothing stubbed in the
@@ -114,7 +155,7 @@ the genuine green, and the gate signs exactly one row
 (`packages/orchestrator/src/prove-it-gate.e2e.test.ts:160`). The negative twin plants a broken
 impl: still red at CONFIRM_GREEN → fail-closed, NO signing row (`prove-it-gate.e2e.test.ts:214`).
 
-## Contracts (16)
+## Contracts (20)
 
 1. **`happy-path-signs-exactly-once`** — red then green, clean tree, signer present → a signed pass and exactly one signing row
    - **asserts —** `ok:true`, the verdict's fields pinned, one `kind:"signing"` event.
@@ -180,3 +221,19 @@ impl: still red at CONFIRM_GREEN → fail-closed, NO signing row (`prove-it-gate
     - **asserts —** a per-test policy carrying `briefContracts` refuses (C7) a red whose NEW vouching tests leave one of the brief's contracts unnamed, naming that contract, with IMPLEMENT never handed out and no signing row; the same test file briefed as exactly the cluster it covers advances and signs, and its red evidence note names the cluster's contracts; on node and on bun.
     - **covers —** `reviewConfirmRed`'s C7 branch, `perTestPolicy`'s `briefContracts` and `redEvidenceDisclosure` (`packages/orchestrator/src/proof/per-test-review.ts`)
     - **proven by —** `packages/orchestrator/src/prove-it-gate.per-test.e2e.test.ts` (session-authored; no signed verdict)
+17. **`failed-check-returns-to-the-worker-who-can-fix-it`** — a failed check inside a repairing build goes back to the worker who can fix it, and is observed again
+    - **asserts —** given a `ProveSpec.repair` policy, `proveUnit` routes each failed check to one authoring phase and re-enters the ladder there: CONFIRM_RED observing no red, and CONFIRM_RED's per-test refusal, go to the test-writer, whose repaired test is observed at CONFIRM_RED again; a CONFIRM_GREEN red with no standing escalation goes to the code-writer; a CONFIRM_GREEN red, or a per-test refusal, while an IMPLEMENT escalation stands goes to the test-writer's in-build revision; at CONFIRM_GREEN a finding carrying `testSide` goes to the test-writer and any other finding to the code-writer; and a red GATE typecheck goes to whoever the policy's `routeTypecheck` names, after which a test repair walks red, green and GATE again. Every code-writer brief carries the latest CONFIRM_RED observation, and every repair brief is the phase's original brief plus a section naming what failed, the observation, and any standing escalation verbatim — a test-writer reading per-test findings never gets the orchestrator's own routes. `ProveResult.repairs` lists each repair's `failedAt`, check, worker and one-line detail in order, on a pass and a refusal alike, and is absent when the walk made none; the signed verdict is unchanged, its evidence the LAST red and LAST green observed.
+    - **covers —** `proveUnit`'s repair routing and repair briefs, `ProveSpec.repair`, `ProveResult.repairs` and `BackstopOutcome.output` (`packages/orchestrator/src/prove-it-gate.ts`); `PerTestFinding.testSide` and `describePerTestRefusal`'s `"worker"` audience (`packages/orchestrator/src/proof/per-test-review.ts`)
+    - **proven by —** `packages/orchestrator/src/prove-it-gate.repair.test.ts` (session-authored; no signed verdict)
+18. **`repair-loop-ends-only-on-a-spent-budget-or-a-refused-repair`** — the loop is bounded by time AND by progress, and a build that ends unsigned ends on the ORIGINAL check
+    - **asserts —** with no `ProveSpec.repair` policy the walk ends at the first failed check exactly as it always has. With one, the policy's budget is asked before EVERY repair and no repair starts once it says no; a spent budget, a repairing slice that fails to author, a repair slice's AUTHOR_TEST escalation (ADR-0569 D4), a red typecheck whose diagnostics name no file, and a repair slice that WROTE NOTHING each end the walk on the ORIGINAL check — its `failedAt`, `failedObservation`, `perTestFindings` and standing escalation — with the reason extended by ` — not repaired in-build: <why>` or ` — in-build repair refused: <why>` and every repair made so far still listed. The wrote-nothing ending is the second bound (ADR-0582 D6): with the workspace fingerprint identical either side of the slice, the reason ends ` — in-build repair refused: the <test-writer|code-writer> wrote nothing: everything authored in this build is byte-identical to what the repair was handed`, exactly ONE repair is recorded, and no further observation is spent on it. It ends only a repair that produced nothing: a slice that wrote ANYTHING keeps the walk going however little it helped, a slice that ESCALATED instead of writing is not judged this way, an `undefined` fingerprint refuses nothing, and the FIRST slice of each phase is never a repair, so the fingerprint is not even taken around it. A standing IMPLEMENT escalation the budget cannot repair is still returned as `escalation`, so ADR-0571's cross-build revision record is still written; an escalation handed to an in-build revision is not. No refusal writes a signing row.
+    - **covers —** `proveUnit`'s repair loop — the budget question before every repair, the fingerprints taken either side of a repair slice and `refusedIfNothingWritten`, the refused-repair path, and the extended refusal reason (`packages/orchestrator/src/prove-it-gate.ts`); `RepairPolicy.scopeFingerprint` (`packages/orchestrator/src/repair.ts`)
+    - **proven by —** `packages/orchestrator/src/prove-it-gate.repair.test.ts` (session-authored; no signed verdict)
+19. **`revised-test-is-re-observed-red-against-the-build-base`** — a test revised after IMPLEMENT is observed red against the source the build began from, and the implementation is put back byte for byte
+    - **asserts —** the set-aside runs only once IMPLEMENT has run, brackets exactly the red re-observation, and restores even when that observation throws; a test repaired before any IMPLEMENT sets nothing aside, and a still-unrepaired test sets aside again at every further CONFIRM_RED. Over a REAL git repository, every implementation-scope path differing from the walk's base commit — modified, added, deleted, committed or not, untracked included — goes back to that commit's content or is removed, while the test file, paths outside the scope and ignored files are left alone; `restore` then puts each file back exactly, including bytes that are not UTF-8 text and a file the implementation deleted, and the index is never touched. The per-test NEW baseline is read once for the whole build, so a test added anywhere in it stays NEW and is held to C4–C6 at every re-observation.
+    - **covers —** `proveUnit`'s CONFIRM_RED set-aside bracket and its one-time `perTest.beforeAuthorTest` read (`packages/orchestrator/src/prove-it-gate.ts`); `setAsideImplementation` and `SetAside` (`packages/orchestrator/src/repair.ts`)
+    - **proven by —** `packages/orchestrator/src/prove-it-gate.repair.test.ts` for the bracketing, and `packages/orchestrator/src/repair.set-aside.test.ts` against a real git repository for the file-level guarantees (session-authored; no signed verdict)
+20. **`repair-support-routes-and-briefs-the-repairing-worker`** — the repair support bounds the loop, routes a red typecheck by the files it names, and briefs the worker the check goes to
+    - **asserts —** `wallClockBudget` admits a repair until its budget has elapsed and then refuses with a plain reason naming the budget and the elapsed time, defaulting to the owner's two hours measured from its own construction. `clipTail` returns a stream at the cap exactly and tail-keeps a longer one with the omitted count named; `renderObservation` renders the exit code and both streams, saying so when a stream is empty or the child was killed. `redObservationSection` carries the CONFIRM_RED observation and nothing when there was none. `testRepairSection` says what failed and that this is a repair rather than a new attempt, carries the observation and any escalation's statement and assertion verbatim, and sends a guard-rail or an untestable contract to the `escalate` tool; `codeRepairSection` says the test is frozen, carries the output, directs an objection to the same tool, and — right after a revision — says why the test changed. `diagnosticFiles` reads both of tsc's diagnostic formats with a wrapper's line prefix skipped, and `routeTypecheckByFile` answers `test` only when EVERY file named is in the test-writer's scope, `code` when any is not, and `undefined` when none is named. Over a real git repository, `worktreeScopeFingerprint` reads the same value twice when nothing was written, MOVES when a tracked file is edited, returns to its earlier value when the original bytes are written back, moves again on a rewrite of an already-dirty file — the shape a `git status` line cannot see — moves on a new untracked file, never moves for an ignored one, still reads a write made after the spine's own commit, and is `undefined` outside a repository.
+    - **covers —** `packages/orchestrator/src/repair.ts` — `wallClockBudget` / `DEFAULT_BUILD_BUDGET_MS`, `clipTail`, `renderObservation`, `redObservationSection`, `testRepairSection`, `codeRepairSection`, `diagnosticFiles`, `routeTypecheckByFile` and `worktreeScopeFingerprint`
+    - **proven by —** `packages/orchestrator/src/repair.test.ts`, and `packages/orchestrator/src/repair.set-aside.test.ts` against a real git repository for the fingerprint (session-authored; no signed verdict)

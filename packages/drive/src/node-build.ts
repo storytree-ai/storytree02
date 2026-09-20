@@ -1335,6 +1335,24 @@ export function renderEscalation(unitId: string, runId: string, result: ProveRes
 }
 
 /**
+ * ADR-0582 D8: every in-build repair the walk made, in order — one line each naming where the check
+ * failed, which check it was, which worker it went back to, and what failed — under a header saying how
+ * many there were and that none of them was an attempt (ADR-0581 D4). `[]` when the walk made none, so
+ * an envelope without repairs reads exactly as it always has. A pure reader of `ProveResult.repairs`.
+ */
+export function renderRepairs(result: Pick<ProveResult, "repairs">): string[] {
+  const repairs = result.repairs ?? [];
+  if (repairs.length === 0) return [];
+  return [
+    `repairs:     ${repairs.length} in-build repair(s) — each failed check went back to the worker who could fix it; a repair is not an attempt (ADR-0581 D4)`,
+    ...repairs.map(
+      (r, i) =>
+        `  ${i + 1}. ${r.failedAt} ${r.check} → ${r.to === "AUTHOR_TEST" ? "test-writer" : "code-writer"}: ${r.detail}`,
+    ),
+  ];
+}
+
+/**
  * `[]` for an undefined revision, or one exact line naming the prior run id, the raising phase and
  * the test id (ADR-0571 D3/D6): this build is a test revision — one D4 attempt, kind `revised-test`.
  * A pure reader of the {@link TestRevision} the revision read already resolved; it never itself reads
@@ -1781,7 +1799,19 @@ export async function buildNodeReal(args: RealBuildArgs): Promise<RealBuildResul
   // WRITE lives here in the drive (the same place the `building` mark above is written). Advisory.
   const phaseTarget: PhaseActivityTarget = { unitId: spec.id, runId, signer };
   if (spec.tier !== undefined) phaseTarget.tier = spec.tier;
-  resolved.spec.onPhase = withPhaseReport(phaseActivityWriter(store, phaseTarget), args.onPhase);
+  // What the package typecheck said at the LAST GATE the walk reached (below) — cleared as each GATE
+  // begins. The in-build repair loop (ADR-0582) can visit GATE more than once, and a red that a later
+  // visit re-observed must never outlive it; the walk's own ending decides the rest after it returns.
+  let typecheck: "green" | "red" | undefined;
+  let backstopRefusal: BackstopPreservationRefusal | undefined;
+  const reportPhase = withPhaseReport(phaseActivityWriter(store, phaseTarget), args.onPhase);
+  resolved.spec.onPhase = (phase) => {
+    if (phase === "GATE") {
+      typecheck = undefined;
+      backstopRefusal = undefined;
+    }
+    return reportPhase(phase);
+  };
   // `sign-after-typecheck` (ADR-0315): the package TYPECHECK runs AHEAD of the signature. It is
   // injected as the gate's `backstop` seam (run inside GATE, after the clean-tree + signer refusals,
   // before the signing append), so a red package typecheck refuses the VERDICT rather than only
@@ -1799,8 +1829,6 @@ export async function buildNodeReal(args: RealBuildArgs): Promise<RealBuildResul
   // The package's regression SUITE is deliberately NOT run here (ADR-0580 D2). The landing
   // `pnpm gate` and CI run every affected package's full test leg on every PR, and automerge requires
   // it; the accepted cost is a signed pass over a package whose suite is red, visible until CI.
-  let typecheck: "green" | "red" | undefined;
-  let backstopRefusal: BackstopPreservationRefusal | undefined;
   const typecheckCommand = realConfig.install === true ? realConfig.typecheck : undefined;
   if (typecheckCommand !== undefined) {
     resolved.spec.backstop = async (): Promise<BackstopOutcome> => {
@@ -1818,7 +1846,9 @@ export async function buildNodeReal(args: RealBuildArgs): Promise<RealBuildResul
           observation: refusal.observation,
           authoredCommitSha,
         };
-        return { ok: refusal.ok, reason: refusal.reason };
+        // The raw output rides along so the gate can hand the red to whoever owns the files it names
+        // (ADR-0582 D3); the reason stays the bounded, rendered one the envelope prints.
+        return { ok: refusal.ok, reason: refusal.reason, output: observed.originalProcessResult };
       }
       return { ok: true };
     };
@@ -1850,6 +1880,12 @@ export async function buildNodeReal(args: RealBuildArgs): Promise<RealBuildResul
   }
   // A build run never writes session presence (ADR-0199) — work-events + the claim only.
   const result = await proveUnit(resolved.spec);
+  // A red typecheck the walk was repaired past is not why it ended: a walk that ended anywhere but GATE
+  // reports no typecheck and preserves no refused commit (ADR-0582 D5).
+  if (!result.ok && result.failedAt !== "GATE") {
+    typecheck = undefined;
+    backstopRefusal = undefined;
+  }
   // ADR-0576 D5: one signed pass appended after a signed result — advisory in the sense that a throw
   // here never overturns the verdict (it is already signed), but never swallowed either: reported on
   // `innerLoop.signedPass` so an unrecordable pass is visible rather than silently lost.
@@ -2602,6 +2638,7 @@ export async function nodeBuild(
           ...promotionLines,
           `verdict:     NONE — failed closed at ${result.failedAt}: ${result.reason}`,
           ...renderEscalation(spec.id, runId, result),
+          ...renderRepairs(result),
           ...renderRevisionRecord(spec.id, runId, runtime, revisionWrite, incrementId),
           ...outcome.lines,
           ...renderFailedConfirmObservation(spec.id, runId, result.failedObservation),
@@ -2620,6 +2657,7 @@ export async function nodeBuild(
         ...header,
         `verdict:     ${verdictLine(result.verdict)}`,
         ...renderEscalation(spec.id, runId, result),
+        ...renderRepairs(result),
         `evidence:    ${result.verdict.evidence.map((e) => e.kind).join(", ")}`,
         ...promotionLines,
         ...outcome.lines,

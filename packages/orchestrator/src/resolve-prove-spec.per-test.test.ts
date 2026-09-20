@@ -14,6 +14,7 @@ import { perTestReporterUrl } from "./proof/per-test-report.js";
 import { classifyProofRoute, perTestChannelOf, withPerTestReport } from "./proof/proof-route.js";
 import type { RealProofConfig } from "./proof-config.js";
 import { proveUnit } from "./prove-it-gate.js";
+import type { RepairDecision } from "./repair.js";
 import { realPrompts, realProofCommand, resolveProveSpec } from "./resolve-prove-spec.js";
 
 // The arming half of ADR-0573: which real proof routes carry a per-test channel (D2/D3), how the channel
@@ -270,6 +271,14 @@ async function armedWalk(testSource: string, implementation: string, specText = 
         IMPLEMENT: [SOURCE_FILE, implementation],
       }),
       treeState: async () => ({ commitSha: "armed-walk", clean: true }),
+      // This walk exists to observe the REVIEW's own verdict, and its author writes the same bytes
+      // every slice — so a repair could only hand back what the spine just refused (ADR-0582 D5/D6).
+      // The synthetic workspace is no git repository either, so the wrote-nothing ending cannot see
+      // that for itself: granting no repair is what keeps this walk one pass over the review.
+      repairBudget: {
+        mayRepair: (): Promise<RepairDecision> =>
+          Promise.resolve({ ok: false, reason: "this offline review walk grants no in-build repair" }),
+      },
     });
     if (!resolved.ok) throw new Error(resolved.reason);
     return { resolved: resolved.spec, result: await proveUnit(resolved.spec) };

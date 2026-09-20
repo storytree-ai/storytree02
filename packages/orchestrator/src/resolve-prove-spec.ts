@@ -62,6 +62,13 @@ import {
 import type { NodeBuildConfig, RealProofConfig } from "./proof-config.js";
 import { commitAuthored, platformShellCommand } from "./build-worktree.js";
 import type { CommitScope } from "./build-worktree.js";
+import {
+  routeTypecheckByFile,
+  setAsideImplementation,
+  wallClockBudget,
+  worktreeScopeFingerprint,
+} from "./repair.js";
+import type { RepairBudget } from "./repair.js";
 
 /**
  * The resolver (drive-machinery Phase B, plan §2): turn a loaded {@link NodeSpec} into the full
@@ -355,6 +362,13 @@ export interface RealResolveOptions extends BaseResolveOptions {
    * every other prompt are untouched.
    */
   testRevision?: TestRevision | undefined;
+  /**
+   * ADR-0582 D6: the build's budget the in-build repair loop asks before every repair. Defaults to a
+   * {@link wallClockBudget} of {@link DEFAULT_BUILD_BUDGET_MS} started at resolution, which is
+   * immediately before the walk. The seam `workers-have-what-they-need-arc-inc-01`'s per-build budget,
+   * and the orchestrator's peek-and-extend behind it, arrive through — so a build has ONE budget.
+   */
+  repairBudget?: RepairBudget | undefined;
 }
 
 /**
@@ -874,6 +888,15 @@ function resolveReal(
   if ((real.addDeps ?? []).length > 0) {
     commitScope.spineOutputGlobs = ["pnpm-lock.yaml", "**/package.json"];
   }
+  // The commit the walk began from, read ONCE — before the spine's first scoped commit can move HEAD.
+  // Two readers need that one commit, not whatever HEAD happens to be: the proved-span binding below
+  // (ADR-0534), which must diff the WHOLE build even when the spine commits more than once, and the
+  // in-build repair loop's set-aside (ADR-0582 D4), which puts the implementation back to it.
+  let walkBase: string | undefined;
+  const baseOfWalk = async (): Promise<string> => {
+    walkBase ??= (await gitTreeState(opts.workspace)()).commitSha;
+    return walkBase;
+  };
   // ADR-0534: what the scoped commit CHANGED, captured here because this closure is the one place
   // the spine holds both ends of the diff — the base it cut from and the commit it just made. The
   // gate's binding thunk (below) reads it AFTER this has run; an injected treeState (offline tests)
@@ -882,18 +905,27 @@ function resolveReal(
   const treeState =
     opts.treeState ??
     (async (): Promise<TreeState> => {
-      const base = await gitTreeState(opts.workspace)();
+      const baseSha = await baseOfWalk();
       const commit = await commitAuthored({
         worktreeRoot: opts.workspace,
         message: `storytree real build ${opts.runId}: ${spec.id} (authored by the gated leaf)`,
         author: commitAuthor,
         scope: commitScope,
       });
+      // This seam runs on every GATE visit, and a caller may read it again (the drive's backstop does,
+      // to capture the authored HEAD). Each read keeps the walk's base and ADDS what its commit staged,
+      // so a second commit after an in-build repair, or a read that commits nothing, never narrows the
+      // binding to one commit's diff — or to an empty one (ADR-0582 Consequences).
       proved = {
-        baseSha: base.commitSha,
+        baseSha,
         headSha: commit.commitSha,
         // The IMPLEMENT fence is the source/test split itself: source-shaped and never a test path.
-        files: commit.staged.filter((p) => scope.isWriteAllowed("IMPLEMENT", p)),
+        files: [
+          ...new Set([
+            ...(proved?.files ?? []),
+            ...commit.staged.filter((p) => scope.isWriteAllowed("IMPLEMENT", p)),
+          ]),
+        ],
       };
       if (commit.outOfScope.length > 0) {
         // Surfaced, not swept: the gate's clean-tree read is about to refuse over exactly these,
@@ -950,6 +982,28 @@ function resolveReal(
     proveSpec.binding = async () =>
       proved === undefined ? undefined : await computeProvedBinding({ workspace: opts.workspace, ...proved });
   }
+  // ADR-0581 D4 / ADR-0582: every REAL build repairs a failed check inside the build. The write scope
+  // answers both questions the loop asks of a path — whose file it is (the typecheck router) and what
+  // the implementation is (the set-aside) — so the loop routes by exactly the walls the workers wrote
+  // under.
+  proveSpec.repair = {
+    budget: opts.repairBudget ?? wallClockBudget(),
+    setAsideImplementation: async () => {
+      const aside = await setAsideImplementation({
+        worktreeRoot: opts.workspace,
+        baseSha: await baseOfWalk(),
+        isImplementationPath: (p) => scope.isWriteAllowed("IMPLEMENT", p),
+      });
+      return () => aside.restore();
+    },
+    routeTypecheck: (output) =>
+      routeTypecheckByFile(output, {
+        isTestPath: (p) => scope.isWriteAllowed("AUTHOR_TEST", p),
+        anchors: [real.testFile, real.sourceFile],
+        worktreeRoot: opts.workspace,
+      }),
+    scopeFingerprint: () => worktreeScopeFingerprint({ worktreeRoot: opts.workspace }),
+  };
   return liveAuthor !== undefined
     ? { ok: true, spec: proveSpec, liveAuthor }
     : { ok: true, spec: proveSpec };
@@ -1322,6 +1376,17 @@ function testRevisionSection(revision: TestRevision): string {
 }
 
 /**
+ * How every REAL IMPLEMENT brief tells the code-writer to object (ADR-0582 D7): through the `escalate`
+ * tool, which both runtimes carry on every real build (ADR-0569 D6, ADR-0570 D7). An objection written
+ * only in prose creates no escalation record, so the spine reads it as a failed implementation; an
+ * escalation reaches the test-writer in the same build (ADR-0581 D4).
+ */
+const IMPLEMENT_OBJECTION =
+  "If you conclude the test itself is wrong — or that your change legitimately needs an EXISTING test " +
+  "updated — do not work around it: raise it with the `escalate` tool, quoting the assertion, and the " +
+  "spine hands it to the test-writer in this same build. An objection written only in prose is not recorded.";
+
+/**
  * The REAL-mode briefs: the node's identity/outcome/guidance plus the repo + worktree facts the
  * leaf needs to author the REAL files — exact paths, the proof command the spine runs, and the
  * iteration-one no-node_modules constraint (builtins + relative imports only).
@@ -1520,8 +1585,7 @@ export function realPrompts(
         `WITHOUT changing what the code does (writes to the test file are refused in this phase). The ` +
         `green is the WHOLE PACKAGE SUITE: your new test must pass AND every existing test must still ` +
         `pass — a regression reds the suite and the spine refuses the green. ` +
-        `${greenClose("edit", "the suite")} If you conclude the test itself is ` +
-        `wrong, stop and say so plainly instead of working around it.`,
+        `${greenClose("edit", "the suite")} ${IMPLEMENT_OBJECTION}`,
     };
   }
   if (editsExisting) {
@@ -1546,8 +1610,8 @@ export function realPrompts(
           `contract only if it is NEW — its full title, enclosing \`describe\` included, is not already in the ` +
           `file — and names that contract's id, so rewriting the body of an existing test does not count. The ` +
           `spine refuses the whole red if any contract in the cluster is left without a new test that asserts ` +
-          `something substantive (ADR-0573 C7): if one cannot be tested against the current source, stop and say ` +
-          `so plainly rather than dropping it. The unit's other declared contracts are not this build's work. ` +
+          `something substantive (ADR-0573 C7): if one cannot be tested against the current source, raise it ` +
+          `with the \`escalate\` tool rather than dropping it. The unit's other declared contracts are not this build's work. ` +
           `After writing them, use \`run_proof\` to confirm each new test fails on its own for the RIGHT reason — ` +
           `a behaviour-assertion failure, not a syntax error and not a "module not found". The spine observes the ` +
           `official red itself. When the test file is written and checked, stop.${perTestClause}${revisionBlock}`,
@@ -1556,8 +1620,7 @@ export function realPrompts(
           `Implement against the whole cluster together, not one test at a time (you may write more than one of ` +
           `the named source files; writes to the test file are refused). The spine observes every test in ` +
           `\`${real.testFile}\` on its own at green, so a single test left red refuses the whole green. ` +
-          `${greenClose("edit", "every test in the cluster")} If you conclude a test of the cluster is wrong, ` +
-          `stop and say so plainly instead of working around it.`,
+          `${greenClose("edit", "every test in the cluster")} ${IMPLEMENT_OBJECTION}`,
       };
     }
     return {
@@ -1569,8 +1632,7 @@ export function realPrompts(
       implement:
         `${implementLead}that test passes (you may write ` +
         `more than one of the named source files; writes to the test file are refused). ` +
-        `${greenClose("edit", "the proof")} If you conclude the test itself ` +
-        `is wrong, stop and say so plainly instead of working around it.`,
+        `${greenClose("edit", "the proof")} ${IMPLEMENT_OBJECTION}`,
     };
   }
   return {
@@ -1584,8 +1646,7 @@ export function realPrompts(
     implement:
       `${header}\n\n${conventions}${contractsImplement}${guidance}${walkthroughImplement}\n\nPhase IMPLEMENT — read ${testsNamed}, ` +
       `then write ONLY ${sourcesNamed} so that test passes. Writes to the test file are ` +
-      `refused in this phase. ${greenClose("write", "the proof")} If you conclude the test itself ` +
-      `is wrong, stop and say so plainly instead of working around it.`,
+      `refused in this phase. ${greenClose("write", "the proof")} ${IMPLEMENT_OBJECTION}`,
   };
 }
 
