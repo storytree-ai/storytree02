@@ -35,6 +35,8 @@ import type {
 } from "./codex-feedback-endpoint.js";
 import { linkReplicaDependencies } from "./codex-replica-links.js";
 import type { SdkFeedbackRun } from "./sdk-author.js";
+import { armSpawnBounds } from "./codex-spawn-bounds.js";
+import type { SpawnBoundsArgs } from "./codex-spawn-bounds.js";
 import { scrubShellWorkerEnv } from "./worker-env.js";
 import { budgetIsSpent, budgetMinutes, budgetSpentError } from "./worker-budget.js";
 import type { WorkerTimeBudget } from "./worker-budget.js";
@@ -763,104 +765,56 @@ export async function runPinnedCodexCli(
     const stderr: Buffer[] = [];
     let timedOut = false;
     let stoppedBy: "bound" | "silence" | undefined;
-    let settled = false;
-    const now = (): number => clock.now?.() ?? Date.now();
-    // The bound. Released in `settle`, on `exit` or on `error`, so it never outlives the child it
-    // bounds and needs no `unref`. While `armedTimer` is defined the bound is live; suspending it
-    // (see `command.bound` below) releases it and remembers the remaining time, so only the leaf's
-    // own time — never time spent while the spine runs a feedback command — counts against it.
+    // Both clocks, armed as one unit and released in `settle` (below), on `exit` or on `error`, so
+    // neither outlives the child it bounded and neither needs `unref`. Which one a feedback run pauses,
+    // and why, is `armSpawnBounds`' own doc.
     //
-    // It signals the WRAPPER, not the native binary that stopped answering, and still reaches that
-    // binary on both platforms (measured on codex-cli 0.145.0, inner-loop-exit-arc inc-07). On POSIX
-    // the wrapper forwards SIGTERM and exits only once its native child has — pinned by the "reaches
-    // the native binary" test — and the native binary installs no SIGTERM handler: held mid-request on
-    // an endpoint that never answered, it was gone within about 20 ms of this signal. On Windows
-    // this is TerminateProcess on the wrapper alone, but the wrapper's own libuv holds its child
-    // in a kill-on-close job object, so the native binary ends with it. SIGKILL alone would
+    // The kill signals the WRAPPER, not the native binary that stopped answering, and still reaches
+    // that binary on both platforms (measured on codex-cli 0.145.0, inner-loop-exit-arc inc-07). On
+    // POSIX the wrapper forwards SIGTERM and exits only once its native child has — pinned by the
+    // "reaches the native binary" test — and the native binary installs no SIGTERM handler: held
+    // mid-request on an endpoint that never answered, it was gone within about 20 ms of this signal. On
+    // Windows this is TerminateProcess on the wrapper alone, but the wrapper's own libuv holds its
+    // child in a kill-on-close job object, so the native binary ends with it. SIGKILL alone would
     // ORPHAN the native binary on POSIX, because a SIGKILL cannot be forwarded.
-    let armedTimer: ReturnType<typeof setTimeout> | undefined;
-    let armedAt = 0;
-    let remainingMs = resolveCodexTimeoutMs(command);
-    const arm = (ms: number): void => {
-      armedAt = now();
-      remainingMs = ms;
-      armedTimer = clock.setTimeout(() => {
-        timedOut = true;
-        stoppedBy = "bound";
-        child.kill();
-      }, ms);
-    };
-    arm(remainingMs);
-    // The silence detector (ADR-0581 D2): armed only when the caller asks for one, re-armed by every
-    // chunk below, and killed by the same signal path as the bound. It exists to catch a child that
-    // has stopped saying anything at all, which is the one thing a wall-clock budget cannot see until
-    // the whole budget is gone.
-    const silenceMs = command.silenceMs;
-    let silenceTimer: ReturnType<typeof setTimeout> | undefined;
-    const armSilence = (): void => {
-      if (silenceMs === undefined || settled) return;
-      silenceTimer = clock.setTimeout(() => {
-        timedOut = true;
-        stoppedBy = "silence";
-        child.kill();
-      }, silenceMs);
-    };
-    const heard = (): void => {
-      if (silenceTimer !== undefined) {
-        clock.clearTimeout(silenceTimer);
-        silenceTimer = undefined;
-      }
-      armSilence();
-    };
-    armSilence();
+    const boundsArgs: SpawnBoundsArgs =
+      command.silenceMs === undefined
+        ? {
+            clock,
+            boundMs: resolveCodexTimeoutMs(command),
+            stop: (reason) => {
+              timedOut = true;
+              stoppedBy = reason;
+              child.kill();
+            },
+          }
+        : {
+            clock,
+            boundMs: resolveCodexTimeoutMs(command),
+            silenceMs: command.silenceMs,
+            stop: (reason) => {
+              timedOut = true;
+              stoppedBy = reason;
+              child.kill();
+            },
+          };
+    const bounds = armSpawnBounds(boundsArgs);
     if (command.bound !== undefined) {
-      // Whichever clock must not count spine-side feedback time: the silence detector when one is
-      // armed (a proof run produces no child output by design), else the wall-clock bound, which is
-      // the pre-budget behaviour a caller with no silence detector still relies on.
-      command.bound.suspend = () => {
-        if (settled) return;
-        if (silenceMs !== undefined) {
-          if (silenceTimer === undefined) return;
-          clock.clearTimeout(silenceTimer);
-          silenceTimer = undefined;
-          return;
-        }
-        if (armedTimer === undefined) return;
-        remainingMs = Math.max(0, remainingMs - (now() - armedAt));
-        clock.clearTimeout(armedTimer);
-        armedTimer = undefined;
-      };
-      command.bound.resume = () => {
-        if (settled) return;
-        if (silenceMs !== undefined) {
-          if (silenceTimer !== undefined) return;
-          armSilence();
-          return;
-        }
-        if (armedTimer !== undefined) return;
-        arm(remainingMs);
-      };
+      command.bound.suspend = () => bounds.suspend();
+      command.bound.resume = () => bounds.resume();
     }
     const settle = (fn: () => void): void => {
-      settled = true;
-      if (armedTimer !== undefined) {
-        clock.clearTimeout(armedTimer);
-        armedTimer = undefined;
-      }
-      if (silenceTimer !== undefined) {
-        clock.clearTimeout(silenceTimer);
-        silenceTimer = undefined;
-      }
+      bounds.settle();
       fn();
     };
     child.once("error", (error) => settle(() => reject(error)));
     child.stdout.on("data", (chunk: Buffer) => {
       stdout.push(chunk);
-      heard();
+      bounds.heard();
     });
     child.stderr.on("data", (chunk: Buffer) => {
       stderr.push(chunk);
-      heard();
+      bounds.heard();
     });
     child.once("exit", (code, signal) => {
       settle(() => {

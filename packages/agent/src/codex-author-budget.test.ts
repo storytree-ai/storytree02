@@ -4,9 +4,10 @@
  * - the AUTHOR, through an injected runner: the slice a spent budget refuses, what the exec command
  *   carries once a budget is wired, and what a stop keeps — the run record, the scope fence, and the
  *   in-scope work it promotes instead of throwing away;
- * - the RUNNER's silence detector, through real spawns on a hand-driven clock: a child that says
- *   nothing is killed as a hang, a child that keeps talking is not, and a feedback run's own silence
- *   does not count.
+ * - the RUNNER's wiring, through two real spawns on a hand-driven clock: a child that says nothing is
+ *   killed as a hang and the reason reaches the result, and output re-arms the detector so a child
+ *   that keeps talking settles on its own. WHICH clock fires, what a suspend pauses and what a resume
+ *   gives back are `codex-spawn-bounds.test.ts`'s, driven purely — no child, no real time.
  */
 
 import assert from "node:assert/strict";
@@ -22,7 +23,6 @@ import {
 } from "./codex-author.js";
 import type {
   CodexBoundClock,
-  CodexBoundControl,
   CodexCommand,
   CodexCommandResult,
   CodexRunner,
@@ -206,6 +206,42 @@ test("budget-stops-a-worker: a stopped budgeted phase PROMOTES its observed in-s
   });
 });
 
+test("budget-stops-a-worker: a stop whose promotion fails says which, and leaves the workspace as it was", async () => {
+  await withWorkspace(async (root) => {
+    const commands: CodexCommand[] = [];
+    const author = new CodexPhaseAuthor({
+      cwd: root,
+      writeGlobs: WRITE_GLOBS,
+      promotionManifests: PROMOTION_MANIFESTS,
+      isWriteAllowed: () => true,
+      timeBudget: budget(60_000),
+      runner: stoppedRunner(
+        { "packages/widget/src/widget.ts": "widget half-written\n" },
+        "bound",
+        commands,
+      ),
+      promotionFaults: {
+        afterApply: () => {
+          throw new Error("disk went away");
+        },
+      },
+    });
+
+    const result = await author.author("IMPLEMENT", "Implement the widget.");
+    assert.equal(result.ok, false);
+    assert.equal(result.ok ? undefined : result.exhausted, true, "still exhaustion, not a crash");
+    assert.match(
+      result.ok ? "" : result.error,
+      /is spent at IMPLEMENT; the observed changes could not be promoted: disk went away/,
+    );
+    assert.equal(
+      await fs.readFile(path.join(root, "packages/widget/src/widget.ts"), "utf8"),
+      "widget before\n",
+      "a failed promotion rolls back, so the workspace is untouched",
+    );
+  });
+});
+
 test("budget-stops-a-worker: a stop that wrote nothing says so, and promotes nothing", async () => {
   await withWorkspace(async (root) => {
     const commands: CodexCommand[] = [];
@@ -369,19 +405,6 @@ test("silence-detector: a child that says nothing is killed as a silent hang, na
   assert.equal(result.stoppedBy, "silence");
 });
 
-test("silence-detector: the wall-clock bound firing is reported as the bound, never as silence", async () => {
-  const hand = handClock();
-  const pending = within(
-    runPinnedCodexCli(quietChild(60_000, { timeoutMs: 3_600_000, silenceMs: 600_000 }), hand.clock),
-  );
-  // The bound is armed FIRST, the silence detector second; firing index 0 is the budget running out.
-  assert.deepEqual(hand.armings, [3_600_000, 600_000]);
-  hand.fire(0);
-  const result = await pending;
-  assert.equal(result.timedOut, true);
-  assert.equal(result.stoppedBy, "bound", "a spent bound is never reported as a hang");
-});
-
 test("silence-detector: output RE-ARMS it, so a slow child that keeps talking is never killed for silence", async () => {
   const hand = handClock();
   const chatty: CodexCommand = {
@@ -402,29 +425,4 @@ test("silence-detector: output RE-ARMS it, so a slow child that keeps talking is
     hand.armings.length >= 2,
     `expected the detector to be re-armed by output, saw ${hand.armings.length} arming(s)`,
   );
-});
-
-test("silence-detector: a feedback run's own silence does not count — suspend pauses the detector, not the budget", async () => {
-  const hand = handClock();
-  const control: CodexBoundControl = {};
-  const pending = within(
-    runPinnedCodexCli(
-      quietChild(300, { timeoutMs: 3_600_000, silenceMs: 600_000, bound: control }),
-      hand.clock,
-    ),
-  );
-  assert.ok(control.suspend !== undefined && control.resume !== undefined);
-  const armedBefore = hand.armings.length;
-  control.suspend?.();
-  control.resume?.();
-  assert.equal(
-    hand.armings.length,
-    armedBefore + 1,
-    "resume re-arms the silence detector for its whole window",
-  );
-  // The wall-clock bound was never re-armed, because wall clock is wall clock: its first arming stands.
-  assert.equal(hand.armings[0], 3_600_000);
-  const result = await pending;
-  assert.equal(result.code, 0);
-  assert.equal(result.timedOut, undefined);
 });
