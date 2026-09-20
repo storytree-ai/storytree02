@@ -2930,7 +2930,7 @@ export function nodeHelp(storiesDir: string = defaultStoriesDir()): Envelope {
       `      Codex multi-file promotion smoke: node build ${CODEX_MULTIFILE_RUNTIME_SEAM_ID}`,
       "      --live --runtime codex --actor <email> (built-in disposable fixture; never --real).",
       "",
-      "  storytree node build <id> --real --increment <id> [--runtime claude|codex] [--model <id>] [--budget <usd>] [--time-budget <minutes>] [--actor <email>]",
+      "  storytree node build <id> --real --increment <id> [--runtime claude|codex] [--model <id>] [--budget <usd>] [--max-turns <n>] [--time-budget <minutes>] [--actor <email>]",
       "      Phase F — the REAL build: a fresh git worktree of this repo, the leaf authors the",
       "      node's REAL test/impl at their real paths, the spine runs the node's REAL proof",
       "      command for red/green, commits the authored files, and the GATE reads genuine git",

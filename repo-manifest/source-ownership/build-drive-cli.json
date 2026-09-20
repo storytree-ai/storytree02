@@ -9,7 +9,8 @@
       "packages/drive/src/inner-loop-entry.ts": "build-drive-cli",
       "packages/drive/src/node-build-codex-feedback.test.ts": "build-drive-cli",
       "packages/drive/src/node-build.ts": "build-drive-cli",
-      "packages/drive/src/stale-existence-claim.ts": "build-drive-cli"
+      "packages/drive/src/stale-existence-claim.ts": "build-drive-cli",
+      "packages/drive/src/time-budget.ts": "build-drive-cli"
     }
   }
 }

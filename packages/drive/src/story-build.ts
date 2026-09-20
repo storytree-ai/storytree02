@@ -1659,7 +1659,7 @@ export function storyHelp(): Envelope {
       "      but the TASK per node is still synthetic. Codex defaults to gpt-5.6-terra and requires",
       "      saved ChatGPT-managed auth; --budget is an optional Claude-only total ceiling.",
       "",
-      "  storytree story build <story-id> --real --increment <id> [--runtime claude|codex] [--budget <usd>] [--model <id>] [--time-budget <minutes>] [--actor <email>]",
+      "  storytree story build <story-id> --real --increment <id> [--runtime claude|codex] [--budget <usd>] [--model <id>] [--max-turns <n>] [--time-budget <minutes>] [--actor <email>]",
       "      ADR-0057 §3 expansion D — chain node build --real over the WHOLE story: each node",
       "      authored for real in ONE shared worktree in dependency order (a later node builds on",
       "      earlier nodes' committed source), signed, the proven chain promoted ONCE at the stacked",

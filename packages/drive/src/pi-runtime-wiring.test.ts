@@ -128,7 +128,7 @@ test("the node and story help put --increment on the paid --real form, say it is
   const node = nodeHelp().body.split("\n");
   assert.ok(
     node.includes(
-      "  storytree node build <id> --real --increment <id> [--runtime claude|codex] [--model <id>] [--budget <usd>] [--max-turns <n>] [--actor <email>]",
+      "  storytree node build <id> --real --increment <id> [--runtime claude|codex] [--model <id>] [--budget <usd>] [--max-turns <n>] [--time-budget <minutes>] [--actor <email>]",
     ),
     nodeHelp().body,
   );
@@ -149,7 +149,7 @@ test("the node and story help put --increment on the paid --real form, say it is
   const story = storyHelp().body.split("\n");
   assert.ok(
     story.includes(
-      "  storytree story build <story-id> --real --increment <id> [--runtime claude|codex] [--budget <usd>] [--model <id>] [--max-turns <n>] [--actor <email>]",
+      "  storytree story build <story-id> --real --increment <id> [--runtime claude|codex] [--budget <usd>] [--model <id>] [--max-turns <n>] [--time-budget <minutes>] [--actor <email>]",
     ),
     storyHelp().body,
   );

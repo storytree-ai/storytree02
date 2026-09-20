@@ -371,7 +371,12 @@ export function routeTypecheckByFile(output: ProcessOutput, routing: TypecheckRo
 /** Run git in `cwd`, resolving its raw stdout; rejects on a non-zero exit. Injectable for tests. */
 export type GitRunner = (args: readonly string[], cwd: string) => Promise<Buffer>;
 
-const runGitBuffer: GitRunner = (args, cwd) =>
+/**
+ * The REAL git runner the set-aside falls through to when no fake is injected — the one that runs in
+ * production. Exported so a test can name and drive it: with it unexported, every set-aside test was
+ * evidence about a fake, and this implementation was reached by nothing (`unproven-seam-default`).
+ */
+export const runGitBuffer: GitRunner = (args, cwd) =>
   new Promise<Buffer>((resolve, reject) => {
     execFile(
       "git",
