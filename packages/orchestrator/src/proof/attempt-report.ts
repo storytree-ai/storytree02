@@ -41,17 +41,15 @@ export interface StoredAttemptRecord extends ObservedAttempt {
   readonly runId: string;
 }
 
-/** An {@link ObservedAttempt} part-built: the same contract, assembled a field at a time. */
-type ObservedAttemptDraft = { -readonly [K in keyof ObservedAttempt]: ObservedAttempt[K] };
-
 /**
  * Assemble an {@link ObservedAttempt}, leaving out every optional the caller has nothing for rather
  * than setting it to `undefined` — which under `exactOptionalPropertyTypes` are different objects, and
- * which JSON serialisation renders differently again.
+ * which JSON renders differently again.
  *
  * It exists so the three places that build one — the failed build that writes it, the parser that
  * reads it back, and the resolver that hands it to a brief — cannot disagree about which fields a
- * record with nothing to say carries.
+ * record with nothing to say carries. Built as `docs/typescript-standard.md` prescribes for required
+ * fields plus conditional optionals: unconditional spreads over a base, each chosen by a ternary.
  */
 export function observedAttempt(input: {
   failedAt: string;
@@ -59,13 +57,11 @@ export function observedAttempt(input: {
   reason?: string | undefined;
   observation?: AttemptObservation | undefined;
 }): ObservedAttempt {
-  const draft: ObservedAttemptDraft = {
-    failedAt: input.failedAt,
-    escalationReturned: input.escalationReturned,
-  };
-  if (input.reason !== undefined) draft.reason = input.reason;
-  if (input.observation !== undefined) draft.observation = input.observation;
-  return draft;
+  const base = { failedAt: input.failedAt, escalationReturned: input.escalationReturned };
+  const withReason = input.reason === undefined ? base : { ...base, reason: input.reason };
+  return input.observation === undefined
+    ? withReason
+    : { ...withReason, observation: input.observation };
 }
 
 /** The orchestrator's own recorded words about what will be different (ADR-0563 D4), as a brief reads them. */

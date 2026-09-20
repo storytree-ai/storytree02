@@ -3,6 +3,7 @@
     "subtrees": {
       "packages/cli/src/story-baseline*.ts": "work-verdict-event-log",
       "packages/cli/src/work-log*.ts": "work-verdict-event-log",
+      "packages/orchestrator/src/proof/attempt-report.ts": "work-verdict-event-log",
       "packages/orchestrator/src/proof/inner-loop-ledger.ts": "work-verdict-event-log",
       "packages/orchestrator/src/proof/proof-status.ts": "work-verdict-event-log",
       "packages/orchestrator/src/proof/rollup*.ts": "work-verdict-event-log",
