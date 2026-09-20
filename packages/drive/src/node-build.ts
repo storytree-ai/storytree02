@@ -17,9 +17,12 @@ import type { Store, StoreEvent } from "@storytree/storage-protocol";
 import { InMemoryStore } from "@storytree/storage-protocol";
 import {
   appendInnerLoopEvent,
+  attemptReportFromLedger,
   createBuildWorktree,
   findNodeSpecFile,
   foldInnerLoopLedger,
+  observedAttempt,
+  parseAttemptRecord,
   loadNodeSpec,
   mapProofMode,
   describeTestChanges,
@@ -38,6 +41,7 @@ import {
 } from "@storytree/orchestrator";
 import type {
   AddDepsGroup,
+  AttemptReport,
   BackstopOutcome,
   BuildWorktree,
   CreateBuildWorktreeOptions,
@@ -51,9 +55,10 @@ import type {
   RealProofConfig,
   RealResolveOptions,
   ResolveOptions,
+  StoredAttemptRecord,
   TestRevision,
 } from "@storytree/orchestrator";
-import type { LeafPhasePrompts } from "@storytree/orchestrator";
+import type { InnerLoopLedger, LeafPhasePrompts } from "@storytree/orchestrator";
 import {
   applySchema,
   assertTestDatabase,
@@ -1410,6 +1415,42 @@ export function renderRevisionRecord(
   ];
 }
 
+/**
+ * `[]` when this build carries no prior-attempt report (ADR-0586). ONE line, so an operator can see
+ * what the workers were told before any of their output scrolls past: which run failed, the increment
+ * it was filed under, and whether this machine could supply what the spine saw in it.
+ */
+export function renderPriorAttemptLine(report: AttemptReport | undefined): string[] {
+  if (report === undefined) return [];
+  const observed =
+    report.observed === undefined
+      ? "no local record of what the spine saw — the briefs carry the ledger facts alone"
+      : `stopped at ${report.observed.failedAt}`;
+  const grant =
+    report.grant === undefined ? "" : `, plus the recorded \`${report.grant.kind}\` difference`;
+  return [
+    `prior:       run ${report.runId} (increment ${report.incrementId}) FAILED — ${observed}${grant}; reported in BOTH briefs (ADR-0586)`,
+  ];
+}
+
+/**
+ * `[]` when there is no {@link AttemptWrite} (`attemptsDir` was never supplied, or this walk did not
+ * fail). A successful write names the path the NEXT build of this unit reads for ITSELF — and names no
+ * command, because unlike a revision record nothing has to be typed to consume it. An unwritten record
+ * names the path and the reason, so an operator knows the next build is back to the ledger alone.
+ */
+export function renderAttemptRecord(write: AttemptWrite | undefined): string[] {
+  if (write === undefined) return [];
+  if (write.written) {
+    return [
+      `attempt:     recorded to ${write.path} — the next build of this unit reads it (ADR-0586)`,
+    ];
+  }
+  return [
+    `attempt:     NOT recorded (${write.path}): ${write.reason} — the next build will read the ledger alone (ADR-0586 D7)`,
+  ];
+}
+
 // ── The paid-build entry (ADR-0576): the increment + attempt-ledger preflight before any spend ──
 
 /** The two injected read handles a paid build's before-spend preflight reads (ADR-0576 D1). */
@@ -1467,7 +1508,18 @@ export function liveInnerLoopReads(): InnerLoopReadHandles & { readonly close: (
 
 /** The outcome of {@link preflightPaidBuild}: the resolved increment + warnings, or a refused state. */
 export type PaidBuildPreflight =
-  | { readonly ok: true; readonly incrementId: string; readonly warnings: readonly string[] }
+  | {
+      readonly ok: true;
+      readonly incrementId: string;
+      readonly warnings: readonly string[];
+      /**
+       * ADR-0586 D5: the folded ledger for each unit the build will drive, carried out rather than
+       * discarded. The preflight has already read and folded the whole ledger to rule on the attempt
+       * policy, and the fold is the ONLY admitted way to choose which attempt a retry reports on — so
+       * handing it back costs a second read nothing and keeps the choice in one place.
+       */
+      readonly ledgers: ReadonlyMap<string, InnerLoopLedger>;
+    }
   | { readonly ok: false; readonly state: InnerLoopRefusedState };
 
 async function runPaidBuildPreflight(
@@ -1485,7 +1537,12 @@ async function runPaidBuildPreflight(
     revise,
   });
   if (!preflight.ok) return { ok: false, state: preflight.state };
-  return { ok: true, incrementId: resolvedIncrement.incrementId, warnings: preflight.warnings };
+  return {
+    ok: true,
+    incrementId: resolvedIncrement.incrementId,
+    warnings: preflight.warnings,
+    ledgers: preflight.ledgers,
+  };
 }
 
 /**
@@ -1690,6 +1747,19 @@ export interface RealBuildArgs {
    */
   escalationsDir?: string | undefined;
   /**
+   * ADR-0586 D3: when supplied, a FAILED walk records what the spine observed under this directory
+   * via {@link writeAttemptRecord}, and the write is reported on {@link RealBuildResult.attemptWrite}.
+   * Absent means nothing is recorded and the result carries no `attemptWrite` key at all.
+   */
+  attemptsDir?: string | undefined;
+  /**
+   * ADR-0586 D1/D4: the previous failed attempt's report, resolved by the caller and threaded into
+   * BOTH phase briefs. Assigned unconditionally onto `resolveOptions` (never behind a `!== undefined`
+   * guard) for the same reason {@link testRevision} is — the brief-carrying contract is proven on the
+   * resolver, and a guard here would be a mutant no test could kill.
+   */
+  attemptReport?: AttemptReport | undefined;
+  /**
    * ADR-0243 D1 — the accounting-only widening: a canned {@link LiveAuthor} reported as
    * `result.liveAuthor` alongside `authorOverride`'s scripted authoring, so an offline caller can
    * exercise the leaf-slices observer without a real live leaf ever authoring anything. Meaningless
@@ -1765,6 +1835,12 @@ export interface RealBuildResult {
    * Absent entirely (not merely `undefined`) when no directory was supplied.
    */
   revisionWrite?: RevisionWrite;
+  /**
+   * ADR-0586 D3/D7: present only when {@link RealBuildArgs.attemptsDir} was supplied AND this walk
+   * failed — the outcome of recording what the spine observed. Absent entirely (not merely
+   * `undefined`) otherwise, and never a reason the build fails.
+   */
+  attemptWrite?: AttemptWrite;
 }
 
 /**
@@ -1801,6 +1877,9 @@ export async function buildNodeReal(args: RealBuildArgs): Promise<RealBuildResul
   // ADR-0571 D4: unconditional — a guard here would be a mutant no test could kill, since assigning
   // `undefined` is harmless and the brief-threading contract is proven by `real-brief-carries-test-revision`.
   resolveOptions.testRevision = args.testRevision;
+  // ADR-0586 D4: unconditional, for the same reason — the both-briefs contract is proven on the
+  // resolver by `real-brief-carries-the-last-failed-attempt`, and assigning `undefined` is harmless.
+  resolveOptions.attemptReport = args.attemptReport;
   if (args.authorOverride !== undefined) resolveOptions.authorOverride = args.authorOverride;
   if (args.liveAuthorOverride !== undefined) {
     resolveOptions.liveAuthorOverride = args.liveAuthorOverride;
@@ -1979,6 +2058,11 @@ export async function buildNodeReal(args: RealBuildArgs): Promise<RealBuildResul
   // `out` only when a directory was supplied — never merely `undefined`.
   const revisionWrite = await writeRevisionRecord(args.escalationsDir, spec.id, runId, result);
   if (revisionWrite !== null) out.revisionWrite = revisionWrite;
+  // ADR-0586 D3: record what the spine observed on EVERY failed walk, not only an escalating one —
+  // the ordinary failure (a red CONFIRM_GREEN, a red typecheck, a failed gate) is exactly the case
+  // the revision record above never covers. Never throws and never changes the verdict (D7).
+  const attemptWrite = await writeAttemptRecord(args.attemptsDir, spec.id, runId, result);
+  if (attemptWrite !== null) out.attemptWrite = attemptWrite;
   if (!result.ok) return out;
   out.commitSha = result.verdict.commitSha;
 
@@ -2121,6 +2205,11 @@ export interface NodeBuildOpts {
    * default house per-user directory.
    */
   escalationsDir?: string | undefined;
+  /**
+   * Test seam for {@link resolveAttemptsDir} (ADR-0586 D2). Production omits it and gets the default
+   * house per-user directory.
+   */
+  attemptsDir?: string | undefined;
   /**
    * `--increment <id>` (ADR-0575 D1): the arc increment a paid attempt is filed under on the attempt
    * ledger. Valid only with `--real` — neither `--dry-run` nor `--live` records an attempt.
@@ -2386,6 +2475,10 @@ export async function nodeBuild(
   const revisionRead = await readTestRevision(escalationsDir, spec.id, opts.reviseTest);
   if (!revisionRead.ok) return { ok: false, body: revisionRead.reason, next: [] };
   const testRevision = revisionRead.revision;
+  // ADR-0586 D2: the sibling per-user family — an escalation record is a DIRECTIVE an explicit
+  // --revise-test re-run consumes, an attempt record is a REPORT the next build reads for itself.
+  const attemptsDir = resolveAttemptsDir(opts.attemptsDir);
+  let attemptReport: AttemptReport | undefined;
 
   // ADR-0051 §4: the live SDK leaf's per-phase system prompt IS the rendered Library agent
   // (red-builder → AUTHOR_TEST, green-builder → IMPLEMENT). Assemble it offline and fail-loud on a
@@ -2420,6 +2513,10 @@ export async function nodeBuild(
     if (!preflight.ok) return innerLoopRefusalEnvelope(preflight.state);
     incrementId = preflight.incrementId;
     incrementWarnings = preflight.warnings;
+    // ADR-0586: the predecessor's report, resolved from the fold the preflight just took plus this
+    // machine's own record of that run. Read here — before the prompt render, the claim and the
+    // worktree — because the briefs are rendered from it, and it can never refuse a build (D7).
+    attemptReport = resolveAttemptReport(attemptsDir, spec.id, preflight.ledgers.get(spec.id));
   }
 
   let phasePrompts: LeafPhasePrompts | undefined;
@@ -2525,6 +2622,7 @@ export async function nodeBuild(
     let promotion: PromotionResult | undefined;
     let innerLoop: InnerLoopRecording | undefined;
     let revisionWrite: RevisionWrite | undefined;
+    let attemptWrite: AttemptWrite | undefined;
     let promotionSkipped: string | undefined;
     let typecheck: "green" | "red" | undefined;
     let forensicPreservation: PromotionResult | undefined;
@@ -2572,6 +2670,8 @@ export async function nodeBuild(
         realArgs.timeBudgetMs = timeBudget.ms;
         realArgs.testRevision = testRevision;
         realArgs.escalationsDir = escalationsDir;
+        realArgs.attemptsDir = attemptsDir;
+        realArgs.attemptReport = attemptReport;
         realArgs.incrementId = incrementId;
         const built = await progress.stage(
           "gate (the leaf authors, the spine observes red -> green)",
@@ -2582,6 +2682,7 @@ export async function nodeBuild(
         promotion = built.promotion;
         innerLoop = built.innerLoop;
         revisionWrite = built.revisionWrite;
+        attemptWrite = built.attemptWrite;
         promotionSkipped = built.promotionSkipped;
         typecheck = built.typecheck;
         forensicPreservation = built.forensicPreservation;
@@ -2638,6 +2739,7 @@ export async function nodeBuild(
       `store:       ${storeChoice.label}`,
       ...(live || real ? [`runtime:     ${runtime}${opts.model !== undefined ? ` (${opts.model})` : ""}`] : []),
       ...renderRevisingLine(testRevision),
+      ...renderPriorAttemptLine(attemptReport),
       ...renderIncrementLines(incrementId, incrementWarnings),
       ...(real && worktree !== undefined && realConfig !== undefined
         ? [
@@ -2696,6 +2798,7 @@ export async function nodeBuild(
           ...renderRepairs(result),
           ...renderTestChanges(result),
           ...renderRevisionRecord(spec.id, runId, runtime, revisionWrite, incrementId),
+          ...renderAttemptRecord(attemptWrite),
           ...outcome.lines,
           ...renderFailedConfirmObservation(spec.id, runId, result.failedObservation),
           `rollup:      ${derived ?? "(no derived status)"} (authored status stands: ${spec.status})`,
@@ -3231,4 +3334,154 @@ export function readTestRevision(
     };
   }
   return { ok: true, revision: parsed.revision };
+}
+// ── Per-user ATTEMPT records (ADR-0586): what the spine observed in a failed REAL build, written ──
+// where the next build of the same unit reads it for ITSELF. A SIBLING family to the revision records
+// above — keyed identically, by unit and run — and deliberately not merged with them: an escalation
+// record is a DIRECTIVE an explicit `--revise-test` re-run consumes, an attempt record is a REPORT
+// read automatically, and it is written on EVERY failed real build rather than only an escalating one
+// (D3). The drive stores and reads a record here; the ledger decides which one, and the resolver
+// renders it.
+
+/** The house per-user directory a failed REAL build's observation is written under (ADR-0586 D2). */
+export function defaultAttemptsDir(): string {
+  return path.join(os.homedir(), ".storytree", "attempts");
+}
+
+/** `dir` untouched, or {@link defaultAttemptsDir} when `dir` is undefined. */
+export function resolveAttemptsDir(dir: string | undefined): string {
+  return dir ?? defaultAttemptsDir();
+}
+
+/** The on-disk path a unit/run's attempt record lives at: `<dir>/<unitId>/<runId>.json`. */
+export function attemptRecordPath(dir: string, unitId: string, runId: string): string {
+  return path.join(dir, unitId, `${runId}.json`);
+}
+
+/** The outcome of {@link writeAttemptRecord}: never throws, so a filesystem failure still resolves. */
+export type AttemptWrite =
+  | { written: true; path: string }
+  | { written: false; path: string; reason: string };
+
+/**
+ * What {@link writeAttemptRecord} reads off a result: every {@link ProveResult} satisfies it. Only a
+ * refusal carries a phase and a reason, so the source is a union rather than a bag of optional keys —
+ * which is what lets `result.ok` alone decide whether there is anything to record.
+ */
+type AttemptSource =
+  | { ok: true }
+  | {
+      ok: false;
+      failedAt: string;
+      reason: string;
+      escalation?: EscalationRecord | undefined;
+      failedObservation?: Extract<ProveResult, { ok: false }>["failedObservation"];
+    };
+
+/**
+ * Write what the spine observed in a FAILED real build to its per-user attempt record (ADR-0586
+ * D2/D3). Returns `null` — writing nothing, creating no directory — when `dir` is undefined or the
+ * walk PASSED: a signed attempt is not the state a report exists for (D5).
+ *
+ * An escalating failure stores NO reason, and that is ADR-0586 D6's fence rather than a filter applied
+ * later: the gate appends the escalation's kind and its statement VERBATIM to `ProveResult.reason`
+ * (ADR-0569 D4), so storing that string would put a worker's CLAIM into the next build's two briefs —
+ * the automatic escalation thread ADR-0571 D1 refused. What is stored is the single fact that one was
+ * returned, so nothing downstream is able to render the claim even by mistake.
+ *
+ * Never throws: a filesystem failure resolves to `{ written: false, path, reason }` (D7).
+ */
+export async function writeAttemptRecord(
+  dir: string | undefined,
+  unitId: string,
+  runId: string,
+  result: AttemptSource,
+): Promise<AttemptWrite | null> {
+  if (dir === undefined || result.ok) return null;
+  const filePath = attemptRecordPath(dir, unitId, runId);
+  const escalationReturned = result.escalation !== undefined;
+  const record: StoredAttemptRecord = {
+    unitId,
+    runId,
+    ...observedAttempt({
+      failedAt: result.failedAt,
+      escalationReturned,
+      // D6: the reason QUOTES the escalation, so an escalating failure records the fact, not the text.
+      reason: escalationReturned ? undefined : result.reason,
+      observation: result.failedObservation,
+    }),
+  };
+  try {
+    await fs.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.writeFile(filePath, JSON.stringify(record));
+    return { written: true, path: filePath };
+  } catch (e) {
+    return { written: false, path: filePath, reason: (e as Error).message };
+  }
+}
+
+/**
+ * Read a unit/run's attempt record back (ADR-0586 D7). A `runId` that is not a single path segment is
+ * refused before the filesystem is touched, which is what keeps this from ever naming an arbitrary
+ * file; every other refusal names the path or the mismatch it found. It never throws, and no refusal
+ * here ever fails a build — {@link resolveAttemptReport} drops the observed half and carries on.
+ */
+export function readAttemptRecord(
+  dir: string,
+  unitId: string,
+  runId: string,
+): { ok: true; record: StoredAttemptRecord } | { ok: false; reason: string } {
+  if (!isSinglePathSegment(runId)) {
+    return {
+      ok: false,
+      reason: `runId "${runId}" is not a single path segment — it must name one run, not a path`,
+    };
+  }
+  const filePath = attemptRecordPath(dir, unitId, runId);
+  if (!existsSync(filePath)) {
+    return { ok: false, reason: `no attempt record found at ${filePath}` };
+  }
+  let raw: string;
+  try {
+    // Decoded by Buffer#toString, which is UTF-8 — the same decoding an explicit "utf8" asks for.
+    raw = readFileSync(filePath).toString();
+  } catch (e) {
+    return {
+      ok: false,
+      reason: `could not read the attempt record at ${filePath}: ${(e as Error).message}`,
+    };
+  }
+  let parsedJson: unknown;
+  try {
+    parsedJson = JSON.parse(raw);
+  } catch (e) {
+    return {
+      ok: false,
+      reason: `the attempt record at ${filePath} is not valid JSON: ${(e as Error).message}`,
+    };
+  }
+  return parseAttemptRecord(parsedJson, unitId, runId);
+}
+
+/**
+ * The report a REAL build hands BOTH its workers, or `undefined` when there is nothing to report
+ * (ADR-0586 D5). The LEDGER chooses which attempt — never a directory scan — and this machine's record
+ * supplies what the spine saw in it: the ledger is the INDEX and the file is the PAYLOAD (D2).
+ *
+ * A record that is missing, unreadable or malformed drops the observed half and NOTHING else. The
+ * report still names the run, the increment it was filed under, and the orchestrator's recorded
+ * difference, because all three are LEDGER facts — which is exactly what a retry on a different
+ * machine gets, and why that case degrades rather than disappearing. It never throws and never
+ * refuses a build (D7).
+ */
+export function resolveAttemptReport(
+  dir: string,
+  unitId: string,
+  ledger: InnerLoopLedger | undefined,
+): AttemptReport | undefined {
+  const base = attemptReportFromLedger(ledger);
+  if (base === undefined) return undefined;
+  const read = readAttemptRecord(dir, unitId, base.runId);
+  if (!read.ok) return base;
+  return { ...base, observed: observedAttempt(read.record) };
 }
