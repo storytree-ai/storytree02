@@ -27,6 +27,7 @@ import {
   resolveRunnableSuites,
   runTestsDescription,
   runTestsParameter,
+  scopeExistingTestFiles,
   scopePackageDirs,
   splitScriptSegments,
   suiteChoices,
@@ -495,4 +496,71 @@ test("runTestsDescription: names each package with its file count, where it runs
   assert.match(description, /against the leaf's disposable replica/);
   assert.match(description, /FEEDBACK ONLY/);
   assert.match(description, /omit it to run them all/);
+});
+
+/**
+ * ADR-0590 D1/D2: the one derivation every wall reads — the EXISTING test files of the packages a
+ * unit's scope touches, as a concrete list rather than a glob.
+ */
+test("scopeExistingTestFiles: every existing test file of every package the scope touches, deduplicated and sorted", () => {
+  const listed = {
+    "packages/agent": ["src/b.test.ts", "src/a.test.ts", "src/nested/c.test.ts"],
+    "packages/drive": ["src/d.test.ts"],
+  } satisfies Record<string, string[]>;
+  const files = scopeExistingTestFiles(
+    { testGlobs: ["packages/agent/src/a.test.ts"], sourceGlobs: ["packages/drive/src/d.ts"] },
+    "/ws",
+    { listTestFiles: (dir) => (dir === "packages/agent" || dir === "packages/drive" ? listed[dir] : []) },
+  );
+
+  assert.deepEqual(files, [
+    "packages/agent/src/a.test.ts",
+    "packages/agent/src/b.test.ts",
+    "packages/agent/src/nested/c.test.ts",
+    "packages/drive/src/d.test.ts",
+  ]);
+});
+
+test("scopeExistingTestFiles: a package with NO drivable runner still contributes its files", () => {
+  // The divergence from `resolveRunnableSuites`, and the reason this is its own derivation: a vitest
+  // package contributes no RUN choices (its positionals are filters, not paths), but the record is two
+  // reads of a file and needs no runner — so its tests are writable and recorded all the same.
+  const files = scopeExistingTestFiles(
+    { testGlobs: ["apps/studio/src/x.test.ts"], sourceGlobs: [] },
+    "/ws",
+    { listTestFiles: (dir) => (dir === "apps/studio" ? ["src/x.test.ts", "src/y.test.ts"] : []) },
+  );
+
+  assert.deepEqual(files, ["apps/studio/src/x.test.ts", "apps/studio/src/y.test.ts"]);
+  assert.deepEqual(
+    resolveRunnableSuites(
+      { testGlobs: ["apps/studio/src/x.test.ts"], sourceGlobs: [] },
+      { readTestScript: () => "vitest run", listTestFiles: () => ["src/x.test.ts"] },
+    ),
+    [],
+    "the same scope offers NO runnable suite — writable and recorded is not the same as runnable",
+  );
+});
+
+test("scopeExistingTestFiles: a glob naming no single package contributes nothing, rather than inventing one", () => {
+  assert.deepEqual(
+    scopeExistingTestFiles(
+      { testGlobs: ["packages/*/src/**/*.test.ts"], sourceGlobs: ["docs/notes.md", "tsconfig.base.json"] },
+      "/ws",
+      { listTestFiles: () => ["src/a.test.ts"] },
+    ),
+    [],
+    "a wildcard package segment, a docs path and a repo-root file all resolve to no package",
+  );
+});
+
+test("scopeExistingTestFiles: Windows separators from the walk are normalised to the record's form", () => {
+  assert.deepEqual(
+    scopeExistingTestFiles(
+      { testGlobs: ["packages/agent/src/a.test.ts"], sourceGlobs: [] },
+      "/ws",
+      { listTestFiles: () => ["src\\nested\\a.test.ts"] },
+    ),
+    ["packages/agent/src/nested/a.test.ts"],
+  );
 });

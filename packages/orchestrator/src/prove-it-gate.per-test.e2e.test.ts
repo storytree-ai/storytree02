@@ -285,7 +285,7 @@ async function walk(args: {
       runId: "per-test-e2e",
     };
     if (args.perTest) {
-      const policy = { testFile: path.join(workspace, TEST), contracts: args.contracts, observeRed: true };
+      const policy = { testFile: path.join(workspace, TEST), recordFile: TEST, contracts: args.contracts, observeRed: true };
       spec.perTest = perTestPolicy(
         args.briefContracts === undefined ? policy : { ...policy, briefContracts: args.briefContracts },
       );

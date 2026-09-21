@@ -245,6 +245,18 @@ export interface WriteScope {
 export interface PathWriteScopeConfig {
   testGlobs: string[];
   sourceGlobs: string[];
+  /**
+   * EXISTING test files the test-writer may also update (ADR-0590 D1): concrete workspace-relative,
+   * POSIX-separated paths, matched EXACTLY rather than as globs.
+   *
+   * Exact-matched, not folded into {@link testGlobs}, for two reasons. It keeps the grant to files that
+   * were THERE when the build was resolved — a glob would also admit new files the derivation never
+   * saw — and it keeps the wall O(1) per path instead of compiling one regex per entry per write, on a
+   * list that is hundreds of files for a large package.
+   *
+   * Absent ⇒ unchanged: a scope that declares none behaves exactly as it did before ADR-0590.
+   */
+  existingTestFiles?: readonly string[] | undefined;
 }
 
 /**
@@ -260,14 +272,21 @@ export interface PathWriteScopeConfig {
 export class PathWriteScope implements WriteScope {
   private readonly testGlobs: string[];
   private readonly sourceGlobs: string[];
+  private readonly existingTestFiles: ReadonlySet<string>;
 
   constructor(config: PathWriteScopeConfig) {
     this.testGlobs = config.testGlobs;
     this.sourceGlobs = config.sourceGlobs;
+    this.existingTestFiles = new Set((config.existingTestFiles ?? []).map((f) => f.replace(/\\/g, "/")));
   }
 
   isWriteAllowed(phase: Phase, path: string): boolean {
-    const isTest = this.testGlobs.some((g) => globMatch(g, path));
+    // ADR-0590: an existing test file the scope named is a TEST path, exactly as a matching glob is —
+    // so IMPLEMENT's `!isTest` term keeps the code-writer out of it for free, and no second rule about
+    // who may write a test has to be kept in step with the first.
+    const normalized = path.replace(/\\/g, "/");
+    const isTest =
+      this.existingTestFiles.has(normalized) || this.testGlobs.some((g) => globMatch(g, path));
     const isSource = this.sourceGlobs.some((g) => globMatch(g, path));
 
     if (phase === "AUTHOR_TEST") {

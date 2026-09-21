@@ -377,6 +377,8 @@ export {
   describeTestChanges,
   readChangeMarkers,
   reviewTestChanges,
+  // ADR-0590: the record spans every existing test file the write wall admits, not the proof file alone.
+  reviewTestFiles,
   testChangeKey,
   updatedToNewBehaviour,
   updatedToSameBehaviour,

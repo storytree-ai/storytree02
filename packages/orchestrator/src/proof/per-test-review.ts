@@ -62,7 +62,7 @@ import type { AcceptedGuardRail } from "@storytree/proof-protocol";
 import type { TestObservation } from "../phase-machine.js";
 import { analyzeObservedTests, testNameCoversContract } from "./contract-coverage.js";
 import type { PerTestChannel, PerTestReport, ReportedTest } from "./per-test-report.js";
-import { reviewTestChanges, updatedToNewBehaviour, updatedToSameBehaviour } from "./test-baseline.js";
+import { reviewTestFiles, updatedToNewBehaviour, updatedToSameBehaviour } from "./test-baseline.js";
 import type { TestChangeRecord } from "./test-baseline.js";
 
 // ---------------------------------------------------------------------------
@@ -611,6 +611,13 @@ export const STRUCTURAL_RED_NOT_OBSERVED =
 export interface PerTestPolicyArgs {
   /** The ONE test file the proof command runs, absolute. */
   readonly testFile: string;
+  /**
+   * That same file, workspace-relative and POSIX-separated (ADR-0590): the identity the existing-test
+   * record keys its changes on. Carried explicitly rather than derived here, so the two never disagree
+   * about separators or about which root the path is relative to — a disagreement would silently drop
+   * every obligation this file's own changes declared.
+   */
+  readonly recordFile: string;
   readonly contracts: readonly ContractDecl[];
   /** Observe CONFIRM_RED per test — only for an assertion red (ADR-0573 D3). */
   readonly observeRed: boolean;
@@ -666,8 +673,12 @@ export function perTestPolicy(args: PerTestPolicyArgs): PerTestPolicy {
         ? review
         : {
             ...review,
-            assertsNewBehaviour: updatedToNewBehaviour(changes),
-            assertsSameBehaviour: updatedToSameBehaviour(changes),
+            // ADR-0590: the record spans every existing test file the test-writer may reach, but the
+            // rows below come from the ONE file the proof command ran and carry no file identity. Ask
+            // for that file's obligations only — a sibling file's change must not bind a test here that
+            // merely shares its title.
+            assertsNewBehaviour: updatedToNewBehaviour(changes, args.recordFile),
+            assertsSameBehaviour: updatedToSameBehaviour(changes, args.recordFile),
           };
     return reviewConfirmRed(
       args.briefContracts === undefined ? recorded : { ...recorded, briefContracts: args.briefContracts },
@@ -705,33 +716,62 @@ export interface TestChangePolicy {
   review(): TestChangeRecord;
 }
 
-/** The file-backed {@link TestChangePolicy} a resolver hands the gate. */
-export function testChangePolicy(args: { readonly testFile: string }): TestChangePolicy {
-  let before: TestFileRead | undefined;
-  const read = (): TestFileRead => {
-    if (!existsSync(args.testFile)) return { tests: [], source: "" };
+/** One existing test file the record watches (ADR-0590 D3). */
+export interface WatchedTestFile {
+  /** Where to read it, absolute. */
+  readonly absolute: string;
+  /** Its identity in the record: workspace-relative, POSIX-separated. */
+  readonly file: string;
+  /** Whether this build's CONFIRM_RED observation covers it — true for the unit's proof file alone. */
+  readonly observed: boolean;
+}
+
+/**
+ * The file-backed {@link TestChangePolicy} a resolver hands the gate.
+ *
+ * ADR-0590 D3: the record watches EVERY existing test file the test-writer's write wall admits, not the
+ * unit's proof file alone. Before this, the wall was already plural — `real.scope.testGlobs`, which for
+ * a package's default entry is every test file in it — while the record read one scalar path, so a
+ * permitted edit to a sibling test was recorded NOWHERE. Watching the wall's own set is what closes
+ * that, and it needs no runner: the record is two reads of a file compared (ADR-0585 D1).
+ */
+export function testChangePolicy(args: { readonly files: readonly WatchedTestFile[] }): TestChangePolicy {
+  let before: Map<string, TestFileRead> | undefined;
+  const read = (watched: WatchedTestFile): TestFileRead => {
+    if (!existsSync(watched.absolute)) return { tests: [], source: "" };
     try {
-      const source = readFileSync(args.testFile, "utf8");
-      return { tests: declaredTestsOf(source, args.testFile), source };
+      const source = readFileSync(watched.absolute, "utf8");
+      return { tests: declaredTestsOf(source, watched.absolute), source };
     } catch {
       // Unreadable reads as EMPTY on both sides, which records no change and refuses nothing: the
       // per-test review already refuses an unreadable test file where it can see one (C2).
       return { tests: [], source: "" };
     }
   };
+  const readAll = (): Map<string, TestFileRead> => new Map(args.files.map((f) => [f.file, read(f)] as const));
   return {
     beforeAuthorTest(): void {
-      before = read();
+      before = readAll();
     },
     review(): TestChangeRecord {
-      if (before === undefined) return { changes: [], findings: [] };
-      const after = read();
-      return reviewTestChanges({
-        before: before.tests,
-        beforeSource: before.source,
-        after: after.tests,
-        afterSource: after.source,
-      });
+      const baseline = before;
+      if (baseline === undefined) return { changes: [], findings: [] };
+      return reviewTestFiles(
+        args.files.map((watched) => {
+          // A file with no baseline entry cannot be compared against anything, so it reads as EMPTY on
+          // both sides — the same answer an absent file already gets, and never an invented baseline.
+          const was = baseline.get(watched.file) ?? { tests: [], source: "" };
+          const now = read(watched);
+          return {
+            file: watched.file,
+            observed: watched.observed,
+            before: was.tests,
+            beforeSource: was.source,
+            after: now.tests,
+            afterSource: now.source,
+          };
+        }),
+      );
     },
   };
 }

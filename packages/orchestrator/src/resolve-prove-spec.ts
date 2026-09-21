@@ -62,6 +62,7 @@ import {
 } from "./proof/test-suite-runner.js";
 import {
   resolveRunnableSuites,
+  scopeExistingTestFiles,
   suiteResolutionIO,
 } from "./proof/test-suite-runner.js";
 import type { RunnableSuite, TestSelectionRun } from "./proof/test-suite-runner.js";
@@ -114,6 +115,32 @@ export const DRY_RUN_TEST_REL = "unit.test.cjs";
 export const DRY_RUN_IMPL_REL = "impl.cjs";
 
 const CODEX_GLOB_MAGIC = /[*?[\]{}()!+@]/;
+
+/**
+ * A workspace-relative path in the one form the existing-test record and every wall key on: POSIX
+ * separators, no leading `./`. A node's declared `testFile` is already workspace-relative but may be
+ * written with Windows separators, and the record's keys would silently miss it if the two disagreed.
+ */
+function posixRel(p: string): string {
+  return p.split(path.win32.sep).join("/").replace(/^\.\//, "");
+}
+
+/**
+ * What the spine's own scoped commit is allowed to STAGE (ADR-0590 D2): the unit's declared globs, plus
+ * every existing test file its scope reached.
+ *
+ * The existing files must be here or the widened write grant is unusable rather than merely unrecorded.
+ * `commitAuthored` matches this set with the SAME `globMatch` the write wall uses, so anything dirty and
+ * unmatched is left uncommitted as out-of-scope — and the gate then fails the walk on that leftover
+ * dirt. A test-writer's permitted edit to a sibling test would therefore END the build it was allowed to
+ * make. An exact path is a glob that matches itself, so no second matching rule is needed.
+ */
+export function realCommitGlobs(
+  scope: { readonly testGlobs: readonly string[]; readonly sourceGlobs: readonly string[] },
+  existingTestFiles: readonly string[],
+): string[] {
+  return [...new Set([...scope.testGlobs, ...scope.sourceGlobs, ...existingTestFiles])];
+}
 
 /**
  * Turn the spine's phase declaration into a finite Codex packing list. The named proof target is
@@ -541,6 +568,15 @@ export type ResolveResult =
        * on the clock it may extend. Absent on the dry-run and live-smoke routes, which wire no budget.
        */
       buildBudget?: BuildBudget;
+      /**
+       * The EXISTING test files this unit's scope reached (ADR-0590 D2), returned on the REAL route for
+       * the same reason {@link BuildBudget} is: it is one derivation that several walls read, and a
+       * caller cannot reach it through `spec` — the write scope has folded it into a predicate and the
+       * commit scope is closed over inside the tree-state seam. Returning it is what lets a caller, and
+       * a test, hold the walls to each other rather than trust that four call sites stayed in step.
+       * Absent on the dry-run and live-smoke routes, which widen nothing.
+       */
+      existingTestFiles?: readonly string[];
     }
   | { ok: false; reason: string; registered: string[] };
 
@@ -826,7 +862,14 @@ function resolveReal(
     resolver.perTestReport = perTestReportFile(perTestChannel, perTestReportPath);
   }
   const testExecutor = new ShellTestExecutor(resolver);
-  const scope = new PathWriteScope(real.scope);
+  // ADR-0590 D1/D2: the EXISTING test files of every package this unit's scope touches, derived ONCE
+  // and read by every wall that has an opinion about them — the write scope here, the commit scope, the
+  // Codex write globs and promotion manifest, the worker briefs, and the existing-test record. One
+  // derivation because these must agree: a file the wall admits but the commit scope does not is a write
+  // the leaf makes and the gate then refuses as out-of-scope dirt, and one the wall admits but the
+  // record does not watch is exactly the unrecorded edit ADR-0590 exists to close.
+  const existingTestFiles = scopeExistingTestFiles(real.scope, opts.workspace);
+  const scope = new PathWriteScope({ ...real.scope, existingTestFiles });
 
   // The leaf's bounded feedback tools (option A): run_proof spawns the SAME command object the
   // CONFIRM observations spawn (above); run_typecheck (install-bearing nodes) spawns the package
@@ -916,12 +959,18 @@ function resolveReal(
       }
       const codexArgs: CodexPhaseAuthorArgs = {
         cwd: opts.workspace,
+        // ADR-0590 D2: the Codex test-writer gets the same widened set as the Claude one. Both halves
+        // are needed and they do different jobs — `writeGlobs` is the hook wall inside the replica, and
+        // the manifest is PROMOTION authority, which only literal entries ever earn. That is exactly why
+        // the set is a concrete file list: a package-wide glob would pass the wall, let the worker edit
+        // a sibling test in its replica, and then be dropped from the manifest, so the edit would never
+        // leave the replica and the phase would refuse the whole diff as undeclared.
         writeGlobs: {
-          AUTHOR_TEST: real.scope.testGlobs,
+          AUTHOR_TEST: [...real.scope.testGlobs, ...existingTestFiles],
           IMPLEMENT: real.scope.sourceGlobs,
         },
         promotionManifests: {
-          AUTHOR_TEST: codexPromotionManifest(real.testFile, real.scope.testGlobs),
+          AUTHOR_TEST: codexPromotionManifest(real.testFile, [...real.scope.testGlobs, ...existingTestFiles]),
           IMPLEMENT: codexPromotionManifest(real.sourceFile, real.scope.sourceGlobs),
         },
         isWriteAllowed: (phase, relPath) => scope.isWriteAllowed(phase, relPath),
@@ -973,7 +1022,11 @@ function resolveReal(
   const signer = resolveSigner(opts.signerInputs);
   const commitAuthor = signer.ok ? signer.signer : "spine@storytree.invalid";
   const commitScope: CommitScope = {
-    globs: [...real.scope.testGlobs, ...real.scope.sourceGlobs],
+    // ADR-0590: the existing test files the wall admits are staged too. Without them a test-writer's
+    // permitted edit to a sibling test is left dirty and UNCOMMITTED, and the gate then fails the walk
+    // on leftover out-of-scope dirt — so the widened write grant would be unusable rather than merely
+    // unrecorded. Exact paths are globs that match themselves under `globMatch`.
+    globs: realCommitGlobs(real.scope, existingTestFiles),
   };
   if ((real.addDeps ?? []).length > 0) {
     commitScope.spineOutputGlobs = ["pnpm-lock.yaml", "**/package.json"];
@@ -1063,6 +1116,9 @@ function resolveReal(
   if (perTestChannel !== undefined) {
     const policy = {
       testFile: path.join(opts.workspace, real.testFile),
+      // ADR-0590: the same file as the record keys it, so this file's own recorded obligations are the
+      // ones held here — and a sibling file's change binds nothing that merely shares a title.
+      recordFile: posixRel(real.testFile),
       contracts: spec.contracts,
       observeRed: declaredExpectedRed(real) === "assertion",
     };
@@ -1080,9 +1136,20 @@ function resolveReal(
       proved === undefined ? undefined : await computeProvedBinding({ workspace: opts.workspace, ...proved });
   }
   // ADR-0581 D1 / ADR-0585: every REAL build records what the test-writer did to the tests that were
-  // already in its test file. Independent of the per-test channel below — the record is two reads of one
-  // file — so a whole-suite route, never reviewed per test, still records its changes and their reasons.
-  proveSpec.testChanges = testChangePolicy({ testFile: path.join(opts.workspace, real.testFile) });
+  // already here. Independent of the per-test channel below — the record is two reads of a file — so a
+  // whole-suite route, never reviewed per test, still records its changes and their reasons.
+  //
+  // ADR-0590 D3: it watches EVERY file the write wall admits, not the proof file alone. The proof file
+  // is always watched even if the derivation missed it (a node may declare a test file outside any
+  // package the scope resolves), and it is the ONE file marked observed, because it is the one file the
+  // proof command runs.
+  const proofFileRel = posixRel(real.testFile);
+  const watchedTestFiles = [proofFileRel, ...existingTestFiles.filter((f) => f !== proofFileRel)].map((file) => ({
+    absolute: path.join(opts.workspace, file),
+    file,
+    observed: file === proofFileRel,
+  }));
+  proveSpec.testChanges = testChangePolicy({ files: watchedTestFiles });
   // ADR-0581 D4 / ADR-0582: every REAL build repairs a failed check inside the build. The write scope
   // answers both questions the loop asks of a path — whose file it is (the typecheck router) and what
   // the implementation is (the set-aside) — so the loop routes by exactly the walls the workers wrote
@@ -1108,8 +1175,8 @@ function resolveReal(
     scopeFingerprint: () => worktreeScopeFingerprint({ worktreeRoot: opts.workspace }),
   };
   return liveAuthor !== undefined
-    ? { ok: true, spec: proveSpec, liveAuthor, buildBudget }
-    : { ok: true, spec: proveSpec, buildBudget };
+    ? { ok: true, spec: proveSpec, liveAuthor, buildBudget, existingTestFiles }
+    : { ok: true, spec: proveSpec, buildBudget, existingTestFiles };
 }
 
 /**

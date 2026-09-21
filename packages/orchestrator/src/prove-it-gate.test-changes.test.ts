@@ -22,8 +22,16 @@ import type { RepairPolicy } from "./repair.js";
 const RED: TestObservation = { result: "red", testId: "T", originalProcessResult: { stdout: "red", stderr: "", exitCode: 1 } };
 const GREEN: TestObservation = { result: "green", testId: "T", originalProcessResult: { stdout: "green", stderr: "", exitCode: 0 } };
 
-const UNEXPLAINED: TestChange = { test: ["add-sums: two and three make five"], kind: "updated" };
+const PROOF_FILE = "packages/unit/src/unit.test.ts";
+const UNEXPLAINED: TestChange = {
+  file: PROOF_FILE,
+  observed: true,
+  test: ["add-sums: two and three make five"],
+  kind: "updated",
+};
 const EXPLAINED: TestChange = {
+  file: PROOF_FILE,
+  observed: true,
   test: ["add-sums: two and three make five"],
   kind: "updated",
   reason: "add-sums: two and three make five — the sum now rounds",

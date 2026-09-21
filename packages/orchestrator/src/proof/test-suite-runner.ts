@@ -230,6 +230,34 @@ export function scopePackageDirs(scope: {
   return dirs;
 }
 
+/**
+ * Every EXISTING test file of the packages this scope touches, workspace-relative, POSIX-separated and
+ * sorted — the set ADR-0590 makes the test-writer's write scope, the commit scope, Codex's promotion
+ * manifest and the existing-test record all read.
+ *
+ * A CONCRETE FILE LIST, not a glob, and that choice is load-bearing in two directions. Codex's
+ * promotion manifest keeps only literal entries — "pattern-shaped scope remains a hook wall only and
+ * never becomes promotion authority" — so a glob would let a Codex test-writer edit a sibling test
+ * inside its replica and then silently fail to promote it. And the increment's own words are EXISTING
+ * test files: a list resolved from disk admits exactly the files that are there, where a package-wide
+ * glob would also admit new files anywhere in the package, which is a wider grant than was decided.
+ *
+ * Unlike {@link resolveRunnableSuites} this does NOT require the package to have a drivable runner: the
+ * record compares two reads of a file and needs none (ADR-0585 D1), so a vitest package's tests are
+ * writable and recorded here even though no named subset of them can be run.
+ */
+export function scopeExistingTestFiles(
+  scope: { readonly testGlobs: readonly string[]; readonly sourceGlobs: readonly string[] },
+  workspace: string,
+  io: Pick<SuiteResolutionIO, "listTestFiles"> = { listTestFiles: (dir) => listTestFiles(path.join(workspace, dir)) },
+): string[] {
+  const all = new Set<string>();
+  for (const packageDir of scopePackageDirs(scope)) {
+    for (const file of io.listTestFiles(packageDir)) all.add(`${packageDir}/${posix(file)}`);
+  }
+  return [...all].sort();
+}
+
 /** Every test file under `dir`, recursively, as paths relative to `dir` in POSIX form, sorted. */
 export function listTestFiles(dir: string): string[] {
   const found: string[] = [];
