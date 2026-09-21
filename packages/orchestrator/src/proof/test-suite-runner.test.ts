@@ -29,10 +29,13 @@ import {
   runTestsParameter,
   scopeExistingTestFiles,
   scopePackageDirs,
+  singleFileRun,
   splitScriptSegments,
   suiteChoices,
+  suiteReportChannel,
   testSelectionCommands,
 } from "./test-suite-runner.js";
+import { NODE_BINARY } from "./proof-route.js";
 import type { RunnableSuite, SuiteResolutionIO } from "./test-suite-runner.js";
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "..", "..", "..", "..");
@@ -562,5 +565,98 @@ test("scopeExistingTestFiles: Windows separators from the walk are normalised to
       { listTestFiles: () => ["src\\nested\\a.test.ts"] },
     ),
     ["packages/agent/src/nested/a.test.ts"],
+  );
+});
+
+/**
+ * ADR-0591: the ONE spawn that runs a single existing test file and writes a per-test report — the
+ * spine's own way of re-observing a changed test the proof command never runs.
+ */
+
+const BUN_SUITE: RunnableSuite = {
+  packageDir: "packages/proof-protocol",
+  runner: ["bun", "test", "--timeout", "300000"],
+  testFiles: ["packages/proof-protocol/src/a.test.ts", "packages/proof-protocol/src/b.test.ts"],
+};
+const NODE_SUITE: RunnableSuite = {
+  packageDir: "packages/agent",
+  runner: [NODE_BINARY, "--import", "tsx", "--test"],
+  testFiles: ["packages/agent/src/c.test.ts"],
+};
+
+test("suiteReportChannel: the channel comes off the runner that will actually be spawned", () => {
+  assert.equal(suiteReportChannel(BUN_SUITE.runner), "bun-junit");
+  assert.equal(suiteReportChannel(NODE_SUITE.runner), "node-test");
+  assert.equal(suiteReportChannel(["bun", "run", "build"]), undefined, "a bun runner with no `test` writes none");
+  assert.equal(suiteReportChannel([NODE_BINARY, "--import", "tsx"]), undefined, "nor does node with no `--test`");
+  assert.equal(suiteReportChannel(["vitest", "run"]), undefined, "and vitest never reaches here anyway");
+  assert.equal(suiteReportChannel([]), undefined);
+  assert.equal(
+    suiteReportChannel(["C:\\tools\\bun.exe", "test"]),
+    "bun-junit",
+    "a Windows path and launcher suffix still names bun",
+  );
+});
+
+test("singleFileRun: ONE file per spawn, with its channel's reporter attached", () => {
+  const bun = singleFileRun({
+    suites: [BUN_SUITE, NODE_SUITE],
+    file: "packages/proof-protocol/src/b.test.ts",
+    workspace: "/ws",
+    timeoutMs: 60_000,
+    reportPath: "/tmp/report.xml",
+  });
+
+  assert.equal(bun?.channel, "bun-junit");
+  assert.equal(bun?.command.file, "bun");
+  assert.deepEqual(
+    bun?.command.args,
+    [
+      "test",
+      "--reporter=junit",
+      "--reporter-outfile=/tmp/report.xml",
+      "--timeout",
+      "300000",
+      path.join("/ws", "packages/proof-protocol/src/b.test.ts"),
+    ],
+    "the reporter goes right after `test`, every declared flag survives, and exactly ONE file is named",
+  );
+  assert.equal(bun?.command.cwd, path.join("/ws", "packages/proof-protocol"));
+  assert.equal(bun?.command.timeoutMs, 60_000);
+  assert.ok(
+    !(bun?.command.args ?? []).includes(path.join("/ws", "packages/proof-protocol/src/a.test.ts")),
+    "the package's OTHER test file is not swept in — a report covering two files could not attribute its rows",
+  );
+
+  const node = singleFileRun({
+    suites: [BUN_SUITE, NODE_SUITE],
+    file: "packages/agent/src/c.test.ts",
+    workspace: "/ws",
+    timeoutMs: 60_000,
+    reportPath: "/tmp/report.jsonl",
+  });
+  assert.equal(node?.channel, "node-test");
+  assert.ok(node?.command.args.includes("--test-reporter=spec"), "node keeps its human stdout beside the report");
+  assert.ok(
+    node?.command.args.some((a) => a === "--test-reporter-destination=/tmp/report.jsonl"),
+    "and writes the spine's reporter to the path it was given",
+  );
+});
+
+test("singleFileRun: a file no suite offers, and a suite that writes no report, both yield nothing", () => {
+  const args = { suites: [BUN_SUITE], workspace: "/ws", timeoutMs: 1000, reportPath: "/tmp/r" };
+  assert.equal(
+    singleFileRun({ ...args, file: "packages/agent/src/c.test.ts" }),
+    undefined,
+    "a file outside every suite here is not runnable",
+  );
+  assert.equal(
+    singleFileRun({
+      ...args,
+      suites: [{ ...BUN_SUITE, runner: ["vitest", "run"] }],
+      file: "packages/proof-protocol/src/a.test.ts",
+    }),
+    undefined,
+    "a suite whose runner writes no per-test report offers no re-observation",
   );
 });

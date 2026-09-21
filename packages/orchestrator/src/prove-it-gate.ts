@@ -41,8 +41,28 @@ import type {
   PerTestPolicy,
   TestChangePolicy,
 } from "./proof/per-test-review.js";
-import { describeTestChanges } from "./proof/test-baseline.js";
-import type { TestChange, TestChangeRecord } from "./proof/test-baseline.js";
+import {
+  describeTestChanges,
+  markObserved,
+  outsideChangedFiles,
+  reviewOutsideRed,
+} from "./proof/test-baseline.js";
+import type { OutsideObservation, TestChange, TestChangeRecord } from "./proof/test-baseline.js";
+
+/**
+ * How the spine runs a changed test file the proof command never runs (ADR-0591). Injected, so the gate
+ * decides WHEN to re-observe and the resolver decides HOW — and so the walk's own tests need no runner.
+ */
+export interface OutsideTestPolicy {
+  /**
+   * Which of these workspace-relative files this build can actually RUN. A package with no named-subset
+   * runner (`vitest run`, ADR-0587) contributes none, and a file that is not returned here is never
+   * claimed to have been checked.
+   */
+  runnable(files: readonly string[]): readonly string[];
+  /** Run exactly these files and read each one's own per-test report. */
+  observe(files: readonly string[]): Promise<readonly OutsideObservation[]>;
+}
 import type {
   Phase,
   RepairOwner,
@@ -199,6 +219,24 @@ export interface ProveSpec {
    * DEFAULT-ABSENT ⇒ zero behaviour change: a walk with no policy records nothing and refuses nothing.
    */
   testChanges?: TestChangePolicy;
+  /**
+   * ADR-0591 (optional): RE-OBSERVE a changed test that lives outside the unit's own proof file, so the
+   * obligation its marker declared is HELD rather than merely recorded.
+   *
+   * ADR-0590 widened the record to every existing test file the write wall admits, but the proof command
+   * runs ONE file and is resolved before authoring begins, so it cannot be widened afterwards without
+   * red and green having been observed by different commands. This is the second channel: the spine runs
+   * exactly the changed files, beside the proof command and inside the same set-aside, and reads each
+   * one's own per-test report.
+   *
+   * `runnable` is asked FIRST and separately because a package whose `test` script is `vitest run`
+   * offers no named-subset runner (ADR-0587), so some changed files can never be run here — and a file
+   * this build could not run must stay recorded-only rather than silently pass.
+   *
+   * DEFAULT-ABSENT ⇒ zero behaviour change: a walk with no policy re-observes nothing and refuses
+   * nothing, exactly as every walk did before ADR-0591.
+   */
+  outsideTests?: OutsideTestPolicy;
   /**
    * ADR-0581 D4 / ADR-0582 (optional): repair a failed check INSIDE the build. With a policy, a check
    * that fails goes back to the worker who can fix it — the test-writer or the code-writer, by
@@ -584,6 +622,64 @@ export async function proveUnit(spec: ProveSpec): Promise<ProveResult> {
         );
         if (ended !== undefined) return ended;
         continue;
+      }
+      // ADR-0591: a changed test OUTSIDE the proof file is held to what its marker declared, by running
+      // exactly those files here. It comes AFTER the no-reason check above on purpose: a change with no
+      // reason has declared no obligation to hold, and charging the test-writer for both at once would
+      // report one omission twice.
+      //
+      // The run happens inside its OWN set-aside for the reason the proof observation has one — the
+      // marker's claim is about the source this build BEGAN from, and after IMPLEMENT the worktree no
+      // longer holds it. A second bracket rather than a widened first one: the proof command is shared
+      // with the leaf's `run_proof` (one oracle) and must keep spawning exactly what it always did.
+      if (changeRecord !== undefined && spec.outsideTests !== undefined) {
+        const candidates = outsideChangedFiles(changeRecord);
+        const runnable = candidates.length === 0 ? [] : spec.outsideTests.runnable(candidates);
+        if (runnable.length > 0) {
+          let restoreOutside: (() => Promise<void>) | undefined;
+          if (implemented && policy !== undefined) {
+            try {
+              restoreOutside = await policy.setAsideImplementation();
+            } catch (err) {
+              return fail(
+                "CONFIRM_RED",
+                `the implementation could not be set aside to re-observe the changed test file(s) ` +
+                  `${runnable.join(", ")} (${err instanceof Error ? err.message : String(err)}), so what ` +
+                  `their markers declared could not be checked against the source this build began from`,
+                visited,
+                withRepairs(),
+              );
+            }
+          }
+          let outside: readonly OutsideObservation[];
+          try {
+            outside = await spec.outsideTests.observe(runnable);
+          } finally {
+            await restoreOutside?.();
+          }
+          // Only a file that actually came back is marked observed; the rest keep the envelope's
+          // recorded-only qualifier, which is the honest answer for a file nothing ran.
+          testChanges = markObserved(changeRecord.changes, outside.map((o) => o.file));
+          const outsideFindings = reviewOutsideRed({ record: changeRecord, observations: outside });
+          if (outsideFindings.length > 0) {
+            const ended = await repairOrEnd(
+              {
+                failedAt: "CONFIRM_RED",
+                check: "test-changes",
+                reason:
+                  describePerTestRefusal("CONFIRM_RED", outsideFindings) +
+                  exhaustionNote(authorExhaustion, "a red test"),
+                briefReason: describePerTestRefusal("CONFIRM_RED", outsideFindings, "worker"),
+                detail: `${outsideFindings.length} existing-test change(s) outside the proof file that did not hold what they declared`,
+                extras: { failedObservation: obs.originalProcessResult, perTestFindings: outsideFindings },
+                observation: obs.originalProcessResult,
+              },
+              "test",
+            );
+            if (ended !== undefined) return ended;
+            continue;
+          }
+        }
       }
       // ADR-0573 D1: the review point between red and green, consulted only now that the exit code would
       // advance — so it can refuse this red, and can never rescue a refused one.

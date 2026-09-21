@@ -44,7 +44,9 @@ import {
   BUN_TEST_FLAGS_TAKING_A_VALUE,
   NODE_BINARY,
   NODE_FLAGS_TAKING_A_VALUE,
+  withPerTestReport,
 } from "./proof-route.js";
+import type { PerTestChannel } from "./per-test-report.js";
 
 /** The workspace roots a package may live under, as `pnpm-workspace.yaml` declares them. */
 const WORKSPACE_ROOTS = new Set(["packages", "apps"]);
@@ -397,6 +399,53 @@ export function testSelectionCommands(args: {
 }
 
 /** The ADR-0587 choice this tool declares: which existing test files to run. */
+/**
+ * The per-test report channel a suite's own runner writes (ADR-0591), or `undefined` when it writes
+ * none — read from the runner tokens {@link namedSubsetRunner} already derived, so it agrees with the
+ * command that will actually be spawned rather than with a second guess about the package.
+ *
+ * `vitest-json` is deliberately unreachable here: `namedSubsetRunner` refuses a vitest script outright
+ * (its positionals are filters, not paths), so no vitest suite ever reaches this function. That is why a
+ * changed test in `apps/studio` or `packages/app-surface` stays recorded-only.
+ */
+export function suiteReportChannel(runner: readonly string[]): PerTestChannel | undefined {
+  const [file, ...flags] = runner;
+  if (file === undefined) return undefined;
+  if (executableName(file) === "bun" && flags.includes("test")) return "bun-junit";
+  if (flags.includes("--test")) return "node-test";
+  return undefined;
+}
+
+/**
+ * The ONE spawn that runs a single existing test file and writes a per-test report (ADR-0591), or
+ * `undefined` when no suite here offers that file or its runner writes no report.
+ *
+ * ONE FILE PER SPAWN, not one per package as {@link testSelectionCommands} does, and that is the whole
+ * reason this is a separate function: a report's rows carry TITLE PATHS and no file, so a run covering
+ * two files could not say which file a row came from — and two files in one package declaring the same
+ * title is exactly the case the record's file stamp exists to tell apart.
+ */
+export function singleFileRun(args: {
+  readonly suites: readonly RunnableSuite[];
+  readonly file: string;
+  readonly workspace: string;
+  readonly timeoutMs: number;
+  readonly reportPath: string;
+}): { readonly channel: PerTestChannel; readonly command: ShellCommand } | undefined {
+  const suite = args.suites.find((s) => s.testFiles.includes(args.file));
+  if (suite === undefined) return undefined;
+  const channel = suiteReportChannel(suite.runner);
+  if (channel === undefined) return undefined;
+  const [runs] = testSelectionCommands({
+    suites: [suite],
+    chosen: [args.file],
+    workspace: args.workspace,
+    timeoutMs: args.timeoutMs,
+  });
+  if (runs === undefined) return undefined;
+  return { channel, command: withPerTestReport(runs.command, channel, args.reportPath) };
+}
+
 export function runTestsParameter(choices: readonly string[]): FeedbackChoiceParameter {
   return {
     name: "files",

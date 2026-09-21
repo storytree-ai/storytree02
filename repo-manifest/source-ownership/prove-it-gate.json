@@ -2,6 +2,7 @@
   "sourceOwnership": {
     "subtrees": {
       "packages/orchestrator/src/proof/observe-and-sign.ts": "prove-it-gate",
+      "packages/orchestrator/src/proof/outside-red-review.test.ts": "prove-it-gate",
       "packages/orchestrator/src/proof/per-test-review.ts": "prove-it-gate",
       "packages/orchestrator/src/proof/sign-machine-criteria*.ts": "prove-it-gate",
       "packages/orchestrator/src/proof/signer*.ts": "prove-it-gate",

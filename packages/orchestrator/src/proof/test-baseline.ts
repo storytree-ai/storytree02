@@ -33,6 +33,7 @@
  */
 
 import type { PerTestFinding } from "./per-test-review.js";
+import type { PerTestReport } from "./per-test-report.js";
 
 /** One test as the build found it, before any slice was handed out. */
 export interface BaselineTest {
@@ -269,4 +270,131 @@ export function describeTestChanges(changes: readonly TestChange[]): string[] {
     const held = c.observed ? "" : " [recorded only — this build did not re-observe this file]";
     return `${what} — \`${c.file}\` \`${c.test.join(" > ")}\`: ${why}${held}`;
   });
+}
+
+// ---------------------------------------------------------------------------
+// RE-OBSERVING A CHANGED TEST OUTSIDE THE UNIT'S PROOF FILE (ADR-0591)
+// ---------------------------------------------------------------------------
+
+/** What one outside test file's own run reported (ADR-0591). */
+export interface OutsideObservation {
+  /** The file, in the same workspace-relative POSIX form the record keys on. */
+  readonly file: string;
+  /** What its runner reported, read the way every other observation reads one. */
+  readonly report: PerTestReport;
+}
+
+/**
+ * PURE: hold each change in a file this build RE-OBSERVED to what its own marker declared (ADR-0591).
+ *
+ * This is ADR-0585 D4 applied where the proof command cannot reach. The rules are D4's, unchanged, and
+ * the reason they are checked HERE at CONFIRM_RED rather than at green is that red is the only side a
+ * build can establish and the landing gate cannot: the gate runs every one of these files, so a green
+ * that only the gate observes is not weaker evidence — but "this test FAILS against the source the
+ * build began from" needs the implementation set aside, which only the build ever does.
+ *
+ * Silence is never a pass. A file that reported nothing, a report that could not be read, and a test
+ * the run never mentioned each yield a finding, because a marker's claim that goes unchecked must not
+ * be recorded as one that was checked.
+ */
+export function reviewOutsideRed(args: {
+  readonly record: TestChangeRecord;
+  readonly observations: readonly OutsideObservation[];
+}): readonly PerTestFinding[] {
+  const findings: PerTestFinding[] = [];
+  const seen = new Map(args.observations.map((o) => [o.file, o] as const));
+
+  for (const change of args.record.changes) {
+    // Only files this build actually ran, and only changes that DECLARED an obligation: one with no
+    // reason already carries its own C8 from the record, and re-reporting it here would charge the
+    // test-writer twice for one omission.
+    const observed = seen.get(change.file);
+    if (observed === undefined || change.asserts === undefined) continue;
+
+    const where = `\`${change.test.join(" > ")}\` in \`${change.file}\``;
+    if (!observed.report.present || observed.report.unreadable !== undefined) {
+      findings.push({
+        check: "C8",
+        test: change.test,
+        detail:
+          `${where} was recorded as ${change.asserts === "new-behaviour" ? "new behaviour" : "a refactor"}, ` +
+          `but this build could not read what its run reported (` +
+          `${observed.report.unreadable ?? "no report was written"}), so the claim could not be checked — ` +
+          `and an unchecked claim is not recorded as a checked one`,
+        testSide: true,
+      });
+      continue;
+    }
+
+    const row = observed.report.rows.find((r) => keyOf(r.path) === keyOf(change.test));
+    if (row === undefined) {
+      findings.push({
+        check: "C8",
+        test: change.test,
+        detail:
+          `${where} was recorded as changed, but its file's run reported no such test — a test that does ` +
+          `not run cannot show what the change claims. Check the title still matches what the file declares`,
+        testSide: true,
+      });
+      continue;
+    }
+    if (row.outcome !== "passed" && row.outcome !== "failed") {
+      findings.push({
+        check: "C8",
+        test: change.test,
+        detail: `${where} was recorded as changed, but its run reported it as \`${row.outcome}\` — only a test that RAN to an outcome can show what the change claims`,
+        testSide: true,
+      });
+      continue;
+    }
+
+    // The two obligations, exactly as ADR-0585 D4 states them for the proof file.
+    if (change.asserts === "new-behaviour" && row.outcome === "passed") {
+      findings.push({
+        check: "C8",
+        test: change.test,
+        detail:
+          `${where} declares it now asserts NEW behaviour, but it PASSES against the source this build ` +
+          `began from — so it asserts something that already worked. Either it is a refactor ` +
+          `(\`// test-updated (refactor): <why>\`), or it does not yet assert the new behaviour it claims`,
+        testSide: true,
+      });
+      continue;
+    }
+    if (change.asserts === "same-behaviour" && row.outcome === "failed") {
+      findings.push({
+        check: "C8",
+        test: change.test,
+        detail:
+          `${where} declares it is a REFACTOR — the same claim in a different shape — but it FAILS against ` +
+          `the source this build began from, so what it asserts has changed. Record that instead ` +
+          `(\`// test-updated (new behaviour): <why>\`)${row.message.length > 0 ? `. It failed with: ${row.message}` : ""}`,
+        testSide: true,
+      });
+    }
+  }
+  return findings;
+}
+
+/**
+ * The record with `observed` raised on every change in a file this build re-observed (ADR-0591) — which
+ * is what removes the envelope's recorded-only qualifier for exactly those lines, and leaves it in
+ * place for every file that still could not be run.
+ */
+export function markObserved(
+  changes: readonly TestChange[],
+  observedFiles: readonly string[],
+): readonly TestChange[] {
+  const ran = new Set(observedFiles);
+  return changes.map((c) => (ran.has(c.file) && !c.observed ? { ...c, observed: true } : c));
+}
+
+/** The files a record says CHANGED and that carry a declared obligation, outside the observed file. */
+export function outsideChangedFiles(record: TestChangeRecord): string[] {
+  const files: string[] = [];
+  for (const c of record.changes) {
+    if (c.observed || c.asserts === undefined) continue;
+    if (!files.includes(c.file)) files.push(c.file);
+  }
+  return files;
 }
