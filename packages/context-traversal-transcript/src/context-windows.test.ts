@@ -285,6 +285,23 @@ test("a NAME is not a claim: a transcript whose own lines name another window is
   assert.equal(read.harnessWindowUnmatched, true);
 });
 
+test("a named transcript that carries no usable reading is not claimed either", () => {
+  const root = freshRoot();
+  const named = "18181818-1818-4181-8181-181818181818";
+  // Named for this window, speaking for it, and carrying nothing but the harness's own synthetic
+  // line — so the fold declines it. The OTHER arm of the same guard from the test above: one refuses
+  // a file that speaks for a different window, this refuses a file that says nothing at all.
+  writeWindow(root, "proj", named, [
+    { requestId: "a", cwd: MY_CWD, windowId: named, at: "2026-08-26T01:00:00Z", tokens: 0, model: "<synthetic>" },
+  ]);
+
+  const read = readOwnContextWindow({ sessionId: FRESH_WORKTREE, root, harnessWindowId: named });
+
+  assert.equal(read.window, null, "a zero here would tell a session it has a whole window free");
+  assert.equal(read.absence, "no-correlated-window");
+  assert.equal(read.harnessWindowUnmatched, true, "the harness named it and nothing usable answered");
+});
+
 test("a fresh worktree and a harness id nothing answers to is an ABSENCE that says BOTH routes failed", () => {
   const root = freshRoot();
   const win = "12121212-1212-4121-8121-121212121212";

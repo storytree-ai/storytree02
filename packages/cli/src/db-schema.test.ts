@@ -101,6 +101,13 @@ test("split: a mid-statement comment leaves a separator, so the words either sid
   assert.deepEqual(splitSqlStatements("CREATE -- why\nSCHEMA a"), ["CREATE SCHEMA a"]);
 });
 
+test("split: a comment GLUED between two words still separates them", () => {
+  // The line-comment case above cannot show this: it has whitespace on both sides already, so the
+  // separator is redundant there and dropping it changes nothing. A block comment can sit flush
+  // against the words either side, and that is the only shape where the separator does work.
+  assert.deepEqual(splitSqlStatements("CREATE/* why */SCHEMA a"), ["CREATE SCHEMA a"]);
+});
+
 // ── classifying ──────────────────────────────────────────────────────────────
 
 test("classify: every shape the bundled DDL uses, with the object it names", () => {
