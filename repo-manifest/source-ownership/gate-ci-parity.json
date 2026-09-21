@@ -1,8 +1,10 @@
 {
   "sourceOwnership": {
     "subtrees": {
+      "packages/cli/src/check-reliability-gate-parity*.ts": "gate-ci-parity",
       "packages/cli/src/ci-affected*.ts": "gate-ci-parity",
       "packages/cli/src/gate*.ts": "gate-ci-parity",
+      "packages/cli/src/reliability-gate-parity*.ts": "gate-ci-parity",
       "packages/cli/src/typecheck-aperture*.ts": "gate-ci-parity"
     }
   }
