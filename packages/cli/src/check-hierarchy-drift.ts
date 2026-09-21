@@ -114,7 +114,7 @@ async function main(): Promise<number> {
       process.stdout.write(
         "✗ check:hierarchy-drift — the work-hierarchy tables are not in this database.\n\n" +
           "  `applySchema` is not run by ordinary `--pg` commands, so a database that has not seen\n" +
-          "  a load (or a `pnpm db:schema`) since these tables landed does not have them. The\n" +
+          "  a load (or a `pnpm db:schema --write`) since these tables landed does not have them. The\n" +
           "  loader applies the DDL itself:\n\n" +
           "    pnpm hierarchy:load\n",
       );
