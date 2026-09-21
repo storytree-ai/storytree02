@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 
 import type { GateStep } from "./gate-order.js";
 import {
+  type BaselinedGate,
   declaredGatesIn,
   formatReliabilityGateParity,
   judgeCoverage,
@@ -108,6 +109,72 @@ const STORY_NO_BLOCK = [
   "It proves when `pnpm --filter studio uat` passes.",
   "",
 ].join(LF);
+
+const GOLDEN_PASS = [
+  "[check:reliability-gate-parity] 1 declared package-script gate(s) across 1 story file(s) with a `## Reliability Gates` block — 1 run, 0 carried by the baseline, 0 charged here.",
+  "",
+  "[check:reliability-gate-parity] PASS — every declared gate whose runnability is mechanically decidable is executed by a",
+  "[check:reliability-gate-parity] gate step, a CI step, or a repo-wide leg, except the baselined one(s) named above.",
+  "[check:reliability-gate-parity] NOT JUDGED HERE: declarations naming no package script — `exec`-form witness checks,",
+  "[check:reliability-gate-parity] `storytree gate run` / `adopt` signing ceremonies, and inline `node -e` assertions.",
+  "[check:reliability-gate-parity] They are steps of a ceremony a session performs, not per-branch rungs; whether any of",
+  "[check:reliability-gate-parity] them deserves a rung is a story-author judgement, not this rung's.",
+].join(LF);
+
+const GOLDEN_FAIL = [
+  "[check:reliability-gate-parity] 1 declared package-script gate(s) across 1 story file(s) with a `## Reliability Gates` block — 0 run, 0 carried by the baseline, 1 charged here.",
+  "",
+  "[check:reliability-gate-parity] FAIL — a DECLARED gate nobody runs reads as coverage while checking nothing:",
+  "[check:reliability-gate-parity]   stories/s/story.md",
+  "[check:reliability-gate-parity]     `pnpm --filter studio uat`",
+  "[check:reliability-gate-parity]     nothing runs the `uat` script of studio: it is not one of the repo-wide legs (test, typecheck) and no gate step or CI `run:` step names it.",
+  "",
+  "[check:reliability-gate-parity]   Fix it at whichever end is true. If the command carries a real proof obligation, WIRE",
+  "[check:reliability-gate-parity]   it — a step in `packages/cli/src/gate-order.ts`, or a step in the `verify` job of",
+  "[check:reliability-gate-parity]   `.github/workflows/ci.yml` (the split ADR-0547 D1 uses: the gate is the habit, CI is",
+  "[check:reliability-gate-parity]   the wall). If it does not, stop DECLARING it as one — edit the story's",
+  "[check:reliability-gate-parity]   `## Reliability Gates` block, which is `story-author`'s call and not this",
+  "[check:reliability-gate-parity]   rung's. What is not an option is leaving it declared and unrun, which is the state this",
+  "[check:reliability-gate-parity]   rung exists to refuse.",
+].join(LF);
+
+const GOLDEN_CARRIED = [
+  "[check:reliability-gate-parity] 1 declared package-script gate(s) across 1 story file(s) with a `## Reliability Gates` block — 0 run, 1 carried by the baseline, 0 charged here.",
+  "",
+  "[check:reliability-gate-parity] CARRIED, NOT PASSED — a declared gate nothing runs, held by the baseline:",
+  "[check:reliability-gate-parity]   stories/s/story.md",
+  "[check:reliability-gate-parity]     `pnpm --filter studio uat`",
+  "[check:reliability-gate-parity]     held: a red journey",
+  "",
+  "[check:reliability-gate-parity] PASS — every declared gate whose runnability is mechanically decidable is executed by a",
+  "[check:reliability-gate-parity] gate step, a CI step, or a repo-wide leg, except the baselined one(s) named above.",
+  "[check:reliability-gate-parity] NOT JUDGED HERE: declarations naming no package script — `exec`-form witness checks,",
+  "[check:reliability-gate-parity] `storytree gate run` / `adopt` signing ceremonies, and inline `node -e` assertions.",
+  "[check:reliability-gate-parity] They are steps of a ceremony a session performs, not per-branch rungs; whether any of",
+  "[check:reliability-gate-parity] them deserves a rung is a story-author judgement, not this rung's.",
+].join(LF);
+
+const GOLDEN_STALE_RUN = [
+  "[check:reliability-gate-parity] 1 declared package-script gate(s) across 1 story file(s) with a `## Reliability Gates` block — 1 run, 0 carried by the baseline, 0 charged here.",
+  "",
+  "[check:reliability-gate-parity] STALE BASELINE ENTRY — it no longer describes the corpus:",
+  "[check:reliability-gate-parity]   stories/s/story.md",
+  "[check:reliability-gate-parity]     `pnpm --filter studio uat`",
+  "[check:reliability-gate-parity]     this gate IS now run (a gate step or CI `run:` step invokes `uat` for studio) — the blocker cleared. Delete the entry.",
+  "[check:reliability-gate-parity]   Edit UNRUN_GATE_BASELINE in packages/cli/src/reliability-gate-parity.ts.",
+].join(LF);
+
+const GOLDEN_STALE_GHOST = [
+  "[check:reliability-gate-parity] 1 declared package-script gate(s) across 1 story file(s) with a `## Reliability Gates` block — 1 run, 0 carried by the baseline, 0 charged here.",
+  "",
+  "[check:reliability-gate-parity] STALE BASELINE ENTRY — it no longer describes the corpus:",
+  "[check:reliability-gate-parity]   stories/s/story.md",
+  "[check:reliability-gate-parity]     `pnpm --filter studio uat`",
+  "[check:reliability-gate-parity]     no story declares this command any more — the declaration was reworded, retired or deleted, so the entry is a ghost. Delete it.",
+  "[check:reliability-gate-parity]   Edit UNRUN_GATE_BASELINE in packages/cli/src/reliability-gate-parity.ts.",
+].join(LF);
+
+const GOLDEN_BLOCK_LAST = "\n\n1. _(gate: observe)_ `pnpm --filter studio uat`.\n";
 
 describe("reliabilityGatesBlock", () => {
   it("slices the declared block and stops at the next heading", () => {
@@ -317,6 +384,181 @@ describe("reliabilityGatesBlock — the boundary cases the mutation rung found u
     assert.equal(reliabilityGatesBlock(STORY_NO_BLOCK), null);
     assert.doesNotThrow(() => declaredGatesIn("stories/s/story.md", STORY_NO_BLOCK));
     assert.deepEqual(declaredGatesIn("stories/s/story.md", STORY_NO_BLOCK), []);
+  });
+});
+
+describe("formatReliabilityGateParity — WHOLE-STRING goldens", () => {
+  /**
+   * Pinned WHOLE, and REGENERATED from the renderer rather than hand-edited.
+   *
+   * WHY WHOLE RATHER THAN `includes`: the mutation rung named 61 surviving `StringLiteral` mutants in
+   * this module, every one of them a line of report prose that a substring assertion walks straight
+   * past. A report is this rung's entire output — a session reads it and decides whether the corpus
+   * is honest — so prose that can be silently replaced is not a detail. A whole-string golden kills
+   * every literal on the lines it covers, which is the technique this arc already settled on
+   * (`verification-integrity-arc`, the `honestFramingStoryLive` increments).
+   *
+   * To update one: change the renderer, re-run the generator, paste. Editing a golden by hand
+   * defeats it — the golden's whole value is that it was not written by the same judgement that
+   * wrote the code.
+   */
+  const judge = (declared: string, runLines: string[], baseline: BaselinedGate[]) =>
+    judgeReliabilityGateParity({
+      stories: [
+        { path: "stories/s/story.md", text: `# S${LF}${LF}## Reliability Gates${LF}${LF}1. _(gate: observe)_ \`${declared}\`.${LF}` },
+      ],
+      steps: legPlan(),
+      workflowText: workflow(...runLines),
+      jobName: "verify",
+      baseline,
+    });
+
+  const CARRIED_ENTRY: BaselinedGate = {
+    story: "stories/s/story.md",
+    command: "pnpm --filter studio uat",
+    blocker: "held: a red journey",
+  };
+
+  it("the PASS body, whole", () => {
+    assert.equal(formatReliabilityGateParity(judge("pnpm --filter studio test", ["-r test"], [])), GOLDEN_PASS);
+  });
+
+  it("the FAIL body, whole — a declared gate nothing runs", () => {
+    assert.equal(formatReliabilityGateParity(judge("pnpm --filter studio uat", ["-r test"], [])), GOLDEN_FAIL);
+  });
+
+  it("the CARRIED body, whole — a baselined breach on an otherwise passing run", () => {
+    assert.equal(
+      formatReliabilityGateParity(judge("pnpm --filter studio uat", ["-r test"], [CARRIED_ENTRY])),
+      GOLDEN_CARRIED,
+    );
+  });
+
+  it("the STALE body, whole — the baselined gate is now run", () => {
+    assert.equal(
+      formatReliabilityGateParity(judge("pnpm --filter studio uat", ["-r test", "--filter studio uat"], [CARRIED_ENTRY])),
+      GOLDEN_STALE_RUN,
+    );
+  });
+
+  it("the STALE body, whole — the baselined declaration no longer exists", () => {
+    assert.equal(
+      formatReliabilityGateParity(judge("pnpm --filter studio test", ["-r test"], [CARRIED_ENTRY])),
+      GOLDEN_STALE_GHOST,
+    );
+  });
+
+  it("the covered/carried/charged counts are arithmetic, not a restatement of one number", () => {
+    // The count line survived two ArithmeticOperator mutants because no test read it. Three
+    // declarations in three states make the three numbers mutually distinguishable.
+    const parity = judgeReliabilityGateParity({
+      stories: [
+        {
+          path: "stories/s/story.md",
+          text: [
+            "# S",
+            "",
+            "## Reliability Gates",
+            "",
+            "1. _(gate: observe)_ `pnpm --filter studio test`.",
+            "2. _(gate: observe)_ `pnpm --filter studio uat`.",
+            "3. _(gate: observe)_ `pnpm --filter desktop uat`.",
+            "",
+          ].join(LF),
+        },
+      ],
+      steps: legPlan(),
+      workflowText: workflow("-r test"),
+      jobName: "verify",
+      baseline: [CARRIED_ENTRY],
+    });
+    assert.equal(parity.judged.length, 3);
+    assert.equal(parity.baselined.length, 1);
+    assert.equal(parity.unrun.length, 1);
+    assert.ok(formatReliabilityGateParity(parity).includes("3 declared package-script gate(s)"));
+    assert.ok(formatReliabilityGateParity(parity).includes("1 run, 1 carried by the baseline, 1 charged here"));
+  });
+});
+
+describe("the judge's partitions, which the rung found unproven", () => {
+  const story = (...declared: string[]) => ({
+    path: "stories/s/story.md",
+    text: ["# S", "", "## Reliability Gates", "", ...declared.map((d, i) => `${String(i + 1)}. _(gate: observe)_ \`${d}\`.`), ""].join(LF),
+  });
+
+  it("a baseline entry matches on story AND command, never on either alone", () => {
+    // The lookup's `&&` survived as `||`: with one entry whose story and command both matched,
+    // the two are indistinguishable. These two entries each match exactly one half.
+    const parity = judgeReliabilityGateParity({
+      stories: [story("pnpm --filter studio uat")],
+      steps: legPlan(),
+      workflowText: workflow("-r test"),
+      jobName: "verify",
+      baseline: [
+        { story: "stories/OTHER/story.md", command: "pnpm --filter studio uat", blocker: "x".repeat(90) },
+        { story: "stories/s/story.md", command: "pnpm --filter studio other-script", blocker: "y".repeat(90) },
+      ],
+    });
+    // Neither entry covers the real declaration, so it is CHARGED — and both entries are ghosts.
+    assert.equal(parity.unrun.length, 1);
+    assert.equal(parity.baselined.length, 0);
+    assert.equal(parity.staleBaseline.length, 2);
+  });
+
+  it("a COVERED gate never lands in the baselined list, even when the baseline names it", () => {
+    // The partition's `&&` survived as `||`: without the coverage half a covered-and-baselined gate
+    // would be reported as CARRIED — a run that is actually fine described as carrying debt.
+    const parity = judgeReliabilityGateParity({
+      stories: [story("pnpm --filter studio uat")],
+      steps: legPlan(),
+      workflowText: workflow("-r test", "--filter studio uat"),
+      jobName: "verify",
+      baseline: [{ story: "stories/s/story.md", command: "pnpm --filter studio uat", blocker: "z".repeat(90) }],
+    });
+    assert.equal(parity.baselined.length, 0, "it is RUN, so it carries nothing");
+    assert.equal(parity.unrun.length, 0);
+    assert.equal(parity.staleBaseline.length, 1, "the entry is the defect now");
+  });
+
+  it("judgeCoverage requires EVERY filtered package, not merely one and not merely some", () => {
+    // Two equality mutants survived on the hit-count comparison. A two-package declaration with one
+    // package invoked distinguishes `=== packages.length` from `>= 0` and from `<= 0`.
+    const two = parsePackageScriptCommand("pnpm --filter alpha --filter beta uat");
+    assert.notEqual(two, null);
+    const gate = { story: "stories/s/story.md", command: "pnpm --filter alpha --filter beta uat", parsed: two! };
+
+    assert.equal(judgeCoverage(gate, new Set(), new Set(["test"])).covered, false, "none invoked");
+    assert.equal(
+      judgeCoverage(gate, new Set([targetKey("alpha", "uat")]), new Set(["test"])).covered,
+      false,
+      "one of two invoked is not covered",
+    );
+    assert.equal(
+      judgeCoverage(gate, new Set([targetKey("alpha", "uat"), targetKey("beta", "uat")]), new Set(["test"])).covered,
+      true,
+      "both invoked is covered",
+    );
+  });
+
+  it("repoWideScripts reads a leg only when the WHOLE token is one, not a token containing one", () => {
+    // Both anchors of the leg pattern survived. A token that merely contains the shape must not
+    // register as a repo-wide leg, or any step whose text embeds `pnpm -r x` grants coverage.
+    assert.deepEqual([...repoWideScripts(plan("pnpm -r --no-bail test"), workflow(), "verify")], ["test"]);
+    // TRAILING noise disqualifies it: the shared normaliser only recognises an invocation ENDING in
+    // the script word, so `-r test --reporter=x` is not a leg and grants no coverage.
+    assert.equal(repoWideScripts(plan(), workflow("-r test --reporter=x"), "verify").size, 0);
+    // ⚠ LEADING noise does NOT disqualify it, and that is the normaliser's documented contract
+    // rather than a gap here: `normalizeContentStep` collapses EVERY scoping prefix — `-r`,
+    // `-r --no-bail`, an affected-scope `--filter ...<name>`, CI's templated `pnpm_args` — onto the
+    // one `pnpm -r <script>` token, which is exactly why this set is derivable at all. Asserting
+    // otherwise would be this test disagreeing with the seam it depends on.
+    assert.equal(repoWideScripts(plan(), workflow("--filter ...@storytree/cli test"), "verify").has("test"), true);
+  });
+
+  it("a filter token is matched WHOLE, so a lookalike token is not read as a filter", () => {
+    // Both anchors of the filter pattern survived. These tokens contain the text and are not it.
+    assert.equal(parsePackageScriptCommand("pnpm x--filter studio uat"), null);
+    assert.equal(parsePackageScriptCommand("pnpm --filterx studio uat"), null);
   });
 });
 

@@ -478,6 +478,40 @@ test("an UNCLASSIFIABLE command withholds the flake claim rather than asserting 
   assert.equal(c?.verdict, "store-unobserved");
 });
 
+test("readsLiveStore is FALSE for a check-bearing step that is not in the declared set", () => {
+  // Two mutants survived on `readsLiveStore`'s conjunction, and both need a step that HAS a check and
+  // is NOT a member: with `||` (or with the guard forced true) every check-bearing step reads as
+  // store-reading, so `check:boundaries` — disk-only, and one of the cheapest rungs in the gate —
+  // would silently stop being acquittable by an unchanged tree.
+  const disk = GATE_PLAN.find((s) => s.check === "check:boundaries");
+  assert.notEqual(disk, undefined);
+  assert.equal(readsLiveStore(disk!), false);
+
+  // The member control, and the no-check control: the three answers must differ for the right reasons.
+  const member = GATE_PLAN.find((s) => s.check === "check:agents");
+  assert.equal(readsLiveStore(member!), true);
+  const leg = GATE_PLAN.find((s) => s.check === undefined);
+  assert.notEqual(leg, undefined);
+  assert.equal(readsLiveStore(leg!), false, "an expensive `-r` leg names no check and reads no store");
+});
+
+test("every declared store-reading entry says WHAT it reads, and the exemption says why", () => {
+  // The two declared maps' value strings survived as a block — eleven literals no test read. They are
+  // not decoration: each is what a session sees when the rerun report declines to acquit a step, so a
+  // value that can be silently emptied is a diagnostic that can be silently emptied.
+  for (const [check, reads] of LIVE_STORE_READING_CHECKS) {
+    assert.ok(reads.length > 20, `${check} must say what live state its verdict reads`);
+    assert.ok(GATE_PLAN.some((s) => s.check === check), `${check} must be a step in the plan`);
+  }
+  for (const [check, why] of STORE_REACH_WITHOUT_READ) {
+    assert.ok(why.length > 40, `${check}'s exemption must say why the reach is not a read`);
+    assert.equal(LIVE_STORE_READING_CHECKS.has(check), false, `${check} cannot be both declared and exempt`);
+  }
+  // The exemption is a SHORT list by design; a growing one means the closure scan has stopped being
+  // the authority and the declaration has become the whole answer.
+  assert.equal(STORE_REACH_WITHOUT_READ.size, 1);
+});
+
 test("the declared store-reading set matches the REAL import closure of each check's entry module", () => {
   // The MECHANICAL fence, so the declaration cannot become prose. A step is a member iff its entry
   // module's transitive local imports reach the store seam. The scan over-approximates in exactly one

@@ -155,8 +155,12 @@ export function parsePackageScriptCommand(command: string): PackageScriptCommand
     const token = tokens[index] ?? "";
     const filter = FILTER_TOKEN.exec(token);
     if (filter === null) break;
+    // `undefined` means the `--filter=<pkg>` form was not the one matched, so the target is the NEXT
+    // token. An empty string cannot occur: {@link FILTER_TOKEN}'s group is `(.+)`, so it captures at
+    // least one character or does not participate. An `inline !== ""` guard stood here until the
+    // mutation rung found it unkillable — which is what dead code looks like from the outside.
     const inline = filter[1];
-    if (inline !== undefined && inline !== "") {
+    if (inline !== undefined) {
       packages.push(inline);
       index += 1;
       continue;
