@@ -160,7 +160,7 @@ WHAT THIS READ CANNOT SEE — stated so it is not mistaken for completeness:
   · the diff so far — the build's worktree is an OS-random temp path and no event records it, so there is no join from a run id to a working tree
   · any build on ANOTHER machine — the spawn registry is per-user and per-machine (the same cost ADR-0571 D2 accepted), so this is a floor on what is running, never a census
   · a build launched from the PRIMARY CHECKOUT — it derives no session identity and so registers nothing at all
-  · a chain member under \`story build\` — the registered argv names the STORY, so a member reads as unmatched even while it is being built (the story-versus-member keying of ADR-0576 D7)`);
+  · a \`story build --real\` chain, which SPLITS across the two halves so that neither id gives a whole answer: the registered argv names the STORY, while each member's phase marks are written under the MEMBER (one \`buildNodeReal\` walk per member, stamping its own \`spec.id\`). Peek the member and you get its real phase trail under a liveness of UNKNOWN; peek the story and you get RUNNING with no trail at all. Both are honest halves of one build — read them against this line rather than as a contradiction`);
   assert.deepEqual(attemptPolicyPeekCaveat(peek), ["", "⚠ A `--real` build of \"my-unit\" is RUNNING right now, as pid 4242 (session bold-noether-1234) — its latest phase mark is IMPLEMENT, entered 2026-09-21T11:50:00.000Z.", "", "So the unsigned attempt counted above may be THAT BUILD IN FLIGHT rather than a failure. The", "ledger appends its `attempt` row before the walk starts (ADR-0576 D5) and clears it only on a", "later signed pass, which is why a mid-walk build and a failed one read identically here. The", "attempt policy is not wrong — it has no in-progress state to give — but do not spend a decision", "point on this count until the run ends.", "", "  storytree node peek my-unit --pg"]);
 });
 
@@ -192,7 +192,7 @@ WHAT THIS READ CANNOT SEE — stated so it is not mistaken for completeness:
   · the diff so far — the build's worktree is an OS-random temp path and no event records it, so there is no join from a run id to a working tree
   · any build on ANOTHER machine — the spawn registry is per-user and per-machine (the same cost ADR-0571 D2 accepted), so this is a floor on what is running, never a census
   · a build launched from the PRIMARY CHECKOUT — it derives no session identity and so registers nothing at all
-  · a chain member under \`story build\` — the registered argv names the STORY, so a member reads as unmatched even while it is being built (the story-versus-member keying of ADR-0576 D7)`);
+  · a \`story build --real\` chain, which SPLITS across the two halves so that neither id gives a whole answer: the registered argv names the STORY, while each member's phase marks are written under the MEMBER (one \`buildNodeReal\` walk per member, stamping its own \`spec.id\`). Peek the member and you get its real phase trail under a liveness of UNKNOWN; peek the story and you get RUNNING with no trail at all. Both are honest halves of one build — read them against this line rather than as a contradiction`);
   assert.deepEqual(attemptPolicyPeekCaveat(peek), []);
 });
 
@@ -218,7 +218,7 @@ WHAT THIS READ CANNOT SEE — stated so it is not mistaken for completeness:
   · the diff so far — the build's worktree is an OS-random temp path and no event records it, so there is no join from a run id to a working tree
   · any build on ANOTHER machine — the spawn registry is per-user and per-machine (the same cost ADR-0571 D2 accepted), so this is a floor on what is running, never a census
   · a build launched from the PRIMARY CHECKOUT — it derives no session identity and so registers nothing at all
-  · a chain member under \`story build\` — the registered argv names the STORY, so a member reads as unmatched even while it is being built (the story-versus-member keying of ADR-0576 D7)`);
+  · a \`story build --real\` chain, which SPLITS across the two halves so that neither id gives a whole answer: the registered argv names the STORY, while each member's phase marks are written under the MEMBER (one \`buildNodeReal\` walk per member, stamping its own \`spec.id\`). Peek the member and you get its real phase trail under a liveness of UNKNOWN; peek the story and you get RUNNING with no trail at all. Both are honest halves of one build — read them against this line rather than as a contradiction`);
   assert.deepEqual(attemptPolicyPeekCaveat(peek), []);
 });
 
@@ -245,7 +245,7 @@ WHAT THIS READ CANNOT SEE — stated so it is not mistaken for completeness:
   · the diff so far — the build's worktree is an OS-random temp path and no event records it, so there is no join from a run id to a working tree
   · any build on ANOTHER machine — the spawn registry is per-user and per-machine (the same cost ADR-0571 D2 accepted), so this is a floor on what is running, never a census
   · a build launched from the PRIMARY CHECKOUT — it derives no session identity and so registers nothing at all
-  · a chain member under \`story build\` — the registered argv names the STORY, so a member reads as unmatched even while it is being built (the story-versus-member keying of ADR-0576 D7)`);
+  · a \`story build --real\` chain, which SPLITS across the two halves so that neither id gives a whole answer: the registered argv names the STORY, while each member's phase marks are written under the MEMBER (one \`buildNodeReal\` walk per member, stamping its own \`spec.id\`). Peek the member and you get its real phase trail under a liveness of UNKNOWN; peek the story and you get RUNNING with no trail at all. Both are honest halves of one build — read them against this line rather than as a contradiction`);
   assert.deepEqual(attemptPolicyPeekCaveat(peek), []);
 });
 
@@ -278,7 +278,7 @@ WHAT THIS READ CANNOT SEE — stated so it is not mistaken for completeness:
   · the diff so far — the build's worktree is an OS-random temp path and no event records it, so there is no join from a run id to a working tree
   · any build on ANOTHER machine — the spawn registry is per-user and per-machine (the same cost ADR-0571 D2 accepted), so this is a floor on what is running, never a census
   · a build launched from the PRIMARY CHECKOUT — it derives no session identity and so registers nothing at all
-  · a chain member under \`story build\` — the registered argv names the STORY, so a member reads as unmatched even while it is being built (the story-versus-member keying of ADR-0576 D7)`);
+  · a \`story build --real\` chain, which SPLITS across the two halves so that neither id gives a whole answer: the registered argv names the STORY, while each member's phase marks are written under the MEMBER (one \`buildNodeReal\` walk per member, stamping its own \`spec.id\`). Peek the member and you get its real phase trail under a liveness of UNKNOWN; peek the story and you get RUNNING with no trail at all. Both are honest halves of one build — read them against this line rather than as a contradiction`);
   assert.deepEqual(attemptPolicyPeekCaveat(peek), ["", "⚠ A `--real` build of \"my-unit\" is RUNNING right now, as pid 9 (session bold-noether-1234) — its latest phase mark is IMPLEMENT, entered 2026-09-21T11:30:00.000Z.", "", "So the unsigned attempt counted above may be THAT BUILD IN FLIGHT rather than a failure. The", "ledger appends its `attempt` row before the walk starts (ADR-0576 D5) and clears it only on a", "later signed pass, which is why a mid-walk build and a failed one read identically here. The", "attempt policy is not wrong — it has no in-progress state to give — but do not spend a decision", "point on this count until the run ends.", "", "  storytree node peek my-unit --pg"]);
 });
 
@@ -309,7 +309,7 @@ WHAT THIS READ CANNOT SEE — stated so it is not mistaken for completeness:
   · the diff so far — the build's worktree is an OS-random temp path and no event records it, so there is no join from a run id to a working tree
   · any build on ANOTHER machine — the spawn registry is per-user and per-machine (the same cost ADR-0571 D2 accepted), so this is a floor on what is running, never a census
   · a build launched from the PRIMARY CHECKOUT — it derives no session identity and so registers nothing at all
-  · a chain member under \`story build\` — the registered argv names the STORY, so a member reads as unmatched even while it is being built (the story-versus-member keying of ADR-0576 D7)`);
+  · a \`story build --real\` chain, which SPLITS across the two halves so that neither id gives a whole answer: the registered argv names the STORY, while each member's phase marks are written under the MEMBER (one \`buildNodeReal\` walk per member, stamping its own \`spec.id\`). Peek the member and you get its real phase trail under a liveness of UNKNOWN; peek the story and you get RUNNING with no trail at all. Both are honest halves of one build — read them against this line rather than as a contradiction`);
   assert.deepEqual(attemptPolicyPeekCaveat(peek), []);
 });
 
@@ -347,7 +347,7 @@ WHAT THIS READ CANNOT SEE — stated so it is not mistaken for completeness:
   · the diff so far — the build's worktree is an OS-random temp path and no event records it, so there is no join from a run id to a working tree
   · any build on ANOTHER machine — the spawn registry is per-user and per-machine (the same cost ADR-0571 D2 accepted), so this is a floor on what is running, never a census
   · a build launched from the PRIMARY CHECKOUT — it derives no session identity and so registers nothing at all
-  · a chain member under \`story build\` — the registered argv names the STORY, so a member reads as unmatched even while it is being built (the story-versus-member keying of ADR-0576 D7)`);
+  · a \`story build --real\` chain, which SPLITS across the two halves so that neither id gives a whole answer: the registered argv names the STORY, while each member's phase marks are written under the MEMBER (one \`buildNodeReal\` walk per member, stamping its own \`spec.id\`). Peek the member and you get its real phase trail under a liveness of UNKNOWN; peek the story and you get RUNNING with no trail at all. Both are honest halves of one build — read them against this line rather than as a contradiction`);
   assert.deepEqual(attemptPolicyPeekCaveat(peek), []);
 });
 
@@ -377,6 +377,6 @@ WHAT THIS READ CANNOT SEE — stated so it is not mistaken for completeness:
   · the diff so far — the build's worktree is an OS-random temp path and no event records it, so there is no join from a run id to a working tree
   · any build on ANOTHER machine — the spawn registry is per-user and per-machine (the same cost ADR-0571 D2 accepted), so this is a floor on what is running, never a census
   · a build launched from the PRIMARY CHECKOUT — it derives no session identity and so registers nothing at all
-  · a chain member under \`story build\` — the registered argv names the STORY, so a member reads as unmatched even while it is being built (the story-versus-member keying of ADR-0576 D7)`);
+  · a \`story build --real\` chain, which SPLITS across the two halves so that neither id gives a whole answer: the registered argv names the STORY, while each member's phase marks are written under the MEMBER (one \`buildNodeReal\` walk per member, stamping its own \`spec.id\`). Peek the member and you get its real phase trail under a liveness of UNKNOWN; peek the story and you get RUNNING with no trail at all. Both are honest halves of one build — read them against this line rather than as a contradiction`);
   assert.deepEqual(attemptPolicyPeekCaveat(peek), []);
 });
