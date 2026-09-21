@@ -216,6 +216,37 @@ test("the harness's window id picks among the windows a REUSED worktree slot has
   assert.equal(unhinted.band, "calm");
 });
 
+test("the latest-activity fallback sorts by ACTIVITY, not by which file was written last", () => {
+  // THREE windows, because two cannot discriminate a broken comparator — and the answer is the
+  // MIDDLE of the emission order, so neither "kept the order" nor "reversed it" lands on it by luck.
+  // The orders are deliberately crossed: a transcript is touched by things that are not model
+  // requests, so the freshest FILE can have the oldest last request.
+  const root = freshRoot();
+  const staleButFresh = "19191919-1919-4191-8191-191919191919";
+  const theAnswer = "20202020-2020-4202-8202-202020202020";
+  const middling = "21212121-2121-4212-8212-212121212121";
+
+  const a = writeWindow(root, "proj", staleButFresh, [
+    { requestId: "a", cwd: MY_CWD, windowId: staleButFresh, at: "2026-08-26T01:00:00Z", tokens: 10_000, model: "claude-opus-5" },
+  ]);
+  const b = writeWindow(root, "proj", theAnswer, [
+    { requestId: "b", cwd: MY_CWD, windowId: theAnswer, at: "2026-08-26T09:00:00Z", tokens: 20_000, model: "claude-opus-5" },
+  ]);
+  const c = writeWindow(root, "proj", middling, [
+    { requestId: "c", cwd: MY_CWD, windowId: middling, at: "2026-08-26T05:00:00Z", tokens: 30_000, model: "claude-opus-5" },
+  ]);
+  // mtime order (what the scan emits): a, b, c. Activity order: b, c, a.
+  touch(a, 1_000);
+  touch(b, 2_000);
+  touch(c, 3_000);
+
+  const read = readOwnContextWindow({ sessionId: MINE, root });
+
+  assert.equal(read.selectedBy, "latest-activity");
+  assert.equal(read.window?.windowId, theAnswer, "the freshest FILE is not the one making requests");
+  assert.equal(read.window?.residentTokens, 20_000);
+});
+
 test("a harness id the scan did not reach falls back, and SAYS the identity is unconfirmed", () => {
   const root = freshRoot();
   const win = "88888888-8888-4888-8888-888888888888";

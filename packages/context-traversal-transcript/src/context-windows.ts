@@ -629,6 +629,11 @@ export function readOwnContextWindow(args: OwnWindowArgs): OwnWindowRead {
   // ADR-0275 D1 makes mandatory and ADR-0411 D5 says to check FROM. Resolving the named transcript
   // is what makes the answer about the SESSION rather than about the directory it is standing in.
   const elsewhere =
+    // Stryker disable next-line ConditionalExpression: EQUIVALENT — with this guard forced either
+    // way the answer is the same. `namedWindow` compares a BASENAME, which is always a string, so an
+    // undefined id matches no file and it returns `undefined` on exactly the inputs the guard already
+    // returns `undefined` for. The two differ only in whether a pointless scan happens, and no
+    // assertion can observe that. The guard is kept for the wasted work it avoids, not for an answer.
     args.harnessWindowId === undefined ? undefined : namedWindow(windowFiles, args.harnessWindowId);
   if (elsewhere !== undefined) {
     return present(args.sessionId, scan, elsewhere, "harness-window-id-elsewhere", false);
