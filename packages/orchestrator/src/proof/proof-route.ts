@@ -104,7 +104,7 @@ const FOREIGN_RUNNERS = new Set(["vitest", "jest", "mocha", "playwright", "ava",
  * Only the ones a proof command plausibly carries — an unknown `--flag value` pair degrades to
  * "value looks like a path", which can only ever push a route toward the conservative side.
  */
-const NODE_FLAGS_TAKING_A_VALUE = new Set([
+export const NODE_FLAGS_TAKING_A_VALUE = new Set([
   "--import",
   "--require",
   "-r",
@@ -123,7 +123,7 @@ const NODE_FLAGS_TAKING_A_VALUE = new Set([
 ]);
 
 /** `bun test` flags that CONSUME the following token, for the same reason (ADR-0573 D2's bun route). */
-const BUN_TEST_FLAGS_TAKING_A_VALUE = new Set([
+export const BUN_TEST_FLAGS_TAKING_A_VALUE = new Set([
   "--preload",
   "-r",
   "--timeout",

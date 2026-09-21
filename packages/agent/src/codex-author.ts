@@ -42,6 +42,8 @@ import type { WorkerTimeBudget } from "./worker-budget.js";
 
 // Re-exported for callers constructing `CodexPhaseAuthorArgs.feedbackCommands` — the command shape
 // is declared once, in `codex-feedback-endpoint.ts`, never duplicated here.
+import type { FeedbackChoice } from "./feedback-choice.js";
+
 export type { CodexFeedbackCommand } from "./codex-feedback-endpoint.js";
 
 export const DEFAULT_CODEX_MODEL = "gpt-5.6-terra";
@@ -1353,12 +1355,22 @@ export class CodexPhaseAuthor implements PhaseAuthor {
           (command) => ({
             name: command.name,
             description: command.description,
+            // ADR-0587: the declared choice travels through the wrapper. Dropping it here would
+            // leave `executeFeedback` finding no parameter at the far end, so a tool's published
+            // choices would never be validated and every argument the leaf sent would be silently
+            // ignored — the tool would answer the whole-set form to every call, which for
+            // `run_tests` means running every suite the unit touches each time.
+            parameter: command.parameter,
             // Only the leaf's own exec-spawn time counts against its bound: suspended for the
             // duration of a feedback run, resumed once it settles (ADR-0570 D4).
-            run: async (feedbackReplicaRoot: string) => {
+            // The CHOICE travels with the call (ADR-0587). The replica root is the endpoint's to
+            // supply and the choice is the LEAF's; dropping the second here would leave every
+            // validated selection arriving at the registry as the whole-set form, so `run_tests`
+            // would run every suite the unit touches however few files the leaf named.
+            run: async (feedbackReplicaRoot: string, choice?: FeedbackChoice) => {
               bound.suspend?.();
               try {
-                return await command.run(feedbackReplicaRoot);
+                return await command.run(feedbackReplicaRoot, choice);
               } finally {
                 bound.resume?.();
               }
