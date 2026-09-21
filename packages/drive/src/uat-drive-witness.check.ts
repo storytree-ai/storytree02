@@ -56,6 +56,7 @@ import { closePool, createPool } from "@storytree/library/store";
 import { loadLocalSecrets } from "./secrets.js";
 import {
   classifyDriveAttempt,
+  isMissingHarnessEndTable,
   parseHarnessEnds,
   HARNESS_END_SELECT,
   UAT_HARNESS_END_TABLE,
@@ -170,7 +171,10 @@ async function main(): Promise<number> {
       const ends = await handle.pool.query(HARNESS_END_SELECT, [criterionId]);
       harnessEnds = parseHarnessEnds((ends.rows as { doc: unknown }[]).map((r) => r.doc));
     } catch (e) {
-      harnessReadError = (e as Error).message;
+      // An ABSENT table is a complete answer, not a failed read: a drive applies the schema before
+      // it writes, so no table means nothing has ever been recorded here, and the empty readback
+      // above is exactly right. Anything else says nothing either way and is carried as a reason.
+      if (!isMissingHarnessEndTable(e)) harnessReadError = (e as Error).message;
     }
     rows = (res.rows as RawDriveRow[]).map((r) => ({
       criterionId: r.criterion_id,

@@ -288,6 +288,27 @@ export function harnessEndInsert(record: UatHarnessEndRecord): HarnessEndInsert 
 export const HARNESS_END_SELECT =
   `SELECT doc FROM ${UAT_HARNESS_END_TABLE} WHERE criterion_id = $1 ORDER BY seq`;
 
+/**
+ * PURE: is this the store saying the harness-end TABLE does not exist (Postgres `42P01`)?
+ *
+ * It is not a read failure, and treating it as one would be the misreading this whole module
+ * exists to prevent — in the OTHER direction. No table means no harness end has ever been recorded
+ * on this store, which is a COMPLETE answer rather than a missing one: an absence the reader is
+ * entitled to act on. A drive applies the schema before it writes, so the only way to see this is a
+ * store nothing has driven since the stream existed, and on such a store `never attempted` is
+ * exactly true.
+ *
+ * Keyed on the SQLSTATE rather than the message, because the message is localised and the code is
+ * not. Any other failure is still carried as a read error, because it says nothing either way.
+ */
+export function isMissingHarnessEndTable(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    (error as { code?: unknown }).code === "42P01"
+  );
+}
+
 /** Harness-end docs read back from the store, split by whether this code can still read them. */
 export interface HarnessEndReadback {
   readonly records: readonly UatHarnessEndRecord[];
@@ -413,8 +434,12 @@ export function classifyDriveAttempt(args: {
     };
   }
 
+  // The newest end, wherever it sits in the list — never simply the last one read. On an `at` TIE
+  // the later row wins, because {@link HARNESS_END_SELECT} reads `ORDER BY seq` and insertion order
+  // is the only ordering the store guarantees: two ends stamped in the same millisecond are still
+  // ordered, and letting the fold's direction decide would be an accident rather than an answer.
   const latest = ends.reduce<UatHarnessEndRecord | null>(
-    (best, end) => (best === null || end.at > best.at ? end : best),
+    (best, end) => (best === null || end.at >= best.at ? end : best),
     null,
   );
   return {

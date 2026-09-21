@@ -14,6 +14,7 @@ import {
   harnessEndInsert,
   harnessEndPhaseForDriveEnd,
   harnessEndRecord,
+  isMissingHarnessEndTable,
   parseHarnessEnds,
   renderHarnessEnd,
   HARNESS_END_DETAIL_CHARS,
@@ -333,6 +334,16 @@ test("boundHarnessDetail says so when there was no output, rather than storing a
   assert.equal(boundHarnessDetail("   \n  "), "(the drive produced no output at all)");
 });
 
+test("boundHarnessDetail: a cause EXACTLY at the bound is kept whole, one character over is not", () => {
+  const exact = "z".repeat(HARNESS_END_DETAIL_CHARS);
+  assert.equal(boundHarnessDetail(exact), exact);
+  const oneOver = "z".repeat(HARNESS_END_DETAIL_CHARS + 1);
+  assert.equal(
+    boundHarnessDetail(oneOver),
+    `…[1 earlier character(s) dropped — this is the TAIL of the output]…\n${exact}`,
+  );
+});
+
 test("boundHarnessDetail keeps the TAIL and ANNOUNCES the truncation", () => {
   const bounded = boundHarnessDetail(`${"x".repeat(HARNESS_END_DETAIL_CHARS + 14)}TAIL-IS-THE-CAUSE`);
   assert.ok(bounded.startsWith("…[31 earlier character(s) dropped — this is the TAIL of the output]…\n"));
@@ -354,6 +365,18 @@ test("parseHarnessEnds counts a doc it cannot read instead of dropping it silent
   const readback = parseHarnessEnds([harnessEndRecord(LAUNCH_FAILURE), { nope: 1 }, null]);
   assert.equal(readback.records.length, 1);
   assert.equal(readback.unreadable, 2);
+});
+
+test("an ABSENT harness-end table is a complete answer, and anything else is a read failure", () => {
+  // 42P01 = undefined_table. A drive applies the schema before it writes, so no table means nothing
+  // has ever been recorded here — which is what makes "never attempted" true rather than guessed.
+  assert.equal(isMissingHarnessEndTable({ code: "42P01" }), true);
+  assert.equal(isMissingHarnessEndTable({ code: "42501" }), false);
+  assert.equal(isMissingHarnessEndTable({ code: 42_101 }), false);
+  assert.equal(isMissingHarnessEndTable(new Error("relation does not exist")), false);
+  assert.equal(isMissingHarnessEndTable(null), false);
+  assert.equal(isMissingHarnessEndTable(undefined), false);
+  assert.equal(isMissingHarnessEndTable("42P01"), false);
 });
 
 // ---------------------------------------------------------------------------
@@ -396,16 +419,35 @@ test("classifyDriveAttempt: ATTEMPTED AND REFUSED, with the most recent cause at
   );
 });
 
-test("classifyDriveAttempt: the MOST RECENT end is the one attached, not the first written", () => {
-  const older = harnessEndRecord({ ...LAUNCH_FAILURE, at: "2026-08-20T00:00:00.000Z", host: "older-box" });
-  const newer = harnessEndRecord({ ...LAUNCH_FAILURE, at: "2026-08-24T02:14:09.000Z", host: "newer-box" });
+test("classifyDriveAttempt: the MOST RECENT end is attached wherever it sits in the list", () => {
+  // The newest is deliberately NEITHER first NOR last: a fold that simply keeps whichever row it
+  // saw last would pick `middle` here, and a fold that never advances would pick `newest` by luck.
+  const at = (day: string, host: string) =>
+    harnessEndRecord({ ...LAUNCH_FAILURE, at: `2026-08-${day}T00:00:00.000Z`, host });
   const history = classifyDriveAttempt({
     criterionId: LAUNCH_FAILURE.criterionId,
     driveRecordCount: 0,
-    harnessEnds: { records: [older, newer], unreadable: 0 },
+    harnessEnds: { records: [at("20", "oldest-box"), at("24", "newest-box"), at("22", "middle-box")], unreadable: 0 },
   });
-  assert.ok(history.lines.join("\n").includes("on newer-box"));
-  assert.ok(!history.lines.join("\n").includes("on older-box"));
+  const rendered = history.lines.join("\n");
+  assert.ok(rendered.includes("on newest-box"));
+  assert.ok(!rendered.includes("on middle-box"));
+  assert.ok(!rendered.includes("on oldest-box"));
+});
+
+test("classifyDriveAttempt: two ends stamped at the SAME instant fall back to insertion order", () => {
+  // HARNESS_END_SELECT reads `ORDER BY seq`, so a later row IS later even when the clock did not
+  // move. Deciding a tie by the fold's direction instead would be an accident, not an answer.
+  const same = (host: string) =>
+    harnessEndRecord({ ...LAUNCH_FAILURE, at: "2026-08-24T02:14:09.000Z", host });
+  const history = classifyDriveAttempt({
+    criterionId: LAUNCH_FAILURE.criterionId,
+    driveRecordCount: 0,
+    harnessEnds: { records: [same("written-first"), same("written-second")], unreadable: 0 },
+  });
+  const rendered = history.lines.join("\n");
+  assert.ok(rendered.includes("on written-second"));
+  assert.ok(!rendered.includes("on written-first"));
 });
 
 test("classifyDriveAttempt: an UNREADABLE row is still an attempt, and never reads as never-attempted", () => {
