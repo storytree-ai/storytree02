@@ -34,8 +34,8 @@
  * `sourceOwnership.subtrees` entry un-owns files it never opened; under a rule that only asked "is
  * this path new?" every one of them would read INHERITED and land uncharged, and the NEXT session's
  * check would excuse them too, because by then they are genuinely inherited. Asking the base map the
- * same question the current map was asked is what makes that impossible, and it costs one
- * `git show <base>:repo-manifest.json`.
+ * same question the current map was asked is what makes that impossible, and it costs one read of
+ * the base's `repo-manifest/` fragment tree.
  *
  * IT IS NOT A DECAY INSTRUMENT, DELIBERATELY. ADR-0252 D1 chartered four cheap instruments and
  * ADR-0278 added a fifth with its own ADR and owner ratification; a sixth is an amendment to an
@@ -66,7 +66,7 @@
  *   - blind the SOURCE WALK (`gatherSourceFiles` returns `[]`) → 0 files, so 0 unowned, so 0
  *     authored → `✓ every source file this branch adds carries a declared owner`, exit 0. A repo that
  *     could not be read reports as a repo with nothing wrong. **DEFLATES — the dangerous direction.**
- *   - blind the CURRENT DECLARATION MAP (an unreadable `repo-manifest.json` yields `[]`) → every one
+ *   - blind the CURRENT DECLARATION MAP (an unreadable `repo-manifest/` tree yields `[]`) → every one
  *     of 595 files is unowned, so every file the branch touched is charged → a red naming hundreds of
  *     files. **INFLATES** — loud, and survivable, but it names the wrong defect: the reader is sent to
  *     write declarations for a map that is already complete.
@@ -176,7 +176,7 @@ export interface OwnershipTotalityFacts {
   readonly baseFiles: ReadonlySet<string>;
   /**
    * The files that were ALREADY unowned at the merge base — `judgeSourceOwnership` run over the same
-   * file list against the BASE `repo-manifest.json`. This is what separates "this branch removed the
+   * file list against the BASE `repo-manifest/` tree. This is what separates "this branch removed the
    * declaration" from "this was already the standing backlog".
    */
   readonly baseUnowned: ReadonlySet<string>;

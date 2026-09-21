@@ -1,7 +1,8 @@
 /**
  * The SOURCE-OWNERSHIP judge — the pure half of the second declared ownership map (ADR-0317 D2).
  *
- * WHAT THIS IS, AND WHAT IT IS EMPHATICALLY NOT. `repo-manifest.json` `packageOwnership` maps every
+ * WHAT THIS IS, AND WHAT IT IS EMPHATICALLY NOT. `packageOwnership`
+ * (`repo-manifest/package-ownership/_domain.json`) maps every
  * workspace package to its owning story, and `check:boundaries` holds it to the disk — 24 of 24
  * packages classified, zero unmapped (ADR-0074). That check is CORRECT at its own grain and nothing
  * here replaces or weakens it. What has never existed is the grain BELOW it: a map from a source
@@ -164,7 +165,8 @@ export interface ContestedFile {
  * ADR-0346 D2 retired story-grain `work` claims, so every story-grain entry answers "who owns this
  * file" with a node the claim ledger will not let anyone claim. That much is uniform. What is NOT
  * uniform, and what a single number asserts falsely, is whether that is a DECISION or a GAP — and
- * `repo-manifest.json`'s own authoring rules already settle most of them:
+ * the map's own authoring rules (`repo-manifest/source-ownership/_domain.json`) already settle most
+ * of them:
  *
  *  - `barrel` — the subtree names a package `src/index.ts`. Rule (4) settles this as story grain BY
  *    NATURE: a bare re-export barrel is the union of every organ the package fronts, so no single

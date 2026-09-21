@@ -264,8 +264,9 @@ keeps the core pure and the GPU dep surface isolated. It is owned HERE, not by `
 because mappers live with their consumer (the studio React mapper lives in `apps/studio`; the
 string-SVG mapper lives web-side) — the core stays "one core, many mappers." Naming: the mapper
 layer is framework-bound by design (that is strategy C's whole point), so naming it for the
-framework IS naming it for its role. On landing, `repo-manifest.json packageOwnership.organisms`
-gains `forest-world-r3f → website-experience` and `check:boundaries` starts scanning its one edge.
+framework IS naming it for its role. On landing,
+`repo-manifest/package-ownership/_domain.json`'s `packageOwnership.organisms` gains
+`forest-world-r3f → website-experience` and `check:boundaries` starts scanning its one edge.
 
 **3 — The provability firewall decides every proof mode.** Parent-side = machine-provable, armed
 `--real`; web-repo-side = operator-attested (ADR-0070), never force-fitted. Seven capabilities are
