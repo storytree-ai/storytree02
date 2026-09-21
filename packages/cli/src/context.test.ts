@@ -354,16 +354,35 @@ test("the harness window id is passed through as a selector, and a blank one is 
 });
 
 test("how the window was identified is stated — an unconfirmed pick never reads as a confirmed one", () => {
+  // Each line is pinned WHOLE rather than probed for a word. The three differ by a shade of meaning
+  // that a regex on "confirmed" cannot see — and the pair that matters most, `unconfirmed` and
+  // `UNCONFIRMED`, differ only in case and in what the second half of the sentence claims.
   const confirmed = contextCommand(deps());
-  assert.match(confirmed.body, /identity:\s+confirmed/);
+  assert.ok(
+    confirmed.body.includes(
+      "  identity:   confirmed — the harness named this window id and it is one of yours",
+    ),
+    `the confirmed identity line changed:\n${confirmed.body}`,
+  );
 
   const unconfirmed = contextCommand(deps({ read: () => reading({ selectedBy: "latest-activity" }) }));
-  assert.match(unconfirmed.body, /identity:\s+unconfirmed/);
+  assert.ok(
+    unconfirmed.body.includes(
+      "  identity:   unconfirmed — no harness window id here, so this is the most recently active window in your worktree",
+    ),
+    `the unconfirmed identity line changed:\n${unconfirmed.body}`,
+  );
 
   const disagreed = contextCommand(
     deps({ read: () => reading({ selectedBy: "latest-activity", harnessWindowUnmatched: true }) }),
   );
-  assert.match(disagreed.body, /UNCONFIRMED/);
+  assert.ok(
+    disagreed.body.includes(
+      "  identity:   UNCONFIRMED — the harness named a window no transcript on this machine answers" +
+        " to; this is the most recently active window in your worktree",
+    ),
+    `the UNCONFIRMED identity line changed:\n${disagreed.body}`,
+  );
 });
 
 // ── the fresh worktree the merge ceremony mandates ───────────────────────────

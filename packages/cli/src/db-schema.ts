@@ -92,97 +92,69 @@ export function wantsWrite(argv: readonly string[]): boolean {
 // ---------------------------------------------------------------------------
 
 /**
- * The index just past a single-quoted literal opening at `open`, with `''` read as an escaped quote.
+ * Everything a top-level `;` cannot be inside, plus the `;` itself — one pass, in one pattern.
  *
- * An unterminated literal consumes the rest of the file, which is the safe direction: the alternative
- * is resuming statement-splitting inside a string and reporting statements that do not exist.
- */
-function closingQuote(sql: string, open: number): number {
-  let i = open + 1;
-  while (i < sql.length) {
-    if (sql[i] !== "'") {
-      i += 1;
-      continue;
-    }
-    if (sql[i + 1] === "'") {
-      i += 2;
-      continue;
-    }
-    return i + 1;
-  }
-  return sql.length;
-}
-
-/**
- * The dollar-quote tag opening at `i` (`$$` or `$tag$`), or `null`.
+ * ★ THIS IS THE WHOLE REASON THE SPLIT IS NOT `sql.split(";")`. The bundled DDL's two
+ * `DO $$ … END $$;` blocks carry semicolons of their own, and a naive split shreds them into
+ * fragments — inventing a dozen statements that are not there and reporting NO `DO block` at all,
+ * which is exactly the "not purely additive" line a caller most needs. Comments and string literals
+ * carry semicolons too.
  *
- * This is the whole reason the split is a walk rather than `sql.split(";")`: the bundled DDL's two
- * `DO $$ … END $$;` blocks carry semicolons of their own, and a naive split reports their fragments
- * as separate top-level statements — inventing a dozen statements that are not there and mislabelling
- * what the block does. A positional parameter (`$1`) deliberately does not match.
+ * Read the alternatives in order:
+ *   `--[^\n]*`                    a line comment, to end of line
+ *   `/*[\s\S]*?(?:*​/|$)`          a block comment; an unterminated one runs to EOF
+ *   `'[^']*'?`                    a string literal; an unterminated one runs to EOF
+ *   `$tag$ … $tag$`               a dollar-quoted block, closed only by its OWN tag
+ *   `;`                           a top-level statement boundary
+ *
+ * ⚠ `''` IS NOT TREATED AS AN ESCAPE, and that is deliberate rather than an oversight. Postgres reads
+ * `'a''b'` as one literal; this reads it as two adjacent ones — and the REGIONS are identical either
+ * way, because the second literal opens exactly where the first closed. No input can distinguish the
+ * two through this function's output, so the escape branch this used to carry did no work.
+ *
+ * ⚠ A positional parameter (`$1`) is not a tag: the tag must be empty (`$$`) or start with a letter
+ * or underscore.
  */
-function dollarTagAt(sql: string, i: number): string | null {
-  if (sql[i] !== "$") return null;
-  const match = /^\$[A-Za-z_][A-Za-z_0-9]*\$|^\$\$/.exec(sql.slice(i));
-  return match?.[0] ?? null;
-}
+const SQL_TOKEN =
+  /--[^\n]*|\/\*[\s\S]*?(?:\*\/|$)|'[^']*'?|\$(?<tag>[A-Za-z_][A-Za-z_0-9]*|)\$[\s\S]*?(?:\$\k<tag>\$|$)|;/g;
 
 /** One line per statement, single-spaced — the form every classifier regex below is written against. */
 function normaliseWhitespace(statement: string): string {
   return statement.replace(/\s+/g, " ").trim();
 }
 
+/** A comment is replaced by a separator; everything else a token matched is kept verbatim. */
+function isComment(token: string): boolean {
+  return token.startsWith("--") || token.startsWith("/*");
+}
+
 /**
- * Split SQL into its top-level statements, skipping comments and never splitting inside a string or
+ * Split SQL into its top-level statements, dropping comments and never splitting inside a string or
  * a dollar-quoted block.
  *
  * Comments are dropped rather than carried: the classifier reads a statement's leading words, and a
  * leading `-- …` comment (which is how nearly every statement in the bundled DDL is introduced) would
- * otherwise be the leading words.
+ * otherwise BE the leading words. They leave a space behind, so the words either side of a
+ * mid-statement comment do not run together.
  */
 export function splitSqlStatements(sql: string): string[] {
   const statements: string[] = [];
   let current = "";
-  let i = 0;
+  let cursor = 0;
 
-  while (i < sql.length) {
-    if (sql.startsWith("--", i)) {
-      const end = sql.indexOf("\n", i);
-      i = end === -1 ? sql.length : end + 1;
-      // A space, so the words either side of a mid-statement comment do not run together.
-      current += " ";
-      continue;
-    }
-    if (sql.startsWith("/*", i)) {
-      const end = sql.indexOf("*/", i + 2);
-      i = end === -1 ? sql.length : end + 2;
-      current += " ";
-      continue;
-    }
-    if (sql[i] === "'") {
-      const end = closingQuote(sql, i);
-      current += sql.slice(i, end);
-      i = end;
-      continue;
-    }
-    const tag = dollarTagAt(sql, i);
-    if (tag !== null) {
-      const close = sql.indexOf(tag, i + tag.length);
-      const end = close === -1 ? sql.length : close + tag.length;
-      current += sql.slice(i, end);
-      i = end;
-      continue;
-    }
-    if (sql[i] === ";") {
+  for (const match of sql.matchAll(SQL_TOKEN)) {
+    const token = match[0];
+    current += sql.slice(cursor, match.index);
+    cursor = match.index + token.length;
+
+    if (token === ";") {
       statements.push(current);
       current = "";
-      i += 1;
       continue;
     }
-    current += sql[i];
-    i += 1;
+    current += isComment(token) ? " " : token;
   }
-  statements.push(current);
+  statements.push(current + sql.slice(cursor));
 
   return statements.map(normaliseWhitespace).filter((statement) => statement.length > 0);
 }
@@ -225,9 +197,16 @@ const DROPS_SOMETHING = /\bDROP\b/i;
 /** `DO $$ … $$` — a procedural block whose effect its first word does not disclose. */
 const DO_BLOCK = /^DO\b/i;
 
-/** The statement's opening word, upper-cased — the only honest label for a shape not in the table. */
+/**
+ * The statement's opening word, upper-cased — the only honest label for a shape not in the table.
+ *
+ * Written against the whole string rather than `split(" ")[0]`, which under
+ * `noUncheckedIndexedAccess` needs a `?? ""` fallback no input can reach: every statement classified
+ * here came through {@link splitSqlStatements}' own non-empty filter.
+ */
 function leadingWord(statement: string): string {
-  return (statement.split(" ")[0] ?? "").toUpperCase();
+  const end = statement.indexOf(" ");
+  return (end === -1 ? statement : statement.slice(0, end)).toUpperCase();
 }
 
 /**

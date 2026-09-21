@@ -142,6 +142,76 @@ test("classify: an object glued to its opening paren is still read whole", () =>
   assert.equal(classifyStatement("CREATE TABLE events.thing(id TEXT)").object, "events.thing");
 });
 
+test("classify: every shape is ANCHORED — a DO block that NAMES them all is still a DO block", () => {
+  // One statement carrying every keyword the table matches. Unanchor any of those patterns and this
+  // procedural block is reported as whichever shape its body happens to mention — which is the
+  // direction that matters, because it would read as `additive` while doing whatever the block does.
+  const block =
+    "DO $$ BEGIN" +
+    " CREATE SCHEMA s;" +
+    " CREATE TABLE t (id TEXT);" +
+    " CREATE INDEX i ON t (id);" +
+    " CREATE UNIQUE INDEX u ON t (id);" +
+    " ALTER TABLE t ADD COLUMN c TEXT;" +
+    " DROP INDEX i;" +
+    " DROP TABLE t;" +
+    " END $$";
+  assert.deepEqual(classifyStatement(block), { kind: "DO block", object: null, posture: "opaque" });
+});
+
+test("classify: `DO` is anchored too — a statement that merely CONTAINS it is not a procedural block", () => {
+  assert.deepEqual(classifyStatement("INSERT INTO events.t VALUES (1) ON CONFLICT DO NOTHING"), {
+    kind: "INSERT",
+    object: null,
+    posture: "opaque",
+  });
+});
+
+test("classify: the OPTIONAL clauses are optional — every plain form still classifies", () => {
+  // Each of these drops a `(?:… )?` group: `IF NOT EXISTS`, `IF EXISTS`, `CONCURRENTLY`, `ONLY`.
+  // Make any of them mandatory and the statement falls through to `opaque`, which would report the
+  // whole bundled DDL as a wall of statements whose effect is unknown.
+  assert.deepEqual(classifyStatement("CREATE SCHEMA events"), {
+    kind: "CREATE SCHEMA",
+    object: "events",
+    posture: "additive",
+  });
+  assert.deepEqual(classifyStatement("CREATE TABLE events.t (id TEXT)"), {
+    kind: "CREATE TABLE",
+    object: "events.t",
+    posture: "additive",
+  });
+  assert.deepEqual(classifyStatement("CREATE INDEX ix ON events.t (id)"), {
+    kind: "CREATE INDEX",
+    object: "ix",
+    posture: "additive",
+  });
+  assert.deepEqual(classifyStatement("CREATE UNIQUE INDEX ux ON events.t (id)"), {
+    kind: "CREATE UNIQUE INDEX",
+    object: "ux",
+    posture: "additive",
+  });
+  assert.deepEqual(classifyStatement("DROP TABLE events.t"), {
+    kind: "DROP TABLE",
+    object: "events.t",
+    posture: "destructive",
+  });
+  assert.deepEqual(classifyStatement("DROP INDEX events.ix"), {
+    kind: "DROP INDEX",
+    object: "events.ix",
+    posture: "destructive",
+  });
+  assert.deepEqual(classifyStatement("ALTER TABLE events.t ADD COLUMN c TEXT"), {
+    kind: "ALTER TABLE",
+    object: "events.t",
+    posture: "additive",
+  });
+});
+
+test("classify: a single-word statement is labelled by that whole word", () => {
+  assert.deepEqual(classifyStatement("COMMIT"), { kind: "COMMIT", object: null, posture: "opaque" });
+});
+
 test("classify: an unknown shape is OPAQUE labelled by its opening word — never guessed additive", () => {
   assert.deepEqual(classifyStatement("truncate events.thing"), {
     kind: "TRUNCATE",
