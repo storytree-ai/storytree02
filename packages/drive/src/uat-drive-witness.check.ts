@@ -17,13 +17,32 @@
  * an input to THIS check, never a verdict — no model signs its own proof, and the signing path is
  * reused unchanged.
  *
+ * **A red now says WHY IT IS RED IN THE OTHER SENSE TOO — whether anybody ever tried.** Until
+ * `events.uat_harness_end` existed, an absent drive record answered two different questions with one
+ * sentence: *nobody has driven this criterion* and *somebody drove it and the machinery refused
+ * them* both printed `no drive records … — run the driver`, byte for byte. The first is work waiting
+ * to be done; the second is a broken box with a named, repeatable cause, and telling them apart is
+ * what stops the next reader paying for a diagnosis this harness already made. So a red prints an
+ * ATTEMPT HISTORY beside the disqualification reasons ({@link classifyDriveAttempt}). It changes
+ * NOTHING about the verdict: the product witness is still selected from `events.uat_drive` alone,
+ * and a harness end can no more witness a leg than an absent record can.
+ *
  * The revision binding is the honesty wall worth naming twice: the record carries the `revision-id`
  * of the journey that was actually driven, and this gate compares it against the criterion's revision
  * as it reads NOW. Re-authoring the journey prose therefore invalidates every prior drive instead of
  * carrying its green onto a claim nobody tested.
  *
- * Usage (and the exact `proofCommand` a bound gate declares):
+ * Usage:
+ *   pnpm uat:witness <story-id> <criterion-id>
+ *
+ * A bound gate's `proofCommand` still declares the long form, which is the same invocation:
  *   pnpm --filter @storytree/drive exec node --import tsx src/uat-drive-witness.check.ts <story-id> <criterion-id>
+ * A criterion's declared command is inside its hashed canonical content, so shortening it there
+ * would invalidate every drive already taken against that revision. The root `uat:witness` script is
+ * the hand-typed sibling of `uat:drive` — and it is what makes this file's mutation exemption
+ * DERIVED rather than declared: it is a process entry point whose `main()` opens a real Cloud SQL
+ * pool, so mutating it measures the shape of the file and not the strength of any test, and loading
+ * it in the mutation sandbox `process.exit`s the runner before a single test is discovered.
  *
  * Deliberately NOT a `*.test.ts` — it needs the live store and a full clone, like gate-5/6/7.
  */
@@ -35,6 +54,13 @@ import { parseUatTestCriterionSources } from "@storytree/library";
 import { closePool, createPool } from "@storytree/library/store";
 
 import { loadLocalSecrets } from "./secrets.js";
+import {
+  classifyDriveAttempt,
+  parseHarnessEnds,
+  HARNESS_END_SELECT,
+  UAT_HARNESS_END_TABLE,
+  type HarnessEndReadback,
+} from "./uat-drive-harness-end.js";
 import { selectWitnessableDrive, type DriveRow } from "./uat-drive.js";
 
 /**
@@ -127,12 +153,25 @@ async function main(): Promise<number> {
   }
 
   let rows: DriveRow[];
+  // THE ATTEMPT HISTORY, read alongside the witness and never in place of it. It answers the
+  // question an absent drive record used to answer twice over — "nobody has driven this" and
+  // "somebody drove it and the machinery refused them" were the same sentence. A read failure here
+  // is carried as a REASON rather than as silence: reporting "never attempted" because a query
+  // errored would be the exact misattribution this exists to close.
+  let harnessEnds: HarnessEndReadback = { records: [], unreadable: 0 };
+  let harnessReadError: string | null = null;
   try {
     const res = await handle.pool.query(
       `SELECT criterion_id, revision_id, outcome, commit_sha, run_id, driver, at
          FROM events.uat_drive WHERE criterion_id = $1`,
       [criterionId],
     );
+    try {
+      const ends = await handle.pool.query(HARNESS_END_SELECT, [criterionId]);
+      harnessEnds = parseHarnessEnds((ends.rows as { doc: unknown }[]).map((r) => r.doc));
+    } catch (e) {
+      harnessReadError = (e as Error).message;
+    }
     rows = (res.rows as RawDriveRow[]).map((r) => ({
       criterionId: r.criterion_id,
       revisionId: r.revision_id,
@@ -170,9 +209,25 @@ async function main(): Promise<number> {
 
   console.error(`uat-drive-witness: NO model-driven witness for ${storyId} / ${criterionId}:`);
   for (const reason of result.reasons) console.error(`  x ${reason}`);
+  console.error("");
+  if (harnessReadError !== null) {
+    console.error(
+      `ATTEMPT HISTORY: UNREADABLE — ${UAT_HARNESS_END_TABLE} could not be read: ${harnessReadError}\n` +
+        "  So this check cannot tell you whether the criterion was ever attempted. Do NOT read that as\n" +
+        "  'never attempted'. If the table does not exist yet, no drive has reached this store at all.",
+    );
+  } else {
+    for (const line of classifyDriveAttempt({
+      criterionId,
+      driveRecordCount: rows.length,
+      harnessEnds,
+    }).lines) {
+      console.error(line);
+    }
+  }
   console.error(
     "\nRe-run the driver — it PRODUCES the artifact out-of-band; this gate only witnesses it:\n" +
-      `  pnpm --filter @storytree/drive exec node --import tsx src/uat-drive.run.ts ${storyId} ${criterionId}`,
+      `  pnpm uat:drive ${storyId} ${criterionId}`,
   );
   return 1;
 }
