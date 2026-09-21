@@ -32,6 +32,7 @@ import os from "node:os";
 import {
   type AliveProbe,
   type ClassifiedSpawn,
+  type PeekHold,
   type PeekPhaseMark,
   type SpawnRegistryIo,
   attemptPolicyPeekCaveat,
@@ -39,9 +40,11 @@ import {
   foldBuildPeek,
   listRegisteredSessions,
   nodeAliveProbe,
+  listStoredHolds,
   nodeSpawnRegistryIo,
   readOwnership,
   renderBuildPeek,
+  resolveHoldsDir,
 } from "@storytree/drive";
 
 import type { Envelope } from "./envelope.js";
@@ -54,6 +57,17 @@ export interface NodePeekDeps {
   readonly probe: AliveProbe;
   readonly now: () => number;
   readonly machine: () => string | null;
+  /**
+   * This unit's announced hold, when it has one (ADR-0592 D6) — the THIRD input, beside the registry
+   * and the store. A separate seam rather than a directory on this bag, so a test injects an answer
+   * instead of a filesystem, and so the fold still reads nothing itself.
+   *
+   * ⚠ It resolves `undefined` for BOTH "no hold" and "the holds directory could not be read", and the
+   * render says nothing in either case. That is deliberate: a peek is a read that must keep working
+   * when things around it are broken, and a build that is not held is the overwhelmingly common case.
+   * The hold's own expiry is what bounds the harm — a hold nobody was told about still stops itself.
+   */
+  readonly readHold: (unitId: string) => Promise<PeekHold | undefined>;
 }
 
 /** The live wiring: the real registry, the real probe, the real clock, this box's hostname. */
@@ -64,7 +78,22 @@ export function defaultNodePeekDeps(): NodePeekDeps {
     probe: nodeAliveProbe,
     now: () => Date.now(),
     machine: () => machineName(os.hostname()),
+    readHold: async (unitId) => (await latestHoldFor(unitId)) ?? undefined,
   };
+}
+
+/**
+ * The newest hold this unit has announced on this machine, or null.
+ *
+ * NEWEST rather than "the one" because the notices are keyed by run: a unit built twice could in
+ * principle have two, and the one an orchestrator is being asked about is the latest. A build's own
+ * `close()` removes its notice, so in practice there is at most one live — the sort is what makes the
+ * abnormal case answer something honest rather than arbitrary.
+ */
+async function latestHoldFor(unitId: string): Promise<PeekHold | null> {
+  const holds = await listStoredHolds(resolveHoldsDir(undefined)).catch(() => []);
+  const mine = holds.filter((h) => h.unitId === unitId);
+  return mine.length === 0 ? null : (mine[mine.length - 1] ?? null);
 }
 
 /**
@@ -96,17 +125,32 @@ export function nodePeekCommand(
   unitId: string,
   marks: readonly PeekPhaseMark[] | null,
   deps: NodePeekDeps,
+  hold?: PeekHold | undefined,
 ): Envelope {
+  // Each option is narrowed to a named const and spread UNCONDITIONALLY: an inline conditional spread
+  // of `{}` is what `no-conditional-empty-object-spread` refuses, and `exactOptionalPropertyTypes`
+  // refuses `hold: undefined` against an optional key.
+  const held = hold === undefined ? {} : { hold };
   const peek = foldBuildPeek({
     unitId,
     spawns: readMachineSpawns(deps),
     marks,
     nowMs: deps.now(),
+    ...held,
   });
   const body = [machineScopeLine(deps.machine()), "", renderBuildPeek(peek)].join("\n");
   const next: string[] = [];
   // The read that lies, offered beside the one that corrects it (ADR-0588 D4) — and offered FIRST
   // when the peek is the thing that makes it readable.
+  // ADR-0592 D6: a held build is waiting on a decision that EXPIRES, so the two answers are offered
+  // ahead of everything else — including the attempt-policy read, which is the right first offer for a
+  // running build and the wrong one for a build that is asking the reader a question.
+  if (peek.hold.held && peek.hold.answerable) {
+    next.push(
+      `storytree node extend ${unitId} --minutes 30 --reason "<why>"`,
+      `storytree node extend ${unitId} --stop --reason "<why>"`,
+    );
+  }
   if (peek.liveness === "running") next.push(`storytree node attempts ${unitId} --pg`);
   if (!peek.storeRead) next.push(`storytree node peek ${unitId} --pg`);
   next.push(`storytree node log ${unitId} --pg`, "storytree own --all");

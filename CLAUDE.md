@@ -541,6 +541,20 @@ kind owes a seed export any more.
   leaf's own first wall refuses on purpose, and never a metered key, which its fifth wall refuses.
   `--store pg` on live/real builds persists verdicts to `events.work_event`/`events.verdict`
   (refused for dry-runs — a scripted PASS persisted would be a forged healthy).
+  **A `--real` BUILD NOW HOLDS AT ITS BUDGET AND ASKS YOU (ADR-0592) — so background it.** Time, not
+  turns, is the brake (ADR-0584): `--time-budget <minutes>` sets the whole build's wall clock, default
+  two hours, per MEMBER on a chain. At expiry the build HOLDS instead of stopping: it prints a
+  BUILD HELD banner, `storytree node peek <unit-id> --pg` reports HELD with the grace left, and you
+  answer ONCE — `storytree node extend <unit-id> --minutes <n> --reason "<why>"` (buys time, resumes
+  the SAME build with its files on disk) or `--stop --reason "<why>"` (ends it now). **Neither takes
+  `--pg`** — the hold is a file under `~/.storytree/holds` precisely so a held build stays answerable
+  when the store is down. **Doing nothing is also an answer:** after `--hold-grace` minutes (default
+  10; `0` disables the hold) it stops unsigned. So a paid build launched in a FOREGROUND call you are
+  blocked on cannot be answered — you pay the grace window and buy nothing. Accounting: an extension
+  is NOT an attempt under ADR-0563 and structurally cannot be (the `attempt` event precedes the walk,
+  ADR-0576 D5); a build that stops at expiry is ONE failed attempt however many extensions preceded
+  it, and every extension is listed in the envelope with your reason. ⚠ Extend the id that is HELD —
+  on a chain that is the MEMBER, not the story the peek names; `node extend` lists what is held.
 - Library CLI: `pnpm storytree library` (explore). **READ BARE — `--pg` is for WRITES:**
   `pnpm db:up` then `pnpm storytree library artifact edit <id> --set <field>=<value> --pg`. A bare
   read already dials the live store and is current (the Library section above), so `--pg` buys a read
