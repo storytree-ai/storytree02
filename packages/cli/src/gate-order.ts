@@ -546,6 +546,77 @@ export const SKIP_CAPABLE_CHECKS: ReadonlyMap<string, string> = new Map([
 ]);
 
 /**
+ * Gate steps whose VERDICT reads the shared live store, keyed to the mutable state each one reads.
+ *
+ * WHAT IT IS FOR, AND IT IS ONE THING. `gate-rerun.ts` may call a fail→pass a `flake-signature` only
+ * when the working-tree digest is byte-identical across the two runs — and that digest's aperture is
+ * `git status` + `git diff HEAD` + the untracked files' content. The shared Postgres store is OUTSIDE
+ * that aperture entirely. So for a step in this set, "the repository did not change" does NOT mean
+ * "nothing changed": a sibling session's `--pg` write, or the session's own repair of a live artifact,
+ * moves the verdict while the digest is unmoved. Claiming a flake there asserts that nothing was
+ * fixed in between, over precisely the state the comparison cannot see — and a REAL store-side repair
+ * is the commonest way a store-reading step goes fail→pass on an unchanged tree.
+ *
+ * ⚠ NOT THE SAME AXIS AS {@link GateSubject}, THOUGH THEY COINCIDE TODAY, AND THEY MUST NOT BE
+ * COLLAPSED. `subject` answers WHOSE a red might be — the ordering question. This answers whether
+ * SAMENESS is provable — the rerun question. All ten members happen to be the `shared-environment`
+ * block right now, and that is a coincidence of the current plan rather than a rule: a step could
+ * read shared state the digest CAN see (a submodule's HEAD shows up in `git status`), or read the
+ * store while any red is still squarely the branch's own. Nothing asserts the two sets are equal,
+ * because a legitimate divergence must not red the gate.
+ *
+ * DERIVED, NOT GUESSED, and `gate-order.test.ts` holds it to the derivation: a step is a member iff
+ * its entry module's transitive local import closure reaches the store seam — `@storytree/library/store`
+ * (the direct `createPool`/`PgLibraryStore` route) or `openCorpusStore` from `@storytree/drive` (the
+ * shared route five of them take). The scan OVER-approximates in one known way, which is why
+ * {@link STORE_REACH_WITHOUT_READ} exists rather than a hand-waved exception.
+ */
+export const LIVE_STORE_READING_CHECKS: ReadonlyMap<string, string> = new Map([
+  ["check:web-grounding", "the live corpus, to check each website claim is still grounded in an artifact"],
+  ["check:adr-health", "the `adr` rows — their status, edges and `load_bearing` tag"],
+  ["check:guidance", "the live `agent` artifacts the committed `CLAUDE.md` projection is generated from"],
+  ["check:agents", "the live `agent` artifacts the committed harness agent directories are generated from"],
+  ["check:verification-decay", "shared proof state and the drain ceilings measured over it"],
+  ["check:library-dag-acyclic", "every artifact's authored `dependsOn` edges"],
+  ["check:definition-adjudication", "the `definition` artifacts and their adjudication state"],
+  ["check:mirror-conformance-live", "the live `events.node_claim` ledger, through the `--arm live` activity pair"],
+  ["check:hierarchy-drift", "the live work-hierarchy projection, compared against this checkout's tree"],
+  ["check:uat-revision-continuity", "the live criterion revisions this branch's changed criteria bind to"],
+]);
+
+/**
+ * The ONE step whose import closure reaches the store seam without its verdict reading the store.
+ *
+ * `check-mirror-conformance.ts` is the entry for TWO gate steps (ADR-0496 D1): `--arm fixtures` (the
+ * default, which `pnpm check:mirror-conformance` runs) compares every registered mirror over frozen
+ * fixtures, and `--arm live` (`pnpm check:mirror-conformance-live`) adds the `/api/activity` pair over
+ * the real ledger. One file, one import of `createPool`, two steps — so a static closure scan cannot
+ * tell them apart and marks both.
+ *
+ * DECLARED WITH A WRITTEN REASON RATHER THAN SILENTLY TOLERATED, because the over-approximation is in
+ * the SAFE direction and would therefore never be noticed: a step wrongly marked store-reading only
+ * WITHHOLDS a flake claim it could honestly have made. That is the same bias the whole rerun surface
+ * takes (`treeChangedSince` answers `null` rather than guessing), so it would sit here forever as an
+ * unexamined lost signal. Naming it keeps it a decision.
+ */
+export const STORE_REACH_WITHOUT_READ: ReadonlyMap<string, string> = new Map([
+  [
+    "check:mirror-conformance",
+    "shares `check-mirror-conformance.ts` with its `--arm live` sibling, which is the arm that dials the store; the default `--arm fixtures` this step runs compares frozen fixtures only",
+  ],
+]);
+
+/**
+ * Does this step's verdict read mutable live-store state the working-tree digest cannot observe?
+ *
+ * The single place the classification is consulted, so the rerun comparison and the ordering
+ * invariant can never disagree about which steps they are talking about.
+ */
+export function readsLiveStore(step: GateStep): boolean {
+  return step.check !== undefined && LIVE_STORE_READING_CHECKS.has(step.check);
+}
+
+/**
  * The token whose presence in a skip-capable check's root script means its exit code will NOT
  * survive — see {@link SKIP_CAPABLE_CHECKS}. Kept beside the set so the test and the reason cannot
  * drift apart.
