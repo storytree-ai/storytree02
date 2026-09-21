@@ -562,6 +562,15 @@ Three things cost real time and none of them had a row:
    two `DROP TABLE IF EXISTS` lines are a completed ADR-0200 D7 retirement that no-ops on every later
    run — but that was the schema file's good manners, not a guard. Filed as friction
    (`db-schema-applies-ddl-while-reading-as-an-inspection-verb`).
+
+   > **REMEDIED 2026-09-22** — increment `db-schema-requires-explicit-write-posture` on
+   > `tool-signal-gaps-arc`. **The bare `pnpm db:schema` now PREVIEWS and opens no connection**: it
+   > lists every top-level statement the DDL would apply, grouped by kind, and reads out the ones
+   > that are not purely additive — today the two `DROP TABLE`s above and the two `DO $$ … $$` blocks
+   > whose effect their opening word does not disclose. **`pnpm db:schema --write` is what applies
+   > it.** So the finding above is history: the guard this run found missing now exists, and the
+   > schema file's good manners are no longer what is standing between a read-only question and a
+   > write to the shared store.
 3. **`doctor`'s Claude probe FAILED a correctly-provisioned box** — FIXED, and it is now called
    `claude-credential`. Under ADR-0430 the token comes from Secret Manager and
    `~/.claude/.credentials.json` is legitimately absent, but the probe looked only for a
