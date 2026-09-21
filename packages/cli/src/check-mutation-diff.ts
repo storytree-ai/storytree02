@@ -30,6 +30,7 @@ import { GATE_SKIP_EXIT_CODE } from "./gate-runner.js";
 import { MIRRORS } from "./mirror-conformance.js";
 import {
   adjudicateMutants,
+  auditSuppressionDirectives,
   type ChangedRanges,
   concurrencyFor,
   declaredTestRoots,
@@ -38,6 +39,7 @@ import {
   entryPointsFromShellScripts,
   formatMutationVerdict,
   formatNarrowingLines,
+  formatSuppressionAudit,
   isTestFile,
   isSpawnUatTest,
   mergeMutationReports,
@@ -789,6 +791,23 @@ function main(): void {
         process.exit(disposition.exitCode);
       }
     }
+
+    // DID THE BRANCH'S OWN SUPPRESSION DIRECTIVES ACTUALLY SUPPRESS ANYTHING?
+    //
+    // Printed on a PASS as well as a failure, for the reason the narrowings above are: a directive
+    // that bound to nothing is invisible in the diff — the comment that works and the comment that
+    // does not are textually identical — so the only place a reader can meet the fact is here.
+    // It never changes the verdict; see `formatSuppressionAudit` for why warn, not red.
+    //
+    // Printed OUTSIDE `formatMutationVerdict` on purpose: everything that function emits is part of
+    // the verdict, and this is not. Keeping it on its own stream is what stops an advisory line
+    // being read as a reason the rung failed.
+    const suppressions = auditSuppressionDirectives({
+      sources,
+      changed: ranges,
+      mutants: verdict.mutants,
+    });
+    for (const line of formatSuppressionAudit(TAG, suppressions)) console.log(line);
 
     const body = formatMutationVerdict(TAG, verdict, selection.targets, sources);
 
