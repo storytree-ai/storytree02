@@ -166,8 +166,8 @@ The graph is acyclic; `judge-result-shape` is the root.
 
 This NEW story owns the NEW `@storytree/model-judged-uat` port at `packages/model-judged-uat`; every
 `proof.real.sourceFile` and literal `sourceGlobs` entry is under that one building. Package scaffold
-+ `repo-manifest.json` `packageOwnership` registration must land before the leaf chain (same bootstrap
-as `model-uat-witness` / `uat-criterion-detail`).
++ `packageOwnership` registration in `repo-manifest/package-ownership/_domain.json` must land before
+the leaf chain (same bootstrap as `model-uat-witness` / `uat-criterion-detail`).
 
 Runtime dependencies (honest `depends_on`):
 
