@@ -25,8 +25,18 @@
  * raises an `open-question` only when IT is unsure. That widening is scoped to a UAT drive;
  * `asset:attempt-privileged-actions-approve-inline` is untouched everywhere else.
  *
+ * **A refusal is now DURABLE, and still not a product claim.** Every end that stops this run before a
+ * readable journey report — an auth/model/config refusal, an exhausted port band, a prompt audit, a
+ * session that died at launch, a walk cut off at the ceiling, a refused report timing or surface —
+ * writes a typed `UatHarnessEndRecord` to `events.uat_harness_end` (`uat-drive-harness-end.ts`).
+ * That stream is NOT `events.uat_drive`: the witness check selects its product witness from the
+ * latter alone, so a harness end is invisible to it by construction, and the record has nowhere to
+ * put an outcome. It is why the store is brought up BEFORE the provider is verified — a refusal
+ * raised without a pool could only be printed, which is the hole this closes.
+ *
  * Fail-closed before any spend: a dirty tree refuses (the record pins the commit the journey was
- * driven against), an unreachable store refuses (a record that does not persist witnesses nothing),
+ * driven against), an unreachable store refuses (a record that does not persist witnesses nothing,
+ * and it is the one refusal that cannot record itself),
  * a RETIRED story refuses (`retiredStoryDriveRefusal` — its criteria are kept as unclaimed history
  * and witness nothing, so neither outcome is a product finding), and a prompt that has lost the
  * authored journey, the honesty clause, or the report contract refuses (`auditDrivePrompt`).
@@ -46,7 +56,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import net from "node:net";
-import { tmpdir } from "node:os";
+import { hostname, tmpdir } from "node:os";
 import path from "node:path";
 
 import { activeReliabilityGates, parseUatTestCriterionSources } from "@storytree/library";
@@ -56,6 +66,14 @@ import { loadNodeSpec } from "@storytree/orchestrator";
 import { ensureLiveDb } from "./db-control.js";
 import { deriveIdentity } from "./noticeboard.js";
 import { loadLocalSecrets } from "./secrets.js";
+import {
+  harnessEndInsert,
+  harnessEndPhaseForDriveEnd,
+  harnessEndRecord,
+  type HarnessEndDraft,
+  type UatHarnessEndPhase,
+  type UatHarnessEndProcess,
+} from "./uat-drive-harness-end.js";
 import {
   assertDriveIsolated,
   auditDriveReportTiming,
@@ -80,6 +98,7 @@ import {
   selectDriveTargets,
   uatDriveTaskPrompt,
   UatDriveRecord,
+  UAT_DRIVE_CODEX_MODEL,
   UAT_DRIVE_SURFACE_ATTESTATION_FILE,
   type DriveIsolation,
   type DriveSurfaceAttestation,
@@ -171,12 +190,20 @@ function resolvePinnedCodexEntrypoint(): string {
   return path.join(path.dirname(packageJson), "bin", "codex.js");
 }
 
+/**
+ * A verified runtime, or the REASON it was refused.
+ *
+ * The reason is RETURNED rather than only printed because it is now persisted: a launch precondition
+ * that fails on this box will fail on it again, and the next reader deserves the cause rather than a
+ * stderr line that died with the session (`uat-drive-harness-end.ts`).
+ */
+type RuntimeVerification = { ok: true; runtime: DriverRuntime } | { ok: false; reason: string };
+
 /** Resolve and prove the runtime once, before a drive can spend subscription time. */
-function verifyCodexRuntime(selection: ProviderSelection): DriverRuntime | null {
+function verifyCodexRuntime(selection: ProviderSelection): RuntimeVerification {
   const explicit = process.env[STORYTREE_CODEX_EXECUTABLE_ENV]?.trim();
   if (explicit !== undefined && !path.isAbsolute(explicit)) {
-    console.error(`[uat-drive] REFUSED: ${STORYTREE_CODEX_EXECUTABLE_ENV} must name an absolute executable.`);
-    return null;
+    return { ok: false, reason: `${STORYTREE_CODEX_EXECUTABLE_ENV} must name an absolute executable.` };
   }
   // The project-pinned official wrapper has the code-mode host that the Desktop sandbox copy lacks.
   const executableArgs = explicit === undefined ? [resolvePinnedCodexEntrypoint()] : [];
@@ -204,11 +231,12 @@ function verifyCodexRuntime(selection: ProviderSelection): DriverRuntime | null 
     const status = `${login.stdout ?? ""}\n${login.stderr ?? ""}`;
     const verified = verifyCodexSubscriptionAuth(status, env);
     if (!verified.ok) {
-      console.error(
-        `[uat-drive] REFUSED: ${verified.detail}. Log in to Codex with the owner's ChatGPT subscription; ` +
+      return {
+        ok: false,
+        reason:
+          `${verified.detail}. Log in to Codex with the owner's ChatGPT subscription; ` +
           "API-key and Anthropic fallback are disabled.",
-      );
-      return null;
+      };
     }
     log(
       `provider: ${CODEX_DRIVER} — ${verified.detail} (${executable}); ` +
@@ -216,15 +244,16 @@ function verifyCodexRuntime(selection: ProviderSelection): DriverRuntime | null 
           ? `explicit ${STORYTREE_UAT_DRIVE_PROVIDER_ENV}=codex selection`
           : `default route (${STORYTREE_UAT_DRIVE_PROVIDER_ENV} unset; ADR-0555 D2)`),
     );
-    return { provider: "codex", driver: CODEX_DRIVER, executable, executableArgs };
+    return { ok: true, runtime: { provider: "codex", driver: CODEX_DRIVER, executable, executableArgs } };
   } catch (e) {
     const detail = (e as { stderr?: string }).stderr?.trim() || (e as Error).message;
-    console.error(
-      `[uat-drive] REFUSED: could not verify the Codex ChatGPT subscription with ${executable}: ${detail}\n` +
+    return {
+      ok: false,
+      reason:
+        `could not verify the Codex ChatGPT subscription with ${executable}: ${detail}\n` +
         `  Set ${STORYTREE_CODEX_EXECUTABLE_ENV} only when the Desktop runtime is outside PATH. ` +
         "No API-key or Anthropic fallback exists.",
-    );
-    return null;
+    };
   }
 }
 
@@ -236,11 +265,10 @@ type ProviderSelection = "explicit" | "default";
  * banner still names how the provider was chosen, so any future default movement stays visible in
  * run provenance rather than being inferred from whichever provider happened to answer.
  */
-function verifyClaudeRuntime(selection: ProviderSelection): DriverRuntime | null {
+function verifyClaudeRuntime(selection: ProviderSelection): RuntimeVerification {
   const token = process.env["CLAUDE_CODE_OAUTH_TOKEN"]?.trim();
   if (token === undefined || token.length === 0) {
-    console.error("[uat-drive] REFUSED: Claude was selected but no Claude subscription token is available.");
-    return null;
+    return { ok: false, reason: "Claude was selected but no Claude subscription token is available." };
   }
   log(
     `provider: ${CLAUDE_DRIVER} — ` +
@@ -248,7 +276,10 @@ function verifyClaudeRuntime(selection: ProviderSelection): DriverRuntime | null
         ? `explicit ${STORYTREE_UAT_DRIVE_PROVIDER_ENV}=claude selection`
         : `default route (${STORYTREE_UAT_DRIVE_PROVIDER_ENV} unset; ADR-0555 D2)`),
   );
-  return { provider: "claude", driver: CLAUDE_DRIVER, executable: "claude", executableArgs: [] };
+  return {
+    ok: true,
+    runtime: { provider: "claude", driver: CLAUDE_DRIVER, executable: "claude", executableArgs: [] },
+  };
 }
 
 /** The Codex CLI's final-answer file is the report; stdout is only a diagnostic fallback. */
@@ -257,6 +288,68 @@ function readCodexFinalMessage(finalMessagePath: string, stdout: string, stderr:
     return readFileSync(finalMessagePath, "utf8");
   } catch {
     return finalText([stdout, stderr].filter((text) => text.length > 0).join("\n"));
+  }
+}
+
+/** The minimum a caller needs to mint and persist a harness end. Satisfied by {@link DriveContext}. */
+interface HarnessEndContext {
+  readonly pool: { query(text: string, values?: unknown[]): Promise<unknown> };
+  readonly storyId: string;
+  readonly runId: string;
+  readonly commitSha: string;
+  /** The box the attempt was made on — a launch precondition is usually a property of the machine. */
+  readonly host: string;
+}
+
+/** What the caller knows about the runtime at the moment it was refused — often not much. */
+type HarnessEndRuntime = Partial<Pick<HarnessEndDraft, "provider" | "driver" | "model" | "process">>;
+
+/**
+ * Persist ONE typed harness end per target, so a refusal survives the session that hit it.
+ *
+ * **Never a claim about the product.** The row goes to `events.uat_harness_end`, which the witness
+ * check does not read for its product witness, and its schema has nowhere to put an outcome — the
+ * fences are in `uat-drive-harness-end.ts`'s header. What it buys is the thing an absent row could
+ * never say: the next reader can tell a box that refused the drive from a criterion nobody has ever
+ * tried.
+ *
+ * A failed INSERT is reported and swallowed. Persisting the diagnosis is strictly better than not,
+ * and it must never be able to turn a harness end into a crash that loses the other criteria too —
+ * but it is said out loud, because a silent failure here would recreate the very hole this closes.
+ */
+async function persistHarnessEnds(
+  ctx: HarnessEndContext,
+  targets: readonly DriveTarget[],
+  phase: UatHarnessEndPhase,
+  detail: string,
+  runtime: HarnessEndRuntime = {},
+): Promise<void> {
+  for (const target of targets) {
+    try {
+      const record = harnessEndRecord({
+        storyId: ctx.storyId,
+        criterionId: target.criterionId,
+        revisionId: target.revisionId,
+        runId: ctx.runId,
+        commitSha: ctx.commitSha,
+        phase,
+        host: ctx.host,
+        detail,
+        at: new Date().toISOString(),
+        ...runtime,
+      });
+      const insert = harnessEndInsert(record);
+      await ctx.pool.query(insert.text, [...insert.values]);
+      log(
+        `  recorded a HARNESS END for ${target.criterionId} (${phase}) — the cause survives this ` +
+          "session, and it witnesses nothing.",
+      );
+    } catch (e) {
+      console.error(
+        `[uat-drive] could NOT persist the harness end for ${target.criterionId}: ${(e as Error).message}\n` +
+          "  The cause printed above reaches this terminal only — the next box will not see it.",
+      );
+    }
   }
 }
 
@@ -322,73 +415,108 @@ async function main(): Promise<number> {
     return 1;
   }
 
-  const preference = resolveUatDriveProvider(process.env[STORYTREE_UAT_DRIVE_PROVIDER_ENV]);
-  if (!preference.ok) {
-    console.error(`[uat-drive] REFUSED: ${preference.reason}`);
-    return 1;
-  }
-  if (preference.provider === "claude") loadLocalSecrets(process.env, ["CLAUDE_CODE_OAUTH_TOKEN"]);
-  const providerSelection: ProviderSelection =
-    (process.env[STORYTREE_UAT_DRIVE_PROVIDER_ENV] ?? "").trim() === "" ? "default" : "explicit";
-  const runtime =
-    preference.provider === "codex"
-      ? verifyCodexRuntime(providerSelection)
-      : verifyClaudeRuntime(providerSelection);
-  if (runtime === null) return 1;
-
   const runId = `uat-drive:${storyId}:${commitSha.slice(0, 10)}:${process.pid}`;
 
-  // ISOLATION, decided before any spend. A drive is a GUEST in this checkout: its own notice-board
-  // identity (so its tidy-up can never release the LAUNCHING session's claims), its own reserved
-  // surface port (so it cannot walk a sibling worktree's studio), and its own out-of-tree scratch
-  // directory (so what it leaves behind cannot refuse the next drive).
-  const launching = deriveIdentity();
-  const ports = await reserveDrivePorts(selection.targets.length, process.pid);
-  if (ports === null) {
+  // THE STORE COMES UP BEFORE THE REMAINING PREFLIGHTS, and the order is the point rather than an
+  // accident. Everything below this line can REFUSE — an expired login, a model the subscription
+  // cannot run, an exhausted port band — and every one of those refusals is now persisted as a typed
+  // harness end, so it survives the session that hit it instead of dying in its scrollback. A
+  // refusal raised before a pool exists could only be printed, which is exactly the hole being
+  // closed. The cost is that a bad-auth run pays the store probe first; the store is up 24/7, and a
+  // few seconds is cheap against re-diagnosing the same launch on the next box.
+  //
+  // The one refusal that still persists NOTHING is this one: a store that cannot be reached cannot
+  // record that it could not be reached. It is stated rather than hidden.
+  log(`bringing the live store up (records persist to events.uat_drive / events.uat_harness_end)…`);
+  const ready = await ensureLiveDb((m) => console.error(`[db] ${m}`));
+  if (!ready.ok) {
     console.error(
-      `[uat-drive] REFUSED: no free port in the reserved drive band — every candidate is in use.\n` +
-        "  A drive must OWN its surface; attaching to whatever is already listening is how a drive\n" +
-        "  ends up measuring a sibling worktree's checkout. Free a port and re-run.",
+      `[uat-drive] the database could not be brought up: ${ready.reason}\n` +
+        "  Nothing was persisted and nothing COULD be — this refusal has nowhere to record itself.",
     );
     return 1;
   }
-  const scratchDir = driveScratchDir(tmpdir().replace(/\\/g, "/"), runId);
-  mkdirSync(scratchDir, { recursive: true });
-
-  // Fail-closed before any model spend: every drive identity must be distinct. Absolute time is
-  // intentionally NOT stamped in this preflight: criteria run one at a time, so stamping them all
-  // here would make a later criterion spend the earlier criterion's ceiling while it waited.
-  for (const t of selection.targets) {
-    const sessionId = mintDriveSessionId({ criterionId: t.criterionId, pid: process.pid });
-    const refusal = assertDriveIsolated(launching, sessionId);
-    if (refusal !== null) {
-      console.error(`[uat-drive] ${refusal}`);
-      return 1;
-    }
-  }
-  log(
-    `isolated — each drive gets its own notice-board session, its own port (${ports.join(", ")}) and\n` +
-      `  scratch at ${scratchDir}. The launching session ` +
-      `(${launching?.sessionId ?? "none — primary checkout"}) keeps every claim it holds.`,
-  );
-
-  log(`bringing the live store up (the record persists to events.uat_drive)…`);
-  const ready = await ensureLiveDb((m) => console.error(`[db] ${m}`));
-  if (!ready.ok) {
-    console.error(`[uat-drive] the database could not be brought up: ${ready.reason}`);
-    return 1;
-  }
-
-  log(
-    `driving ${selection.targets.length} criterion(s) of "${storyId}" @ ${commitSha.slice(0, 10)} — ` +
-      `each is a fresh subscription-funded session (ADR-0010 §5, out-of-band), ceiling ${DRIVE_TIMEOUT_MIN} min.`,
-  );
 
   const handle = await createPool();
   const findings: string[] = [];
   const harnessEnds: string[] = [];
   try {
     await applySchema(handle.pool);
+    const endCtx: HarnessEndContext = { pool: handle.pool, storyId, runId, commitSha, host: hostname() };
+
+    const preference = resolveUatDriveProvider(process.env[STORYTREE_UAT_DRIVE_PROVIDER_ENV]);
+    if (!preference.ok) {
+      console.error(`[uat-drive] REFUSED: ${preference.reason}`);
+      await persistHarnessEnds(endCtx, selection.targets, "runtime-refused", preference.reason);
+      return 1;
+    }
+    if (preference.provider === "claude") loadLocalSecrets(process.env, ["CLAUDE_CODE_OAUTH_TOKEN"]);
+    const providerSelection: ProviderSelection =
+      (process.env[STORYTREE_UAT_DRIVE_PROVIDER_ENV] ?? "").trim() === "" ? "default" : "explicit";
+    const verification =
+      preference.provider === "codex"
+        ? verifyCodexRuntime(providerSelection)
+        : verifyClaudeRuntime(providerSelection);
+    if (!verification.ok) {
+      console.error(`[uat-drive] REFUSED: ${verification.reason}`);
+      // The MODEL is named on the record because the measured instance was a model refusal: a
+      // config-inherited `gpt-5.6-sol` a ChatGPT account cannot run. A row that omits it makes the
+      // next reader go looking for the selection all over again.
+      const refusedRuntime: HarnessEndRuntime =
+        preference.provider === "codex"
+          ? { provider: preference.provider, model: UAT_DRIVE_CODEX_MODEL }
+          : { provider: preference.provider };
+      await persistHarnessEnds(endCtx, selection.targets, "runtime-refused", verification.reason, refusedRuntime);
+      return 1;
+    }
+    const runtime = verification.runtime;
+
+    // ISOLATION, decided before any spend. A drive is a GUEST in this checkout: its own notice-board
+    // identity (so its tidy-up can never release the LAUNCHING session's claims), its own reserved
+    // surface port (so it cannot walk a sibling worktree's studio), and its own out-of-tree scratch
+    // directory (so what it leaves behind cannot refuse the next drive).
+    const launching = deriveIdentity();
+    const ports = await reserveDrivePorts(selection.targets.length, process.pid);
+    if (ports === null) {
+      const reason =
+        "no free port in the reserved drive band — every candidate is in use.\n" +
+        "  A drive must OWN its surface; attaching to whatever is already listening is how a drive\n" +
+        "  ends up measuring a sibling worktree's checkout. Free a port and re-run.";
+      console.error(`[uat-drive] REFUSED: ${reason}`);
+      await persistHarnessEnds(endCtx, selection.targets, "isolation-refused", reason, {
+        provider: runtime.provider,
+        driver: runtime.driver,
+      });
+      return 1;
+    }
+    const scratchDir = driveScratchDir(tmpdir().replace(/\\/g, "/"), runId);
+    mkdirSync(scratchDir, { recursive: true });
+
+    // Fail-closed before any model spend: every drive identity must be distinct. Absolute time is
+    // intentionally NOT stamped in this preflight: criteria run one at a time, so stamping them all
+    // here would make a later criterion spend the earlier criterion's ceiling while it waited.
+    for (const t of selection.targets) {
+      const sessionId = mintDriveSessionId({ criterionId: t.criterionId, pid: process.pid });
+      const refusal = assertDriveIsolated(launching, sessionId);
+      if (refusal !== null) {
+        console.error(`[uat-drive] ${refusal}`);
+        await persistHarnessEnds(endCtx, selection.targets, "isolation-refused", refusal, {
+          provider: runtime.provider,
+          driver: runtime.driver,
+        });
+        return 1;
+      }
+    }
+    log(
+      `isolated — each drive gets its own notice-board session, its own port (${ports.join(", ")}) and\n` +
+        `  scratch at ${scratchDir}. The launching session ` +
+        `(${launching?.sessionId ?? "none — primary checkout"}) keeps every claim it holds.`,
+    );
+
+    log(
+      `driving ${selection.targets.length} criterion(s) of "${storyId}" @ ${commitSha.slice(0, 10)} — ` +
+        `each is a fresh subscription-funded session (ADR-0010 §5, out-of-band), ceiling ${DRIVE_TIMEOUT_MIN} min.`,
+    );
 
     for (const [i, t] of selection.targets.entries()) {
       // Stamp THIS criterion's runner-owned clock immediately before its prompt is created. The
@@ -414,9 +542,13 @@ async function main(): Promise<number> {
       const prompt = uatDriveTaskPrompt(driveSpec);
       const audit = auditDrivePrompt(prompt, driveSpec);
       if (!audit.ok) {
-        const line = `${t.criterionId} — prompt audit refused: lost ${audit.missing.join(", ")}`;
-        console.error(`[uat-drive] REFUSED: ${line}`);
-        harnessEnds.push(line);
+        const reason = `prompt audit refused: lost ${audit.missing.join(", ")}`;
+        console.error(`[uat-drive] REFUSED: ${t.criterionId} — ${reason}`);
+        await persistHarnessEnds(endCtx, [t], "prompt-audit-refused", reason, {
+          provider: runtime.provider,
+          driver: runtime.driver,
+        });
+        harnessEnds.push(`${t.criterionId} — ${reason}`);
         continue;
       }
       const outcome = await driveOne(t, prompt, {
@@ -425,6 +557,7 @@ async function main(): Promise<number> {
         runId,
         cwd: toplevel,
         pool: handle.pool,
+        host: endCtx.host,
         isolation,
         runtime,
       });
@@ -456,8 +589,11 @@ async function main(): Promise<number> {
   }
   if (harnessEnds.length > 0) {
     console.error(
-      `\nNothing above is a claim about the product: nothing was observed to be wrong, and NOTHING was\n` +
-        `persisted. Exit ${EXIT_HARNESS} says exactly that — do not read it as a red the product earned.`,
+      `\nNothing above is a claim about the product: nothing was observed to be wrong. Exit ${EXIT_HARNESS} says\n` +
+        `exactly that — do not read it as a red the product earned. Each end IS persisted now, as a typed\n` +
+        `NON-PRODUCT record in events.uat_harness_end, so the cause outlives this session; it witnesses\n` +
+        `nothing and can never satisfy a UAT leg. Read one back with:\n` +
+        `  pnpm uat:witness ${storyId} <criterion-id>`,
     );
     return EXIT_HARNESS;
   }
@@ -569,6 +705,8 @@ interface DriveContext {
   runId: string;
   cwd: string;
   pool: { query(text: string, values?: unknown[]): Promise<unknown> };
+  /** The box this drive ran on — stamped on a harness end, because a launch refusal is often local. */
+  host: string;
   /** This drive's separation from the launching session — the only thing the child inherits ON PURPOSE. */
   isolation: DriveIsolation;
   /** A subscription-authenticated provider executable, checked before any model time is spent. */
@@ -628,6 +766,15 @@ async function driveOne(target: DriveTarget, prompt: string, ctx: DriveContext):
     ceilingMinutes: DRIVE_TIMEOUT_MIN,
     elapsedMinutes,
   });
+  // The child's own end, carried onto any harness end below. `exit none` and `exit 0` are different
+  // facts and a reader chasing a launch refusal needs the difference, so both are recorded rather
+  // than collapsed into a truthy check.
+  const processEnd: UatHarnessEndProcess = {
+    exitCode: res.status ?? null,
+    signal: res.signal ?? null,
+    timedOut,
+    elapsedMinutes,
+  };
   log(
     end.kind === "reported"
       ? `  the drive session finished after ${elapsedMinutes.toFixed(1)}m (exit ${res.status}).`
@@ -635,16 +782,24 @@ async function driveOne(target: DriveTarget, prompt: string, ctx: DriveContext):
   );
 
   if (!parsed.ok) {
-    // A run whose report cannot be read did NOT pass, and nothing is PERSISTED — an unreadable run
-    // must leave no trace a later witness could mistake for evidence. But "persists nothing" was
-    // over-read as "says nothing": the model's whole account of the run was discarded too, so a MISS
-    // arrived as one line with no way to tell a driver that hit a wall from one that ended a turn
-    // early, and diagnosing it cost a second paid drive. The tail below is DIAGNOSTIC OUTPUT, not
-    // evidence — it reaches stderr and never `events.uat_drive`, so the witness gate cannot see it.
+    // A run whose report cannot be read did NOT pass, and NO PRODUCT RECORD is written — an
+    // unreadable run must leave nothing a later witness could mistake for evidence. What it leaves
+    // instead is a typed HARNESS END in a different stream: diagnosis the next box can read, in a
+    // shape that has nowhere to put an outcome and that the witness selector never queries. Before
+    // that stream existed the model's whole account was discarded with the session, so a MISS
+    // arrived as one line and diagnosing it cost a second paid drive.
     console.error(`  ~ ${target.criterionId}: ${parsed.reason}`);
-    console.error(`  --- the driver's last ${UNREADABLE_TAIL_CHARS} chars (diagnostic only; nothing was persisted) ---`);
+    console.error(`  --- the driver's last ${UNREADABLE_TAIL_CHARS} chars ---`);
     console.error(text.length > 0 ? indentTail(text) : "  (the driver produced no output at all)");
     console.error("  --- end of unreadable output ---");
+    const phase = harnessEndPhaseForDriveEnd(end.kind);
+    if (phase !== null) {
+      await persistHarnessEnds(ctx, [target], phase, `${parsed.reason}\n${end.reason}\n\n${text}`, {
+        provider: ctx.runtime.provider,
+        driver: ctx.runtime.driver,
+        process: processEnd,
+      });
+    }
     return { line: `${target.criterionId} — ${end.reason}`, harness: end.harness };
   }
   const report = parsed.report;
@@ -660,9 +815,14 @@ async function driveOne(target: DriveTarget, prompt: string, ctx: DriveContext):
   if (!timingAudit.ok) {
     console.error(`  ~ ${target.criterionId}: deadline timing REFUSED — ${timingAudit.reason}`);
     console.error(
-      "  Nothing was persisted. The runner's UTC lease was still live, so this is a harness refusal,\n" +
-        "  not a product finding.",
+      "  No product record was written. The runner's UTC lease was still live, so this is a harness\n" +
+        "  refusal, not a product finding — recorded as such in events.uat_harness_end.",
     );
+    await persistHarnessEnds(ctx, [target], "report-timing-refused", timingAudit.reason, {
+      provider: ctx.runtime.provider,
+      driver: ctx.runtime.driver,
+      process: processEnd,
+    });
     return { line: `${target.criterionId} — deadline timing refused: ${timingAudit.reason}`, harness: true };
   }
 
@@ -679,9 +839,15 @@ async function driveOne(target: DriveTarget, prompt: string, ctx: DriveContext):
   if (!surfaceOwnership.ok) {
     console.error(`  ~ ${target.criterionId}: surface ownership REFUSED — ${surfaceOwnership.reason}`);
     console.error(
-      "  Nothing was persisted. This is a harness refusal, not a product red: it says the walk cannot be\n" +
-        "  attributed to this checkout's surface, not that the journey failed.",
+      "  No product record was written. This is a harness refusal, not a product red: it says the walk\n" +
+        "  cannot be attributed to this checkout's surface, not that the journey failed. It is recorded\n" +
+        "  as such in events.uat_harness_end.",
     );
+    await persistHarnessEnds(ctx, [target], "surface-ownership-refused", surfaceOwnership.reason, {
+      provider: ctx.runtime.provider,
+      driver: ctx.runtime.driver,
+      process: processEnd,
+    });
     return {
       line: `${target.criterionId} — surface ownership refused: ${surfaceOwnership.reason}`,
       harness: true,
