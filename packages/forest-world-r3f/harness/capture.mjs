@@ -23,6 +23,13 @@
 //
 //   ST_HARNESS_URL           the page to photograph (default: the plant row on :5184)
 //   ST_OUT_DIR               where the pictures and the report go, REPO-ROOT-relative
+//   ST_READ_ONLY             run the WHOLE audit and write NOTHING (1/true/yes/on; unset = write).
+//                            For the commonest reason to run this script — "did my change break the
+//                            island audit?" — where the verdict is wanted and the artefacts are not.
+//                            Every run now also PRINTS what it wrote, or would have written, because
+//                            a run that rewrites committed evidence and says nothing about it is how
+//                            22 files of an unrelated pass once nearly entered a commit. See
+//                            `capture-output.ts`, which also records what that friction got wrong.
 //   ST_FULL_PAGE_NAME        filename for the whole-page screenshot
 //   ST_PANEL_NAMES           comma-separated panel ids, each bound to the <section> carrying it as
 //                            `data-st-panel` (unset: every authored panel — see capture-panels.ts)
@@ -56,6 +63,10 @@ import { landPalette } from './palette-band.js';
 // Which section becomes which evidence file. Pure, and proved in `capture-panels.test.ts` —
 // a driver holding its own copy of that rule is how the positional zip survived unnoticed.
 import { PANEL_ID_ATTRIBUTE, parseRequestedPanels, planPanelCaptures } from './capture-panels.js';
+// Whether this run writes at all, and the line it prints about that. Pure, and proved in
+// `capture-output.test.ts` — including a source guard over THIS file holding every write to the
+// two helpers below, so a write added later cannot quietly escape the read-only fence.
+import { READ_ONLY_ENV, describeWrites, parseReadOnly } from './capture-output.js';
 // ...and the SHADOW half from the module that derives the shadow rung, for the same reason.
 // The authored palette a shadowed land may emit is the closure over the shadow LADDER, so
 // checking delivered pixels against `landPalette()` alone would condemn every shadowed pixel
@@ -114,7 +125,11 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 // Resolved against the REPO ROOT (three levels up from this harness), never `process.cwd()`
 // — pnpm runs a package script from the PACKAGE directory, so a cwd-relative path quietly
 // wrote the evidence to `packages/forest-world-r3f/docs/research/...` instead of the repo's.
-const OUT = join(HERE, '../../..', process.env['ST_OUT_DIR'] ?? 'docs/research/chapter2-live-render-2026-08-19');
+// Kept as the caller's own spelling as well as the resolved path: the run REPORTS its output
+// directory when it finishes, and what a reader can act on is the value they would set, not an
+// absolute path with three `..` segments in the middle of it.
+const OUT_SPEC = process.env['ST_OUT_DIR'] ?? 'docs/research/chapter2-live-render-2026-08-19';
+const OUT = join(HERE, '../../..', OUT_SPEC);
 const URL = process.env['ST_HARNESS_URL'] ?? 'http://localhost:5184/compare.html';
 
 function fail(msg, code = 1) {
@@ -125,6 +140,38 @@ function fail(msg, code = 1) {
 // Parsed BEFORE the browser starts, so a mistyped allowance costs nothing to find out about.
 const allowance = parseNavigationAllowance(process.env[NAVIGATION_ALLOWANCE_ENV]);
 if (!allowance.ok) fail(allowance.refusal);
+
+// --- the output seam: whether this run writes at all ----------------------------------------
+//
+// Parsed here for the reason stated one line up, and it matters more for this knob than for the
+// allowance: a caller who sets ST_READ_ONLY has asked for their working tree to be left alone, so
+// discovering a typo AFTER the run would mean discovering it from the 22 files it just wrote.
+const readOnly = parseReadOnly(process.env[READ_ONLY_ENV]);
+if (!readOnly.ok) fail(readOnly.refusal);
+const READ_ONLY = readOnly.readOnly;
+
+// EVERY WRITE IN THIS FILE GOES THROUGH ONE OF THESE TWO, and `capture-output.test.ts` holds that
+// structurally rather than trusting it: the read-only fence is only worth as much as its least
+// careful future edit, and the way this fails is a sixth write site added later that nobody routes.
+//
+// They record on BOTH paths. The file list is what the run reports at the end, so read-only can say
+// what it suppressed and a writing run can say what it left in the tree — the half of the original
+// complaint that a steerable output directory does not touch.
+const written = [];
+
+/** Photograph `target` into `file` under the output directory — or, read-only, just record it. */
+async function shoot(target, file, options = {}) {
+  written.push(file);
+  if (READ_ONLY) return;
+  await target.screenshot({ ...options, path: join(OUT, file) });
+}
+
+/** Write `contents` to `file` under the output directory — or, read-only, just record it. */
+function emit(file, contents) {
+  written.push(file);
+  if (READ_ONLY) return;
+  writeFileSync(join(OUT, file), contents);
+}
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage({ viewport: { width: 1280, height: 1100 } });
@@ -420,11 +467,10 @@ const p50 = sorted[Math.floor(sorted.length / 2)];
 
 // --- the pictures -------------------------------------------------------------------------
 
-mkdirSync(OUT, { recursive: true });
-await page.screenshot({
-  path: join(OUT, process.env['ST_FULL_PAGE_NAME'] ?? 'live-vs-sprite.png'),
-  fullPage: true,
-});
+// Read-only creates no directory either: `mkdirSync` on a path that does not exist IS a write, and
+// leaving an empty `docs/research/...` behind would be a smaller version of the same complaint.
+if (!READ_ONLY) mkdirSync(OUT, { recursive: true });
+await shoot(page, process.env['ST_FULL_PAGE_NAME'] ?? 'live-vs-sprite.png', { fullPage: true });
 
 // PANEL FILENAMES BIND TO THE SECTION'S AUTHORED `data-st-panel`, never to its position.
 //
@@ -442,8 +488,11 @@ for (const [index, section] of sections.entries()) {
 }
 const panelPlan = planPanelCaptures(sectionIds, parseRequestedPanels(process.env['ST_PANEL_NAMES']));
 if (!panelPlan.ok) fail(`panel capture: ${panelPlan.refusal}`);
+// THE LOOP STILL RUNS IN READ-ONLY, and so does the plan check above it. Both carry audit claims —
+// a requested panel that is not on the page, two sections claiming one id — and a read-only run that
+// skipped them would print the same green having checked strictly less. Only the write is skipped.
 for (const capture of panelPlan.captures) {
-  await sections[capture.index].screenshot({ path: join(OUT, capture.file) });
+  await shoot(sections[capture.index], capture.file);
 }
 
 // ONE FILE PER NAMED CANVAS, found by `data-st-tag` rather than by position.
@@ -465,7 +514,9 @@ for (const el of tagged) {
   // error as the positional names, arriving by a different route. Refuse instead.
   if (seenTags.has(tag)) fail(`two canvases share the tag ${JSON.stringify(tag)}`);
   seenTags.add(tag);
-  await el.screenshot({ path: join(OUT, `island-${tag}.png`) });
+  // Same rule as the panel loop: the duplicate-tag refusal above is an audit claim, so the walk
+  // happens on both paths and only the screenshot is conditional.
+  await shoot(el, `island-${tag}.png`);
 }
 
 // --- the report ---------------------------------------------------------------------------
@@ -799,7 +850,7 @@ const report = {
   },
 };
 
-writeFileSync(join(OUT, 'capture-report.json'), JSON.stringify(report, null, 2) + '\n');
+emit('capture-report.json', JSON.stringify(report, null, 2) + '\n');
 
 await browser.close();
 
@@ -886,6 +937,12 @@ console.log(
     'canvases (REPORTED, not a rung — the flat control reads 0)',
 );
 console.log(`frame p50  : ${report.frameTiming.p50Ms} ms (RELATIVE — software rasteriser)`);
+// WHAT THIS RUN DID TO THE WORKING TREE, on both paths and before the refusals below. A green run
+// that rewrote 22 files of an unrelated evidence pass and mentioned none of them is the friction
+// this reports out of; printing it only in read-only mode would have left the writing run — the one
+// that actually pollutes — exactly as quiet as it was. It sits ABOVE the refusals so that the
+// read-only warning about having no evidence to diagnose from precedes the refusal it concerns.
+console.log(describeWrites({ readOnly: READ_ONLY, dir: OUT_SPEC, files: written }));
 // THE REFUSALS, COLLECTED RATHER THAN RACED. Each of these is a claim the page exists to prove,
 // and `fail()` exits, so a run with two faults used to name only whichever was checked first.
 // They are gathered and reported together.
