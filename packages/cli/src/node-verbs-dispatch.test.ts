@@ -205,9 +205,13 @@ test("node-area-exposes-the-ledger-verbs: the node area names the three ledger v
   assert.deepEqual(unknown, {
     ok: false,
     body:
-      'unknown node command "zzz". try: storytree node build <id> --dry-run | storytree node resolve <id> | storytree node log <id> --pg | storytree node walls --pg | storytree node attempts <id> --pg | storytree node grant <id> --pg | storytree node adjudicate <id> --run <run-id> --pg',
+      'unknown node command "zzz". try: storytree node build <id> --dry-run | storytree node resolve <id> | storytree node peek <id> | storytree node log <id> --pg | storytree node walls --pg | storytree node attempts <id> --pg | storytree node grant <id> --pg | storytree node adjudicate <id> --run <run-id> --pg',
     next: [
       "storytree node resolve <id>",
+      // `peek` (ADR-0588) sits beside `resolve` rather than at the end: both are FREE reads a
+      // caller takes BEFORE reaching for a paid build, and this list is the refusal's whole
+      // discoverability surface.
+      "storytree node peek <id>",
       "storytree node log <id> --pg",
       "storytree node walls --pg",
       "storytree node build <id> --dry-run",

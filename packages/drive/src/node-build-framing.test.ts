@@ -321,3 +321,29 @@ test("node help says a --real build typechecks its package before signing and ne
   );
   assert.doesNotMatch(body, /regression run/, "the help must not promise a package-suite run");
 });
+
+// ---------- the help text offers the FREE read that precedes a paid build ----------
+//
+// `node peek` (ADR-0588) answers "is this build working or is it stuck" from what a build already
+// writes, and it costs nothing. The help is where an operator meets it, so the block is pinned here
+// beside the rest of the promise: a verb nothing points at is a verb nobody runs, and this one's
+// whole value is being reached BEFORE the expensive decision it informs.
+
+test("node help offers `node peek`, naming what it joins, what it needs, and that it states its own limits", () => {
+  const body = nodeHelp().body.replace(/\s+/g, " ");
+  assert.ok(
+    body.includes(
+      "storytree node peek <id> [--pg] FREE, read-only: is a --real build of this unit RUNNING, " +
+        "ENDED or UNKNOWN (ADR-0588)? Joins this machine's process registry to the appended phase " +
+        "marks — the two halves that answer nothing on their own. Elapsed is read against the budget " +
+        "the build was actually launched with, never an assumed default. The registry half needs NO " +
+        "store, so this still answers without --pg; it prints what it cannot see, every time. " +
+        // Reaching INTO the next block is deliberate: it pins that `peek` sits immediately before
+        // `walls`, i.e. that the two FREE reads stay together and ahead of anything that spends.
+        // It also closes the gap a tail-anchored assertion leaves — text inserted after the last
+        // word it quotes is invisible to it.
+        "storytree node walls [<id>] --pg",
+    ),
+    body,
+  );
+});

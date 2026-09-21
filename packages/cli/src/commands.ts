@@ -230,6 +230,7 @@ import {
 import { gatherFromDisk, ownershipCommand, ownershipHelp } from "./ownership.js";
 // `shared-box-session-ownership-arc` inc 1 — the session's own background-work inventory.
 import { ownCommand, ownHelp } from "./own.js";
+import { type NodePeekDeps, defaultNodePeekDeps, nodePeekCommand, readMachineSpawns } from "./node-peek.js";
 import {
   lintPanelHelp,
   lintPanelPacketCommand,
@@ -267,6 +268,8 @@ import { lookupNodeBuildConfig, parsePocketReadings } from "@storytree/orchestra
 import type { PocketReading } from "@storytree/orchestrator";
 
 import {
+  attemptPolicyPeekCaveat,
+  foldBuildPeek,
   loadTitledAdrMetasFromStore,
   nodeBuild,
   nodeHelp,
@@ -2314,6 +2317,14 @@ export interface RunDeps {
    */
   readonly workLog?: WorkLogReaderLike | null;
   /**
+   * The peek's two SEAMS — the machine's spawn registry and the liveness probe (`storytree node
+   * peek`, ADR-0588). Absent means the real ones: unlike every neighbour here it is NOT a
+   * live-store handle and does not follow `--pg`, because its subject is this machine's own
+   * filesystem. Present only so the verb is driven offline in tests without signalling or
+   * stat-ing anything.
+   */
+  readonly nodePeek?: NodePeekDeps;
+  /**
    * The attestation log (ADR-0044 `attestation-signals`): the live store when --pg;
    * null/absent offline — `storytree attest` then refuses (writes/reads both need it).
    */
@@ -2930,7 +2941,60 @@ async function nodeLedgerCommand(
       return { ok: true, body: result.lines.join("\n"), next: [] };
     }
     const rendered = renderInnerLoopEntryState(state);
-    return { ok: true, body: [...result.lines, ...rendered.lines].join("\n"), next: [...rendered.next] };
+    // THE DISAGREEMENT FENCE (ADR-0588 D4) — and the measure of whether the peek worked.
+    //
+    // The ledger's `attempt` row is appended immediately BEFORE the gate walk (ADR-0576 D5) and
+    // cleared only by a later `signed-pass`, so a build that is genuinely mid-walk reads IDENTICALLY
+    // here to one that already failed and stopped: one more unsigned attempt, one more consecutive
+    // failure. That is not an absence — it is an answer that looks like an answer and is wrong half
+    // the time, and it is the read an orchestrator reaches for at exactly the moment it is deciding
+    // whether to grant another attempt.
+    //
+    // The repair is a LINE, not new machinery, and it belongs here rather than inside the ledger:
+    // the ledger keeps its own meaning — it folds the attempt POLICY and genuinely has no
+    // in-progress state to give — and the peek is what makes that fold readable beside it. The
+    // registry read is a filesystem sweep, so this costs no database and cannot fail the command it
+    // annotates; an unreadable registry leaves the policy's own answer exactly as it was.
+    // ⚠ IT TAKES THE WIRED SEAM AND DOES NOT FALL BACK TO THE REAL REGISTRY, which is the opposite
+    // of `node peek` below — two rules, because the risks are opposite. The peek IS the registry
+    // read, so falling back is always right there. This one rides on somebody else's command, and
+    // a fallback would turn every hermetic `node attempts` test into a 575-directory filesystem
+    // sweep whose result depends on what the box happens to be running. `main.ts` wires the seam
+    // once, and `node-peek-dispatch.test.ts` pins that wiring, so an absent seam cannot mean a
+    // silently-dropped fence in production.
+    //
+    // IT FIRES ON `attempt-failed` ALONE, and the `signed` state is not an oversight. D4 is about
+    // ONE ambiguity: an unsigned attempt that may be a build still walking. A signed run has no
+    // unsigned attempt to be mistaken for anything, so a caveat there would be saying something
+    // false about the row it sits under — and a fence that annotates reads it does not apply to is
+    // how a caveat stops being read at all.
+    let fence: readonly string[] = [];
+    const peekDeps = deps.nodePeek;
+    // Stryker disable next-line ConditionalExpression: EQUIVALENT — the `peekDeps !== undefined` half cannot be observed. Dropping it calls `readMachineSpawns(undefined)`, which throws on the first property read and lands in the same catch, leaving the same empty fence. It is kept because the absent seam is an ORDINARY state (every hermetic caller) and reaching it by exception rather than by test is not the same design, even where the output agrees
+    if (peekDeps !== undefined && state.state === "attempt-failed") {
+      try {
+        fence = attemptPolicyPeekCaveat(
+          foldBuildPeek({
+            unitId,
+            spawns: readMachineSpawns(peekDeps),
+            marks: null,
+            nowMs: peekDeps.now(),
+          }),
+        );
+      } catch {
+        // Instrumentation, like the registry write it reads back: an unreadable registry leaves the
+        // attempt policy's own answer exactly as it was rather than failing the read that asked.
+      }
+    }
+    const attemptsBody = [...result.lines, ...rendered.lines, ...fence].join("\n");
+    return {
+      ok: true,
+      body: attemptsBody,
+      next:
+        fence.length > 0
+          ? [`storytree node peek ${unitId} --pg`, ...rendered.next]
+          : [...rendered.next],
+    };
   }
 
   if (sub === "grant") {
@@ -3857,6 +3921,30 @@ export async function run(argv: readonly string[], deps: RunDeps): Promise<Envel
         next: [`storytree node resolve ${third}`, `storytree tree ${third} --pg`],
       };
     }
+    if (sub === "peek") {
+      // FREE, read-only: is this unit's `--real` build RUNNING, ENDED or UNKNOWN (ADR-0588 D2)?
+      //
+      // ⚠ IT DOES NOT REFUSE WITHOUT `--pg`, and that is deliberate rather than an oversight — its
+      // two neighbours above DO. Their whole subject lives in Postgres, so a rendered zero would be
+      // indistinguishable from a unit nobody ever built. This one's first input is a filesystem read
+      // of this machine's own registry, which answers the sharpest half of the question with no
+      // database at all. A peek that still says something useful when the store is unreachable is
+      // worth more than one that refuses, so an absent store NARROWS the answer and the render says
+      // so in words (`storeRead: false`) — never silently, and never as an empty trail.
+      if (third === undefined) {
+        return {
+          ok: false,
+          body: "storytree node peek <unit-id> — which unit's build?",
+          next: ["storytree node peek <unit-id> --pg"],
+        };
+      }
+      const peekDeps = deps.nodePeek ?? defaultNodePeekDeps();
+      const marks =
+        deps.workLog === undefined || deps.workLog === null
+          ? null
+          : foldWorkLog(await deps.workLog.readEvents(), third);
+      return nodePeekCommand(third, marks, peekDeps);
+    }
     if (sub === "walls") {
       // FREE, read-only: the write-scope wall READING (ADR-0446) — how often the spine's phase
       // fence actually refused a write, ALWAYS against the slices it was armed for. The unit id is
@@ -3898,9 +3986,10 @@ export async function run(argv: readonly string[], deps: RunDeps): Promise<Envel
     if (sub !== "build") {
       return {
         ok: false,
-        body: `unknown node command "${sub}". try: storytree node build <id> --dry-run | storytree node resolve <id> | storytree node log <id> --pg | storytree node walls --pg | storytree node attempts <id> --pg | storytree node grant <id> --pg | storytree node adjudicate <id> --run <run-id> --pg`,
+        body: `unknown node command "${sub}". try: storytree node build <id> --dry-run | storytree node resolve <id> | storytree node peek <id> | storytree node log <id> --pg | storytree node walls --pg | storytree node attempts <id> --pg | storytree node grant <id> --pg | storytree node adjudicate <id> --run <run-id> --pg`,
         next: [
           "storytree node resolve <id>",
+          "storytree node peek <id>",
           "storytree node log <id> --pg",
           "storytree node walls --pg",
           "storytree node build <id> --dry-run",

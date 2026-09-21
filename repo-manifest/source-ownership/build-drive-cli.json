@@ -3,7 +3,9 @@
     "subtrees": {
       "packages/cli/src/build.ts": "build-drive-cli",
       "packages/cli/src/inner-loop-verbs.ts": "build-drive-cli",
+      "packages/cli/src/node-peek.ts": "build-drive-cli",
       "packages/drive/src/backstop-report.ts": "build-drive-cli",
+      "packages/drive/src/build-peek.ts": "build-drive-cli",
       "packages/drive/src/build-progress.ts": "build-drive-cli",
       "packages/drive/src/build.ts": "build-drive-cli",
       "packages/drive/src/inner-loop-entry.ts": "build-drive-cli",

@@ -63,6 +63,7 @@ import type { VerdictReaderLike } from "./tree-verdicts.js";
 import type { MemberStoreLike } from "./members.js";
 import type { WorkLogReaderLike } from "./work-log.js";
 import type { UatVerdictStoreLike } from "./uat.js";
+import { defaultNodePeekDeps } from "./node-peek.js";
 
 /**
  * The `storytree` CLI entry (ADR-0023). ONLINE-ONLY since ADR-0302 D1/D2: every store below is the
@@ -550,6 +551,13 @@ export async function main(): Promise<void> {
       members,
       adr,
       traversalEvents,
+      // The peek's two seams — this machine's spawn registry and the liveness probe (ADR-0588).
+      // Supplied HERE and only here, like the re-steer denominator below, because this is the one
+      // place that knows it is a real invocation on a real box. It deliberately does NOT follow
+      // `usePg`: its subject is the filesystem, not the live store, which is what lets a peek still
+      // answer when the database is unreachable. Without it the D4 fence on `node attempts` simply
+      // does not fire — so `node-peek-dispatch.test.ts` pins this line rather than trusting it.
+      nodePeek: defaultNodePeekDeps(),
       // The re-steer denominator (`follow-the-research-arc`, increment
       // `resteer-session-denominator`) — supplied HERE and only here, because this is the one place
       // that knows it is running against a real checkout rather than a test double. A THUNK, so the
