@@ -42,7 +42,7 @@ import {
   ShellTestExecutor,
   runShellCommand,
 } from "./shell-test-executor.js";
-import type { ShellCommand, ShellTestResolver } from "./shell-test-executor.js";
+import type { ShellCommand, ShellRunResult, ShellTestResolver } from "./shell-test-executor.js";
 import {
   NODE_BINARY,
   classifyProofRoute,
@@ -63,11 +63,19 @@ import {
 import {
   resolveRunnableSuites,
   scopeExistingTestFiles,
+  singleFileRun,
   suiteResolutionIO,
 } from "./proof/test-suite-runner.js";
 import type { RunnableSuite, TestSelectionRun } from "./proof/test-suite-runner.js";
 import { gitTreeState } from "./prove-it-gate.js";
-import type { EscalationRecord, PhasePrompts, ProveSpec, TreeState } from "./prove-it-gate.js";
+import type {
+  EscalationRecord,
+  OutsideTestPolicy,
+  PhasePrompts,
+  ProveSpec,
+  TreeState,
+} from "./prove-it-gate.js";
+import type { OutsideObservation } from "./proof/test-baseline.js";
 import type { TestObservation } from "./phase-machine.js";
 import type { NodeSpec } from "./node-spec.js";
 import { mapProofMode } from "./node-spec.js";
@@ -135,6 +143,55 @@ function posixRel(p: string): string {
  * dirt. A test-writer's permitted edit to a sibling test would therefore END the build it was allowed to
  * make. An exact path is a glob that matches itself, so no second matching rule is needed.
  */
+/**
+ * The spine's own way of running a changed test file the proof command never runs (ADR-0591).
+ *
+ * One spawn PER FILE, each with its own freshly-cleared report path, because a report's rows carry
+ * title paths and no file: a run covering two files could not say which file a row came from, and two
+ * same-titled tests in one package is exactly the case the record's file stamp exists to tell apart.
+ *
+ * ADR-0249's freshness rule is honoured the same way {@link ShellTestExecutor} honours it — clear the
+ * path, spawn, read what THIS run wrote. A clear that fails yields a report marked absent rather than a
+ * throw, because the review refuses an absent report anyway and a throw here would end a walk over a
+ * feedback-grade run.
+ */
+export function outsideTestPolicy(args: {
+  readonly suites: readonly RunnableSuite[];
+  readonly workspace: string;
+  readonly timeoutMs: number;
+  readonly runId: string;
+  readonly unitId: string;
+  /** Injected so the decision is testable without spawning anything. */
+  readonly spawn?: (command: ShellCommand) => Promise<ShellRunResult>;
+}): OutsideTestPolicy {
+  const planFor = (file: string, reportPath: string) =>
+    singleFileRun({ suites: args.suites, file, workspace: args.workspace, timeoutMs: args.timeoutMs, reportPath });
+  const run = args.spawn ?? runShellCommand;
+  return {
+    runnable(files: readonly string[]): readonly string[] {
+      // A throwaway path: this asks only WHETHER the file resolves to a drivable runner.
+      return files.filter((f) => planFor(f, "unused") !== undefined);
+    },
+    async observe(files: readonly string[]): Promise<readonly OutsideObservation[]> {
+      const seen: OutsideObservation[] = [];
+      for (const file of files) {
+        const reportPath = allocatePerTestReportPath(args.runId, `${args.unitId}-outside`, "node-test");
+        const plan = planFor(file, reportPath);
+        if (plan === undefined) continue;
+        const source = perTestReportFile(plan.channel, reportPath);
+        const cleared = source.reset();
+        if (!cleared.ok) {
+          seen.push({ file, report: { channel: plan.channel, present: false, rows: [], unreadable: cleared.reason } });
+          continue;
+        }
+        await run(plan.command);
+        seen.push({ file, report: source.read() });
+      }
+      return seen;
+    },
+  };
+}
+
 export function realCommitGlobs(
   scope: { readonly testGlobs: readonly string[]; readonly sourceGlobs: readonly string[] },
   existingTestFiles: readonly string[],
@@ -1150,6 +1207,17 @@ function resolveReal(
     observed: file === proofFileRel,
   }));
   proveSpec.testChanges = testChangePolicy({ files: watchedTestFiles });
+  // ADR-0591: and the changed ones outside the proof file are RE-OBSERVED, so what their markers
+  // declared is held rather than only recorded. Armed off the SAME suites `run_tests` uses, so the
+  // spine re-observes exactly what a worker could have run — and offers nothing for a package whose
+  // runner cannot be driven by name, which stays recorded-only and says so in the envelope.
+  proveSpec.outsideTests = outsideTestPolicy({
+    suites: testSuites.suites,
+    workspace: opts.workspace,
+    timeoutMs: testSuites.timeoutMs,
+    runId: opts.runId,
+    unitId: spec.id,
+  });
   // ADR-0581 D4 / ADR-0582: every REAL build repairs a failed check inside the build. The write scope
   // answers both questions the loop asks of a path — whose file it is (the typecheck router) and what
   // the implementation is (the set-aside) — so the loop routes by exactly the walls the workers wrote
