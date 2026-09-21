@@ -318,6 +318,33 @@ test("listStoredHolds sweeps every unit, skips answers, and sorts oldest hold fi
   );
 });
 
+test("listStoredHolds skips an answer BY NAME, even one whose content would parse as a hold", async () => {
+  // The `.decision.json` skip must not rest on the two schemas never overlapping. A real decision record
+  // is refused by `parseStoredHold` anyway (it carries no pid or budget), so a test using a REAL decision
+  // cannot tell whether the NAME guard does anything — it would pass with the guard deleted. This plants
+  // a file with a hold's CONTENT under a decision's NAME, which is the only shape that distinguishes the
+  // two, and is what a decision gaining the hold's fields would look like.
+  const dir = await tempDir();
+  await mkdir(path.join(dir, "u"), { recursive: true });
+  await writeFile(
+    holdNoticePath(dir, "u", "real-genuine"),
+    JSON.stringify(storedHold({ unitId: "u", runId: "real-genuine" })),
+    "utf8",
+  );
+  await writeFile(
+    holdDecisionPath(dir, "u", "real-trap"),
+    JSON.stringify(storedHold({ unitId: "u", runId: "real-trap" })),
+    "utf8",
+  );
+
+  const holds = await listStoredHolds(dir);
+  assert.deepEqual(
+    holds.map((h) => h.runId),
+    ["real-genuine"],
+    "an answer is not a hold, and the NAME is what says so",
+  );
+});
+
 test("listStoredHolds answers empty for a directory that does not exist", async () => {
   assert.deepEqual(await listStoredHolds(path.join(os.tmpdir(), "storytree-no-such-holds-dir-9x8y7z")), []);
 });
