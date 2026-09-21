@@ -410,10 +410,23 @@ export type OwnWindowAbsence =
   /** This session's transcript was found and carries no usable reading — the honest zero-free zero. */
   | "no-readable-occupancy";
 
-/** How the reading was picked out of the windows written inside this worktree. */
+/** How the reading was picked. */
 export type OwnWindowSelection =
   /** The harness named its own window id and the correlated set contained it. Exact. */
   | "harness-window-id"
+  /**
+   * The harness named its own window id, no transcript in THIS worktree carried it, and the named
+   * transcript was resolved by name — its own lines agreeing that they speak for that window.
+   *
+   * THE FRESH-WORKTREE CASE, and the reason this value exists (increment
+   * `context-verb-resolves-the-session-not-just-the-worktree`). The merge ceremony requires a fresh
+   * worktree the moment repo code is touched again (ADR-0275 D1), and ADR-0411 D5 requires a context
+   * check at that same increment boundary — so the one moment a session is guaranteed to ask is the
+   * one moment the cwd correlation has nothing to find. Measured 2026-09-22 against this machine's
+   * real root: one process, one harness window id, one transcript on disk — the original worktree's
+   * id read 185,798 tokens and a fresh worktree's id got `no-correlated-window`.
+   */
+  | "harness-window-id-elsewhere"
   /** No usable harness id, so the most recently active correlated window was taken. */
   | "latest-activity";
 
@@ -422,7 +435,13 @@ export interface OwnWindowScan {
   readonly root: string;
   /** Parent session transcripts found under the root. */
   readonly windowFilesFound: number;
-  /** How many of the newest were actually read — {@link OWN_WINDOW_CANDIDATE_LIMIT} at most. */
+  /**
+   * How many of the newest the CORRELATION sweep read — {@link OWN_WINDOW_CANDIDATE_LIMIT} at most.
+   *
+   * The sweep, and only the sweep. Resolving a harness-named window reads one more file by name and
+   * is not counted here, because this number exists to say how far the `cwd` search reached — which
+   * is what an absence has to report — and a name lookup does not search at all.
+   */
   readonly windowFilesRead: number;
   /** The bound itself, so an absence can say "sixty of N" rather than merely "not found". */
   readonly candidateLimit: number;
@@ -455,13 +474,19 @@ export interface OwnWindowRead {
   readonly absence: OwnWindowAbsence | null;
   readonly selectedBy: OwnWindowSelection | null;
   /**
-   * True when the harness named a window id and the correlated set did not contain it.
+   * True when the harness named a window id and NOTHING on this machine could be resolved for it —
+   * neither a correlated transcript nor a transcript of that name whose own lines claim it.
    *
    * Reported rather than swallowed because it is the one shape in which the fallback could hand a
    * session a SIBLING's number: two sessions can share one worktree, so "written inside this
-   * worktree" alone does not single out a window. It is not treated as an absence — a correlated
-   * window is still very likely this session's — but a reader who sees this flag knows the exact
-   * identity was not confirmed.
+   * worktree" alone does not single out a window. It is not treated as an absence on its own — a
+   * correlated window is still very likely this session's — but a reader who sees this flag knows
+   * the exact identity was not confirmed.
+   *
+   * ⚠ It used to fire whenever the CORRELATED SET did not contain the named window, which folded
+   * two different states into one: "the harness named a window nobody has heard of" and "the harness
+   * named your window and you are standing in a different worktree". The second is now
+   * {@link OwnWindowSelection}'s `harness-window-id-elsewhere` and is a READING, not a doubt.
    */
   readonly harnessWindowUnmatched: boolean;
 }
@@ -474,10 +499,16 @@ export interface OwnWindowArgs {
   /**
    * The window id the harness declared for this process, when it declared one.
    *
-   * A SELECTOR over the correlated set, never a way to reach outside it. The correlation rule
-   * (`cwd` inside `.claude/worktrees/<sessionId>`) stays the only thing that decides which windows
-   * are eligible; this only picks among them, and picking is exactly what the cwd rule cannot do
-   * when one worktree has carried more than one session.
+   * THE SESSION'S OWN IDENTITY, and it outranks the worktree correlation rather than merely picking
+   * within it. It does two jobs the cwd rule cannot: it picks among the several windows one reused
+   * worktree slot has carried, and — when the caller is standing in a worktree that has written no
+   * transcript of its own — it names the window anyway, which is the whole of increment
+   * `context-verb-resolves-the-session-not-just-the-worktree`.
+   *
+   * ⚠ Reaching outside the correlated set is not a licence to guess: the named transcript's own
+   * lines must agree that they speak for that window before it is claimed. What makes this safe,
+   * where "the busiest window on the box" would not be, is that the harness stamped this id into
+   * THIS process's environment — nobody else's.
    */
   readonly harnessWindowId?: string;
   /** Overrides {@link OWN_WINDOW_CANDIDATE_LIMIT}. Tests set it; callers should not need to. */
@@ -493,14 +524,61 @@ function absent(
   return { sessionId, scan, window: null, band: null, absence, selectedBy: null, harnessWindowUnmatched };
 }
 
+function present(
+  sessionId: string,
+  scan: OwnWindowScan,
+  window: OwnWindowOccupancy,
+  selectedBy: OwnWindowSelection,
+  harnessWindowUnmatched: boolean,
+): OwnWindowRead {
+  return {
+    sessionId,
+    scan,
+    window,
+    band: bandOf(window.residentTokens),
+    absence: null,
+    selectedBy,
+    harnessWindowUnmatched,
+  };
+}
+
+/**
+ * The transcript the harness NAMED, looked up by name rather than by worktree.
+ *
+ * ★ THIS IS THE SESSION'S IDENTITY, NOT THE WORKTREE'S, and it is a STRONGER claim than the cwd
+ * correlation rather than a weaker one. The cwd rule exists because most harnesses declare no window
+ * id; when one does, it stamped that id into THIS process's environment, so it cannot hand back a
+ * sibling's window the way "most recently active window in this worktree" can.
+ *
+ * It costs one extra file read and NO extra walk: the sweep has already been done and the lookup is
+ * a `find` over its result. That is the same trade {@link readWindowOccupancySeries} makes, and the
+ * verification is the same too — the file's own lines must AGREE that they speak for this window,
+ * because a NAME IS NOT A CLAIM. A transcript that names a different window, or names none, is
+ * refused here rather than reported as the caller's own.
+ */
+function namedWindow(files: readonly StattedFile[], windowId: string): OwnWindowOccupancy | undefined {
+  const match = files.find(({ file }) => path.basename(file, ".jsonl") === windowId);
+  if (match === undefined) return undefined;
+  const occupancy = foldWindowOccupancy(match.file, match.mtimeMs);
+  if (occupancy === undefined || occupancy.windowId !== windowId) return undefined;
+  return { ...occupancy, file: match.file };
+}
+
 /**
  * How full is THIS session's own context window?
  *
  * The answer ADR-0411 D6 says a session must be handed rather than estimate. It joins the two
  * halves that already existed and re-derives neither: the transcript parse rules are
- * {@link readTranscriptWindow}'s, and the session→window identity rule is
- * {@link correlateTranscriptFile}'s — a transcript belongs to session `S` exactly when it recorded
- * a `cwd` inside `S`'s worktree.
+ * {@link readTranscriptWindow}'s, and the worktree→window rule is {@link correlateTranscriptFile}'s
+ * — a transcript belongs to worktree `S` exactly when it recorded a `cwd` inside `S`.
+ *
+ * ★ IT RESOLVES THE SESSION, NOT ONLY THE WORKTREE IT WAS INVOKED FROM. The cwd correlation answers
+ * "which windows ran HERE", which is a different question from "which window am I", and the two part
+ * company at the exact moment this reading is asked for: the merge ceremony stands up a fresh
+ * worktree the moment repo code is touched again (ADR-0275 D1) and ADR-0411 D5 has the session check
+ * its context at that same increment boundary. So the harness's own window id is tried FIRST against
+ * the correlated set and then, failing that, by NAME — see {@link OwnWindowArgs.harnessWindowId}.
+ * Only where the harness names nothing does the worktree decide.
  *
  * BOUNDED, and it says by how much. The caller's own window is being appended to as this runs, so
  * it sits at or near the top of an mtime ordering by construction; reading the newest
@@ -539,31 +617,37 @@ export function readOwnContextWindow(args: OwnWindowArgs): OwnWindowRead {
 
   const scan: OwnWindowScan = { ...baseScan, correlatedWindows };
 
-  if (correlatedWindows === 0) return absent(args.sessionId, scan, "no-correlated-window");
-  // Correlated, but every one of them was unreadable or ended on nothing but synthetic lines. That
-  // is a real state and it is NOT zero occupancy: a session told "0" would take on new work.
-  if (mine.length === 0) return absent(args.sessionId, scan, "no-readable-occupancy");
-
+  // The strongest answer available: the harness named a window and this worktree wrote it.
   const named =
     args.harnessWindowId === undefined
       ? undefined
       : mine.find((window) => window.windowId === args.harnessWindowId);
-  const harnessWindowUnmatched = args.harnessWindowId !== undefined && named === undefined;
+  if (named !== undefined) return present(args.sessionId, scan, named, "harness-window-id", false);
+
+  // THE FRESH-WORKTREE ARM. The harness named a window that nothing in this worktree wrote, which is
+  // what a session standing in a worktree it created mid-run looks like — and the exact worktree
+  // ADR-0275 D1 makes mandatory and ADR-0411 D5 says to check FROM. Resolving the named transcript
+  // is what makes the answer about the SESSION rather than about the directory it is standing in.
+  const elsewhere =
+    args.harnessWindowId === undefined ? undefined : namedWindow(windowFiles, args.harnessWindowId);
+  if (elsewhere !== undefined) {
+    return present(args.sessionId, scan, elsewhere, "harness-window-id-elsewhere", false);
+  }
+
+  // From here the harness named nothing usable, so the worktree is all there is to go on — and the
+  // flag says the named window resolved NOWHERE, which is a different thing from never being named.
+  const harnessWindowUnmatched = args.harnessWindowId !== undefined;
+
+  if (correlatedWindows === 0) return absent(args.sessionId, scan, "no-correlated-window", harnessWindowUnmatched);
 
   // Newest activity is the fallback, and it is the right one: the caller's own window is the one
   // being written to as this runs.
-  const window = named ?? [...mine].sort((a, b) => lastActivityMs(b) - lastActivityMs(a))[0];
-  if (window === undefined) return absent(args.sessionId, scan, "no-readable-occupancy");
+  const window = [...mine].sort((a, b) => lastActivityMs(b) - lastActivityMs(a))[0];
+  // Correlated, but every one of them was unreadable or ended on nothing but synthetic lines. That
+  // is a real state and it is NOT zero occupancy: a session told "0" would take on new work.
+  if (window === undefined) return absent(args.sessionId, scan, "no-readable-occupancy", harnessWindowUnmatched);
 
-  return {
-    sessionId: args.sessionId,
-    scan,
-    window,
-    band: bandOf(window.residentTokens),
-    absence: null,
-    selectedBy: named === undefined ? "latest-activity" : "harness-window-id",
-    harnessWindowUnmatched,
-  };
+  return present(args.sessionId, scan, window, "latest-activity", harnessWindowUnmatched);
 }
 
 // ---------------------------------------------------------------------------

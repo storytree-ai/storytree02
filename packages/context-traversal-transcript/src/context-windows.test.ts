@@ -230,6 +230,146 @@ test("a harness id the scan did not reach falls back, and SAYS the identity is u
   assert.equal(read.harnessWindowUnmatched, true, "the one shape that could hand back a sibling's number is reported");
 });
 
+// ── the fresh worktree the merge ceremony mandates ───────────────────────────
+//
+// The measured failure (2026-09-22, against this machine's real transcript root): ONE process, ONE
+// harness window id, ONE transcript on disk. Asked with the worktree it started in, it read 185,798
+// tokens; asked with a worktree stood up mid-run, it answered `no-correlated-window` — NO READING —
+// at the one moment ADR-0275 D1 and ADR-0411 D5 together guarantee a session will ask.
+
+const FRESH_WORKTREE = "a-worktree-stood-up-mid-run";
+
+test("a worktree that has written no transcript still gets THIS SESSION's reading, via the harness id", () => {
+  const root = freshRoot();
+  const win = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+  writeWindow(root, "proj", win, [
+    { requestId: "a", cwd: MY_CWD, windowId: win, at: "2026-08-26T01:00:00Z", tokens: 712_000, model: "claude-opus-5" },
+  ]);
+
+  // Every line of the transcript records the ORIGINAL worktree, so nothing correlates to the new one.
+  const read = readOwnContextWindow({ sessionId: FRESH_WORKTREE, root, harnessWindowId: win });
+
+  assert.equal(read.absence, null, "a NO READING here is the defect: the session's own window is right there");
+  assert.equal(read.window?.windowId, win);
+  assert.equal(read.window?.residentTokens, 712_000);
+  assert.equal(read.band, "soft", "and the band must follow it, or the scheduling decision it feeds is wrong");
+  assert.equal(read.selectedBy, "harness-window-id-elsewhere");
+  assert.equal(read.harnessWindowUnmatched, false, "the harness named it and it was found — that is confirmed");
+  assert.equal(read.scan.correlatedWindows, 0, "and the scan still says plainly that this worktree wrote nothing");
+});
+
+test("a NAME is not a claim: a transcript whose own lines name another window is refused", () => {
+  const root = freshRoot();
+  const named = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+  const dir = path.join(root, "proj");
+  fs.mkdirSync(dir, { recursive: true });
+  // Named for one window, speaking for another — so the file is not this session's on any evidence
+  // but its filename, which is exactly what must not be enough.
+  fs.writeFileSync(
+    path.join(dir, `${named}.jsonl`),
+    assistantLine({
+      requestId: "a",
+      cwd: "C:/code/storytree/.claude/worktrees/somebody-else-11111",
+      windowId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+      at: "2026-08-26T01:00:00Z",
+      tokens: 300_000,
+      model: "claude-opus-5",
+    }) + "\n",
+    "utf8",
+  );
+
+  const read = readOwnContextWindow({ sessionId: FRESH_WORKTREE, root, harnessWindowId: named });
+
+  assert.equal(read.window, null, "claiming that file would hand this session a stranger's number");
+  assert.equal(read.absence, "no-correlated-window");
+  assert.equal(read.harnessWindowUnmatched, true);
+});
+
+test("a fresh worktree and a harness id nothing answers to is an ABSENCE that says BOTH routes failed", () => {
+  const root = freshRoot();
+  const win = "12121212-1212-4121-8121-121212121212";
+  writeWindow(root, "proj", win, [
+    { requestId: "a", cwd: MY_CWD, windowId: win, at: "2026-08-26T01:00:00Z", tokens: 90_000, model: "claude-opus-5" },
+  ]);
+
+  const unnamed = readOwnContextWindow({ sessionId: FRESH_WORKTREE, root });
+  assert.equal(unnamed.absence, "no-correlated-window");
+  assert.equal(unnamed.harnessWindowUnmatched, false, "no id was given, so none went unmatched");
+
+  const bogus = readOwnContextWindow({ sessionId: FRESH_WORKTREE, root, harnessWindowId: "no-such-window" });
+  assert.equal(bogus.absence, "no-correlated-window");
+  assert.equal(bogus.harnessWindowUnmatched, true, "an id WAS given and resolved nowhere — a different state");
+});
+
+test("the harness-named window is found past the candidate bound — the bound caps the cwd sweep only", () => {
+  const root = freshRoot();
+  const mine = "13131313-1313-4131-8131-131313131313";
+  const mineFile = writeWindow(root, "proj", mine, [
+    { requestId: "a", cwd: MY_CWD, windowId: mine, at: "2026-08-26T01:00:00Z", tokens: 640_000, model: "claude-opus-5" },
+  ]);
+  const decoy = "14141414-1414-4141-8141-141414141414";
+  const decoyFile = writeWindow(root, "other", decoy, [
+    {
+      requestId: "b",
+      cwd: "C:/code/storytree/.claude/worktrees/somebody-else-11111",
+      windowId: decoy,
+      at: "2026-08-26T09:00:00Z",
+      tokens: 10_000,
+      model: "claude-opus-5",
+    },
+  ]);
+  touch(mineFile, 60_000);
+  touch(decoyFile, 1_000);
+
+  // The sweep reads only the decoy, so correlation reaches nothing — the same shape the bound test
+  // below pins. The NAME lookup is not a search and is not capped by it.
+  const read = readOwnContextWindow({ sessionId: FRESH_WORKTREE, root, candidateLimit: 1, harnessWindowId: mine });
+
+  assert.equal(read.window?.windowId, mine);
+  assert.equal(read.window?.residentTokens, 640_000);
+  assert.equal(read.selectedBy, "harness-window-id-elsewhere");
+  assert.equal(read.scan.windowFilesRead, 1, "and the scan keeps reporting how far the SWEEP reached, not this");
+});
+
+test("a helper transcript is never resolvable by name, however exactly the harness id matches it", () => {
+  const root = freshRoot();
+  const win = "15151515-1515-4151-8151-151515151515";
+  const helper = "16161616-1616-4161-8161-161616161616";
+  writeWindow(root, "proj", win, [
+    { requestId: "a", cwd: MY_CWD, windowId: win, at: "2026-08-26T01:00:00Z", tokens: 90_000, model: "claude-opus-5" },
+  ]);
+  writeHelper(root, "proj", win, helper, [
+    {
+      requestId: "h",
+      cwd: MY_CWD,
+      windowId: helper,
+      at: "2026-08-26T01:40:00Z",
+      tokens: 300_000,
+      model: "claude-opus-5",
+      sidechain: true,
+    },
+  ]);
+
+  const read = readOwnContextWindow({ sessionId: FRESH_WORKTREE, root, harnessWindowId: helper });
+
+  assert.equal(read.window, null, "a helper's 300k is never any session's own figure (ADR-0413 D2)");
+  assert.equal(read.absence, "no-correlated-window");
+  assert.equal(read.harnessWindowUnmatched, true);
+});
+
+test("the CORRELATED window still wins when the harness id names one this worktree wrote", () => {
+  const root = freshRoot();
+  const win = "17171717-1717-4171-8171-171717171717";
+  writeWindow(root, "proj", win, [
+    { requestId: "a", cwd: MY_CWD, windowId: win, at: "2026-08-26T01:00:00Z", tokens: 90_000, model: "claude-opus-5" },
+  ]);
+
+  const read = readOwnContextWindow({ sessionId: MINE, root, harnessWindowId: win });
+
+  assert.equal(read.selectedBy, "harness-window-id", "the ordinary case must not be relabelled as the new arm");
+  assert.equal(read.scan.correlatedWindows, 1);
+});
+
 test("helper tokens never enter the session's own figure (ADR-0413 D2)", () => {
   const root = freshRoot();
   const win = "99999999-9999-4999-8999-999999999999";
