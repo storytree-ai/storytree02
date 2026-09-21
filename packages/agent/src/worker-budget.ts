@@ -37,6 +37,16 @@ export interface WorkerBoundClock {
    * `!== undefined` guard around a no-op — a guard nothing can falsify, and so nothing can test.
    */
   clearTimeout(handle: ReturnType<typeof setTimeout> | undefined): void;
+  /**
+   * The current instant in milliseconds — what a helper's duration is measured with (ADR-0589 D3).
+   *
+   * It lives on THIS interface, beside the deadline, rather than on a clock of its own, because the
+   * two readings answer the same question about the same slice: how much of the build's budget went
+   * where. A helper timed on a second clock could report eleven minutes inside a slice the deadline
+   * says ran for nine, and nothing in the envelope would show which reading was wrong. One object
+   * also means one injection: a test that controls the deadline controls the durations too.
+   */
+  now(): number;
 }
 
 /** Minutes, floored, so an unspent minute never reads as spent. The unit every stop reports in. */

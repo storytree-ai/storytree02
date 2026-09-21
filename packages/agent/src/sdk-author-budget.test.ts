@@ -44,6 +44,9 @@ function handClock() {
       clearTimeout: () => {
         cleared += 1;
       },
+      // Frozen: these tests are about the DEADLINE, and nothing here reads the instant. The
+      // moving clock that drives helper durations is `sdk-author-helpers.test.ts`'s (ADR-0589 D3).
+      now: () => 0,
     } satisfies WorkerBoundClock,
   };
 }
