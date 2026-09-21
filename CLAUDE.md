@@ -660,10 +660,12 @@ that hides edges either.
 ⚠ **What it is ALSO not, any more, is "the consolidation pass": there is no such pass to reach for.**
 `adr-0139-consolidation-arc` is CLOSED, and its untagged-decision triage was **withdrawn as void**
 rather than left parked — ADR-0532 D3 makes `load_bearing: false` a CORRECT DEFAULT rather than an
-unexamined one, so the untagged set was never a backlog and *active ⟺ load-bearing* was never going
-to become true of the store. The arc's own end state now says the condition "is void rather than
-outstanding, and no session inherits it". Do not go looking for that work; if the curated set ever
-does grow too large to calibrate on, that is a fresh decision to take, not a pass already chartered.
+unexamined one, which DISSOLVED the untagged backlog rather than draining it — the ~240 untagged
+records stopped being a backlog by redefinition, and *active ⟺ load-bearing* was never going to
+become true of the store, because the two sets measure different things. The arc's own end state now
+says the condition "is void rather than outstanding, and no session inherits it". Do not go looking
+for that work; if the curated set ever does grow too large to calibrate on, that is a fresh decision
+to take, not a pass already chartered.
 
 **Status is a projection of the `## Status` prose, never an invented flip.** An agent MAY flip an ADR
 `proposed → accepted` (the green flip) once the decision is made and the prose supports it (ADR-0084);
