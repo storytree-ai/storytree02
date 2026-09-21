@@ -25,7 +25,8 @@ import { commitShaOf, storiesDirty, storiesTreeSha } from "./hierarchy-git.js";
  * ## IT APPLIES THE SCHEMA FIRST, DELIBERATELY
  *
  * `applySchema` is idempotent DDL and is NOT run by ordinary `--pg` commands, so a merged change that
- * adds a table leaves every live reader of that table broken until somebody runs `pnpm db:schema` —
+ * adds a table leaves every live reader of that table broken until somebody runs `pnpm db:schema
+ * --write` (the bare form previews and applies nothing) —
  * a break a fully green gate cannot see, because no gate rung reads through the new table. Running
  * it here means the writer of these tables is also what creates them: there is no window in which
  * the rows are expected and the relations are absent.

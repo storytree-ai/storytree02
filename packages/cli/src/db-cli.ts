@@ -11,6 +11,7 @@ import {
   stopLiveDbViaRest,
 } from "@storytree/drive";
 
+import { runDbSchema, WRITE_FLAG } from "./db-schema.js";
 import { loadLocalSecrets } from "./secrets.js";
 
 async function main(): Promise<void> {
@@ -82,23 +83,38 @@ async function main(): Promise<void> {
       // a verb once it had been re-derived enough times. Secrets hydration, the `PoolHandle` shape
       // and `closePool` teardown all sit inside the verb.
       //
-      // The DDL is idempotent by construction (`CREATE TABLE IF NOT EXISTS` / `ADD COLUMN IF NOT
-      // EXISTS`), so re-running it is safe — which is what makes it honest to expose on its own.
-      // It applies SCHEMA ONLY and touches no row: the residue hazard the friction names is a
-      // migration running when the caller asked for DDL, so this deliberately cannot do that.
-      loadLocalSecrets();
-      const { applySchema, createPool, closePool } = await import("@storytree/library/store");
-      const handle = await createPool();
-      try {
-        await applySchema(handle.pool);
-        console.log("schema applied (DDL only — no data migration ran)");
-      } finally {
-        await closePool(handle.pool, handle.connector);
-      }
+      // ★ THE BARE FORM NO LONGER APPLIES ANYTHING (increment
+      // `db-schema-requires-explicit-write-posture`). It previews, and `--write` is what applies.
+      // The earlier note here said this "applies SCHEMA ONLY and touches no row", which is true of
+      // INSERT/UPDATE and false of the file: the bundled DDL carries two top-level `DROP TABLE IF
+      // EXISTS` statements and two `DO $$ … $$` blocks that drop and re-add constraints, against the
+      // ONE shared instance every session on this box uses. The decision, the summariser and both
+      // renders are in `db-schema.ts`; what stays here is the I/O this shell owns.
+      await runDbSchema({
+        argv,
+        readDdl: async () => {
+          const { SCHEMA_SQL_PATH } = await import("@storytree/library/store");
+          const { readFile } = await import("node:fs/promises");
+          return { path: SCHEMA_SQL_PATH, sql: await readFile(SCHEMA_SQL_PATH, "utf8") };
+        },
+        applyDdl: async () => {
+          loadLocalSecrets();
+          const { applySchema, createPool, closePool } = await import("@storytree/library/store");
+          const handle = await createPool();
+          try {
+            await applySchema(handle.pool);
+          } finally {
+            await closePool(handle.pool, handle.connector);
+          }
+        },
+        out: (line) => {
+          console.log(line);
+        },
+      });
       return;
     }
     default:
-      console.error("usage: db-cli <up|down|status|probe|schema>");
+      console.error(`usage: db-cli <up|down|status|probe|schema [${WRITE_FLAG}]>`);
       process.exitCode = 2;
   }
 }
