@@ -145,12 +145,23 @@ const FILTER_TOKEN = /^--filter(?:=(.+))?$/;
  * the `test` script with an argument, and the argument does not change WHICH script runs.
  */
 export function parsePackageScriptCommand(command: string): PackageScriptCommand | null {
+  // ONE normalisation, not two. A `.filter((t) => t !== "")` stood beside the trim until the mutation
+  // rung found BOTH unkillable: with the filter present the trim is redundant (an empty leading token
+  // is dropped anyway), and with the trim present the filter is redundant (`\s+` consumes interior
+  // runs, so no empty token is produced). Two guards against the same thing make each other
+  // untestable, and the pair read as more careful than either.
   const separated = command.trim().split(/\s+--\s+/)[0] ?? "";
-  const tokens = separated.split(/\s+/).filter((t) => t !== "");
+  const tokens = separated.split(/\s+/);
   if (tokens[0] !== "pnpm") return null;
 
   const packages: string[] = [];
   let index = 1;
+  // Stryker disable next-line EqualityOperator,BlockStatement: EQUIVALENT and NON-TERMINATING.
+  // `<=` reads one index past the end, where `tokens[index] ?? ""` yields `""`, `FILTER_TOKEN` does
+  // not match it and the loop breaks on the same iteration — same result, one wasted comparison.
+  // Emptying the BODY removes the only `index` advance, so the mutant is an infinite loop rather
+  // than a behaviour change: it can only ever be reported as a timeout, which the rung's own
+  // vocabulary calls UNPROVEN and refuses to score either way.
   while (index < tokens.length) {
     const token = tokens[index] ?? "";
     const filter = FILTER_TOKEN.exec(token);
@@ -204,6 +215,9 @@ export function declaredGatesIn(story: string, storyText: string): DeclaredGate[
   if (block === null) return [];
   const out: DeclaredGate[] = [];
   for (const match of block.matchAll(COMMAND_SPAN)) {
+    // Stryker disable next-line StringLiteral: EQUIVALENT — `?? ""` on group 1 of a regex that has
+    // already matched. `COMMAND_SPAN`'s group is not optional, so it always participates and the
+    // fallback is unreachable; the same reasoning `gate-ci-parity.ts` records for its own groups.
     const command = (match[1] ?? "").trim();
     const parsed = parsePackageScriptCommand(command);
     if (parsed === null) continue;
@@ -229,6 +243,11 @@ export function repoWideScripts(steps: readonly GateStep[], workflowText: string
   const scripts = new Set<string>();
   const tokens = new Set([...localGatePlanTokens(steps), ...ciContentChecks(workflowText, jobName)]);
   for (const token of tokens) {
+    // Stryker disable next-line Regex: EQUIVALENT over a CLOSED input vocabulary. These tokens come
+    // only from `normalizeContentStep`, which emits exactly `check:<name>`, `pnpm lint`,
+    // `pnpm ci:affected` or `pnpm -r <script>` — so no token can carry text before or after the leg
+    // shape, and neither anchor can change a verdict. It is kept because the vocabulary is the
+    // NORMALISER'S to widen, not this reader's, and a future token could carry a suffix.
     const leg = /^pnpm -r (\S+)$/.exec(token);
     if (leg !== null) scripts.add(leg[1] ?? "");
   }
@@ -356,7 +375,11 @@ export function judgeCoverage(
 ): GateCoverage {
   const { packages, script } = gate.parsed;
   const hit = packages.filter((pkg) => targeted.has(targetKey(pkg, script)));
-  if (hit.length === packages.length && packages.length > 0) {
+  // No `&& packages.length > 0` guard: {@link parsePackageScriptCommand} returns `null` rather than a
+  // parse with an empty `packages`, so a `DeclaredGate` always names at least one. The guard stood
+  // here until the mutation rung could not kill it — an unreachable condition, and one that invited a
+  // reader to believe the empty case was possible.
+  if (hit.length === packages.length) {
     return {
       covered: true,
       by: "targeted-invocation",

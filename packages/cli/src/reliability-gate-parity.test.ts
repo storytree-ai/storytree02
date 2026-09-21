@@ -174,6 +174,9 @@ const GOLDEN_STALE_GHOST = [
   "[check:reliability-gate-parity]   Edit UNRUN_GATE_BASELINE in packages/cli/src/reliability-gate-parity.ts.",
 ].join(LF);
 
+const GOLDEN_BASELINE_BLOCKER =
+  "BLOCKED ON A RED JOURNEY, not on the wiring — measured 2026-09-22 on this branch. The command is wirable today (CI already installs the Chromium it needs, for the `check:land-art` rung), but the journey itself FAILS 4 of its 6 cases at `origin/main` efb99e0b, so wiring it would red every studio-touching PR on a break none of them authored. Three of the four share ONE cause: the spec asserts `.asset-refs h4` = \"Sources\", a pane commit 3ea9c3cc (\"stop rendering the Sources block on every read surface\") retired — that commit updated every unit test it broke and left the UAT journey alone, WHICH IS THIS RUNG'S OWN THESIS demonstrated inside the current commit range rather than argued. Clearing it needs the spec re-pointed at the app's surviving affordances AND criteria 4/5/6 and 9 re-worded, which is `story-author`'s ceremony under ADR-0253 (criterion identity is immutable across revisions) and the `studio` capability's spec — neither of them `gate-ci-parity`'s. Cleared by the increment `studio-uat-journey-is-green-then-wired` on `verification-integrity-arc`.";
+
 const GOLDEN_BLOCK_LAST = "\n\n1. _(gate: observe)_ `pnpm --filter studio uat`.\n";
 
 describe("reliabilityGatesBlock", () => {
@@ -894,6 +897,140 @@ describe("formatReliabilityGateParity", () => {
     assert.ok(body.includes("PASS"));
     assert.ok(body.includes("NOT JUDGED HERE"));
     assert.ok(body.includes("ceremony"));
+  });
+});
+
+describe("the remaining strings and branches nothing had read", () => {
+  it("the block-is-last slice is pinned WHOLE, to the byte", () => {
+    // `includes` assertions could not separate `slice(afterHeading)` from `slice(afterHeading, -1)`:
+    // dropping the final character leaves every substring claim true. Only the whole value does.
+    assert.equal(reliabilityGatesBlock(STORY_BLOCK_LAST), GOLDEN_BLOCK_LAST);
+  });
+
+  it("every NON_SCRIPT_HEAD is refused, not just the three anyone thought to test", () => {
+    // Three of the six were exercised, so emptying any of the other three changed nothing. A head
+    // that stops being excluded is read as a SCRIPT NAME, and the declaration then claims a gate on
+    // a script that does not exist.
+    for (const head of ["exec", "dlx", "run", "install", "add", "why"]) {
+      assert.equal(
+        parsePackageScriptCommand(`pnpm --filter studio ${head} something`),
+        null,
+        `\`${head}\` names no package script and must be refused`,
+      );
+    }
+    // The control: an ordinary word in the same position IS a script.
+    assert.deepEqual(parsePackageScriptCommand("pnpm --filter studio uat something"), {
+      packages: ["studio"],
+      script: "uat",
+    });
+  });
+
+  it("the three coverage DETAILS each say which tier answered, and the partial one names the gap", () => {
+    // Three template literals no test read. Each is what a session sees next to a declaration, so a
+    // detail that can be silently emptied is a diagnostic that can be silently emptied.
+    const one = parsePackageScriptCommand("pnpm --filter studio uat");
+    const two = parsePackageScriptCommand("pnpm --filter alpha --filter beta uat");
+    assert.notEqual(one, null);
+    assert.notEqual(two, null);
+    const gate1 = { story: "stories/s/story.md", command: "pnpm --filter studio uat", parsed: one! };
+    const gate2 = { story: "stories/s/story.md", command: "pnpm --filter alpha --filter beta uat", parsed: two! };
+
+    const targeted = judgeCoverage(gate1, new Set([targetKey("studio", "uat")]), new Set(["test"]));
+    assert.equal(
+      targeted.detail,
+      "a gate step or CI `run:` step invokes `uat` for studio",
+    );
+
+    const repoWide = judgeCoverage(
+      { ...gate1, command: "pnpm --filter studio test", parsed: parsePackageScriptCommand("pnpm --filter studio test")! },
+      new Set(),
+      new Set(["test"]),
+    );
+    assert.equal(
+      repoWide.detail,
+      "the repo-wide `pnpm -r test` leg runs it in every affected workspace",
+    );
+
+    // The PARTIAL branch: one of two packages invoked. Its extra sentence is the only thing that
+    // tells a reader the declaration is half-discharged rather than wholly unrun.
+    const partial = judgeCoverage(gate2, new Set([targetKey("alpha", "uat")]), new Set(["test"]));
+    assert.equal(partial.covered, false);
+    assert.equal(
+      partial.detail,
+      "nothing runs the `uat` script of alpha, beta: it is not one of the repo-wide legs (test) and " +
+        "no gate step or CI `run:` step names it. Only alpha of alpha, beta is invoked directly, so " +
+        "the declaration is not fully covered.",
+    );
+
+    // And the NO-hit branch omits that sentence rather than printing an empty one.
+    const none = judgeCoverage(gate2, new Set(), new Set(["test"]));
+    assert.equal(none.detail.includes("is invoked directly"), false);
+  });
+
+  it("storiesWithBlock counts the files that DECLARE one, not every file walked", () => {
+    // The count's own condition survived as `true`, which would report every story file as declaring
+    // a block — and that number is what tells a reader whether an empty judged set means "nothing
+    // decidable" or "nothing read".
+    const parity = judgeReliabilityGateParity({
+      stories: [
+        { path: "stories/a/story.md", text: STORY_BLOCK_LAST },
+        { path: "stories/b/story.md", text: STORY_NO_BLOCK },
+        { path: "stories/c/story.md", text: STORY_NO_BLOCK },
+      ],
+      steps: legPlan(),
+      workflowText: workflow("-r test", "--filter studio uat"),
+      jobName: "verify",
+      baseline: [],
+    });
+    assert.equal(parity.storiesWithBlock, 1, "two of the three declare nothing");
+    assert.equal(parity.judged.length, 1);
+  });
+
+  it("each BLIND CHECK refusal says which enumeration came back empty", () => {
+    // Both messages were asserted only by their exception TYPE. The type tells a reader the check is
+    // blind; only the message tells them which read broke, and the two repairs are different.
+    const noStories = () =>
+      judgeReliabilityGateParity({
+        stories: [],
+        steps: legPlan(),
+        workflowText: workflow("-r test"),
+        jobName: "verify",
+        baseline: [],
+      });
+    assert.throws(noStories, (err: unknown) => {
+      assert.ok(err instanceof VacuousReliabilitySweep);
+      assert.match(err.message, /story walk found no files/);
+      assert.match(err.message, /every gate would read as run/);
+      return true;
+    });
+
+    const noLegs = () =>
+      judgeReliabilityGateParity({
+        stories: [{ path: "stories/a/story.md", text: STORY_BLOCK_LAST }],
+        steps: plan("pnpm check:boundaries"),
+        workflowText: workflow("check:boundaries"),
+        jobName: "verify",
+        baseline: [],
+      });
+    assert.throws(noLegs, (err: unknown) => {
+      assert.ok(err instanceof VacuousReliabilitySweep);
+      assert.match(err.message, /no repo-wide `pnpm -r <script>` leg could be derived/);
+      assert.match(err.message, /every declared gate would look uncovered/);
+      // It names the job it consulted, so a typo'd job name is distinguishable from a plan with no leg.
+      assert.match(err.message, /verify/);
+      return true;
+    });
+  });
+
+  it("the REAL baseline entry's blocker is pinned WHOLE", () => {
+    // The blocker is built from a dozen concatenated pieces, so emptying any ONE of them left the
+    // length assertion satisfied and the mutant alive. This is the entry a session reads to learn why
+    // the corpus's only end-to-end journey is carried rather than run, and what would clear it — so
+    // it is pinned to the byte, and changing it is a deliberate edit here as well as there.
+    assert.equal(UNRUN_GATE_BASELINE.length, 1);
+    assert.equal(UNRUN_GATE_BASELINE[0]?.story, "stories/studio/story.md");
+    assert.equal(UNRUN_GATE_BASELINE[0]?.command, "pnpm --filter studio uat");
+    assert.equal(UNRUN_GATE_BASELINE[0]?.blocker, GOLDEN_BASELINE_BLOCKER);
   });
 });
 

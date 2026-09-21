@@ -397,6 +397,32 @@ test("a step this run did NOT execute produces no comparison row", () => {
   assert.deepEqual(comparisons.map((c) => c.command), ["pnpm check:agents"]);
 });
 
+/** Newline built at runtime rather than typed, per `asset:escape-sequences-in-tool-arguments-become-real-bytes`. */
+const LF = String.fromCharCode(10);
+
+/**
+ * The store-unobserved paragraph, pinned WHOLE and REGENERATED from the renderer.
+ *
+ * Four of its literals survived the mutation rung under `match` assertions: a regex over one line
+ * says nothing about the three beside it, and this paragraph's whole job is to explain WHY an
+ * unchanged repository is not an acquittal. A sentence that can be silently emptied here turns the
+ * withheld claim back into a bare PASS.
+ */
+const GOLDEN_STORE_UNOBSERVED = [
+  "",
+  "  === against the recorded run ===",
+  "    PASSED, STORE UNOBSERVED  pnpm check:verification-decay",
+  "      FAILED in the run at 2026-08-14T02:00:00.000Z and PASSED here, with HEAD and the working tree PROVABLY unchanged —",
+  "      but this step's verdict also reads the SHARED LIVE STORE, which the tree digest does",
+  "      not observe. So repository sameness rules out a code fix and rules out nothing about",
+  "      the store: a real store-side repair (yours, or a sibling session's `--pg` write) and",
+  "      infrastructure noise look identical from here. This is NOT a flake signature and the",
+  "      earlier red is NOT acquitted. If you repaired live state, this is that repair working.",
+  "",
+  "    None of this is a gate verdict — it compares two runs, and the steps this one did not",
+  "    re-execute are NOT RUN above. `pnpm gate` is what gates.",
+].join(LF);
+
 // ── the store axis: an unchanged REPOSITORY is not unchanged STATE ───────────
 
 test("fail -> pass over an unchanged tree is NOT a flake when the step reads the live store", () => {
@@ -413,12 +439,11 @@ test("fail -> pass over an unchanged tree is NOT a flake when the step reads the
   });
   assert.equal(c?.verdict, "store-unobserved");
 
-  const rendered = renderRerunComparison([c!], rec).join("\n");
-  assert.match(rendered, /STORE UNOBSERVED/);
-  assert.match(rendered, /NOT a flake signature/);
-  assert.match(rendered, /NOT acquitted/);
-  assert.doesNotMatch(rendered, /FLAKE SIGNATURE/, "the acquitting label must not appear at all");
-  assert.match(rendered, /None of this is a gate verdict/);
+  const rendered = renderRerunComparison([c!], rec).join(LF);
+  assert.equal(rendered, GOLDEN_STORE_UNOBSERVED);
+  // The one claim a golden does not make obvious to a later reader: the ACQUITTING label appears
+  // nowhere in it. That is the whole point of the verdict, and it is worth stating separately.
+  assert.doesNotMatch(rendered, /FLAKE SIGNATURE/);
 });
 
 test("the SAME evidence splits on what the step reads — the control is a repository-only step", () => {
