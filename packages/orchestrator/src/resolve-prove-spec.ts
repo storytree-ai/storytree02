@@ -14,7 +14,10 @@ import type {
   ClaudeAgentAuthorArgs,
   CodexPhaseAuthorArgs,
   CodexPromotionManifest,
+  FeedbackChoice,
+  FeedbackChoiceParameter,
   FeedbackCommand,
+  FeedbackRunOutput,
   LiveRuntime,
   ModelResponse,
   PhaseAuthor,
@@ -49,7 +52,19 @@ import {
 import { allocatePerTestReportPath, perTestReportFile } from "./proof/per-test-report.js";
 import type { PerTestChannel } from "./proof/per-test-report.js";
 import { perTestPolicy, testChangePolicy } from "./proof/per-test-review.js";
+import { resolveFeedbackChoice } from "@storytree/agent";
 import type { ProofRoute } from "./proof/proof-route.js";
+import {
+  runTestsDescription,
+  runTestsParameter,
+  suiteChoices,
+  testSelectionCommands,
+} from "./proof/test-suite-runner.js";
+import {
+  resolveRunnableSuites,
+  suiteResolutionIO,
+} from "./proof/test-suite-runner.js";
+import type { RunnableSuite, TestSelectionRun } from "./proof/test-suite-runner.js";
 import { gitTreeState } from "./prove-it-gate.js";
 import type { EscalationRecord, PhasePrompts, ProveSpec, TreeState } from "./prove-it-gate.js";
 import type { TestObservation } from "./phase-machine.js";
@@ -821,7 +836,23 @@ function resolveReal(
     real.install === true && real.typecheck !== undefined
       ? platformShellCommand({ ...real.typecheck, cwd: opts.workspace })
       : undefined;
-  const feedbackCommands = feedbackCommandsFor(realProofCmd, proofDisplay, typecheckCmd);
+  // `run_tests` (`worker-can-run-the-existing-tests`): the EXISTING tests of every package this
+  // unit's own scope reaches, resolved ONCE and shared by both runtimes, so the Claude and Codex
+  // workers are offered exactly the same set — a worker that could see a neighbouring test on one
+  // runtime and not the other would make the runtime choice a quality choice (ADR-0587's reasoning
+  // for the shared run cap, applied to the same seam).
+  //
+  // The BOUND is at least the spine-wide proof default and never less than this node's own declared
+  // proof budget: a whole-suite selection is minutes of work (drive 327s, cli 270s, measured
+  // 2026-09-19) where a single proof run may be seconds, so inheriting a short per-node bound would
+  // kill the very run the tool exists to allow. The runaway brake is the build's wall clock
+  // (ADR-0581 D2), not this.
+  const testSuites: FeedbackTestSuites = {
+    suites: resolveRunnableSuites(real.scope, suiteResolutionIO(opts.workspace)),
+    workspace: opts.workspace,
+    timeoutMs: Math.max(realProofCmd.timeoutMs ?? 0, DEFAULT_PROOF_TIMEOUT_MS),
+  };
+  const feedbackCommands = feedbackCommandsFor(realProofCmd, proofDisplay, typecheckCmd, testSuites);
 
   // ADR-0243 D1: liveAuthorOverride is meaningless without an authorOverride authoring leaf — it
   // would silently claim a live leaf ran when nothing did. Refused fail-closed, naming both option
@@ -899,6 +930,7 @@ function resolveReal(
           proofDisplay,
           opts.workspace,
           typecheckCmd,
+          testSuites,
         ),
       };
       if (opts.phasePrompts !== undefined) codexArgs.phasePrompts = opts.phasePrompts;
@@ -1262,6 +1294,99 @@ export function realProofCommand(
 }
 
 /**
+ * What a runtime needs to register `run_tests` (`worker-can-run-the-existing-tests`): the packages
+ * whose existing tests this unit's scope reaches, the workspace those files are named relative to,
+ * and the wall-clock bound one selection's spawn carries. Absent — or carrying no suite — no
+ * `run_tests` is registered at all, which is the honest answer when nothing about this unit is
+ * runnable: a registered tool that could never run anything would cost a worker a round trip to
+ * find out.
+ */
+export interface FeedbackTestSuites {
+  readonly suites: readonly RunnableSuite[];
+  readonly workspace: string;
+  readonly timeoutMs: number;
+}
+
+/**
+ * Run one validated `run_tests` selection and answer as ONE feedback result.
+ *
+ * A selection normally names files from a single package and is that package's own spawn, verbatim.
+ * When it spans several, each package's runner is spawned in turn — every one of them, never
+ * stopping at the first red, because a worker reading this is looking for what it broke and a run
+ * that stopped early would hide the rest. The merged exit code is the FIRST non-zero, so the answer
+ * still reads as failed; the streams are labelled per package so the worker can tell them apart.
+ *
+ * An EMPTY selection cannot arrive through `executeFeedback` (the empty list is refused there, and
+ * the absent form resolves to every choice), so this is a fail-closed floor rather than a live
+ * branch: it reports a non-zero code rather than an empty success, because "nothing ran" rendered
+ * as success is the one answer a worker would read as "they all passed".
+ */
+async function runTestSelection(runs: readonly TestSelectionRun[]): Promise<FeedbackRunOutput> {
+  const only = runs.length === 1 ? runs[0] : undefined;
+  if (only !== undefined) return runShellCommand(only.command);
+  if (runs.length === 0) {
+    return {
+      code: 1,
+      stdout: "",
+      stderr:
+        "no existing test files were selected, so nothing ran. Name at least one of the files " +
+        "this build offers, or omit the argument to run all of them.",
+    };
+  }
+  const stdout: string[] = [];
+  const stderr: string[] = [];
+  let code: number | null = 0;
+  for (const run of runs) {
+    const result = await runShellCommand(run.command);
+    const label = `--- ${run.packageDir} (exit ${result.code ?? "null"}) ---`;
+    stdout.push(`${label}\n${result.stdout}`);
+    stderr.push(`${label}\n${result.stderr}`);
+    if (code === 0 && result.code !== 0) code = result.code;
+  }
+  return { code, stdout: stdout.join("\n"), stderr: stderr.join("\n") };
+}
+
+/**
+ * The `run_tests` tool, shared by both runtimes: ONE declared choice (ADR-0587) over the
+ * spine-enumerated test files, and `select` — the single place a validated choice becomes spawns.
+ *
+ * It stops at `select` rather than returning a finished `run` because that is exactly where the two
+ * runtimes diverge and nowhere else: the Claude leaf spawns these commands as they are, the Codex
+ * leaf retargets each into its replica first. Handing both the same `select` is what stops the
+ * choice-to-commands rule existing twice and drifting.
+ */
+interface RunTestsTool {
+  readonly name: string;
+  readonly description: string;
+  readonly parameter: FeedbackChoiceParameter;
+  /** The single place a validated choice becomes spawns — see {@link runTestsCommand}. */
+  readonly select: (choice?: FeedbackChoice) => TestSelectionRun[];
+}
+
+function runTestsCommand(args: {
+  readonly tests: FeedbackTestSuites;
+  readonly where: string;
+}): RunTestsTool {
+  const { tests } = args;
+  const parameter = runTestsParameter(suiteChoices(tests.suites));
+  return {
+    name: "run_tests",
+    description: runTestsDescription(tests.suites, args.where),
+    parameter,
+    select: (choice) =>
+      testSelectionCommands({
+        suites: tests.suites,
+        // An absent choice is the whole-set form. It cannot arrive here from `executeFeedback`,
+        // which always hands a declared parameter its validated choice — but taking the whole set
+        // is what an absent one MEANS, so the fallback agrees with the seam instead of guessing.
+        chosen: resolveFeedbackChoice(choice ?? { chosen: undefined }, parameter),
+        workspace: tests.workspace,
+        timeoutMs: tests.timeoutMs,
+      }),
+  };
+}
+
+/**
  * The option-A feedback commands for a live leaf: `run_proof` always (the EXACT command the
  * spine's CONFIRM observations spawn), `run_typecheck` when the node registers one. Both spawn
  * through {@link runShellCommand} — env-scrubbed, exit-code-as-data, leaf controls zero arguments.
@@ -1270,6 +1395,7 @@ export function feedbackCommandsFor(
   proofCmd: ShellCommand,
   proofDisplay: string,
   typecheckCmd?: ShellCommand,
+  tests?: FeedbackTestSuites,
 ): FeedbackCommand[] {
   const commands: FeedbackCommand[] = [
     {
@@ -1289,6 +1415,18 @@ export function feedbackCommandsFor(
         "return its exit code and output. Bounded runs. Promotion requires this green — the " +
         "proof command runs under tsx (types stripped), so only this sees type errors.",
       run: () => runShellCommand(typecheckCmd),
+    });
+  }
+  // `run_tests` (`worker-can-run-the-existing-tests`): the leaf's only look at the EXISTING tests
+  // its change sits among. Registered only when the unit's scope actually reaches a package this
+  // spine can run a named subset of — see `test-suite-runner.ts` for what makes one drivable.
+  if (tests !== undefined && tests.suites.length > 0) {
+    const tool = runTestsCommand({ tests, where: "in the workspace" });
+    commands.push({
+      name: tool.name,
+      description: tool.description,
+      parameter: tool.parameter,
+      run: (choice) => runTestSelection(tool.select(choice)),
     });
   }
   return commands;
@@ -1336,6 +1474,7 @@ export function codexFeedbackCommandsFor(
   proofDisplay: string,
   workspace: string,
   typecheckCmd?: ShellCommand,
+  tests?: FeedbackTestSuites,
 ): NonNullable<CodexPhaseAuthorArgs["feedbackCommands"]>[number][] {
   const commands: NonNullable<CodexPhaseAuthorArgs["feedbackCommands"]>[number][] = [
     {
@@ -1359,6 +1498,25 @@ export function codexFeedbackCommandsFor(
       timeoutMs: typecheckCmd.timeoutMs ?? DEFAULT_PROOF_TIMEOUT_MS,
       run: (replicaRoot: string) =>
         runShellCommand(retargetShellCommand(typecheckCmd, workspace, replicaRoot)),
+    });
+  }
+  // `run_tests`, against the REPLICA: every selected package's command is retargeted exactly as
+  // `run_proof` is, so a feedback run sees the leaf's own edits rather than the unedited worktree.
+  // `testSelectionCommands` builds absolute in-workspace paths precisely so this move can find them.
+  if (tests !== undefined && tests.suites.length > 0) {
+    const tool = runTestsCommand({ tests, where: "against the leaf's disposable replica" });
+    commands.push({
+      name: tool.name,
+      description: tool.description,
+      parameter: tool.parameter,
+      timeoutMs: tests.timeoutMs,
+      run: (replicaRoot: string, choice?: FeedbackChoice) =>
+        runTestSelection(
+          tool.select(choice).map((r) => ({
+            packageDir: r.packageDir,
+            command: retargetShellCommand(r.command, workspace, replicaRoot),
+          })),
+        ),
     });
   }
   return commands;

@@ -42,6 +42,8 @@ import type { WorkerTimeBudget } from "./worker-budget.js";
 
 // Re-exported for callers constructing `CodexPhaseAuthorArgs.feedbackCommands` — the command shape
 // is declared once, in `codex-feedback-endpoint.ts`, never duplicated here.
+import type { FeedbackChoice } from "./feedback-choice.js";
+
 export type { CodexFeedbackCommand } from "./codex-feedback-endpoint.js";
 
 export const DEFAULT_CODEX_MODEL = "gpt-5.6-terra";
@@ -469,6 +471,40 @@ function computeFeedbackToolTimeoutSec(commands: CodexFeedbackCommand[]): number
     FEEDBACK_TOOL_TIMEOUT_SEC,
     Math.ceil(longestMs / 1000) + FEEDBACK_TOOL_TIMEOUT_HEADROOM_SEC,
   );
+}
+
+/**
+ * Wrap ONE registered feedback command so the leaf's exec bound is suspended for the duration of a
+ * run and resumed once it settles (ADR-0570 D4) — and so that NOTHING ELSE about the command
+ * changes on the way to the endpoint.
+ *
+ * SPREAD, never field-by-field, and that is the whole reason this is a named function rather than
+ * an inline literal. Rebuilding the object property by property silently drops every field nobody
+ * remembered to copy, and it did: ADR-0587's `parameter` was dropped exactly that way. The far end
+ * then finds no parameter in `executeFeedback`, never validates the published choices, and answers
+ * the whole-set form to every call — which for `run_tests` means running every suite the unit
+ * touches however few files the leaf named. Nothing was red, because the seam landed one increment
+ * before the first command that declared a choice, so no test drove this path with one.
+ *
+ * `run` is the one field the wrapper replaces, so the choice is the one thing it forwards by hand:
+ * the replica root is the ENDPOINT's to supply, the choice is the LEAF's, and dropping the second
+ * is the same bug in its other half.
+ */
+export function wrapFeedbackCommandWithBound(
+  command: CodexFeedbackCommand,
+  bound: CodexBoundControl,
+): CodexFeedbackCommand {
+  return {
+    ...command,
+    run: async (replicaRoot: string, choice?: FeedbackChoice) => {
+      bound.suspend?.();
+      try {
+        return await command.run(replicaRoot, choice);
+      } finally {
+        bound.resume?.();
+      }
+    },
+  };
 }
 
 /**
@@ -1349,21 +1385,11 @@ export class CodexPhaseAuthor implements PhaseAuthor {
       // `finally` below, which covers every exit after it opened — success, a refused promotion, and
       // a thrown runner alike.
       if (armed) {
+        // Each command wrapped so the leaf's bound is suspended around its run, and NOTHING else
+        // about it changes on the way to the endpoint — see `wrapFeedbackCommandWithBound` for the
+        // field-dropping bug that is why this is a named function.
         const wrappedFeedbackCommands: CodexFeedbackCommand[] = this.#feedbackCommands.map(
-          (command) => ({
-            name: command.name,
-            description: command.description,
-            // Only the leaf's own exec-spawn time counts against its bound: suspended for the
-            // duration of a feedback run, resumed once it settles (ADR-0570 D4).
-            run: async (feedbackReplicaRoot: string) => {
-              bound.suspend?.();
-              try {
-                return await command.run(feedbackReplicaRoot);
-              } finally {
-                bound.resume?.();
-              }
-            },
-          }),
+          (command) => wrapFeedbackCommandWithBound(command, bound),
         );
         feedbackHandle = await openCodexFeedbackEndpoint({
           phase,
