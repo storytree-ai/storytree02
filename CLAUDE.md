@@ -653,10 +653,17 @@ so it can never drift — and it needs the DB up. When you land or overtake a de
 ⚠ **A plain support edge must NEVER promote its target into this set:** closing over `dependsOn` would
 reproduce today's set almost exactly and then grow without bound as new support edges accumulate,
 which a consumer of the view cannot detect FROM the view. The cost accepted knowingly: a new decision
-resting on a load-bearing one no longer joins the set automatically and must be tagged. If the set
-grows too large to calibrate on, the remedy is the consolidation pass parked on
-`adr-0139-consolidation-arc` — **not** a filter that hides edges — and to find a decision nothing in
-the set points at, the verb is `storytree library related <id> --unlinked`, not a wider closure.
+resting on a load-bearing one no longer joins the set automatically and must be tagged. To find a
+decision nothing in the set points at, the verb is `storytree library related <id> --unlinked`, not
+a wider closure — and the remedy for a set that grows too large to calibrate on is **not** a filter
+that hides edges either.
+⚠ **What it is ALSO not, any more, is "the consolidation pass": there is no such pass to reach for.**
+`adr-0139-consolidation-arc` is CLOSED, and its untagged-decision triage was **withdrawn as void**
+rather than left parked — ADR-0532 D3 makes `load_bearing: false` a CORRECT DEFAULT rather than an
+unexamined one, so the untagged set was never a backlog and *active ⟺ load-bearing* was never going
+to become true of the store. The arc's own end state now says the condition "is void rather than
+outstanding, and no session inherits it". Do not go looking for that work; if the curated set ever
+does grow too large to calibrate on, that is a fresh decision to take, not a pass already chartered.
 
 **Status is a projection of the `## Status` prose, never an invented flip.** An agent MAY flip an ADR
 `proposed → accepted` (the green flip) once the decision is made and the prose supports it (ADR-0084);
