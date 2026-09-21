@@ -4,6 +4,7 @@
 export {
   formatEnvelope,
   emitNodeEnvelope,
+  runnableNextLine,
   withDeltaFooter,
   type Envelope,
   type ContextNode,
