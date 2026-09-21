@@ -535,8 +535,8 @@ test("per-test-green-requires-every-declared-test: an early exit's single passin
 test("per-test-review-only-refuses: the verdict evidence discloses whether each observation was per test", () => {
   const redOk: PerTestJudgement = { ok: true, declaredTests: 3, acceptedGuardRails: [] };
   const withAccepted: PerTestJudgement = { ok: true, declaredTests: 3, acceptedGuardRails: [{ test: ["t"], contracts: ["c"] }] };
-  const policy = perTestPolicy({ testFile: "/nowhere.test.ts", contracts: [], observeRed: true });
-  const structural = perTestPolicy({ testFile: "/nowhere.test.ts", contracts: [], observeRed: false });
+  const policy = perTestPolicy({ testFile: "/nowhere.test.ts", recordFile: "nowhere.test.ts", contracts: [], observeRed: true });
+  const structural = perTestPolicy({ testFile: "/nowhere.test.ts", recordFile: "nowhere.test.ts", contracts: [], observeRed: false });
 
   assert.equal(redEvidenceDisclosure(undefined, undefined), undefined, "no policy: the evidence reads exactly as before");
   assert.equal(
@@ -558,7 +558,7 @@ test("per-test-review-only-refuses: the policy reads the test file before AUTHOR
     const testFile = join(dir, "unit.test.ts");
     const existing = `test("clamp-bounds: an existing test that already passes", () => { assert.equal(clamp(15, 0, 10), 10); });\n`;
     await writeFile(testFile, existing);
-    const policy = perTestPolicy({ testFile, contracts: CLUSTER_CONTRACTS, observeRed: true });
+    const policy = perTestPolicy({ testFile, recordFile: "unit.test.ts", contracts: CLUSTER_CONTRACTS, observeRed: true });
     const confirmRed = policy.confirmRed;
     assert.ok(confirmRed !== undefined, "an assertion red is observed per test");
 
@@ -605,7 +605,7 @@ test("per-test-green-requires-every-declared-test: the policy reads a `.tsx` tes
 });
 `,
     );
-    const policy = perTestPolicy({ testFile, contracts: [], observeRed: false });
+    const policy = perTestPolicy({ testFile, recordFile: "unit.test.ts", contracts: [], observeRed: false });
     const rows = readVitestJsonReport(
       JSON.stringify({
         testResults: [
@@ -633,7 +633,7 @@ test("per-test-green-requires-every-declared-test: the policy reads a `.tsx` tes
 });
 
 test("per-test-review-only-refuses: a structural red is not observed per test, and the policy says why", () => {
-  const policy = perTestPolicy({ testFile: "/nowhere.test.ts", contracts: [], observeRed: false });
+  const policy = perTestPolicy({ testFile: "/nowhere.test.ts", recordFile: "nowhere.test.ts", contracts: [], observeRed: false });
   assert.equal(policy.confirmRed, undefined);
   assert.equal(policy.redNotObserved, STRUCTURAL_RED_NOT_OBSERVED);
 });

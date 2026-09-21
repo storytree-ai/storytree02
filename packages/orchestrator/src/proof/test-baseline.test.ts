@@ -10,6 +10,7 @@ import {
   describeTestChanges,
   readChangeMarkers,
   reviewTestChanges,
+  reviewTestFiles,
   testChangeKey,
   updatedToNewBehaviour,
   updatedToSameBehaviour,
@@ -24,6 +25,8 @@ import type { BaselineTest } from "./test-baseline.js";
  */
 
 const FILE = "packages/unit/src/unit.test.ts";
+/** A sibling existing test file the write wall admits but the proof command never runs (ADR-0590). */
+const OTHER = "packages/unit/src/sibling.test.ts";
 
 const SOURCE = (body: string): string => `import test from "node:test";
 import assert from "node:assert/strict";
@@ -59,6 +62,8 @@ const readTests = (source: string): BaselineTest[] => declaredTestsOf(source, FI
 
 function review(before: string, after: string): ReturnType<typeof reviewTestChanges> {
   return reviewTestChanges({
+    file: FILE,
+    observed: true,
     before: readTests(before),
     beforeSource: before,
     after: readTests(after),
@@ -111,16 +116,16 @@ describe("an-existing-test-change-is-recorded-with-its-reason: what the test-wri
       newBehaviour.changes.map((c) => [c.kind, c.asserts, c.reason]),
       [["updated", "new-behaviour", "add-sums: two and three make five — the sum now rounds to two places"]],
     );
-    assert.deepEqual([...updatedToNewBehaviour(newBehaviour)], [testChangeKey(["add-sums: two and three make five"])]);
-    assert.deepEqual([...updatedToSameBehaviour(newBehaviour)], []);
+    assert.deepEqual([...updatedToNewBehaviour(newBehaviour, FILE)], [testChangeKey(["add-sums: two and three make five"])]);
+    assert.deepEqual([...updatedToSameBehaviour(newBehaviour, FILE)], []);
 
     const refactor = review(
       SOURCE(KEPT),
       SOURCE(`// test-updated (refactor): add-sums: two and three make five — same assertion, shared fixture\n${REWRITTEN}`),
     );
     assert.deepEqual(refactor.findings, []);
-    assert.deepEqual([...updatedToSameBehaviour(refactor)], [testChangeKey(["add-sums: two and three make five"])]);
-    assert.deepEqual([...updatedToNewBehaviour(refactor)], []);
+    assert.deepEqual([...updatedToSameBehaviour(refactor, FILE)], [testChangeKey(["add-sums: two and three make five"])]);
+    assert.deepEqual([...updatedToNewBehaviour(refactor, FILE)], []);
 
     const removal = review(
       SOURCE(KEPT),
@@ -256,13 +261,14 @@ describe("an-existing-test-change-is-recorded-with-its-reason: what the test-wri
     const file = path.join(dir, "unit.test.ts");
     try {
       // A file that does not exist yet reads as EMPTY on both sides: a net-new unit changes nothing.
-      const absent = testChangePolicy({ testFile: file });
+      const watch = (observed = true) => ({ files: [{ absolute: file, file: FILE, observed }] });
+      const absent = testChangePolicy(watch());
       absent.beforeAuthorTest();
       writeFileSync(file, SOURCE(KEPT));
       assert.deepEqual(absent.review(), { changes: [], findings: [] });
 
       // The real thing: the file as the build found it, then the file the test-writer left.
-      const policy = testChangePolicy({ testFile: file });
+      const policy = testChangePolicy(watch());
       policy.beforeAuthorTest();
       writeFileSync(
         file,
@@ -287,7 +293,7 @@ describe("an-existing-test-change-is-recorded-with-its-reason: what the test-wri
       assert.deepEqual(policy.review().findings.length, 1, "the reason went away with the marker");
 
       // A policy never asked for its baseline records nothing rather than inventing one.
-      assert.deepEqual(testChangePolicy({ testFile: file }).review(), { changes: [], findings: [] });
+      assert.deepEqual(testChangePolicy(watch()).review(), { changes: [], findings: [] });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -297,17 +303,184 @@ describe("an-existing-test-change-is-recorded-with-its-reason: what the test-wri
     assert.deepEqual(describeTestChanges([]), []);
     assert.deepEqual(
       describeTestChanges([
-        { test: ["a"], kind: "updated", reason: "a — the new rule", asserts: "new-behaviour" },
-        { test: ["b"], kind: "updated", reason: "b — same claim, shared fixture", asserts: "same-behaviour" },
-        { test: ["c"], kind: "removed", reason: "c — folded into b" },
-        { test: ["d"], kind: "updated" },
+        { file: FILE, observed: true, test: ["a"], kind: "updated", reason: "a — the new rule", asserts: "new-behaviour" },
+        { file: FILE, observed: true, test: ["b"], kind: "updated", reason: "b — same claim, shared fixture", asserts: "same-behaviour" },
+        { file: FILE, observed: true, test: ["c"], kind: "removed", reason: "c — folded into b" },
+        { file: FILE, observed: true, test: ["d"], kind: "updated" },
+        { file: OTHER, observed: false, test: ["e"], kind: "updated", reason: "e — the new rule", asserts: "new-behaviour" },
       ]),
       [
-        "updated (new behaviour) — `a`: a — the new rule",
-        "updated (refactor) — `b`: b — same claim, shared fixture",
-        "removed — `c`: c — folded into b",
-        "updated — `d`: NO REASON STATED",
+        "updated (new behaviour) — `packages/unit/src/unit.test.ts` `a`: a — the new rule",
+        "updated (refactor) — `packages/unit/src/unit.test.ts` `b`: b — same claim, shared fixture",
+        "removed — `packages/unit/src/unit.test.ts` `c`: c — folded into b",
+        "updated — `packages/unit/src/unit.test.ts` `d`: NO REASON STATED",
+        "updated (new behaviour) — `packages/unit/src/sibling.test.ts` `e`: e — the new rule" +
+          " [recorded only — this build did not re-observe this file]",
       ],
     );
+  });
+});
+
+/**
+ * `the-record-spans-every-existing-test-file-the-wall-admits` (ADR-0590): the write wall was already
+ * PLURAL — `real.scope.testGlobs`, which for a package's default registry entry is every test file in
+ * it — while the record read ONE scalar path. A permitted edit to a sibling test was therefore recorded
+ * nowhere. The record now watches the same set the wall admits: each file reviewed against its own
+ * baseline and its own markers, each change carrying the file it was in and whether this build observed
+ * that file.
+ */
+describe("the-record-spans-every-existing-test-file-the-wall-admits: a change anywhere the wall admits is recorded", () => {
+  const reviewOf = (file: string, observed: boolean, before: string, after: string) => ({
+    file,
+    observed,
+    before: readTests(before),
+    beforeSource: before,
+    after: readTests(after),
+    afterSource: after,
+  });
+
+  test("each file is reviewed against ITS OWN baseline, and every change names its file", () => {
+    const record = reviewTestFiles([
+      reviewOf(
+        FILE,
+        true,
+        SOURCE(KEPT),
+        SOURCE(`// test-removed: add-negatives: minus one and one make zero — folded into the sums table\n${REMOVED}`),
+      ),
+      reviewOf(
+        OTHER,
+        false,
+        SOURCE(KEPT),
+        SOURCE(`// test-updated (refactor): add-sums: two and three make five — shared fixture\n${REWRITTEN}`),
+      ),
+    ]);
+
+    assert.deepEqual(
+      record.changes.map((c) => [c.file, c.kind, c.observed, c.reason]),
+      [
+        [FILE, "removed", true, "add-negatives: minus one and one make zero — folded into the sums table"],
+        [OTHER, "updated", false, "add-sums: two and three make five — shared fixture"],
+      ],
+      "both files' changes are recorded, each stamped with its file and whether the build observed it",
+    );
+    assert.deepEqual(record.findings, [], "both changes stated a reason");
+  });
+
+  test("a marker in ONE file cannot excuse a change in ANOTHER", () => {
+    // The reason is written in FILE and names the test; the CHANGE is in OTHER. Reviewing per file is
+    // what keeps a marker LOCAL — a single merged read of both sources would accept this.
+    const record = reviewTestFiles([
+      reviewOf(
+        FILE,
+        true,
+        SOURCE(KEPT),
+        SOURCE(`// test-updated (refactor): add-sums: two and three make five — shared fixture\n${KEPT}`),
+      ),
+      reviewOf(OTHER, false, SOURCE(KEPT), SOURCE(REWRITTEN)),
+    ]);
+
+    assert.deepEqual(
+      record.changes.map((c) => [c.file, c.reason]),
+      [[OTHER, undefined]],
+      "the change in OTHER is recorded with NO reason — FILE's marker is not its to borrow",
+    );
+    assert.equal(record.findings.length, 1);
+    assert.equal(record.findings[0]?.check, "C8");
+    assert.equal(record.findings[0]?.testSide, true, "a missing reason is the test-writer's to clear");
+    assert.match(
+      record.findings[0]?.detail ?? "",
+      /packages\/unit\/src\/sibling\.test\.ts/,
+      "the finding names the file, or the test-writer cannot tell which same-titled test it means",
+    );
+  });
+
+  test("two files declaring the SAME title yield two changes, and neither obliges the other", () => {
+    // The collision the file stamp exists for: a baseline test keys on its title path alone, so without
+    // the stamp these two fold into ONE change — and one file's declared obligation is then held
+    // against the other file's test, which nobody declared anything about.
+    const record = reviewTestFiles([
+      reviewOf(
+        FILE,
+        true,
+        SOURCE(KEPT),
+        SOURCE(`// test-updated (refactor): add-sums: two and three make five — shared fixture\n${REWRITTEN}`),
+      ),
+      reviewOf(
+        OTHER,
+        false,
+        SOURCE(KEPT),
+        SOURCE(`// test-updated (new behaviour): add-sums: two and three make five — now rounds\n${REWRITTEN}`),
+      ),
+    ]);
+
+    assert.equal(record.changes.length, 2, "one change per file, never one merged change");
+    assert.deepEqual(
+      record.changes.map((c) => [c.file, c.asserts]),
+      [
+        [FILE, "same-behaviour"],
+        [OTHER, "new-behaviour"],
+      ],
+    );
+
+    const key = testChangeKey(["add-sums: two and three make five"]);
+    // THE POINT: the proof file declared a REFACTOR, so that is the only obligation the red review may
+    // hold its test to. The sibling's `new behaviour` claim is about a test the proof command never ran.
+    assert.deepEqual([...updatedToSameBehaviour(record, FILE)], [key]);
+    assert.deepEqual(
+      [...updatedToNewBehaviour(record, FILE)],
+      [],
+      "the sibling's new-behaviour claim must not oblige the proof file's same-titled test to fail at red",
+    );
+    assert.deepEqual([...updatedToNewBehaviour(record, OTHER)], [key]);
+    assert.deepEqual([...updatedToSameBehaviour(record, OTHER)], []);
+    assert.deepEqual(
+      [...updatedToNewBehaviour(record, "packages/unit/src/never-touched.test.ts")],
+      [],
+      "a file carrying no change in the record obliges nothing",
+    );
+  });
+
+  test("the file-backed policy watches every file it was given, and the envelope says which were observed", () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "storytree-test-baseline-multi-"));
+    const proof = path.join(dir, "unit.test.ts");
+    const sibling = path.join(dir, "sibling.test.ts");
+    const missing = path.join(dir, "absent.test.ts");
+    try {
+      writeFileSync(proof, SOURCE(KEPT));
+      writeFileSync(sibling, SOURCE(KEPT));
+      const policy = testChangePolicy({
+        files: [
+          { absolute: proof, file: FILE, observed: true },
+          { absolute: sibling, file: OTHER, observed: false },
+          { absolute: missing, file: "packages/unit/src/absent.test.ts", observed: false },
+        ],
+      });
+      policy.beforeAuthorTest();
+
+      // The proof file is left alone; the SIBLING is what the test-writer changed — the case that was
+      // permitted and recorded nowhere before ADR-0590.
+      writeFileSync(sibling, SOURCE(`// test-removed: add-negatives: minus one and one make zero — folded in\n${REMOVED}`));
+      // A file absent when the baseline was read stays empty on both sides even once it appears.
+      writeFileSync(missing, SOURCE(KEPT));
+
+      const record = policy.review();
+      assert.deepEqual(
+        record.changes.map((c) => [c.file, c.kind, c.observed]),
+        [[OTHER, "removed", false]],
+        "only the sibling changed, and the record says this build did not observe it",
+      );
+      assert.deepEqual(record.findings, []);
+      assert.deepEqual(
+        describeTestChanges(record.changes),
+        [
+          "removed — `packages/unit/src/sibling.test.ts` `add-negatives: minus one and one make zero`: " +
+            "add-negatives: minus one and one make zero — folded in" +
+            " [recorded only — this build did not re-observe this file]",
+        ],
+        "the envelope names the file and does NOT claim an obligation this build never held",
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

@@ -176,3 +176,59 @@ test("RecordingTestExecutor rejects on over-run (never a silent green)", async (
   await exec.run("alpha");
   await assert.rejects(() => exec.run("beta"), /exhausted/);
 });
+
+/**
+ * ADR-0590 D1: the test-writer's wall also admits the EXISTING test files the unit's scope named, as
+ * concrete paths matched exactly rather than as globs.
+ */
+test("an existing test file the scope named is the test-writer's to write, and never the code-writer's", () => {
+  const sibling = "packages/unit/src/sibling.test.ts";
+  const scope = new PathWriteScope({
+    testGlobs: ["packages/unit/src/unit.test.ts"],
+    sourceGlobs: ["packages/unit/src/unit.ts"],
+    existingTestFiles: [sibling],
+  });
+
+  assert.equal(scope.isWriteAllowed("AUTHOR_TEST", sibling), true, "the test-writer may update it");
+  assert.equal(
+    scope.isWriteAllowed("IMPLEMENT", sibling),
+    false,
+    "the code-writer never writes a test — the widened set is a TEST path, so IMPLEMENT's !isTest term excludes it",
+  );
+  for (const phase of ["CONFIRM_RED", "CONFIRM_GREEN", "GATE"] as const) {
+    assert.equal(scope.isWriteAllowed(phase, sibling), false, `${phase} is observe-only`);
+  }
+
+  // The unit's own declared globs are untouched by the widening.
+  assert.equal(scope.isWriteAllowed("AUTHOR_TEST", "packages/unit/src/unit.test.ts"), true);
+  assert.equal(scope.isWriteAllowed("IMPLEMENT", "packages/unit/src/unit.ts"), true);
+});
+
+test("the widened set is EXACT — it admits the files it names and nothing shaped like them", () => {
+  const scope = new PathWriteScope({
+    testGlobs: [],
+    sourceGlobs: [],
+    existingTestFiles: ["packages/unit/src/sibling.test.ts"],
+  });
+
+  assert.equal(scope.isWriteAllowed("AUTHOR_TEST", "packages/unit/src/sibling.test.ts"), true);
+  // A list, not a glob: a file that did not exist when the scope was derived is NOT admitted, which is
+  // what keeps the grant to EXISTING test files rather than to the whole package.
+  assert.equal(scope.isWriteAllowed("AUTHOR_TEST", "packages/unit/src/brand-new.test.ts"), false);
+  assert.equal(scope.isWriteAllowed("AUTHOR_TEST", "packages/unit/src/nested/sibling.test.ts"), false);
+  assert.equal(scope.isWriteAllowed("AUTHOR_TEST", "packages/other/src/sibling.test.ts"), false);
+  // Windows separators reach this predicate from the leaves; they must not miss the set.
+  assert.equal(scope.isWriteAllowed("AUTHOR_TEST", "packages\\unit\\src\\sibling.test.ts"), true);
+});
+
+test("a scope declaring no existing test files behaves exactly as it did before ADR-0590", () => {
+  const scope = new PathWriteScope({
+    testGlobs: ["packages/unit/src/**/*.test.ts"],
+    sourceGlobs: ["packages/unit/src/unit.ts"],
+  });
+
+  assert.equal(scope.isWriteAllowed("AUTHOR_TEST", "packages/unit/src/unit.test.ts"), true);
+  assert.equal(scope.isWriteAllowed("AUTHOR_TEST", "packages/other/src/x.test.ts"), false);
+  assert.equal(scope.isWriteAllowed("IMPLEMENT", "packages/unit/src/unit.ts"), true);
+  assert.equal(scope.isWriteAllowed("IMPLEMENT", "packages/unit/src/unit.test.ts"), false);
+});

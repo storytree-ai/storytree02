@@ -47,12 +47,28 @@ export type UpdatedAsserts = "new-behaviour" | "same-behaviour";
 
 /** One change a test-writer made to a test that existed before this build. */
 export interface TestChange {
+  /**
+   * The test file the change is in, workspace-relative and POSIX-separated (ADR-0590). A record that
+   * spans files needs this: {@link BaselineTest} keys on the title path alone, so two files declaring
+   * the same title would otherwise collide into one change and one obligation.
+   */
+  readonly file: string;
   readonly test: readonly string[];
   readonly kind: "updated" | "removed";
   /** The reason the test-writer stated, verbatim; absent when it stated none. */
   readonly reason?: string;
   /** What an update declares it asserts now. Absent on a removal, and on a change with no reason. */
   readonly asserts?: UpdatedAsserts;
+  /**
+   * Whether this build's CONFIRM_RED observation covered {@link file} — i.e. whether the marker's
+   * declared obligation was actually HELD, or merely recorded (ADR-0590 D4).
+   *
+   * True only for the unit's own proof file, which is the one file the proof command runs. A change
+   * anywhere else is recorded with its reason and listed in the envelope, and the envelope SAYS it was
+   * not re-observed rather than letting the reader assume the same guarantee. Re-observing those files
+   * needs a second observation channel and is not built.
+   */
+  readonly observed: boolean;
 }
 
 /** One marker read out of a test file. */
@@ -110,6 +126,16 @@ export function testChangeKey(titlePath: readonly string[]): string {
 
 /** What {@link reviewTestChanges} reads. */
 export interface TestChangeReview {
+  /**
+   * The file these two reads are of, workspace-relative and POSIX-separated. Stamped on every change
+   * and finding, so a record spanning files can still say which file each change was in (ADR-0590).
+   */
+  readonly file: string;
+  /**
+   * Whether this build OBSERVES {@link file} — true only for the unit's own proof file. Recorded on
+   * each change so the envelope can say which obligations were HELD and which were only recorded.
+   */
+  readonly observed: boolean;
   /** The tests the file declared BEFORE the first authoring slice. */
   readonly before: readonly BaselineTest[];
   /** That file's source, for the markers it already carried. */
@@ -157,46 +183,90 @@ export function reviewTestChanges(input: TestChangeReview): TestChangeRecord {
     const name = was.path[was.path.length - 1] ?? "";
     // NAME CONTAINMENT, as ADR-0122 already joins a contract to a test: the reason names the test.
     const marker = markers.find((m) => m.kind === kind && name.length > 0 && m.reason.includes(name));
+    const where = { file: input.file, observed: input.observed };
     if (marker === undefined) {
-      changes.push({ test: [...was.path], kind });
+      changes.push({ ...where, test: [...was.path], kind });
       findings.push({
         check: "C8",
         test: was.path,
         detail:
           `a test that existed before this build was ${kind === "removed" ? "removed" : "updated"} with no ` +
-          `stated reason — changing it is yours to judge, and the build records why: ${MARKER_HELP}`,
+          `stated reason (in \`${input.file}\`) — changing it is yours to judge, and the build records why: ` +
+          MARKER_HELP,
         testSide: true,
       });
       continue;
     }
     changes.push(
       marker.asserts === undefined
-        ? { test: [...was.path], kind, reason: marker.reason }
-        : { test: [...was.path], kind, reason: marker.reason, asserts: marker.asserts },
+        ? { ...where, test: [...was.path], kind, reason: marker.reason }
+        : { ...where, test: [...was.path], kind, reason: marker.reason, asserts: marker.asserts },
     );
   }
   return { changes, findings };
 }
 
-/** The title paths this build's record says now assert NEW behaviour — held like a new test at red. */
-export function updatedToNewBehaviour(record: TestChangeRecord): ReadonlySet<string> {
+/**
+ * One record over SEVERAL files (ADR-0590 D3): each file reviewed on its own — its own markers, its own
+ * baseline — and the results concatenated in the order given.
+ *
+ * Reviewing per file rather than over a merged pair is what keeps a marker LOCAL: a reason written in
+ * one file cannot excuse a change in another, which a merged source would silently allow.
+ */
+export function reviewTestFiles(reviews: readonly TestChangeReview[]): TestChangeRecord {
+  const changes: TestChange[] = [];
+  const findings: PerTestFinding[] = [];
+  for (const review of reviews) {
+    const record = reviewTestChanges(review);
+    changes.push(...record.changes);
+    findings.push(...record.findings);
+  }
+  return { changes, findings };
+}
+
+/**
+ * The title paths this build's record says now assert NEW behaviour — held like a new test at red.
+ *
+ * SCOPED TO ONE FILE, and that is load-bearing (ADR-0590 D4). The review that consumes these sets joins
+ * them to the tests the proof command OBSERVED, which come from one file and carry no file identity of
+ * their own — so a change in a sibling file would bind a proof-file test that merely shares its title,
+ * obliging an outcome nobody declared for it. The caller must say which file it is asking about; there
+ * is no whole-record form, because the one it would return is the wrong answer.
+ */
+export function updatedToNewBehaviour(record: TestChangeRecord, file: string): ReadonlySet<string> {
   return new Set(
-    record.changes.filter((c) => c.kind === "updated" && c.asserts === "new-behaviour").map((c) => keyOf(c.test)),
+    record.changes
+      .filter((c) => c.file === file && c.kind === "updated" && c.asserts === "new-behaviour")
+      .map((c) => keyOf(c.test)),
   );
 }
 
-/** The title paths this build's record calls REFACTORS — they must still pass against the base source. */
-export function updatedToSameBehaviour(record: TestChangeRecord): ReadonlySet<string> {
+/**
+ * The title paths this build's record calls REFACTORS — they must still pass against the base source.
+ * Scoped to one file for the reason {@link updatedToNewBehaviour} gives.
+ */
+export function updatedToSameBehaviour(record: TestChangeRecord, file: string): ReadonlySet<string> {
   return new Set(
-    record.changes.filter((c) => c.kind === "updated" && c.asserts === "same-behaviour").map((c) => keyOf(c.test)),
+    record.changes
+      .filter((c) => c.file === file && c.kind === "updated" && c.asserts === "same-behaviour")
+      .map((c) => keyOf(c.test)),
   );
 }
 
-/** One line per change, as the build envelope lists them (ADR-0585). `[]` when nothing changed. */
+/**
+ * One line per change, as the build envelope lists them (ADR-0585, widened by ADR-0590). `[]` when
+ * nothing changed.
+ *
+ * Each line names the FILE, because the record now spans every existing test file the test-writer could
+ * reach. A change the build did not observe says so on its own line: its marker's obligation was
+ * RECORDED, not held, and a reader who assumed otherwise would be reading a guarantee that was never
+ * made.
+ */
 export function describeTestChanges(changes: readonly TestChange[]): string[] {
   return changes.map((c) => {
     const what = c.kind === "removed" ? "removed" : c.asserts === "same-behaviour" ? "updated (refactor)" : c.asserts === "new-behaviour" ? "updated (new behaviour)" : "updated";
     const why = c.reason === undefined ? "NO REASON STATED" : c.reason;
-    return `${what} — \`${c.test.join(" > ")}\`: ${why}`;
+    const held = c.observed ? "" : " [recorded only — this build did not re-observe this file]";
+    return `${what} — \`${c.file}\` \`${c.test.join(" > ")}\`: ${why}${held}`;
   });
 }
