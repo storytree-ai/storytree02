@@ -15,6 +15,9 @@
 // Proof: pnpm --filter @storytree/drive exec bun test --preload ../../scripts/tsx-cache-off.mjs src/node-build-framing.test.ts
 
 import assert from "node:assert/strict";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { test } from "node:test";
 
 import { honestFramingLive, honestFramingReal, nodeHelp } from "./node-build.js";
@@ -308,8 +311,38 @@ for (const golden of GOLDENS) {
 // regression run", so it is pinned here, beside the framing that reports what a run actually did:
 // the operator reads the promise before a paid build and the framing after it, and the two must agree.
 
+/**
+ * An EMPTY stories directory to render the help against.
+ *
+ * MEASURED, and it is the difference between a rung that can attribute a kill and one that cannot:
+ * `nodeHelp()` against the real corpus costs ~184 ms/call, because discovery is a disk scan of the
+ * whole `stories/` tree (ADR-0057 A: the help lists SPEC-BORNE nodes, not only the registry).
+ * Against an empty directory it is ~0.1 ms. Both tests below pin PROSE, and the prose is byte-
+ * identical either way — verified on both assertions before this changed; only the discovered node
+ * list differs, which neither test reads.
+ *
+ * ⚠ WHY IT MATTERS HERE, because it cost a CI red to learn. `check:mutation-diff` runs a mutant's
+ * whole COVERING SUITE once per mutant, so every millisecond in this file is multiplied by the
+ * mutants it covers. Adding a second `nodeHelp()` call in one landing doubled that, and on a slower
+ * CI runner four mutants came back UNPROVEN — *killed, but with no killing test nameable* — while
+ * every local run reported them Killed with a named killer. The remedy is to make the witness
+ * CHEAP; adding more witnesses measurably makes it worse.
+ *
+ * ⚠ AND NOT BY SHARING ONE RENDER BETWEEN THE TESTS, which was the first attempt and was worse:
+ * a memoised body means only the FIRST test to run ever calls `nodeHelp()`, so per-test coverage
+ * records just that one as covering these lines — and every mutant the OTHER test alone would kill
+ * comes back a genuine SURVIVOR. It turned an attribution timeout into an attribution hole. Each
+ * test calls `nodeHelp` itself, on purpose.
+ */
+let emptyStoriesDirCache: string | undefined;
+function emptyStoriesDir(): string {
+  // Lazy, not module scope: a fixture built at module scope makes every mutant it reaches STATIC.
+  emptyStoriesDirCache ??= mkdtempSync(path.join(tmpdir(), "node-help-"));
+  return emptyStoriesDirCache;
+}
+
 test("node help says a --real build typechecks its package before signing and never runs the package suite", () => {
-  const body = nodeHelp().body.replace(/\s+/g, " ");
+  const body = nodeHelp(emptyStoriesDir()).body.replace(/\s+/g, " ");
   assert.ok(
     body.includes(
       "via PR with a NON-SQUASH merge. Nodes with real.install get a lockfile-only pnpm install in " +
@@ -320,4 +353,30 @@ test("node help says a --real build typechecks its package before signing and ne
     body,
   );
   assert.doesNotMatch(body, /regression run/, "the help must not promise a package-suite run");
+});
+
+// ---------- the help text offers the FREE read that precedes a paid build ----------
+//
+// `node peek` (ADR-0588) answers "is this build working or is it stuck" from what a build already
+// writes, and it costs nothing. The help is where an operator meets it, so the block is pinned here
+// beside the rest of the promise: a verb nothing points at is a verb nobody runs, and this one's
+// whole value is being reached BEFORE the expensive decision it informs.
+
+test("node help offers `node peek`, naming what it joins, what it needs, and that it states its own limits", () => {
+  const body = nodeHelp(emptyStoriesDir()).body.replace(/\s+/g, " ");
+  assert.ok(
+    body.includes(
+      "storytree node peek <id> [--pg] FREE, read-only: is a --real build of this unit RUNNING, " +
+        "ENDED or UNKNOWN (ADR-0588)? Joins this machine's process registry to the appended phase " +
+        "marks — the two halves that answer nothing on their own. Elapsed is read against the budget " +
+        "the build was actually launched with, never an assumed default. The registry half needs NO " +
+        "store, so this still answers without --pg; it prints what it cannot see, every time. " +
+        // Reaching INTO the next block is deliberate: it pins that `peek` sits immediately before
+        // `walls`, i.e. that the two FREE reads stay together and ahead of anything that spends.
+        // It also closes the gap a tail-anchored assertion leaves — text inserted after the last
+        // word it quotes is invisible to it.
+        "storytree node walls [<id>] --pg",
+    ),
+    body,
+  );
 });

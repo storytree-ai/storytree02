@@ -33,6 +33,7 @@ export * from "./work-hierarchy.js";
 export * from "./hierarchy-projection.js";
 // The build's LIVENESS channel (`diagnosis-honesty-arc`): a long run names the leg holding its
 // clock, so a redirected log tells "slow but progressing" apart from "wedged on a precondition".
+export * from "./build-peek.js";
 export * from "./build-progress.js";
 // The SPAWN REGISTRY (`shared-box-session-ownership-arc` inc 1): which long-running process belongs
 // to which session, so a session can inventory its own work on a shared box — and so reclaiming it
