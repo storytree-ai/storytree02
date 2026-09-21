@@ -174,7 +174,7 @@ Listed roots-first. Cap 1 is library-hosted glue (ADR-0192 honesty). Caps 2–3 
 ## Ownership (ADR-0192)
 
 - **NEW port:** `@storytree/model-uat-pilot` (`packages/model-uat-pilot`) — harness + story UAT.
-  Register in `repo-manifest.json` `packageOwnership` at bootstrap.
+  Register `packageOwnership` in `repo-manifest/package-ownership/_domain.json` at bootstrap.
 - **Hosted glue:** `uat-criterion-library-surface` edits `@storytree/library` kind tables (and
   any minimal sync recognition). Loud, owner-visible foreign-building work — the deferred
   increment-2 consumer glue this pilot cannot complete without.
