@@ -503,14 +503,14 @@ test("runTestsDescription: names each package with its file count, where it runs
  * unit's scope touches, as a concrete list rather than a glob.
  */
 test("scopeExistingTestFiles: every existing test file of every package the scope touches, deduplicated and sorted", () => {
-  const listed: Record<string, string[]> = {
+  const listed = {
     "packages/agent": ["src/b.test.ts", "src/a.test.ts", "src/nested/c.test.ts"],
     "packages/drive": ["src/d.test.ts"],
-  };
+  } satisfies Record<string, string[]>;
   const files = scopeExistingTestFiles(
     { testGlobs: ["packages/agent/src/a.test.ts"], sourceGlobs: ["packages/drive/src/d.ts"] },
     "/ws",
-    { listTestFiles: (dir) => listed[dir] ?? [] },
+    { listTestFiles: (dir) => (dir === "packages/agent" || dir === "packages/drive" ? listed[dir] : []) },
   );
 
   assert.deepEqual(files, [
