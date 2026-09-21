@@ -1022,6 +1022,58 @@ describe("the remaining strings and branches nothing had read", () => {
     });
   });
 
+  it("both details LIST their packages when there is more than one to list", () => {
+    // Two `join(", ")` separators survived because every earlier case had a single package or a
+    // single hit, where the separator is never emitted. A declaration naming several packages runs
+    // several journeys, and a detail that concatenates their names into one word — `alphabeta` —
+    // misreports WHICH of them is covered, which is the whole content of the line.
+    const three = parsePackageScriptCommand("pnpm --filter alpha --filter beta --filter gamma uat");
+    assert.notEqual(three, null);
+    const gate = {
+      story: "stories/s/story.md",
+      command: "pnpm --filter alpha --filter beta --filter gamma uat",
+      parsed: three!,
+    };
+
+    // Fully covered: the targeted detail lists all three, separated.
+    const all = judgeCoverage(
+      gate,
+      new Set([targetKey("alpha", "uat"), targetKey("beta", "uat"), targetKey("gamma", "uat")]),
+      new Set(["test"]),
+    );
+    assert.equal(all.covered, true);
+    assert.equal(all.detail, "a gate step or CI `run:` step invokes `uat` for alpha, beta, gamma");
+
+    // Partly covered: the partial sentence lists the TWO hits, separated, against all three.
+    const some = judgeCoverage(
+      gate,
+      new Set([targetKey("alpha", "uat"), targetKey("gamma", "uat")]),
+      new Set(["test"]),
+    );
+    assert.equal(some.covered, false);
+    assert.ok(
+      some.detail.endsWith(
+        "Only alpha, gamma of alpha, beta, gamma is invoked directly, so the declaration is not fully covered.",
+      ),
+      some.detail,
+    );
+  });
+
+  it("the uncovered detail LISTS the repo-wide legs when there is more than one", () => {
+    // The same separator in the leg list: every earlier case derived exactly one leg, so `test` and
+    // `testtypecheck` were indistinguishable. This line is what tells a reader which scripts the gate
+    // does run, i.e. what the declaration could have named instead.
+    const one = parsePackageScriptCommand("pnpm --filter studio uat");
+    assert.notEqual(one, null);
+    const coverage = judgeCoverage(
+      { story: "stories/s/story.md", command: "pnpm --filter studio uat", parsed: one! },
+      new Set(),
+      new Set(["test", "typecheck"]),
+    );
+    assert.equal(coverage.covered, false);
+    assert.ok(coverage.detail.includes("(test, typecheck)"), coverage.detail);
+  });
+
   it("the STORED command is trimmed, because the baseline matches on it exactly", () => {
     // `declaredGatesIn` trims the backtick span even though the parser trims its own input, and the
     // duplication is NOT redundant here: the trimmed text is also what lands on `DeclaredGate.command`

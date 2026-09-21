@@ -613,6 +613,11 @@ export const STORE_REACH_WITHOUT_READ: ReadonlyMap<string, string> = new Map([
  * invariant can never disagree about which steps they are talking about.
  */
 export function readsLiveStore(step: GateStep): boolean {
+  // Stryker disable next-line ConditionalExpression: EQUIVALENT, and the narrowing is
+  // TYPE-REQUIRED rather than defensive. Forcing it true leaves `has(undefined)` for a step
+  // that names no check, and a Map keyed by string answers false either way — so no verdict
+  // can change. It cannot simply be dropped: `step.check` is `string | undefined`, and `has`
+  // takes a string, so the narrowing is what makes this compile at all.
   return step.check !== undefined && LIVE_STORE_READING_CHECKS.has(step.check);
 }
 
