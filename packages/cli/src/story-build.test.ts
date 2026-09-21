@@ -41,39 +41,305 @@ function recordingProgress(): RecordingProgressResult {
 /** The story area never touches the library store; an empty InMemoryStore keeps the tests fast. */
 const deps = { store: new InMemoryStore() };
 
+// ── The topology fixture: an AUTHORED graph, deliberately not a copy of any real story ───────
+
+/**
+ * WHY A FIXTURE. The topology contracts this file proves — `depends_on` honoured, the alphabetical
+ * ready-queue tie-break, the story's own UAT node LAST — are properties of the ORDERING, not of any
+ * particular corpus. Pinning them to the real `library` story's capability count, first roots and
+ * deepest tail made an ordinary, correct edit on a different surface (adding or reordering one of
+ * that story's capabilities) red THIS package's test, with a failure message that said nothing about
+ * what broke: friction `story-capability-add-reds-a-pinned-topo-order`.
+ *
+ * WHAT THE FIXTURE STANDS FOR: a story whose drive order is decided by BOTH mechanisms at once —
+ * two dependency-free roots that only the tie-break can separate, a three-deep chain, and a
+ * cross-branch leaf — so every contract stays fully proved over it.
+ *
+ * WHAT IT DELIBERATELY DOES NOT MIRROR: `library`'s capability set, its count, its edges or its
+ * depth. It is not a snapshot of the corpus and is never reconciled against one — a fixture that
+ * merely copied today's real topology would be a frozen mirror nobody maintains, which is the same
+ * failure wearing different clothes. It moves only when a topology CONTRACT moves. The real corpus
+ * keeps exactly ONE narrow smoke below, which pins no count and no position.
+ *
+ * ⚠ THE ARRANGEMENT IS LOAD-BEARING. An exact assertion over an ordering cannot fail if the input
+ * already satisfies it, so the answer is reachable by none of the cheap wrong rules:
+ *
+ *   answer        alpha-root, gamma-leaf, zulu-root, beta-mid, delta-tail  ← what we assert
+ *   declaration   zulu-root, delta-tail, alpha-root, beta-mid, gamma-leaf  ← the `capabilities:` list,
+ *                                                                           i.e. the loader's order
+ *   its reverse   gamma-leaf, beta-mid, alpha-root, delta-tail, zulu-root  ← bun/JSC (this package's
+ *                                                                           runner) REVERSES where
+ *                                                                           node preserves
+ *   alphabetical  alpha-root, beta-mid, delta-tail, gamma-leaf, zulu-root  ← the tie-break alone
+ *
+ * All four differ, the graph is six nodes (two can never distinguish an order from its reverse),
+ * and the alphabetical ready-queue decides TWICE — alpha-root over zulu-root, then gamma-leaf over
+ * zulu-root — so dropping the sort moves the answer from its first position. The test asserts those
+ * properties of the fixture itself, so a later edit cannot quietly weaken them.
+ */
+const TOPO_FIXTURE_STORY = "topo-fixture";
+
+/** The fixture's drive order. Asserted as a literal, never derived from the code under test. */
+const TOPO_FIXTURE_ORDER = [
+  "alpha-root",
+  "gamma-leaf",
+  "zulu-root",
+  "beta-mid",
+  "delta-tail",
+  TOPO_FIXTURE_STORY,
+];
+
+/** The `capabilities:` frontmatter order — what the loader hands `topoOrderStoryNodes`. */
+const TOPO_FIXTURE_DECLARED = ["zulu-root", "delta-tail", "alpha-root", "beta-mid", "gamma-leaf"];
+
+/** The fixture's edges: two roots, a three-deep chain off one of them, a leaf off the other. */
+const TOPO_FIXTURE_EDGES: ReadonlyArray<readonly [string, readonly string[]]> = [
+  ["alpha-root", []],
+  ["zulu-root", []],
+  ["gamma-leaf", ["alpha-root"]],
+  ["beta-mid", ["zulu-root"]],
+  ["delta-tail", ["beta-mid"]],
+];
+
+/** A capability spec carrying its own `proof:` block, so the fixture needs no registry entry. */
+function fixtureCapabilitySpec(storyId: string, id: string, dependsOn: readonly string[]): string {
+  return [
+    "---",
+    `id: "${id}"`,
+    "tier: capability",
+    `title: "fixture capability ${id}"`,
+    'outcome: "temp"',
+    "status: proposed",
+    "proof_mode: integration-test",
+    `story: "${storyId}"`,
+    `depends_on: [${dependsOn.join(", ")}]`,
+    "proof:",
+    "  command:",
+    "    file: node",
+    '    args: ["--version"]',
+    "  scope:",
+    `    testGlobs: ["packages/fixture/src/${id}.test.ts"]`,
+    `    sourceGlobs: ["packages/fixture/src/${id}.ts"]`,
+    "---",
+    "",
+    "# temp",
+    "",
+  ].join("\n");
+}
+
+/** A temp stories/ root holding ONLY the fixture story above. `uat_witness: machine` so its own UAT node is driven and signed. */
+function topoFixtureStoriesDir(): string {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "storytree-topo-fixture-"));
+  const storyDir = path.join(dir, TOPO_FIXTURE_STORY);
+  mkdirSync(storyDir, { recursive: true });
+  writeFileSync(
+    path.join(storyDir, "story.md"),
+    [
+      "---",
+      `id: "${TOPO_FIXTURE_STORY}"`,
+      "tier: story",
+      'title: "topology fixture story"',
+      'outcome: "temp"',
+      "status: proposed",
+      "proof_mode: UAT",
+      "uat_witness: machine",
+      `capabilities: [${TOPO_FIXTURE_DECLARED.join(", ")}]`,
+      "proof:",
+      "  command:",
+      "    file: node",
+      '    args: ["--version"]',
+      "  scope:",
+      `    testGlobs: ["packages/fixture/src/${TOPO_FIXTURE_STORY}.test.ts"]`,
+      `    sourceGlobs: ["packages/fixture/src/${TOPO_FIXTURE_STORY}.ts"]`,
+      "---",
+      "",
+      "# temp",
+      "",
+    ].join("\n"),
+  );
+  for (const [id, dependsOn] of TOPO_FIXTURE_EDGES) {
+    writeFileSync(path.join(storyDir, `${id}.md`), fixtureCapabilitySpec(TOPO_FIXTURE_STORY, id, dependsOn));
+  }
+  return dir;
+}
+
+/**
+ * Add an UNRELATED story, carrying its own capability, to an EXISTING fixture root — the corpus edit
+ * the friction describes, performed in place so the report's `spec:` path is unchanged and the run
+ * id is the only line that can differ between the two reports.
+ */
+function addUnrelatedStory(dir: string): void {
+  const storyDir = path.join(dir, "unrelated-story");
+  mkdirSync(storyDir, { recursive: true });
+  writeFileSync(
+    path.join(storyDir, "story.md"),
+    [
+      "---",
+      'id: "unrelated-story"',
+      "tier: story",
+      'title: "a story this proof says nothing about"',
+      'outcome: "temp"',
+      "status: proposed",
+      "proof_mode: UAT",
+      "capabilities: [unrelated-capability]",
+      "---",
+      "",
+      "# temp",
+      "",
+    ].join("\n"),
+  );
+  writeFileSync(
+    path.join(storyDir, "unrelated-capability.md"),
+    fixtureCapabilitySpec("unrelated-story", "unrelated-capability", []),
+  );
+}
+
+/** The `order:` line's node ids, in driven order. */
+function drivenOrder(body: string): string[] {
+  const line = body.split("\n").find((l) => l.startsWith("order:"));
+  assert.ok(line !== undefined, `an order: line is part of the report:\n${body}`);
+  return line
+    .replace("order:", "")
+    .split("→")
+    .map((s) => s.trim())
+    .filter((s) => s !== "");
+}
+
+/** A dry-run report with its one volatile line — the wall-clock-derived run id — normalised away. */
+function stableReport(body: string): string {
+  return body.replace(/^run: +\S+$/m, "run: <run-id>");
+}
+
 test("story build names EACH NODE as its own progress leg — 'node i/N: <id>', in the driven order", async () => {
   // A chain is the worst case the friction describes: it can run for an hour across many nodes, and
   // a single "still running" cannot tell a chain on its seventh node from one wedged on its first.
   // The per-node leg is the chain-ADVANCEMENT signal, and it must be the DRIVEN order — the story's
   // own withheld UAT node is not a leg, because no leg ever runs for it.
-  const rec = recordingProgress();
-  const env = await storyBuild("library", {
-    dryRun: true,
-    actor: "tester@example.com",
-    progress: rec.progress,
-  });
-  assert.equal(env.ok, true, env.body);
+  const dir = topoFixtureStoriesDir();
+  try {
+    const rec = recordingProgress();
+    const env = await storyBuild(TOPO_FIXTURE_STORY, {
+      dryRun: true,
+      actor: "tester@example.com",
+      storiesDir: dir,
+      progress: rec.progress,
+    });
+    assert.equal(env.ok, true, env.body);
 
-  const nodeLegs = rec.stages.filter((s) => s.startsWith("node "));
-  assert.ok(nodeLegs.length > 1, `a chain must report per-node legs: ${rec.stages.join(" | ")}`);
-  const driven = (env.body.split("\n").find((l) => l.startsWith("order:")) ?? "")
-    .replace("order:", "")
-    .split("→")
-    .map((s) => s.trim())
-    .filter((s) => s !== "");
-  assert.deepEqual(
-    nodeLegs,
-    driven.slice(0, nodeLegs.length).map((id, i) => `node ${i + 1}/${nodeLegs.length}: ${id}`),
-    "each leg carries its position in the chain AND the node it is on",
-  );
-  assert.ok(
-    rec.stages.some((s) => /verdict store/.test(s)),
-    `the store leg is named too: ${rec.stages.join(" | ")}`,
-  );
-  assert.ok(rec.notes.length > 0, "and each node's phase walk reaches the progress channel");
+    const nodeLegs = rec.stages.filter((s) => s.startsWith("node "));
+    // The fixture GUARANTEES a chain — six nodes, every one driven — where the real corpus only
+    // happened to supply one.
+    assert.equal(nodeLegs.length, TOPO_FIXTURE_ORDER.length, rec.stages.join(" | "));
+    assert.deepEqual(
+      nodeLegs,
+      drivenOrder(env.body).map((id, i) => `node ${i + 1}/${nodeLegs.length}: ${id}`),
+      "each leg carries its position in the chain AND the node it is on",
+    );
+    assert.ok(
+      rec.stages.some((s) => /verdict store/.test(s)),
+      `the store leg is named too: ${rec.stages.join(" | ")}`,
+    );
+    assert.ok(rec.notes.length > 0, "and each node's phase walk reaches the progress channel");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
-test("story build library --dry-run drives the capabilities topo-ordered and SIGNS the (machine-witnessed) story UAT node", async () => {
+test("story build --dry-run drives the capabilities topo-ordered and SIGNS the (machine-witnessed) story UAT node", async () => {
+  const dir = topoFixtureStoriesDir();
+  try {
+    const env = await storyBuild(TOPO_FIXTURE_STORY, {
+      dryRun: true,
+      actor: "tester@example.com",
+      storiesDir: dir,
+    });
+    assert.equal(env.ok, true, env.body);
+    assert.match(env.body, /story build topo-fixture — DRY-RUN/);
+
+    const order = drivenOrder(env.body);
+    assert.deepEqual(order, TOPO_FIXTURE_ORDER, `the drive order:\n${env.body}`);
+
+    // The same answer said as EDGES rather than as a sequence — which rule produced it, not merely
+    // which permutation came out.
+    assert.ok(
+      order.indexOf("alpha-root") < order.indexOf("gamma-leaf"),
+      "a dependency precedes its dependent",
+    );
+    assert.ok(
+      order.indexOf("zulu-root") < order.indexOf("beta-mid") &&
+        order.indexOf("beta-mid") < order.indexOf("delta-tail"),
+      "the three-deep chain is honoured end to end",
+    );
+    assert.equal(order.at(-1), TOPO_FIXTURE_STORY, "the story's own UAT node is last in the order");
+    assert.equal(
+      order.at(-2),
+      "delta-tail",
+      "the deepest chain's tail runs just before the story — and it is NOT the alphabetically last capability",
+    );
+
+    // The fixture's own load-bearing property, guarded so a later edit cannot quietly weaken it into
+    // an assertion that cannot fail: the answer is reachable by none of the cheap wrong rules.
+    const caps = order.slice(0, -1);
+    assert.notDeepEqual(caps, TOPO_FIXTURE_DECLARED, "not the loader's declaration order");
+    assert.notDeepEqual(caps, [...TOPO_FIXTURE_DECLARED].reverse(), "nor its reverse");
+    assert.notDeepEqual(caps, [...caps].sort(), "nor plain alphabetical");
+
+    assert.match(
+      env.body,
+      /\(5 capabilities topo-ordered from depends_on, then the story's UAT node\)/,
+    );
+
+    // ADR-0044/0040: a story declaring uat_witness: machine (every Story UAT leg is an agent
+    // exercise) → the gate drives AND signs the story's own UAT node, not just its capabilities.
+    assert.match(env.body, /uat witness: machine \(declared\)/);
+    assert.match(env.body, /nodes:\s+6\/6 signed passes/);
+    assert.match(env.body, /topo-fixture +PASS {3}rollup: healthy/);
+    assert.doesNotMatch(env.body, /WITHHELD/);
+    assert.match(env.body, /outcome: {5}PASSED — every node signed/);
+    assert.equal((env.body.match(/PASS {3}rollup: healthy/g) ?? []).length, 6);
+
+    // The honest framing is part of the output.
+    assert.match(env.body, /proves the CHAINING/);
+    assert.match(env.body, /NOT the nodes' actual proofs/);
+
+    // ADR-0067: the curation pass runs after the green build (here against the dry-run default
+    // in-memory library, so it stays hermetic).
+    assert.match(env.body, /curation: /);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a legitimate capability added ELSEWHERE in the stories root does not move this proof's verdict", async () => {
+  // The friction this fixture exists to end: the topology proof used to be pinned to the real
+  // `library` story, so adding or reordering one of ITS capabilities — ordinary, correct work on a
+  // different surface — went red here, saying nothing about what broke. The contract is that the
+  // verdict is a function of the story under test alone.
+  const dir = topoFixtureStoriesDir();
+  try {
+    const opts = { dryRun: true, actor: "tester@example.com", storiesDir: dir } as const;
+    const before = await storyBuild(TOPO_FIXTURE_STORY, opts);
+    assert.equal(before.ok, true, before.body);
+
+    addUnrelatedStory(dir);
+
+    const after = await storyBuild(TOPO_FIXTURE_STORY, opts);
+    assert.equal(after.ok, true, after.body);
+    // Byte-identical modulo the wall-clock run id: same order, same count, same signed passes, same
+    // outcome. A loader that reached past the story's own `capabilities:` list would change the
+    // order, the count, or refuse outright.
+    assert.equal(stableReport(after.body), stableReport(before.body));
+    assert.doesNotMatch(after.body, /unrelated-/, "the extra capability appears nowhere in the report");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("story build library --dry-run reaches the REAL corpus through the CLI route (the one live-corpus smoke)", async () => {
+  // The narrow smoke the fixture above cannot give: `run` resolving argv, the default stories root
+  // under the repo, and a real story spec loading. It pins NO capability count, NO first root, NO
+  // deepest tail and NO PASS-line count — every assertion is either report SHAPE or a consistency
+  // relation the report must satisfy against itself.
   const env = await run(
     ["story", "build", "library", "--dry-run", "--actor", "tester@example.com"],
     deps,
@@ -82,55 +348,22 @@ test("story build library --dry-run drives the capabilities topo-ordered and SIG
   assert.match(env.body, /story build library — DRY-RUN/);
   assert.match(env.body, /stories\/library\/story\.md/);
 
-  // The topo order: the four dependency-less roots first, the CLI capability after all six of its
-  // deps, and the story LAST.
-  const orderLine = env.body.split("\n").find((l) => l.startsWith("order:"));
-  assert.ok(orderLine !== undefined, "an order: line is part of the report");
-  const order = orderLine
-    .replace("order:", "")
-    .split("→")
-    .map((s) => s.trim());
-  assert.equal(order[0], "graduation-park-lease", "the dep-less park-lease root runs first");
-  assert.equal(order[1], "hydrated-store-dialing-root", "the independent store-dialing root follows");
-  assert.equal(order[2], "library-dag-acyclic-core", "the dep-less DAG root follows");
-  assert.equal(order[3], "library-schema-and-write-validation", "the schema dependency root follows");
-  assert.equal(order[order.length - 1], "library", "the story's UAT node is last in the order");
-  // The DEEPEST chain's tail runs just before the story. That is `work-hierarchy-drift-gate`
-  // (→ work-hierarchy-store-projection → event-sourced-store-seam), which overtook `library-cli`
-  // when the work-hierarchy projection landed on this story (ADR-0445 D1). `library-cli`'s own
-  // ordering fact is asserted below, where it is a statement about edges rather than about which
-  // capability happens to be deepest.
+  const order = drivenOrder(env.body);
+  assert.equal(order.at(-1), "library", "the story's UAT node is last in the order");
+
+  const signed = /nodes:\s+(\d+)\/(\d+) signed passes/.exec(env.body);
+  assert.ok(signed !== null, `a nodes: line is part of the report:\n${env.body}`);
+  assert.equal(signed[1], signed[2], "every node the chain drove signed a pass");
+  assert.equal(Number(signed[2]), order.length, "and the driven set is the order it printed");
   assert.equal(
-    order[order.length - 2],
-    "work-hierarchy-drift-gate",
-    "the deepest capability chain's tail runs just before the story",
-  );
-  assert.equal(order.length, 13, "12 capabilities + the story");
-  assert.ok(
-    order.indexOf("migrate-on-write-upcaster") < order.indexOf("event-sourced-store-seam"),
-    "depends_on edges are honoured",
-  );
-  assert.ok(
-    order.indexOf("event-sourced-store-seam") < order.indexOf("work-hierarchy-store-projection") &&
-      order.indexOf("work-hierarchy-store-projection") < order.indexOf("work-hierarchy-drift-gate"),
-    "the projection chain is honoured end to end",
+    (env.body.match(/PASS {3}rollup: healthy/g) ?? []).length,
+    order.length,
+    "one signed rollup line per ordered node",
   );
 
-  // ADR-0044/0040: library now declares uat_witness: machine (every Story UAT leg is an agent
-  // exercise) → the gate drives AND signs the story's own UAT node, not just its capabilities.
   assert.match(env.body, /uat witness: machine \(declared\)/);
-  assert.match(env.body, /nodes:\s+13\/13 signed passes/);
-  assert.match(env.body, /library +PASS {3}rollup: healthy/);
   assert.doesNotMatch(env.body, /WITHHELD/);
   assert.match(env.body, /outcome: {5}PASSED — every node signed/);
-  assert.equal((env.body.match(/PASS {3}rollup: healthy/g) ?? []).length, 13);
-
-  // The honest framing is part of the output.
-  assert.match(env.body, /proves the CHAINING/);
-  assert.match(env.body, /NOT the nodes' actual proofs/);
-
-  // ADR-0067: the curation pass runs after the green build (here against an empty in-memory store).
-  assert.match(env.body, /curation: /);
 });
 
 test("storyBuild runs the curation pass only on green and enacts an injected curator's retire (ADR-0067)", async () => {

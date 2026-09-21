@@ -275,6 +275,35 @@ CREATE TABLE IF NOT EXISTS events.uat_drive (
   at           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- UAT HARNESS ENDS: one append-only row per drive that was REFUSED before it could produce a
+-- readable journey report (uat-drive-harness-end.ts). An auth, model, configuration, isolation,
+-- timing or surface-ownership precondition stopped the machinery, so NOTHING about the product was
+-- observed. Before this stream existed such a run persisted nothing at all, and the witness check
+-- afterwards said `no drive records … — run the driver`: byte-identical to what it said before the
+-- drive was ever attempted, so a broken box and an untouched criterion were indistinguishable.
+--
+-- ⚠ THIS IS ITS OWN TABLE ON PURPOSE, and moving these rows into events.uat_drive would destroy the
+-- property that makes them safe to keep. uat-drive-witness.check.ts selects its product witness from
+-- events.uat_drive ALONE, so a harness end is invisible to the witness selector BY CONSTRUCTION
+-- rather than by a filter someone has to remember. It declares NO `outcome` column for the same
+-- reason: a harness end has nowhere to put `pass`, so it can never be mistaken for a verdict nobody
+-- reached. `driver` is nullable because the commonest refusal happens BEFORE a runtime is verified.
+CREATE TABLE IF NOT EXISTS events.uat_harness_end (
+  seq          BIGSERIAL PRIMARY KEY,
+  story_id     TEXT NOT NULL,
+  criterion_id TEXT NOT NULL,
+  revision_id  TEXT NOT NULL,        -- the criterion content that was being attempted (ADR-0253)
+  run_id       TEXT NOT NULL,
+  phase        TEXT NOT NULL,        -- where the machinery stopped (UatHarnessEndPhase)
+  host         TEXT NOT NULL,        -- a launch precondition is usually a property of the box
+  driver       TEXT,                 -- NULL when the refusal preceded runtime verification
+  commit_sha   TEXT NOT NULL,
+  doc          JSONB NOT NULL,       -- the full UatHarnessEndRecord (evidenceClass + cause inside)
+  at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  caused_by_stream TEXT,
+  caused_by_seq    BIGINT
+);
+
 -- Binding-staleness change log (ADR-0016 §2, the `change` event the ADR adds to the vocabulary):
 -- one append-only row per described/undescribed change to a proof unit's bound code, the Postgres
 -- home for the `ChangeStore` seam (@storytree/core). The full signed-shape ADR-0016 `ChangeEvent`
@@ -450,6 +479,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS inner_loop_owner_grant_authority_unique
 CREATE INDEX IF NOT EXISTS user_event_id_idx ON events.user_event (id);
 CREATE INDEX IF NOT EXISTS attestation_test_idx ON events.attestation (test_id);
 CREATE INDEX IF NOT EXISTS uat_drive_criterion_idx ON events.uat_drive (criterion_id);
+CREATE INDEX IF NOT EXISTS uat_harness_end_criterion_idx ON events.uat_harness_end (criterion_id);
 CREATE INDEX IF NOT EXISTS change_event_unit_idx ON events.change_event (unit_id);
 
 -- MIGRATION (ADR-0350 D1): the CAUSAL EDGE — two nullable columns on every append-only stream, so an
