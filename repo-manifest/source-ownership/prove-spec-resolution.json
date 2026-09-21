@@ -5,6 +5,7 @@
       "packages/orchestrator/src/proof/test-suite-runner.test.ts": "prove-spec-resolution",
       "packages/orchestrator/src/proof/test-suite-runner.ts": "prove-spec-resolution",
       "packages/orchestrator/src/resolve-prove-spec.codex-feedback.test.ts": "prove-spec-resolution",
+      "packages/orchestrator/src/resolve-prove-spec.existing-tests.test.ts": "prove-spec-resolution",
       "packages/orchestrator/src/resolve-prove-spec.revision.test.ts": "prove-spec-resolution",
       "packages/orchestrator/src/resolve-prove-spec.run-tests.test.ts": "prove-spec-resolution",
       "packages/orchestrator/src/resolve-prove-spec.test.ts": "prove-spec-resolution",

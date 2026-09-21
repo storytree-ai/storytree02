@@ -126,6 +126,23 @@ function posixRel(p: string): string {
 }
 
 /**
+ * What the spine's own scoped commit is allowed to STAGE (ADR-0590 D2): the unit's declared globs, plus
+ * every existing test file its scope reached.
+ *
+ * The existing files must be here or the widened write grant is unusable rather than merely unrecorded.
+ * `commitAuthored` matches this set with the SAME `globMatch` the write wall uses, so anything dirty and
+ * unmatched is left uncommitted as out-of-scope — and the gate then fails the walk on that leftover
+ * dirt. A test-writer's permitted edit to a sibling test would therefore END the build it was allowed to
+ * make. An exact path is a glob that matches itself, so no second matching rule is needed.
+ */
+export function realCommitGlobs(
+  scope: { readonly testGlobs: readonly string[]; readonly sourceGlobs: readonly string[] },
+  existingTestFiles: readonly string[],
+): string[] {
+  return [...new Set([...scope.testGlobs, ...scope.sourceGlobs, ...existingTestFiles])];
+}
+
+/**
  * Turn the spine's phase declaration into a finite Codex packing list. The named proof target is
  * required; any additional literal scope entries are optional exact targets. Pattern-shaped scope
  * remains a hook wall only and never becomes promotion authority.
@@ -551,6 +568,15 @@ export type ResolveResult =
        * on the clock it may extend. Absent on the dry-run and live-smoke routes, which wire no budget.
        */
       buildBudget?: BuildBudget;
+      /**
+       * The EXISTING test files this unit's scope reached (ADR-0590 D2), returned on the REAL route for
+       * the same reason {@link BuildBudget} is: it is one derivation that several walls read, and a
+       * caller cannot reach it through `spec` — the write scope has folded it into a predicate and the
+       * commit scope is closed over inside the tree-state seam. Returning it is what lets a caller, and
+       * a test, hold the walls to each other rather than trust that four call sites stayed in step.
+       * Absent on the dry-run and live-smoke routes, which widen nothing.
+       */
+      existingTestFiles?: readonly string[];
     }
   | { ok: false; reason: string; registered: string[] };
 
@@ -1000,7 +1026,7 @@ function resolveReal(
     // permitted edit to a sibling test is left dirty and UNCOMMITTED, and the gate then fails the walk
     // on leftover out-of-scope dirt — so the widened write grant would be unusable rather than merely
     // unrecorded. Exact paths are globs that match themselves under `globMatch`.
-    globs: [...real.scope.testGlobs, ...real.scope.sourceGlobs, ...existingTestFiles],
+    globs: realCommitGlobs(real.scope, existingTestFiles),
   };
   if ((real.addDeps ?? []).length > 0) {
     commitScope.spineOutputGlobs = ["pnpm-lock.yaml", "**/package.json"];
@@ -1149,8 +1175,8 @@ function resolveReal(
     scopeFingerprint: () => worktreeScopeFingerprint({ worktreeRoot: opts.workspace }),
   };
   return liveAuthor !== undefined
-    ? { ok: true, spec: proveSpec, liveAuthor, buildBudget }
-    : { ok: true, spec: proveSpec, buildBudget };
+    ? { ok: true, spec: proveSpec, liveAuthor, buildBudget, existingTestFiles }
+    : { ok: true, spec: proveSpec, buildBudget, existingTestFiles };
 }
 
 /**

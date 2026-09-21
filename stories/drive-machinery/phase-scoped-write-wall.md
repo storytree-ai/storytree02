@@ -53,7 +53,7 @@ predicate, called at `write-scoped-executor.ts:107-110`).
 in this decorator — through both authoring slices, with the test file written ONLY in AUTHOR_TEST
 and the impl ONLY in IMPLEMENT against the real `PathWriteScope`.
 
-## Contracts (7)
+## Contracts (8)
 
 1. **`in-scope-write-delegates`** — a TEST write in AUTHOR_TEST and a SOURCE write in IMPLEMENT reach the inner executor
    - **asserts —** the inner executor is called; no violation recorded.
@@ -83,3 +83,7 @@ and the impl ONLY in IMPLEMENT against the real `PathWriteScope`.
    - **asserts —** delegation + the note.
    - **covers —** `write-scoped-executor.ts:101-105`
    - **proven by —** `write-scoped-executor.test.ts:200` (REAL, passing)
+8. **`an-existing-test-the-scope-named-is-the-test-writers`** — the wall also admits the EXISTING test files the unit's scope reached, exactly, and they stay the code-writer's to leave alone
+    - **asserts —** a path in `PathWriteScopeConfig.existingTestFiles` is writable in `AUTHOR_TEST` and refused in `IMPLEMENT`, `CONFIRM_RED`, `CONFIRM_GREEN` and `GATE` — it is a TEST path, so `IMPLEMENT`'s existing `isSource && !isTest` term excludes it with no second rule about who may write a test. The set is matched EXACTLY, not as globs: it admits the files it names, refuses one that merely shares their directory, their basename or a nested path below them — which is what keeps the grant to files that EXISTED when the scope was derived rather than to the whole package — and a Windows-separated path from a leaf still matches. A scope declaring no existing test files behaves exactly as it did before ADR-0590, its declared globs untouched.
+    - **covers —** `PathWriteScopeConfig.existingTestFiles` and `PathWriteScope.isWriteAllowed` (`packages/orchestrator/src/phase-machine.ts`)
+    - **proven by —** `packages/orchestrator/src/phase-machine.test.ts` (session-authored; no signed verdict)
