@@ -455,6 +455,32 @@ function uatRerevision(
     };
   }
 
+  // A REPAIR verb must never certify success on a section it could not read. `checked: 0` has two
+  // causes that used to print identically: a story that declares no criteria (legal, ADR-0294 D4 —
+  // 15 of the 42 heading-bearing stories) and a section whose items could not be parsed. They are
+  // told apart by evidence rather than by taste: only the second declares `(criterion-id:)`
+  // annotations while yielding nothing. Refusing on a merely PRESENT heading would red the 15.
+  if (result.unreadableSection) {
+    return {
+      ok: false,
+      body: [
+        `"${story}": the UAT section declares criterion identities that could not be read — zero items parsed.`,
+        "",
+        "This is not a story that declares no criteria — that section would carry no",
+        "(criterion-id:) at all. Something here parsed to zero items while plainly naming some,",
+        "so the section is UNREADABLE and nothing was written.",
+        "",
+        "Check, in this order:",
+        "  1. every criterion is a NUMBERED list item (`1. `, `2. `) — a bullet is not one;",
+        "  2. the `## UAT Test Criteria` heading is not nested under another `##` section;",
+        "  3. `git diff --stat` does not report the file as binary (a stray NUL byte).",
+        "",
+        "Line endings are no longer a cause: they are normalised at the parse boundary.",
+      ].join("\n"),
+      next: [`storytree uat list ${story} --pg`, `git diff -- stories/${story}/story.md`],
+    };
+  }
+
   if (result.drifted.length === 0) {
     return {
       ok: true,

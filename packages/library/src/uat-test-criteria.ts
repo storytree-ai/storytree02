@@ -156,9 +156,39 @@ interface RawUatItem {
   readonly end: number;
 }
 
+/**
+ * The ONE place a story body's line endings are normalised, so every reader of this module
+ * inherits it rather than each one remembering (the shape that produced the bug below).
+ *
+ * ⚠ CRLF IS ORDINARY INPUT, NOT AN EXOTIC ONE. Windows is the only dev box here, and text-mode
+ * writes are the DEFAULT in Python `io.open(p, "w")`, PowerShell `Out-File` and several editors, so
+ * a story file acquires CRLF by being edited rather than by anything unusual.
+ *
+ * ⚠ AND THE FAILURE IS SILENT, WHICH IS WHY IT COSTS SO MUCH. `NUMBERED_ITEM` ends `(.*)$`, and in
+ * JavaScript `.` does not match `\r` — it is a line terminator. So on a `\r`-terminated line `.*`
+ * stops before the `\r` and `$` cannot match: the item is not recognised AT ALL. `section.trim()`
+ * strips only the section's own last `\r`, so a CRLF story loses every item except (at most) the
+ * final one, and usually all of them. Nothing throws; `uat list`, `uat census` and
+ * `uat rerevision --write` all agree the story declares no criteria, which reads as a strong
+ * CONSISTENT answer and actively misdirects the diagnosis. Meanwhile
+ * {@link canonicalUatCriterionContent} already normalised `/\r\n?/g` before hashing (below), so the
+ * two halves of this one module disagreed — one of them silently.
+ */
+const normaliseLineEndings = (body: string): string => body.replace(/\r\n?/g, "\n");
+
+/**
+ * Locate the story's UAT section, and hand back the BODY the spans are indices into.
+ *
+ * Returning `body` is not a convenience: normalising SHORTENS the text by one byte per line, and
+ * `RawUatItem.start`/`end` are ABSOLUTE indices. A rewriting caller that spliced these spans into
+ * the string it was passed would cut mid-item and silently corrupt the file — worse than the bug
+ * being fixed. Splicing into the body returned here cannot go wrong, because it is the very string
+ * the offsets were measured against.
+ */
 function storyUatSection(
-  body: string,
-): { section: string; offset: number; wouldBe: boolean } | null {
+  rawBody: string,
+): { body: string; section: string; offset: number; wouldBe: boolean } | null {
+  const body = normaliseLineEndings(rawBody);
   const heading = STORY_UAT_HEADING.exec(body);
   if (heading === null) return null;
   const wouldBe = WOULD_BE_QUALIFIER.test(heading[1] ?? "");
@@ -166,7 +196,12 @@ function storyUatSection(
   const after = body.slice(from);
   const next = NEXT_H2.exec(after);
   const raw = next === null ? after : after.slice(0, next.index);
-  return { section: raw.trim(), offset: from + (raw.length - raw.trimStart().length), wouldBe };
+  return {
+    body,
+    section: raw.trim(),
+    offset: from + (raw.length - raw.trimStart().length),
+    wouldBe,
+  };
 }
 
 function rawUatItem(lines: readonly string[], start: number): RawUatItem {
@@ -409,9 +444,24 @@ export interface UatRevisionRecompute {
   readonly drifted: readonly UatRevisionDrift[];
   /**
    * The story body with each drifted `(revision-id:)` advanced and its superseded value recorded
-   * as `(previous-revision-id:)`. Byte-identical to the input when nothing drifted.
+   * as `(previous-revision-id:)`. Byte-identical to the input when nothing drifted — a story with
+   * no drift is never rewritten, so a CRLF file is not silently reformatted by a verb that found
+   * nothing to repair.
    */
   readonly body: string;
+  /**
+   * The section declares criterion identities that the splitter could not turn into items, so
+   * `checked` is 0 because the section could not be READ — not because the story declares none.
+   *
+   * ⚠ THE DISCRIMINATOR IS MEASURED, AND THE OBVIOUS ONE IS WRONG. "Zero criteria" is a LEGAL
+   * declaration (ADR-0294 D4), and refusing merely on a PRESENT `## UAT Test Criteria` heading
+   * would red honest stories: across all 42 heading-bearing stories on 2026-09-22, 15 parse to
+   * zero items — `stories/model-judged-uat/story.md` says so in as many words — while all 27 that
+   * parse to one or more carry `(criterion-id:)` annotations. Not one of the 15 does. So identities
+   * present with no items parsed is a CONTRADICTION rather than a judgement call, and a section
+   * with neither is a story saying "none".
+   */
+  readonly unreadableSection: boolean;
 }
 
 /** The revision tag WITH its surrounding emphasis, so a rewrite can mirror the authored decoration. */
@@ -437,9 +487,10 @@ const ANY_PREVIOUS_REVISION_ID_TAG = /\(previous-revision-id:\s*[^)]*\)/i;
  */
 export function recomputeUatRevisionIds(storyId: string, body: string): UatRevisionRecompute {
   const parsed = storyUatSection(body);
-  if (parsed === null) return { checked: 0, drifted: [], body };
+  if (parsed === null) return { checked: 0, drifted: [], body, unreadableSection: false };
 
   const items = splitItems(parsed.section, parsed.offset);
+  const unreadableSection = items.length === 0 && CRITERION_ID_TAG.test(parsed.section);
   const drifted: UatRevisionDrift[] = [];
   const edits: { start: number; end: number; text: string }[] = [];
 
@@ -458,12 +509,21 @@ export function recomputeUatRevisionIds(storyId: string, body: string): UatRevis
     });
   }
 
+  // Nothing drifted, so nothing is rewritten and the input comes back untouched — including its
+  // line endings. Normalising a file this verb found no repair to make would be a whole-file diff
+  // nobody asked for.
+  if (edits.length === 0) {
+    return { checked: items.length, drifted, body, unreadableSection };
+  }
+
+  // Splice into the body the spans were MEASURED against (see storyUatSection), never the argument:
+  // normalising shortens the text, so these absolute indices do not address the caller's string.
   // Splice from the END so an applied edit cannot shift the spans still to be applied.
-  let next = body;
+  let next = parsed.body;
   for (const edit of edits.reverse()) {
     next = next.slice(0, edit.start) + edit.text + next.slice(edit.end);
   }
-  return { checked: items.length, drifted, body: next };
+  return { checked: items.length, drifted, body: next, unreadableSection };
 }
 
 function located<T>(storyId: string, read: () => T): T {
