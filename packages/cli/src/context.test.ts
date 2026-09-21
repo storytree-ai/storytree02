@@ -354,16 +354,101 @@ test("the harness window id is passed through as a selector, and a blank one is 
 });
 
 test("how the window was identified is stated — an unconfirmed pick never reads as a confirmed one", () => {
+  // Each line is pinned WHOLE rather than probed for a word. The three differ by a shade of meaning
+  // that a regex on "confirmed" cannot see — and the pair that matters most, `unconfirmed` and
+  // `UNCONFIRMED`, differ only in case and in what the second half of the sentence claims.
   const confirmed = contextCommand(deps());
-  assert.match(confirmed.body, /identity:\s+confirmed/);
+  assert.ok(
+    confirmed.body.includes(
+      "  identity:   confirmed — the harness named this window id and it is one of yours",
+    ),
+    `the confirmed identity line changed:\n${confirmed.body}`,
+  );
 
   const unconfirmed = contextCommand(deps({ read: () => reading({ selectedBy: "latest-activity" }) }));
-  assert.match(unconfirmed.body, /identity:\s+unconfirmed/);
+  assert.ok(
+    unconfirmed.body.includes(
+      "  identity:   unconfirmed — no harness window id here, so this is the most recently active window in your worktree",
+    ),
+    `the unconfirmed identity line changed:\n${unconfirmed.body}`,
+  );
 
   const disagreed = contextCommand(
     deps({ read: () => reading({ selectedBy: "latest-activity", harnessWindowUnmatched: true }) }),
   );
-  assert.match(disagreed.body, /UNCONFIRMED/);
+  assert.ok(
+    disagreed.body.includes(
+      "  identity:   UNCONFIRMED — the harness named a window no transcript on this machine answers" +
+        " to; this is the most recently active window in your worktree",
+    ),
+    `the UNCONFIRMED identity line changed:\n${disagreed.body}`,
+  );
+});
+
+// ── the fresh worktree the merge ceremony mandates ───────────────────────────
+//
+// ADR-0275 D1 requires a fresh worktree the moment repo code is touched again, and ADR-0411 D5 has
+// the session read its context at that same increment boundary. So the one moment this is certain to
+// be asked is the one moment the worktree has written no transcript of its own. The fold resolves it
+// by the harness's own window id (`context-verb-resolves-the-session-not-just-the-worktree`); what is
+// proved HERE is that the render says so, and does not present a confirmed identity as a doubt.
+
+test("a reading carried in from another worktree is CONFIRMED, and says which question it answered", () => {
+  const env = contextCommand(deps({ read: () => reading({ selectedBy: "harness-window-id-elsewhere" }) }));
+
+  assert.ok(
+    env.body.includes(
+      "  identity:   confirmed — the harness named this window id. Nothing in the worktree you ran" +
+        " this from wrote it, so the reading follows your SESSION rather than this directory (a" +
+        " worktree you stood up mid-run has written no transcript of its own yet)",
+    ),
+    `the elsewhere arm did not render its own identity line:\n${env.body}`,
+  );
+  assert.ok(!/UNCONFIRMED/.test(env.body), "the harness named this window — presenting that as a doubt is the defect");
+  assert.match(env.body, /resident:\s+225,013 tokens/, "and it is a real reading, not an absence");
+});
+
+test("the no-correlated-window absence names WHICH routes were tried, and they are different states", () => {
+  const blind = contextCommand(
+    deps({
+      read: () => reading({ window: null, band: null, absence: "no-correlated-window", selectedBy: null }),
+    }),
+  );
+  assert.ok(
+    blind.body.includes(
+      [
+        "None of the transcripts read was written inside this worktree (angry-hopper-092898).",
+        "This harness named no window id, so the worktree was the only route available, and a",
+        "worktree that has written no transcript of its own has nothing to match a `cwd` on.",
+        "Either the bound below did not reach your window, or this harness writes them elsewhere.",
+      ].join("\n"),
+    ),
+    `the no-hint absence did not say the worktree was the only route:\n${blind.body}`,
+  );
+
+  const unmatched = contextCommand(
+    deps({
+      read: () =>
+        reading({
+          window: null,
+          band: null,
+          absence: "no-correlated-window",
+          selectedBy: null,
+          harnessWindowUnmatched: true,
+        }),
+    }),
+  );
+  assert.ok(
+    unmatched.body.includes(
+      [
+        "None of the transcripts read was written inside this worktree (angry-hopper-092898).",
+        "The harness named a window id for this process, and no transcript on this machine",
+        "answers to it — so neither route reached your window: not the worktree, not the name.",
+        "Either the bound below did not reach your window, or this harness writes them elsewhere.",
+      ].join("\n"),
+    ),
+    `the unmatched absence did not say the NAME route failed too:\n${unmatched.body}`,
+  );
 });
 
 test("the compaction note appears only when peak actually exceeds the current reading", () => {

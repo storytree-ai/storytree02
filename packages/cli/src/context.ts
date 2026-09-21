@@ -263,10 +263,21 @@ function absenceLines(read: OwnWindowRead): readonly string[] {
       ];
     case "no-correlated-window":
       return [
-        `None of the transcripts read was written inside this session's worktree (${read.sessionId}).`,
-        "A transcript belongs to a session when it recorded a `cwd` inside that session's worktree,",
-        "so this is what it looks like when the bound below did not reach yours, or when this",
-        "harness writes its transcripts somewhere else.",
+        `None of the transcripts read was written inside this worktree (${read.sessionId}).`,
+        // WHICH ROUTES WERE TRIED is the half this absence used to leave out, and it is what a
+        // session needs: a worktree stood up mid-run has written no transcript of its own, so the
+        // worktree route is expected to come up empty there and the harness's window id is what
+        // resolves it (`context-verb-resolves-the-session-not-just-the-worktree`).
+        ...(read.harnessWindowUnmatched
+          ? [
+              "The harness named a window id for this process, and no transcript on this machine",
+              "answers to it — so neither route reached your window: not the worktree, not the name.",
+            ]
+          : [
+              "This harness named no window id, so the worktree was the only route available, and a",
+              "worktree that has written no transcript of its own has nothing to match a `cwd` on.",
+            ]),
+        "Either the bound below did not reach your window, or this harness writes them elsewhere.",
       ];
     default:
       return [
@@ -313,18 +324,41 @@ ${MARKS_GOVERN_THE_NEXT_UNIT}`,
   };
 }
 
+/**
+ * How the window in hand was identified — the line that stops a reading being read as more (or less)
+ * certain than it is.
+ *
+ * ★ `harness-window-id-elsewhere` is a CONFIRMED identity and must not render as a doubt. It is the
+ * fresh-worktree case: the harness named this process's window, no transcript in the worktree the
+ * command was invoked from carried it, and the named transcript's own lines claim it
+ * (`context-verb-resolves-the-session-not-just-the-worktree`). The worktree line below will say
+ * "0 written inside this worktree" on this arm, which is correct and is exactly why it is explained
+ * here rather than left for the reader to reconcile.
+ */
+function identityLine(read: OwnWindowRead): string {
+  switch (read.selectedBy) {
+    case "harness-window-id":
+      return "confirmed — the harness named this window id and it is one of yours";
+    case "harness-window-id-elsewhere":
+      return (
+        "confirmed — the harness named this window id. Nothing in the worktree you ran this from" +
+        " wrote it, so the reading follows your SESSION rather than this directory (a worktree you" +
+        " stood up mid-run has written no transcript of its own yet)"
+      );
+    default:
+      return read.harnessWindowUnmatched
+        ? "UNCONFIRMED — the harness named a window no transcript on this machine answers to; this is" +
+            " the most recently active window in your worktree"
+        : "unconfirmed — no harness window id here, so this is the most recently active window in your worktree";
+  }
+}
+
 function renderReading(read: OwnWindowRead, composition: WindowComposition, nowMs: number): Envelope {
   const window = read.window;
   const band = read.band;
   if (window === null || band === null) return renderAbsence(read);
 
-  const identity =
-    read.selectedBy === "harness-window-id"
-      ? "confirmed — the harness named this window id and it is one of yours"
-      : read.harnessWindowUnmatched
-        ? "UNCONFIRMED — the harness named a window this scan did not reach; this is the most recently" +
-          " active window in your worktree"
-        : "unconfirmed — no harness window id here, so this is the most recently active window in your worktree";
+  const identity = identityLine(read);
 
   const excluded =
     window.syntheticObservations === 0

@@ -78,7 +78,7 @@
     "db:down": "pnpm --filter @storytree/cli run db -- down",
     "db:status": "pnpm --filter @storytree/cli run db -- status",
     "db:probe": "pnpm --filter @storytree/cli run db -- probe",
-    "db:schema": "pnpm --filter @storytree/cli run db -- schema",
+    "db:schema": "pnpm -C packages/cli exec tsx src/db-cli.ts schema",
     "web:forest-snapshot": "pnpm --filter studio exec node --import ../../scripts/tsx-cache-off.mjs --import tsx server/forestSnapshotCli.ts",
     "studio:up": "node scripts/studio.mjs up",
     "studio:down": "node scripts/studio.mjs down",
