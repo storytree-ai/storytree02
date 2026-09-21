@@ -109,7 +109,7 @@ function repoRoot(): string {
 async function main(): Promise<number> {
   const [storyId, criterionId] = process.argv.slice(2);
   if (storyId === undefined || criterionId === undefined) {
-    console.error("usage: node --import tsx src/uat-drive-witness.check.ts <story-id> <criterion-id>");
+    console.error("usage: pnpm uat:witness <story-id> <criterion-id>");
     return 2;
   }
 
