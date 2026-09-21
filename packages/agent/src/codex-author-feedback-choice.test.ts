@@ -25,8 +25,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
 
-import { CodexPhaseAuthor } from "./codex-author.js";
-import type { CodexCommandResult, CodexRunner } from "./codex-author.js";
+import { CodexPhaseAuthor, wrapFeedbackCommandWithBound } from "./codex-author.js";
+import type { CodexBoundControl, CodexCommandResult, CodexRunner } from "./codex-author.js";
 import type { CodexFeedbackCommand } from "./codex-feedback-endpoint.js";
 import type { FeedbackChoice } from "./feedback-choice.js";
 
@@ -217,3 +217,108 @@ test(
     }
   },
 );
+
+// ---- the wrapper itself, directly ----
+
+/** What one wrapped call delivered — `choice` admits undefined so an ABSENT one is recordable. */
+interface SeenCall {
+  replicaRoot?: string | undefined;
+  choice?: FeedbackChoice | undefined;
+}
+
+/** A registered command carrying every field the wrapper must preserve. */
+function registered(seen: SeenCall): CodexFeedbackCommand {
+  return {
+    name: "run_tests",
+    description: "Run existing tests the leaf names.",
+    parameter: { name: "files", description: "Which existing test files to run.", choices: CHOICES },
+    timeoutMs: 600_000,
+    run: async (replicaRoot: string, choice?: FeedbackChoice) => {
+      seen.replicaRoot = replicaRoot;
+      seen.choice = choice;
+      return { code: 0, stdout: "ran", stderr: "" };
+    },
+  };
+}
+
+test("wrapFeedbackCommandWithBound: EVERY field except run travels untouched", () => {
+  const command = registered({});
+  const wrapped = wrapFeedbackCommandWithBound(command, {});
+  assert.equal(wrapped.name, "run_tests");
+  assert.equal(wrapped.description, "Run existing tests the leaf names.");
+  assert.deepEqual(wrapped.parameter, {
+    name: "files",
+    description: "Which existing test files to run.",
+    choices: CHOICES,
+  });
+  assert.equal(wrapped.timeoutMs, 600_000);
+  // The point of the wrapper: `run` is the ONE field it replaces.
+  assert.notEqual(wrapped.run, command.run);
+});
+
+test("wrapFeedbackCommandWithBound: a field the interface does not name travels too", () => {
+  // The invariant is "everything travels", not "these five fields travel" — a spread keeps a field
+  // added later, which is exactly what field-by-field copying could not.
+  const extra = { ...registered({}), futureField: "carried" };
+  const wrapped = wrapFeedbackCommandWithBound(extra, {});
+  assert.equal((wrapped as { futureField?: unknown }).futureField, "carried");
+});
+
+test("wrapFeedbackCommandWithBound: run forwards BOTH the replica root and the choice", async () => {
+  const seen: SeenCall = {};
+  const wrapped = wrapFeedbackCommandWithBound(registered(seen), {});
+  const out = await wrapped.run("/replica", { chosen: ["packages/widget/src/b.test.ts"] });
+  assert.equal(seen.replicaRoot, "/replica");
+  assert.deepEqual(seen.choice, { chosen: ["packages/widget/src/b.test.ts"] });
+  assert.deepEqual(out, { code: 0, stdout: "ran", stderr: "" });
+});
+
+test("wrapFeedbackCommandWithBound: an ABSENT choice arrives absent, not as an empty selection", async () => {
+  const seen: SeenCall = { choice: { chosen: ["stale"] } };
+  const wrapped = wrapFeedbackCommandWithBound(registered(seen), {});
+  await wrapped.run("/replica");
+  assert.equal(seen.choice, undefined);
+});
+
+test("wrapFeedbackCommandWithBound: the bound is suspended for the run's duration and resumed after", async () => {
+  const timeline: string[] = [];
+  const seen: SeenCall = {};
+  const command = registered(seen);
+  const timed: CodexFeedbackCommand = {
+    ...command,
+    run: async (replicaRoot: string, choice?: FeedbackChoice) => {
+      timeline.push("run");
+      return await command.run(replicaRoot, choice);
+    },
+  };
+  const bound: CodexBoundControl = {
+    suspend: () => timeline.push("suspend"),
+    resume: () => timeline.push("resume"),
+  };
+  await wrapFeedbackCommandWithBound(timed, bound).run("/replica");
+  assert.deepEqual(timeline, ["suspend", "run", "resume"]);
+});
+
+test("wrapFeedbackCommandWithBound: the bound is resumed even when the run throws", async () => {
+  const timeline: string[] = [];
+  const command: CodexFeedbackCommand = {
+    name: "run_tests",
+    description: "d",
+    run: async () => {
+      throw new Error("spawn failed");
+    },
+  };
+  const bound: CodexBoundControl = {
+    suspend: () => timeline.push("suspend"),
+    resume: () => timeline.push("resume"),
+  };
+  await assert.rejects(() => wrapFeedbackCommandWithBound(command, bound).run("/replica"), /spawn failed/);
+  assert.deepEqual(timeline, ["suspend", "resume"]);
+});
+
+test("wrapFeedbackCommandWithBound: a bound carrying neither hook runs without throwing", async () => {
+  const seen: SeenCall = {};
+  const out = await wrapFeedbackCommandWithBound(registered(seen), {}).run("/replica");
+  assert.equal(out.code, 0);
+  assert.equal(seen.replicaRoot, "/replica");
+});

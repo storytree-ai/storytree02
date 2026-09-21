@@ -474,6 +474,40 @@ function computeFeedbackToolTimeoutSec(commands: CodexFeedbackCommand[]): number
 }
 
 /**
+ * Wrap ONE registered feedback command so the leaf's exec bound is suspended for the duration of a
+ * run and resumed once it settles (ADR-0570 D4) — and so that NOTHING ELSE about the command
+ * changes on the way to the endpoint.
+ *
+ * SPREAD, never field-by-field, and that is the whole reason this is a named function rather than
+ * an inline literal. Rebuilding the object property by property silently drops every field nobody
+ * remembered to copy, and it did: ADR-0587's `parameter` was dropped exactly that way. The far end
+ * then finds no parameter in `executeFeedback`, never validates the published choices, and answers
+ * the whole-set form to every call — which for `run_tests` means running every suite the unit
+ * touches however few files the leaf named. Nothing was red, because the seam landed one increment
+ * before the first command that declared a choice, so no test drove this path with one.
+ *
+ * `run` is the one field the wrapper replaces, so the choice is the one thing it forwards by hand:
+ * the replica root is the ENDPOINT's to supply, the choice is the LEAF's, and dropping the second
+ * is the same bug in its other half.
+ */
+export function wrapFeedbackCommandWithBound(
+  command: CodexFeedbackCommand,
+  bound: CodexBoundControl,
+): CodexFeedbackCommand {
+  return {
+    ...command,
+    run: async (replicaRoot: string, choice?: FeedbackChoice) => {
+      bound.suspend?.();
+      try {
+        return await command.run(replicaRoot, choice);
+      } finally {
+        bound.resume?.();
+      }
+    },
+  };
+}
+
+/**
  * The escalation closing (ADR-0569, extended to the Codex leaf): appended to an ARMED author's
  * composed stdin, after the existing adapter lines, naming the channel, what each authoring phase
  * may escalate, and that raising one never moves the verdict. An unarmed author (no feedback
@@ -1351,31 +1385,11 @@ export class CodexPhaseAuthor implements PhaseAuthor {
       // `finally` below, which covers every exit after it opened — success, a refused promotion, and
       // a thrown runner alike.
       if (armed) {
+        // Each command wrapped so the leaf's bound is suspended around its run, and NOTHING else
+        // about it changes on the way to the endpoint — see `wrapFeedbackCommandWithBound` for the
+        // field-dropping bug that is why this is a named function.
         const wrappedFeedbackCommands: CodexFeedbackCommand[] = this.#feedbackCommands.map(
-          (command) => ({
-            name: command.name,
-            description: command.description,
-            // ADR-0587: the declared choice travels through the wrapper. Dropping it here would
-            // leave `executeFeedback` finding no parameter at the far end, so a tool's published
-            // choices would never be validated and every argument the leaf sent would be silently
-            // ignored — the tool would answer the whole-set form to every call, which for
-            // `run_tests` means running every suite the unit touches each time.
-            parameter: command.parameter,
-            // Only the leaf's own exec-spawn time counts against its bound: suspended for the
-            // duration of a feedback run, resumed once it settles (ADR-0570 D4).
-            // The CHOICE travels with the call (ADR-0587). The replica root is the endpoint's to
-            // supply and the choice is the LEAF's; dropping the second here would leave every
-            // validated selection arriving at the registry as the whole-set form, so `run_tests`
-            // would run every suite the unit touches however few files the leaf named.
-            run: async (feedbackReplicaRoot: string, choice?: FeedbackChoice) => {
-              bound.suspend?.();
-              try {
-                return await command.run(feedbackReplicaRoot, choice);
-              } finally {
-                bound.resume?.();
-              }
-            },
-          }),
+          (command) => wrapFeedbackCommandWithBound(command, bound),
         );
         feedbackHandle = await openCodexFeedbackEndpoint({
           phase,
