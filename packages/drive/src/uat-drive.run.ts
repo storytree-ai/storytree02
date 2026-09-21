@@ -347,7 +347,7 @@ async function persistHarnessEnds(
     } catch (e) {
       console.error(
         `[uat-drive] could NOT persist the harness end for ${target.criterionId}: ${(e as Error).message}\n` +
-          "  The cause below reaches this terminal only — the next box will not see it.",
+          "  The cause printed above reaches this terminal only — the next box will not see it.",
       );
     }
   }
