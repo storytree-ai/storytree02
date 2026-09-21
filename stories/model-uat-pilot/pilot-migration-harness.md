@@ -40,8 +40,9 @@ refuses incomplete migration / silent model default, and reports classified coun
 ## Guidance
 
 - Author `packages/model-uat-pilot/src/pilot-migration-harness.ts` and export it from the package
-  root barrel (`index.ts`). Package scaffold + `repo-manifest.json` `packageOwnership` must land
-  before or with the first leaf that needs the filter (bootstrap).
+  root barrel (`index.ts`). Package scaffold + `packageOwnership` registration in
+  `repo-manifest/package-ownership/_domain.json` must land before or with the first leaf that needs
+  the filter (bootstrap).
 - **Inputs:** absolute or repo-relative paths to the three pilot `story.md` files and the
   `uat-criterion` seed directory. Locked cast: `drive-machinery`, `library-review`,
   `library-tech-tree-overlay` (ADR-0209 D8).

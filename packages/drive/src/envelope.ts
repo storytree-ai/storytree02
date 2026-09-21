@@ -56,6 +56,65 @@ export interface Envelope {
   readonly observedResultIds?: readonly string[];
 }
 
+/**
+ * The invocation prefix a printed `next:` line needs to actually run (`next-lines-run-as-printed`,
+ * discharging friction `cli-next-lines-are-not-runnable-as-printed`).
+ *
+ * WHY A PREFIX AND NOT A PATH PROBE. The increment offered a second option — detect a global
+ * `storytree` install and adapt — and it is dead code here: `@storytree/cli` is `"private": true`
+ * (so it can never be installed from a registry) and its `bin` points at `./src/main.ts`, a
+ * TypeScript file no bare `node` shim can execute without tsx registered first. There is no
+ * reachable state in which a bare `storytree` resolves, so a detection branch could never be taken
+ * — and the diff-scoped mutation rung (ADR-0458) would be right to call it unproven rather than
+ * covered. An unconditional prefix is the honest shape.
+ *
+ * WHY `pnpm` IS SAFE FOR EVERY FLAG. CLAUDE.md's standing caveat — that `pnpm storytree …`
+ * forwards every flag EXCEPT `--json`, which pnpm reserves — is OVERTAKEN and was re-measured here
+ * on 2026-09-22. It described the old doubled invocation (`pnpm --filter @storytree/cli storytree
+ * --`); the root script is now the single-layer `node packages/cli/launch.mjs` (ADR-0162 inc 2), and
+ * pnpm's own echoed argv shows `--json`, `--help`, `--version`, `--silent`, `--recursive` and
+ * `--filter` all forwarded verbatim. Flags pnpm reserves are the ones BEFORE the script name.
+ */
+const INVOCATION_PREFIX = "pnpm";
+
+/** The command word every `next:` line is authored with — the canonical, prefix-free form. */
+const CLI_COMMAND = "storytree";
+
+/**
+ * Is this token a leading `NAME=value` environment assignment rather than the command word?
+ *
+ * One real `next:` line is shaped that way — `STORYTREE_DB_USER=<iam-email> storytree library
+ * artifact edit …` — so the prefix has to land AFTER the assignment, not in front of it. The
+ * `-` guard keeps a line that opens with a valued flag (`--flag=x …`) from being read as an
+ * assignment run, so such a line is left alone rather than silently rewritten.
+ */
+function isEnvAssignment(token: string): boolean {
+  return token.includes("=") && !token.startsWith("-");
+}
+
+/**
+ * PURE: make ONE `next:` line runnable exactly as printed.
+ *
+ * Prefixes `pnpm ` onto the command word when — and only when — the line actually invokes this CLI,
+ * looking past any leading environment assignments. Everything else is returned byte-identical:
+ * `git …` and already-`pnpm …` lines (both real `next:` shapes), interpolation fragments, and the
+ * prose lines some envelopes carry. Splitting and re-joining on a single space is lossless, so the
+ * multi-space alignment in a trailing `   (gloss)` survives untouched.
+ *
+ * It renders, it does not rewrite: `Envelope.next` keeps the canonical bare form, which is what
+ * every composition site splices and what the agent-facing orientation surface still needs.
+ */
+export function runnableNextLine(line: string): string {
+  const tokens = line.split(" ");
+  let at = 0;
+  for (const token of tokens) {
+    if (!isEnvAssignment(token)) break;
+    at += 1;
+  }
+  if (tokens[at] !== CLI_COMMAND) return line;
+  return [...tokens.slice(0, at), INVOCATION_PREFIX, ...tokens.slice(at)].join(" ");
+}
+
 /** Render an {@link Envelope} to the text the agent reads on stdout. */
 export function formatEnvelope(e: Envelope): string {
   const parts: string[] = [e.body.replace(/\s+$/, "")];
@@ -67,7 +126,13 @@ export function formatEnvelope(e: Envelope): string {
     parts.push("note:\n" + e.note.map((n) => `  ${n}`).join("\n"));
   }
   if (e.next && e.next.length > 0) {
-    parts.push("next:\n" + e.next.map((n) => `  - ${n}`).join("\n"));
+    // Made runnable HERE, at the one shell-facing render, rather than at the ~880 call sites that
+    // author these lines: a per-call-site repair is wrong again the next time somebody adds a verb.
+    // Deliberately NOT applied to the agent-facing mirror of this function in
+    // `packages/agent/src/orientation-tools.ts` — those `next:` lines are consumed as TOOL ARGUMENTS
+    // by the in-loop leaf, whose `normalizeArgs` strips exactly `storytree`/`pnpm` and whose tool
+    // descriptions tell the model to drop the leading `storytree`. Same text, different audience.
+    parts.push("next:\n" + e.next.map((n) => `  - ${runnableNextLine(n)}`).join("\n"));
   }
   return parts.join("\n\n") + "\n";
 }

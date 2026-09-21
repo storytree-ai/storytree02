@@ -135,8 +135,16 @@ kind owes a seed export any more.
   Two limits remain: `--json`/`--file` still replaces the WHOLE doc (a replace is a replace), and two
   sessions editing the SAME field are still last-write-wins with no detector — reconcile forward from
   the sibling's text, never re-apply your own (per-artifact claims are DBOS-deferred).
-  *(Invocation note: `pnpm storytree …` forwards every flag EXCEPT `--json` — pnpm reserves that —
-  so pass a doc via `--file`, or use inline `--json` only via `npx tsx packages/cli/src/main.ts …`.)*
+  *(Invocation note: `pnpm storytree …` forwards every flag VERBATIM, `--json` included — the flags
+  pnpm reserves are the ones BEFORE the script name. ⚠ This line said the OPPOSITE until 2026-09-22,
+  and the correction matters because the old text sent readers to a workaround that is itself broken:
+  the caveat was written 2026-06-08 against the doubled `pnpm --filter @storytree/cli storytree --`
+  invocation, which the root script dropped on 2026-07-05 for the single-layer
+  `node packages/cli/launch.mjs` (ADR-0162 inc 2). Re-measured 2026-09-22: `--json`, `--help`,
+  `--version`, `--silent`, `--recursive` and `--filter` all arrive intact, `--json` behaves
+  IDENTICALLY through `pnpm` and through a direct tsx call, and the `npx tsx packages/cli/src/main.ts`
+  form the old note recommended does not even resolve from a worktree root — `tsx` is reachable only
+  through the workspace, so that form errors where the `pnpm` one works.)*
 - **AGENT TIER = live-canonical, like every other tier.** The
   agent kind was once the one seed-authored exception; that is withdrawn. Edit an agent the same way you
   edit anything else — `library artifact edit <id> --pg` — then **regenerate the committed
@@ -550,8 +558,10 @@ kind owes a seed export any more.
   together, so there are no offers to follow and nothing an offer id could record. The `next:` lines
   a render still prints are the REPLACEMENT (ADR-0464 D2) — derived from the authored `depends_on`
   edge rather than from "whatever happened to cite this" — and they carry no trailing id. Run them as
-  printed because they are correct, not because they record a choice. Note: inline `--json` needs
-  `npx tsx packages/cli/src/main.ts`, not `pnpm`.
+  printed because they are correct, not because they record a choice — and "as printed" is now
+  LITERAL: every `next:` line carries the `pnpm ` prefix, so copying one verbatim runs
+  (`next-lines-run-as-printed`, 2026-09-22). The note that used to sit here — that inline `--json`
+  needs `npx tsx packages/cli/src/main.ts` rather than `pnpm` — was stale and is corrected above.
   Two write-ergonomics: `--set field=@path` reads the value from a FILE (long/multi-line prose
   without shell mangling), and a typo'd `--set` field on a structured kind is REFUSED with a clear
   message (naming the bad field + the editable ones), not the opaque `.strict()` union dump.
