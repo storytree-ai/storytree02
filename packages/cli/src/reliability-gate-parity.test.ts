@@ -62,6 +62,53 @@ function legPlan(): GateStep[] {
   return plan("pnpm -r --no-bail typecheck", "pnpm -r --no-bail test");
 }
 
+/**
+ * Line endings BUILT AT RUNTIME rather than typed as escapes.
+ *
+ * `asset:escape-sequences-in-tool-arguments-become-real-bytes` in one line: every authoring channel
+ * decodes an escape before the text reaches disk, so a control character typed into a tool payload
+ * arrives as the real byte and the source no longer says what you meant. Constructing them here is
+ * the form that is safe in every channel — and it is the only way to write a BARE-CR fixture at all,
+ * since a typed CR would land as a real newline and the fixture would silently become an LF one,
+ * testing the case it was written to exclude.
+ */
+const LF = String.fromCharCode(10);
+const CR = String.fromCharCode(13);
+
+/** A story whose Reliability Gates block is the LAST section — nothing follows it. */
+const STORY_BLOCK_LAST = [
+  "# S",
+  "",
+  "## Reliability Gates",
+  "",
+  "1. _(gate: observe)_ `pnpm --filter studio uat`.",
+  "",
+].join(LF);
+
+/** The same story written with classic-Mac bare CR endings. */
+const STORY_BARE_CR = [
+  "# S",
+  "",
+  "## Reliability Gates",
+  "",
+  "1. _(gate: observe)_ `pnpm --filter studio uat`.",
+  "",
+  "## Proof",
+  "",
+  "x",
+  "",
+].join(CR);
+
+/** A story that declares NO block, but names a gate command in ordinary prose. */
+const STORY_NO_BLOCK = [
+  "# S",
+  "",
+  "## Proof",
+  "",
+  "It proves when `pnpm --filter studio uat` passes.",
+  "",
+].join(LF);
+
 describe("reliabilityGatesBlock", () => {
   it("slices the declared block and stops at the next heading", () => {
     const story = [
@@ -169,6 +216,107 @@ describe("parsePackageScriptCommand", () => {
     assert.equal(parsePackageScriptCommand("pnpm --filter studio"), null);
     assert.equal(parsePackageScriptCommand("pnpm --filter studio --silent"), null);
     assert.equal(parsePackageScriptCommand("pnpm --filter --recursive test"), null);
+  });
+});
+
+describe("parsePackageScriptCommand — the distinctions the mutation rung found unproven", () => {
+  it("rejects a NON-pnpm command that would otherwise parse, so the `pnpm` guard is what rejects it", () => {
+    // The gap the rung named: every earlier non-pnpm case ALSO lacked a `--filter`, so the empty
+    // `packages` check rejected it and the head-token guard was never the deciding branch. These
+    // carry a filter AND a script, so only the head token can reject them.
+    assert.equal(parsePackageScriptCommand("npm --filter studio uat"), null);
+    assert.equal(parsePackageScriptCommand("pnpmx --filter studio uat"), null);
+    assert.equal(parsePackageScriptCommand("yarn --filter studio test"), null);
+    // The positive control, identical but for the head token.
+    assert.deepEqual(parsePackageScriptCommand("pnpm --filter studio uat"), {
+      packages: ["studio"],
+      script: "uat",
+    });
+  });
+
+  it("trims the command, so surrounding whitespace cannot hide the head token", () => {
+    // A story writes its gate inside backticks and a stray leading space is ordinary prose. Without
+    // the trim the first token is "" rather than "pnpm", and every declaration written that way
+    // silently stops being judged — an under-count that reads as a clean corpus.
+    assert.deepEqual(parsePackageScriptCommand("  pnpm --filter studio uat  "), {
+      packages: ["studio"],
+      script: "uat",
+    });
+  });
+
+  it("splits on a -- separator however much whitespace surrounds it", () => {
+    // The separator regex was unproven against two narrower spellings, because every earlier case
+    // used exactly one space on each side. A multi-space separator is what tells them apart.
+    for (const spelling of [
+      "pnpm --filter studio test  --  server/x.test.ts",
+      "pnpm --filter studio test   --   server/x.test.ts",
+    ]) {
+      assert.deepEqual(
+        parsePackageScriptCommand(spelling),
+        { packages: ["studio"], script: "test" },
+        spelling,
+      );
+    }
+  });
+
+  it("collapses RUNS of whitespace between tokens, not just single spaces", () => {
+    // The token split was unproven against a single-character class: with single spaces the two are
+    // identical. Doubled spaces produce empty tokens, and an empty token where a `--filter` is
+    // expected ends the scan early and loses the package.
+    assert.deepEqual(parsePackageScriptCommand("pnpm   --filter   studio   uat"), {
+      packages: ["studio"],
+      script: "uat",
+    });
+  });
+
+  it("returns null rather than THROWING when --filter ends the command", () => {
+    // The `target === undefined` guard protects a `.startsWith` on the next token. Without it this
+    // throws a TypeError, which a corpus sweep sees as a CRASHED rung rather than a refused parse —
+    // so "null, and it did not throw" is the assertion that matters, not "null".
+    assert.doesNotThrow(() => parsePackageScriptCommand("pnpm --filter"));
+    assert.equal(parsePackageScriptCommand("pnpm --filter"), null);
+  });
+
+  it("treats an EMPTY inline filter value as no value, and never as a package named empty", () => {
+    // Unproven because no earlier case wrote a bare `--filter=`. Left unguarded the empty string
+    // enters `packages`, and the declaration then claims a package whose name is "".
+    assert.equal(parsePackageScriptCommand("pnpm --filter= test"), null);
+    assert.deepEqual(parsePackageScriptCommand("pnpm --filter=studio test"), {
+      packages: ["studio"],
+      script: "test",
+    });
+  });
+});
+
+describe("reliabilityGatesBlock — the boundary cases the mutation rung found unproven", () => {
+  it("returns the REST of the file when its block is the last section", () => {
+    // Both the no-following-heading branch and the slice itself survived: with a `## Proof` below,
+    // the mutated and unmutated forms agreed closely enough that nothing distinguished them.
+    const story = STORY_BLOCK_LAST;
+    const block = reliabilityGatesBlock(story);
+    assert.ok(block?.includes("pnpm --filter studio uat"));
+    // And it is the TAIL, not the whole file: the heading and everything above it stay out.
+    assert.equal(block?.includes("# S"), false);
+    assert.equal(block?.includes("## Reliability Gates"), false);
+  });
+
+  it("normalises a BARE carriage return, not only a CRLF pair", () => {
+    // The EOL regex was unproven against the CRLF-only form, because the CRLF test never produced a
+    // lone CR. A file with classic-Mac endings would keep every CR, the newline-anchored `## `
+    // boundary probe would never match, and the block would swallow the rest of the file.
+    const block = reliabilityGatesBlock(STORY_BARE_CR);
+    assert.ok(block?.includes("pnpm --filter studio uat"));
+    assert.equal(block?.includes("## Proof"), false, "the boundary must hold under a bare CR too");
+    assert.equal(declaredGatesIn("stories/s/story.md", STORY_BARE_CR).length, 1);
+  });
+
+  it("declaredGatesIn returns nothing for a blockless story, rather than reading the whole file", () => {
+    // The null guard survived because every judge test supplied a block. Without it the `null` flows
+    // into `matchAll` and throws, so a corpus holding ONE blockless story crashes the rung — and
+    // `stories/**` is mostly blockless files.
+    assert.equal(reliabilityGatesBlock(STORY_NO_BLOCK), null);
+    assert.doesNotThrow(() => declaredGatesIn("stories/s/story.md", STORY_NO_BLOCK));
+    assert.deepEqual(declaredGatesIn("stories/s/story.md", STORY_NO_BLOCK), []);
   });
 });
 
