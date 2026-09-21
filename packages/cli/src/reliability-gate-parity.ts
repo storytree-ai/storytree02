@@ -145,13 +145,16 @@ const FILTER_TOKEN = /^--filter(?:=(.+))?$/;
  * the `test` script with an argument, and the argument does not change WHICH script runs.
  */
 export function parsePackageScriptCommand(command: string): PackageScriptCommand | null {
-  // ONE normalisation, not two. A `.filter((t) => t !== "")` stood beside the trim until the mutation
-  // rung found BOTH unkillable: with the filter present the trim is redundant (an empty leading token
-  // is dropped anyway), and with the trim present the filter is redundant (`\s+` consumes interior
-  // runs, so no empty token is produced). Two guards against the same thing make each other
-  // untestable, and the pair read as more careful than either.
-  const separated = command.trim().split(/\s+--\s+/)[0] ?? "";
-  const tokens = separated.split(/\s+/);
+  // ONE normalisation, and no `--` split. Three pieces of machinery stood here and the mutation rung
+  // could not kill any of them, because each was made redundant by another:
+  //   · a `.filter((t) => t !== "")` beside the trim — with the filter an empty leading token is
+  //     dropped anyway, and with the trim `\s+` consumes interior runs so none is produced;
+  //   · a `.split(/\s+--\s+/)[0]` to drop post-`--` arguments — unnecessary, because the SCRIPT is
+  //     the first non-`--filter` token and is therefore always found BEFORE any `--`. Even
+  //     `pnpm --filter studio test -- --filter other uat` resolves to `studio`/`test` either way:
+  //     the walk breaks at `test`, so nothing after it is ever read.
+  // Two guards against one condition make each other untestable and read as more careful than either.
+  const tokens = command.trim().split(/\s+/);
   if (tokens[0] !== "pnpm") return null;
 
   const packages: string[] = [];
@@ -163,6 +166,8 @@ export function parsePackageScriptCommand(command: string): PackageScriptCommand
   // than a behaviour change: it can only ever be reported as a timeout, which the rung's own
   // vocabulary calls UNPROVEN and refuses to score either way.
   while (index < tokens.length) {
+    // Stryker disable next-line StringLiteral: UNREACHABLE — required by `noUncheckedIndexedAccess`,
+    // and the loop bound guarantees `index < tokens.length`, so the fallback can never be taken.
     const token = tokens[index] ?? "";
     const filter = FILTER_TOKEN.exec(token);
     if (filter === null) break;
@@ -249,6 +254,8 @@ export function repoWideScripts(steps: readonly GateStep[], workflowText: string
     // shape, and neither anchor can change a verdict. It is kept because the vocabulary is the
     // NORMALISER'S to widen, not this reader's, and a future token could carry a suffix.
     const leg = /^pnpm -r (\S+)$/.exec(token);
+    // Stryker disable next-line StringLiteral: UNREACHABLE — group 1 of a regex that has already
+    // matched, and it is not optional, so it always participates.
     if (leg !== null) scripts.add(leg[1] ?? "");
   }
   return scripts;
@@ -555,6 +562,8 @@ export function formatReliabilityGateParity(parity: ReliabilityGateParity): stri
       `${TAG} CARRIED, NOT PASSED — a declared gate nothing runs, held by the baseline:`,
       `${TAG}   ${gate.story}`,
       `${TAG}     \`${gate.command}\``,
+      // Stryker disable next-line StringLiteral: UNREACHABLE — every member of `parity.baselined`
+      // was selected BY having a `baselined` blocker, so the fallback cannot be taken.
       `${TAG}     ${gate.baselined ?? ""}`,
     );
   }

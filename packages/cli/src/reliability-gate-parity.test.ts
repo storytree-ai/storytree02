@@ -1022,6 +1022,41 @@ describe("the remaining strings and branches nothing had read", () => {
     });
   });
 
+  it("the STORED command is trimmed, because the baseline matches on it exactly", () => {
+    // `declaredGatesIn` trims the backtick span even though the parser trims its own input, and the
+    // duplication is NOT redundant here: the trimmed text is also what lands on `DeclaredGate.command`
+    // and what `UNRUN_GATE_BASELINE` is matched against. A story writing padding inside its backticks
+    // would otherwise produce a command string no baseline entry could ever equal — so the entry would
+    // read as a ghost and the rung would red on a declaration nobody had changed.
+    const story = [
+      "# S",
+      "",
+      "## Reliability Gates",
+      "",
+      "1. _(gate: observe)_ `  pnpm --filter studio uat  `.",
+      "",
+    ].join(LF);
+    const gates = declaredGatesIn("stories/s/story.md", story);
+    assert.equal(gates.length, 1);
+    assert.equal(gates[0]?.command, "pnpm --filter studio uat", "no surrounding whitespace survives");
+  });
+
+  it("the uncovered detail says `none` when the gate runs no repo-wide leg at all", () => {
+    // The `|| "none"` fallback had NO COVERAGE: the judge refuses an empty leg set outright (that is
+    // a BLIND CHECK), so the only way to reach this branch is to ask `judgeCoverage` directly — which
+    // is exactly the state a caller composing this rule differently would hit, and an empty
+    // parenthesis there reads as a formatting bug rather than as "the gate runs no repo-wide leg".
+    const one = parsePackageScriptCommand("pnpm --filter studio uat");
+    assert.notEqual(one, null);
+    const coverage = judgeCoverage(
+      { story: "stories/s/story.md", command: "pnpm --filter studio uat", parsed: one! },
+      new Set(),
+      new Set(),
+    );
+    assert.equal(coverage.covered, false);
+    assert.ok(coverage.detail.includes("(none)"), coverage.detail);
+  });
+
   it("the REAL baseline entry's blocker is pinned WHOLE", () => {
     // The blocker is built from a dozen concatenated pieces, so emptying any ONE of them left the
     // length assertion satisfied and the mutant alive. This is the entry a session reads to learn why
