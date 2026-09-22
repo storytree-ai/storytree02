@@ -93,6 +93,16 @@ const assertBands = (x: Scenario | Suppressor | RefusedScenario): void => {
   const { weak, strong, n, on } = x.measured;
   assert.ok(n > 0, `${x.id}: n must be positive — an unmeasured entry may not be admitted`);
   assert.ok(on.trim().length > 40, `${x.id}: 'on' must say what was measured and what it does not establish`);
+  // THE PROSE MUST NAME THE NUMBER. An entry's `n` and the sentence describing its measurement drift
+  // apart exactly when the entry is RE-measured, because the field is one token and the prose is a
+  // paragraph — `jev-test-slop-arc-inc-06` re-measured `degenerate-collection` from n=3 to n=189 and
+  // its `on` still described "the 3 pre-satisfied-family pairs" until this fired. A stale sample size
+  // is the most quietly misleading thing a refusal can carry: every reader prices the verdict by it.
+  assert.ok(
+    new RegExp(`\\b${n}\\b`).test(on),
+    `${x.id}: measured.n is ${n}, and 'on' never says so — one of the two was updated without the other. ` +
+      `Name the sample size in the sentence that describes the measurement.`,
+  );
   for (const [lo, hi] of [weak, strong]) {
     assert.ok(lo >= 0 && hi <= 1 && lo <= hi, `${x.id}: band [${lo}, ${hi}] is not a probability range`);
   }

@@ -314,14 +314,14 @@ export const REFUSED: readonly RefusedScenario[] = [
     evidence:
       "Repair `test(codex): close the last two mutation survivors`, whose own comment is the specification: 'TWO paths, not one: the refusal joins them with a comma and a single-entry list would make that separator unobservable — the message could lose it and no assertion would notice.' The same shape is recorded independently in `an-assertion-over-pre-arranged-input-cannot-fail` ('TWO ITEMS CAN NEVER DETECT IT … three minimum').",
     measured: {
-      weak: [0.07, 0.77],
-      strong: [0.05, 0.73],
-      n: 3,
+      weak: [0.02, 0.85],
+      strong: [0.02, 0.82],
+      n: 189,
       population: "observed",
-      on: "The 3 pre-satisfied-family pairs. Its one true instance, pair [0], scored 0.75 against a 0.07 twin — a 0.68 margin, the widest any question achieved on any real pair in this benchmark — and it independently scored 0.62/0.05 on pair [23], whose repair added a guard that the fixture holds tiles off the degenerate axis. The other two family pairs are not collection-shaped and it correctly says little about them, which is what drags the declared band down.",
+      on: "RANKED OVER A POPULATION, 2026-09-22 (`jev-test-slop-arc-inc-06`), which is a different and harder measurement than the 3 matched pairs it was first refused on. 189 code-changing pairs from a widened harvest of the same mutation-repair history — the fence moved from 'the commit touched no production source' to 'the commit changed none of the sources this test file imports', taking the benchmark from 38 pairs to 192 with the same one-sided guarantee. ZERO weak arms reached 0.90 and the highest was 0.85. Its earlier pair figures still reproduce — the one adjudicated true instance scored 0.72 against a 0.05 twin, a 0.67 margin against a next-best of 0.38 — but it RANKED 11th of 189, behind ten units adjudication shows are not the shape at all."
     },
     reason:
-      "NOT REFUSED ON MERIT — REFUSED FOR n. It is the only candidate that separated a real pair cleanly, and the benchmark holds exactly ONE adjudicated instance of the shape it describes. Admitting on n=1 is what the admission test exists to prevent, and the arc's standing instruction is slow growth, so it is recorded here as the leading candidate rather than admitted on a promising single point. What it needs is not a reworded statement but more instances: harvest further mutation-repair commits for one-element and empty-collection fixtures until the shape has a population, then re-measure this wording UNCHANGED so the two runs stay comparable.",
+      "REFUSED ON A POPULATION — and the earlier 'refused for n, not on merit' reading is WITHDRAWN by its own follow-up. Given the n it asked for (189 real pairs instead of 3) it fires on nothing: no weak arm reaches 0.90, the ceiling is 0.85, and its one adjudicated true instance ranks ELEVENTH. What outranks it is the tell — tests that merely happen to use a small collection, two of them repairs that changed only a comment. ⚠ THE LESSON GENERALISES AND IS THE MOST USEFUL THING THIS ENTRY NOW CARRIES: a matched pair holds the subject FIXED, so a wording that separates a pair may be measuring 'this is a small collection' rather than 'this small collection is a defect'. Over a population, where nothing is held fixed, it ranks by the incidental property. Its 0.67 pair margin was real and is still the widest measured here — and a margin needs BOTH arms, which exist only in a benchmark and never in production, so the margin is a research instrument and not a detector. A matched-pair margin is NECESSARY AND NOT SUFFICIENT: the population ranking is what decides."
   },
   {
     id: "undiscriminating-fixture",
