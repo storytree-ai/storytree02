@@ -114,6 +114,7 @@ import {
   questionHelp,
   incrementCommand,
   incrementHelp,
+  type ArcViewDeps,
   type ArcWriteDeps,
   type QuestionWriteDeps,
   type CountCommitsSince,
@@ -4894,14 +4895,25 @@ export async function run(argv: readonly string[], deps: RunDeps): Promise<Envel
       return rawField(deps.store, third, values.raw, values.out);
     }
 
+    const arcViewDeps: ArcViewDeps = {
+      store: deps.store,
+      storiesDir: deps.storiesDir ?? path.join(repoRoot(), "stories"),
+      pg: values.pg === true,
+    };
+    // WHO HOLDS THIS ARC'S OPEN WORK (`active-increment-says-who-holds-it`). `presence.ledger`, NOT
+    // `presence.claims`: the latter is the session-scoped WRITE slice (`claim`/`releaseClaimsBySession`)
+    // and carries no per-unit read. This is the same live `PgClaimStore` the
+    // claim/upgrade/downgrade/release/CLAIMS verbs drive — deliberately the SAME reader
+    // `noticeboard claims <unit>` uses, because `arc show` and that verb must not be able to
+    // disagree about who holds a unit, and two readers over one table is how they would start to.
+    // Absent offline, which the surface renders as UNKNOWN rather than as free. Assigned rather
+    // than conditionally spread — `exactOptionalPropertyTypes` plus the house anti-slop rule.
+    const arcClaims = deps.presence?.ledger;
+    if (arcClaims !== undefined && arcClaims !== null) arcViewDeps.claims = arcClaims;
     return arcCommand(
       sub,
       third,
-      {
-        store: deps.store,
-        storiesDir: deps.storiesDir ?? path.join(repoRoot(), "stories"),
-        pg: values.pg === true,
-      },
+      arcViewDeps,
       // ADR-0239 D3 — the list is a worklist: active-only unless explicitly widened. `--parked`
       // (ADR-0374 D1) is the third widening: a shelved arc leaves the worklist but stays reachable.
       arcScopeOf({

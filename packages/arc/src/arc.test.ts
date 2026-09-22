@@ -6,6 +6,7 @@ import path from "node:path";
 
 import { InMemoryStore, type Store } from "@storytree/storage-protocol";
 import { ASSET_REF_PREFIX, upcastAndValidate } from "@storytree/library";
+import type { ClaimDocT } from "@storytree/notice-board";
 import { deriveArcLifecycle, deriveArcRollup } from "./arc-rollup.js";
 import { questionNew, questionSettle } from "./question.js";
 import { seedDecisionRows } from "./decision.test-helpers.js";
@@ -30,6 +31,7 @@ import {
   arcIncrementPromote,
   arcScopeOf,
   storyArcStamps,
+  type ArcClaimReader,
   type ArcViewDeps,
   type ArcWriteDeps,
 } from "./arc.js";
@@ -4458,6 +4460,143 @@ test("arc list reports an UNRESOLVABLE blocker as a permanent wait, never as a s
     assert.equal(res.ok, true);
     assert.match(res.body, / — ⛔ paint-arc/);
     assert.match(res.body, /queued behind `ground-arc` — NO SUCH ARC/);
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
+// -------------------------------------------------------------------------------------------------
+// `arc show` says whether its OPEN work is held (`active-increment-says-who-holds-it`).
+//
+// These are the WIRING tests. `increment-claims.test.ts` proves the fold over injected rows; what
+// can only be proven here is that `arc show` actually CALLS the ledger and renders the answer — the
+// distinction that matters, because the defect being closed was a surface that had the store
+// connection all along and simply never asked.
+// -------------------------------------------------------------------------------------------------
+
+/** A ledger stub: unit id → its rows, or a throw for the unreadable case. */
+function claimReaderOver(rows: Record<string, ClaimDocT[] | Error>): ArcClaimReader {
+  return {
+    claimsFor: async (unitId: string): Promise<ClaimDocT[]> => {
+      const hit = rows[unitId];
+      if (hit instanceof Error) throw hit;
+      return hit ?? [];
+    },
+  };
+}
+
+function workClaim(over: Partial<ClaimDocT> = {}): ClaimDocT {
+  return {
+    unitId: "map-arc-plan-1",
+    sessionId: "keen-sibling-caeb6e",
+    branch: "claude/keen-sibling-caeb6e",
+    intent: "Building it right now",
+    grade: "work",
+    claimedAt: "2026-09-22T04:00:00.000Z",
+    heartbeatAt: "2026-09-22T11:59:00.000Z",
+    ...over,
+  };
+}
+
+const CLAIM_NOW = "2026-09-22T12:00:00.000Z";
+
+test("arc show NAMES a live holder on its open work, and counts it apart from the takeable rows", async () => {
+  const fx = diskFixture();
+  try {
+    const store = await seededStore();
+    const shown = await arcCommand("show", "map-arc", {
+      ...depsFor(store, fx),
+      now: CLAIM_NOW,
+      claims: claimReaderOver({ "map-arc-plan-1": [workClaim()] }),
+    });
+    assert.equal(shown.ok, true);
+    // THE LINE. This is what the friction's session needed BEFORE it spent a worktree and an install.
+    assert.match(shown.body, /⛔ HELD by keen-sibling-caeb6e \(branch claude\/keen-sibling-caeb6e, LIVE/);
+    assert.match(shown.body, /NOT work to take \(ADR-0346 D1\)/);
+    // Out of the takeable counts and into its own, on ADR-0574 D4's precedent — still LISTED, because
+    // it is still this arc's open work.
+    assert.match(shown.body, /## Work {2}\(0 proposal · 0 ready · 0 active · 1 held by another session\)/);
+    assert.match(shown.body, /- map-arc-plan-1 {2}\[ready, anchor abcdef123\]/);
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
+test("arc show: a STALE holder leaves the work takeable — counted as ready, marked reclaimable", async () => {
+  const fx = diskFixture();
+  try {
+    const store = await seededStore();
+    const shown = await arcCommand("show", "map-arc", {
+      ...depsFor(store, fx),
+      now: CLAIM_NOW,
+      claims: claimReaderOver({
+        // 6 h past its heartbeat — beyond the 2 h reclaim window.
+        "map-arc-plan-1": [workClaim({ heartbeatAt: "2026-09-22T06:00:00.000Z" })],
+      }),
+    });
+    assert.match(shown.body, /claim STALE 6h \(keen-sibling-caeb6e\) — reclaimable, so this IS takeable/);
+    // A stale row fences nobody, so it must NOT be subtracted from the takeable counts.
+    assert.match(shown.body, /## Work {2}\(0 proposal · 1 ready · 0 active\)/);
+    assert.doesNotMatch(shown.body, /held by another session/);
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
+test("arc show: an UNREADABLE ledger renders UNKNOWN per row and never as free work", async () => {
+  const fx = diskFixture();
+  try {
+    const store = await seededStore();
+    const shown = await arcCommand("show", "map-arc", {
+      ...depsFor(store, fx),
+      now: CLAIM_NOW,
+      claims: claimReaderOver({ "map-arc-plan-1": new Error("connection refused") }),
+    });
+    // The surface still ANSWERS — `arc show` worked before the ledger existed and must keep working
+    // when it is unreachable. What it may not do is report the silence as freedom.
+    assert.equal(shown.ok, true);
+    assert.match(shown.body, /claim state UNKNOWN — the ledger read failed \(connection refused\)/);
+    assert.match(shown.body, /POSSIBLY HELD, never as free/);
+    // An UNKNOWN is not evidence of a fence either: the row stays in its own status count.
+    assert.match(shown.body, /## Work {2}\(0 proposal · 1 ready · 0 active\)/);
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
+test("arc show with NO ledger attached says UNKNOWN — an unasked question is not a clean answer", async () => {
+  const fx = diskFixture();
+  try {
+    const store = await seededStore();
+    // No `claims` on the deps at all: the offline shape, and the shape every pre-existing caller has.
+    const shown = await arcCommand("show", "map-arc", { ...depsFor(store, fx), now: CLAIM_NOW });
+    assert.match(shown.body, /claim state UNKNOWN — the claim ledger is not attached/);
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
+test("arc show reads the ledger ONLY for open rows — a closed increment's claims are history", async () => {
+  const fx = diskFixture();
+  try {
+    const store = await seededStore();
+    const w = writeDeps(store);
+    await arcIncrementAdd(w, "map-arc", { outcome: "landed", pr: "1999" });
+    const asked: string[] = [];
+    const shown = await arcCommand("show", "map-arc", {
+      ...depsFor(store, fx),
+      now: CLAIM_NOW,
+      claims: {
+        claimsFor: async (unitId: string): Promise<ClaimDocT[]> => {
+          asked.push(unitId);
+          return [];
+        },
+      },
+    });
+    assert.equal(shown.ok, true);
+    // `map-arc-plan-1` is open; the closed landing row is not asked about. Folding the log in would
+    // charge the most-delivered arcs the most for a signal that means nothing on a closed row.
+    assert.deepEqual(asked, ["map-arc-plan-1"]);
   } finally {
     rmSync(fx.root, { recursive: true, force: true });
   }

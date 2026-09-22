@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "The arc organism: the initiative overlay (ADR-0183 / ADR-0267 / ADR-0305) as its own package — the arc / increment / open-question write verbs, their ADR-0023 render surface, and the derived arc → children JOIN every surface shares. Owns the arc domain rather than lodging in @storytree/cli and @storytree/drive; consumed by the CLI, the studio server and the desktop backend.",
+  "description": "The arc organism: the initiative overlay (ADR-0183 / ADR-0267 / ADR-0305) as its own package \u00e2\u20ac\u201d the arc / increment / open-question write verbs, their ADR-0023 render surface, and the derived arc \u00e2\u2020\u2019 children JOIN every surface shares. Owns the arc domain rather than lodging in @storytree/cli and @storytree/drive; consumed by the CLI, the studio server and the desktop backend.",
   "exports": {
     ".": "./src/index.ts",
     "./arc-rollup": "./src/arc-rollup.ts"
@@ -15,6 +15,7 @@
   "dependencies": {
     "@storytree/drive": "workspace:*",
     "@storytree/library": "workspace:*",
+    "@storytree/notice-board": "workspace:*",
     "@storytree/storage-protocol": "workspace:*",
     "zod": "^3.24.1"
   },
