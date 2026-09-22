@@ -23,6 +23,7 @@
       "packages/cli/src/corpus-*.ts": "cli",
       "packages/cli/src/coverage*.ts": "cli",
       "packages/cli/src/db-cli.ts": "cli",
+      "packages/cli/src/db-schema.ts": "cli",
       "packages/cli/src/decision-altitude.ts": "cli",
       "packages/cli/src/decision-composition-trial.ts": "cli",
       "packages/cli/src/decision-control-set.ts": "cli",
