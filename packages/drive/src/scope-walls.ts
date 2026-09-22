@@ -120,7 +120,7 @@ export interface ClaudeScopeSource {
     tool: string;
     path: string;
     reason: string;
-    kind: "scope" | "outside-workspace" | "no-path";
+    kind: "scope" | "outside-workspace" | "no-path" | "helper";
   }[];
 }
 
@@ -212,6 +212,25 @@ export function liveAuthorScopeWalls(
     }
     if (v.kind === "tool-surface") {
       toolSurfaceRefusals.push({ phase: v.phase, tool: v.tool, reason: v.reason });
+      continue;
+    }
+    // ADR-0589 D2's helper refusal is DROPPED FROM THIS WIRE, deliberately and not by omission.
+    //
+    // It carries no path — it is refused before one is read — so it is not a write-fence firing, and
+    // `ScopeRefusal.path` is required: admitting it would force a fabricated path and inflate every
+    // "how often did the write fence fire?" reading, which is the exact harm `ScopeToolSurfaceRefusal`
+    // was given its own field to avoid. It is not a tool-surface refusal either: that field records
+    // WHICH TOOL was reached for, while this records WHO called — folding it in would report a
+    // helper's `Write` as an off-surface tool call, which is precisely the opposite of true, since
+    // `Write` is on the worker's surface and the caller is what was refused.
+    //
+    // It is not lost: it stays on `ClaudeAgentAuthor.violations` (D2's own record) and the build
+    // envelope reports it on its own line. Giving it persisted carriage is a wire widening with no
+    // evidence behind it yet — this wall should never fire, because a helper has no write tool, and
+    // if it DOES fire the finding is about the SDK breaking its declared-tool-list contract rather
+    // than about this build's write scope. A future decision with an actual firing in hand can add
+    // a `ScopeHelperRefusal` beside `ScopeToolSurfaceRefusal`; it would start here.
+    if (v.kind === "helper") {
       continue;
     }
     refusals.push({ phase: v.phase, kind: v.kind, tool: v.tool, path: v.path, reason: v.reason });
