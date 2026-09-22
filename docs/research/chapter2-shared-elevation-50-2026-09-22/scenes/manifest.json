@@ -1,0 +1,65 @@
+{
+  "generatedAt": "2026-09-22T14:12:37.412Z",
+  "studio": {
+    "url": "http://127.0.0.1:5219",
+    "head": "e36f2ac52905808d3007f58309dc94ec098204ce",
+    "branch": "claude/shared-elevation-50"
+  },
+  "control": "shipped",
+  "arms": [
+    {
+      "id": "shipped",
+      "spacing": {},
+      "tile": {
+        "hexR": 11.063374578680804,
+        "quota": "max(1, capabilities) × 1 hexes",
+        "tilesPerCapability": 1
+      },
+      "file": "shipped.json",
+      "islands": 36,
+      "world": {
+        "width": 854,
+        "height": 1330
+      },
+      "trails": {
+        "edges": 95,
+        "segments": 130,
+        "caves": 0,
+        "dropped": []
+      },
+      "bytes": 1051357
+    }
+  ],
+  "twoD": [
+    {
+      "view": "fit",
+      "islands": 36,
+      "scale": 1.3814647497674355,
+      "viewport": {
+        "w": 2560,
+        "h": 1600
+      },
+      "contentExtentPx": {
+        "w": 989.72705078125,
+        "h": 1684.9751739501953
+      },
+      "medianIslandWidthPx": 90.9686279296875,
+      "png": "/home/mickh/code/Storytree/.claude/worktrees/elev50/docs/research/chapter2-shared-elevation-50-2026-09-22/2d-fit.png"
+    },
+    {
+      "view": "resting",
+      "islands": 36,
+      "scale": 2.947027450249988,
+      "viewport": {
+        "w": 2560,
+        "h": 1600
+      },
+      "contentExtentPx": {
+        "w": 2183.511764526367,
+        "h": 3717.351318359375
+      },
+      "medianIslandWidthPx": 200.692626953125,
+      "png": "/home/mickh/code/Storytree/.claude/worktrees/elev50/docs/research/chapter2-shared-elevation-50-2026-09-22/2d-resting.png"
+    }
+  ]
+}
