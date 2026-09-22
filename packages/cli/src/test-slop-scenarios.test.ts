@@ -144,10 +144,17 @@ test("scenario library: an AUTHORED band is not enough on its own — the transf
   // `if (population !== "authored") continue` reads the field and then lets every other value —
   // including one the type forbids but a cast or a JSON round-trip could still produce — skip the
   // clause silently, which the mutation rung showed by blanking the literal and watching this pass.
-  for (const x of [...SCENARIOS, ...REFUSED]) {
+  //
+  // ALL THREE TIERS, because the obligation is about the BAND and every tier has one. Leaving
+  // suppressors out left the rung one live survivor on exactly that literal — and the suppressor is
+  // the entry where it mattered most, since its band is authored while both of its recorded limits
+  // were in fact found on real data, which is a distinction the reader could not previously make.
+  for (const x of [...SCENARIOS, ...SUPPRESSORS, ...REFUSED]) {
+    // A refusal carries no `limits` — its whole body IS the finding — so its `on` answers for it.
+    const recorded = "limits" in x ? x.limits : x.measured.on;
     if (x.measured.population === "authored") {
       assert.match(
-        "limits" in x ? x.limits : "",
+        recorded,
         /\bobserved\b|\breal\b|\btransfer\b/i,
         `${x.id}: its band comes from examples authored for the measurement, and it says nothing about ` +
           `observed code. Record the transfer result, or record that it has not met observed data yet.`,
