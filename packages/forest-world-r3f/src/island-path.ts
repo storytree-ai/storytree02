@@ -209,6 +209,16 @@ export function islandDocks(
   }
   for (const strip of strips) {
     if (!isDockableStrip(strip)) continue;
+    // A routed strip carries the dependency ids it represents. When it names islands, its
+    // terminal may only land on one of those shores: proximity resolves a genuine choice, but
+    // must not invent a path on an unrelated nearer island. Unnamed synthetic strips retain the
+    // historical nearest-rim behaviour.
+    const namedIslands = new Set<string>();
+    for (const edge of strip.edges ?? []) {
+      const [from, to] = edge.split('->');
+      if (from !== undefined) namedIslands.add(from);
+      if (to !== undefined) namedIslands.add(to);
+    }
     for (const end of stripEndpoints(strip)) {
       if (ends.get(vertexKey(end))!.length !== 1) continue;
       // ⚠ ONE `nearest`, NOT A SEPARATE island AND dock. They were two nullables, assigned only
@@ -221,6 +231,7 @@ export function islandDocks(
       let nearest: NearestDock | null = null;
       let best = Infinity;
       for (const i of indices(rims.length)) {
+        if (namedIslands.size > 0 && !namedIslands.has(rims[i]!.island)) continue;
         const dock = dockOnRim(grids[i]!, end);
         if (dock === null) continue;
         const d = Math.hypot(dock.x - end.x, dock.z - end.z);

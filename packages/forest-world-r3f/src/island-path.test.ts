@@ -226,6 +226,7 @@ test('fld-a-routed-junction-is-never-a-dock: a GHOST run sharing a landing canno
   assert.deepEqual(islandDocks(rim, [visible, peer]).get('ghosted-rim'), []);
 });
 
+// test-updated (new behaviour): fld-every-terminal-trail-end-docks-on-the-real-map: every terminal landing in the shipped stream docks on clipped ground now requires the named-rim rule to restore uat-detail-studio's terminal landing from studio-cloud.
 test('fld-every-terminal-trail-end-docks-on-the-real-map: every terminal landing in the shipped stream docks on clipped ground', () => {
   const source = JSON.parse(
     readFileSync(fileURLToPath(new URL('../../../docs/research/chapter2-real-forest-2026-09-08/scenes/shipped.json', import.meta.url)), 'utf8'),
@@ -263,18 +264,44 @@ test('fld-every-terminal-trail-end-docks-on-the-real-map: every terminal landing
   // islands formed no dock and therefore wore no path at all — the defect a total count alone
   // cannot see, since 52 docks on 28 islands satisfies the equality above just as well.
   assert.equal(docks.size, 35, 'the export carries 35 islands with a rim');
-  // ⚠ ONE ISLAND IS STILL SHORT, AND IT IS A DIFFERENT DEFECT — pinned here rather than asserted
-  // away. `uat-detail-studio`'s only terminal landing sits 5.29 units off its own rim and 4.43 off
-  // `studio-cloud`'s, so the nearest-island rule hands the dock to a shore the trail's edge keys
-  // (`uat-criterion-detail->uat-detail-studio`, `studio->uat-detail-studio`) never name. ADR-0504's
-  // docstring premise — that two islands are never within one reach of the same end — is false on
-  // the real map. Closing it is this lane's next unit; until then the exact shortfall is recorded
-  // so it cannot grow unnoticed.
   assert.deepEqual(
     [...docks.entries()].filter(([, found]) => found.length === 0).map(([island]) => island),
-    ['uat-detail-studio'],
-    'exactly one island is left dockless, by the nearest-island rule rather than by the network',
+    [],
+    'every island named by a terminal trail end receives its real-map dock',
   );
+});
+
+test('fld-a-dock-lands-on-an-island-the-trail-names: named rims beat a nearer unrelated rim, without relaxing the terminal or reach rules', () => {
+  // The endpoint lies three units from WEST but only one from EAST. Its edge names WEST, so the
+  // current nearest-rim rule wrongly puts the dock on EAST; a candidate set derived from the
+  // strip's `from->to` keys must select WEST before proximity breaks any remaining tie.
+  const channel = [island('west', 0, 0, 40), island('east', 44, 0, 40)];
+  const namedWest = strip(
+    { x: 42, z: 200 },
+    { x: 43, z: 20 },
+    { edges: ['source->west'] },
+  );
+  const named = islandDocks(channel, [namedWest]);
+  assert.deepEqual(named.get('west'), [{ x: 40, z: 20 }]);
+  assert.deepEqual(named.get('east'), []);
+
+  // No edge keys retain the old nearest-rim fallback, so synthetic crowd strips with no declared
+  // island still land. A named shore beyond the sanity bound does not become a dock merely by
+  // being named.
+  const unnamed = islandDocks(channel, [strip({ x: 42, z: 200 }, { x: 43, z: 20 })]);
+  assert.deepEqual(unnamed.get('west'), []);
+  assert.deepEqual(unnamed.get('east'), [{ x: 44, z: 20 }]);
+  const tooFar = islandDocks(channel, [strip({ x: 42, z: 200 }, { x: 200, z: 20 }, { edges: ['source->west'] })]);
+  assert.deepEqual([...tooFar.entries()], [['west', []], ['east', []]]);
+
+  // Terminal exclusion happens first: naming WEST cannot rescue two visible strips that share an
+  // otherwise dockable endpoint.
+  const shared = { x: 43, z: 20 };
+  const junction = islandDocks(channel, [
+    strip({ x: 42, z: 200 }, shared, { edges: ['source->west'] }),
+    strip({ x: 42, z: -200 }, shared, { edges: ['source->west'] }),
+  ]);
+  assert.deepEqual([...junction.entries()], [['west', []], ['east', []]]);
 });
 
 test('islandDocks assigns an end within reach of TWO islands to the NEARER one, on either axis', () => {
