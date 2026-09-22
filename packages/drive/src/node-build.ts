@@ -1154,6 +1154,24 @@ function feedbackRunsLine(runs: readonly { phase: string; tool: string; code: nu
   );
 }
 
+/**
+ * The helper line for the Claude branch (ADR-0589 D3): how many read-only helpers each phase
+ * started, and how long they took.
+ *
+ * The TOTAL is rendered beside the per-helper breakdown because the two answer different questions —
+ * "four helpers" and "four helpers that took eleven minutes between them" are different facts about
+ * the same build, and only the second explains where a budget went. Seconds, floored: a helper that
+ * ran is never reported as having taken no time.
+ */
+function helperRunsLine(runs: readonly { phase: string; agentType: string; ms: number }[]): string {
+  const totalMs = runs.reduce((sum, h) => sum + h.ms, 0);
+  return (
+    `helpers:     ${runs.length} read-only helper(s), ${Math.floor(totalMs / 1000)}s total — ` +
+    `${runs.map((h) => `${h.phase}:${h.agentType}=${Math.floor(h.ms / 1000)}s`).join(", ")} ` +
+    "(exploration only; helpers never write, and the build's own clock bounds them)"
+  );
+}
+
 /** The namespace `CodexPhaseAuthor` puts on every feedback tool name; the armed line strips it. */
 // Stryker disable next-line Regex: EQUIVALENT — every `CodexPhaseAuthor.feedbackToolNames` entry is built as `mcp__spine__${name}` by its constructor (packages/agent/src/codex-author.ts), so the prefix always sits at index 0, and a non-global replace strips that same first occurrence with or without the `^` anchor.
 const SPINE_FEEDBACK_TOOL_PREFIX = /^mcp__spine__/;
@@ -1223,8 +1241,19 @@ export function liveLeafLines(liveAuthor: LiveAuthor): string[] {
         : []),
       `scope walls: ${liveAuthor.violations.length === 0 ? "no write refusals" : liveAuthor.violations.map((v) => `${v.phase}:${v.path}`).join(", ")}`,
       codexFeedbackLine(liveAuthor),
+      // ADR-0589 D4, stated rather than left as an empty line: a Codex build reports no helpers
+      // because it HAS none, not because its worker declined to use them. Unconditional for the
+      // same reason the line exists — a reader comparing two runtimes' envelopes must not have to
+      // infer which of those two a missing line meant.
+      "helpers:     none — the Codex runtime supplies no read-only helpers (its sandbox is per-process, not per-agent)",
     ];
   }
+  // Split ONCE, exactly as the pi branch splits its tool-surface refusals and for the same reason
+  // (ADR-0446): a helper refusal (ADR-0589 D2) carries no path and is not a write-fence firing, so
+  // folding it into the write count would inflate the one number that line exists to report — and
+  // it would render as `AUTHOR_TEST:(helper)`, a path-shaped entry naming no path.
+  const claudeWriteRefusals = liveAuthor.violations.filter((v) => v.kind !== "helper");
+  const claudeHelperRefusals = liveAuthor.violations.filter((v) => v.kind === "helper");
   return [
     `leaf:        Claude Agent SDK (${liveAuthor.runs.map((r) => `${r.phase}: ${r.subtype}, ${r.turns} turns`).join("; ") || "no slices ran"})`,
     `cost:        $${liveAuthor.totalCostUsd.toFixed(4)} SDK-reported (subscription-billed)`,
@@ -1239,8 +1268,20 @@ export function liveLeafLines(liveAuthor: LiveAuthor): string[] {
             .join("; ")}`,
         ]
       : []),
-    `scope walls: ${liveAuthor.violations.length === 0 ? "no write refusals" : liveAuthor.violations.map((v) => `${v.phase}:${v.path}`).join(", ")}`,
+    `scope walls: ${claudeWriteRefusals.length === 0 ? "no write refusals" : claudeWriteRefusals.map((v) => `${v.phase}:${v.path}`).join(", ")}`,
+    // Rendered ONLY when it fired, unlike the line above. A helper has no write tool at all, so
+    // this wall firing means the SDK did not honour the declared tool list — a finding about the
+    // runtime rather than routine accounting, and one that should not have a reassuring "none"
+    // line standing in for it on every build.
+    ...(claudeHelperRefusals.length === 0
+      ? []
+      : [
+          `helper wall: ${claudeHelperRefusals.length} write(s) refused from inside a helper — ` +
+            `${claudeHelperRefusals.map((v) => `${v.phase}:${v.tool}`).join(", ")} ` +
+            "(helpers are declared read-only; the SDK admitted a write tool it was not given)",
+        ]),
     ...(liveAuthor.feedbackRuns.length > 0 ? [feedbackRunsLine(liveAuthor.feedbackRuns)] : []),
+    ...(liveAuthor.helperRuns.length > 0 ? [helperRunsLine(liveAuthor.helperRuns)] : []),
   ];
 }
 
