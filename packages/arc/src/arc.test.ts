@@ -30,6 +30,7 @@ import {
   arcIncrementNew,
   arcIncrementPromote,
   arcScopeOf,
+  renderArcRollup,
   storyArcStamps,
   type ArcClaimReader,
   type ArcViewDeps,
@@ -4597,6 +4598,88 @@ test("arc show reads the ledger ONLY for open rows — a closed increment's clai
     // `map-arc-plan-1` is open; the closed landing row is not asked about. Folding the log in would
     // charge the most-delivered arcs the most for a signal that means nothing on a closed row.
     assert.deepEqual(asked, ["map-arc-plan-1"]);
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
+/** A rollup carrying one open increment, for renderer-level tests that need no store. */
+function rollupWithIncrement(status: string, over: Record<string, unknown> = {}) {
+  return deriveArcRollup({
+    arc: {
+      id: "r-arc",
+      kind: "arc",
+      doc: { kind: "arc", id: "r-arc", title: "R", description: "d", intent: "i", endState: "e" },
+    } as never,
+    incrementDocs: [
+      {
+        id: "r-inc",
+        kind: "increment",
+        doc: {
+          kind: "increment",
+          id: "r-inc",
+          title: "An open unit",
+          description: "d",
+          objective: "THE OBJECTIVE LINE",
+          body: "b",
+          arcRef: "asset:r-arc",
+          status,
+          ...over,
+        },
+      } as never,
+    ],
+    questionDocs: [],
+    adrs: [],
+    storyStamps: [],
+  });
+}
+
+test("renderArcRollup without a claims map renders normally — the 5-arg contract still holds", () => {
+  // `renderArcRollup` is exported and the claims map is the SIXTH parameter. A caller that predates
+  // it (or any surface that has no ledger in hand) must still get a working render rather than a
+  // throw on `claims.get`. `arcShow` always passes one; this pins the other half of the contract.
+  const body = renderArcRollup(rollupWithIncrement("proposal"), true, CLAIM_NOW).join("\n");
+  assert.match(body, /## Work {2}\(1 proposal · 0 ready · 0 active\)/);
+  assert.match(body, /- r-inc {2}\[proposal\]/);
+  // No claim vocabulary at all — it was never asked, so it says nothing rather than guessing.
+  assert.doesNotMatch(body, /HELD|STALE|UNKNOWN|held by another session/);
+});
+
+test("an UNHELD proposal row emits NO line between the row and its objective", () => {
+  // Silence is the behaviour here, and it is asserted as adjacency rather than as an absence: a
+  // renderer that pushed a null/empty line would still satisfy a `doesNotMatch` on the wording.
+  const claims = new Map([["r-inc", { state: "unheld" as const }]]);
+  const lines = renderArcRollup(rollupWithIncrement("proposal"), true, CLAIM_NOW, {}, undefined, claims);
+  const row = lines.findIndex((l) => l.includes("- r-inc"));
+  assert.ok(row !== -1);
+  assert.equal(lines[row + 1], "      THE OBJECTIVE LINE", "the objective must follow the row directly");
+});
+
+test("work WAITING ON THE OWNER is counted as waiting even when a live claim also sits on it", async () => {
+  // Both signals can be true at once — a session can hold a claim on work the owner has not yet
+  // unblocked — and they must not double-count: the row leaves the takeable counts EXACTLY ONCE.
+  // The owner gate is the outer reason the work cannot be taken (settling it is what releases the
+  // work), so it is the one that names the row.
+  const fx = diskFixture();
+  try {
+    const store = await seededStore();
+    const w = writeDeps(store);
+    await arcIncrementNew(w, "map-arc", { id: "asked-and-held", title: "Both", ...BODY });
+    await arcIncrementPromote(w, "asked-and-held", "active");
+    await askOwner(store, "oq-which-way");
+    await linkWaitsOn(store, "asked-and-held", ["oq-which-way"]);
+
+    const shown = await arcCommand("show", "map-arc", {
+      ...depsFor(store, fx),
+      now: CLAIM_NOW,
+      claims: claimReaderOver({ "asked-and-held": [workClaim({ unitId: "asked-and-held" })] }),
+    });
+    assert.equal(shown.ok, true);
+    // Counted ONCE, as waiting — never also as `held by another session`.
+    assert.match(shown.body, /1 waiting on the owner\)/);
+    assert.doesNotMatch(shown.body, /held by another session/);
+    // It still SAYS who holds it, because that is what the next session needs once the gate lifts.
+    assert.match(shown.body, /HELD by keen-sibling-caeb6e/);
   } finally {
     rmSync(fx.root, { recursive: true, force: true });
   }

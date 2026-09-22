@@ -130,7 +130,14 @@ test("an increment nobody looked up is UNKNOWN, not unheld — the defect may no
     now: NOW,
   });
   assert.equal(out.get("asked")?.state, "unheld");
-  assert.equal(out.get("never-asked")?.state, "unknown");
+  const missing = out.get("never-asked");
+  assert.equal(missing?.state, "unknown");
+  // The REASON is asserted, not just the state: a surface that says "unknown" without saying why
+  // gives a reader nothing to act on, and an empty reason renders as a bare shrug.
+  assert.equal(
+    missing?.state === "unknown" && missing.reason,
+    "the ledger was not consulted for this increment",
+  );
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -166,6 +173,9 @@ test("UNHELD is silent on proposal/ready and NAMES the anomaly on active", () =>
   const active = renderIncrementClaimLine(unheld, "active", age);
   assert.ok(active !== null);
   assert.match(active, /`active` but NO claim holds it/);
+  // It says the work IS takeable. Without that the row reads as a warning to stay away, which is the
+  // opposite of the truth — nobody holds it.
+  assert.match(active, /Takeable/);
   // The status is NOT demoted — ADR-0386 rejected demotion and ADR-0384 P1 is forward-only — so what
   // the surface owes is the sanctioned in-place correction, not a silent flip.
   assert.match(active, /--set status=<prior> --pg/);
@@ -181,6 +191,10 @@ test("STALE prints its age and says the work IS takeable; UNKNOWN says possibly-
   assert.ok(stale !== null);
   assert.match(stale, /claim STALE 6h/);
   assert.match(stale, /IS takeable/);
+  // The citation is load-bearing, not decoration: it is the REASON a stale hold is takeable (the
+  // next claimer reclaims the row in the same transaction), and a reader who doubts "takeable" has
+  // nowhere to check without it.
+  assert.match(stale, /same transaction \(ADR-0200 D2\)/);
 
   const unknown = renderIncrementClaimLine(
     classifyIncrementClaim({ ok: false, reason: "the ledger read failed (boom)" }, NOW),
@@ -197,4 +211,29 @@ test("STALE prints its age and says the work IS takeable; UNKNOWN says possibly-
 
 test("a state nobody supplied renders nothing at all — an absent map is not an assertion", () => {
   assert.equal(renderIncrementClaimLine(undefined, "active", age), null);
+});
+
+test("an intent that is EMPTY or only whitespace is ABSENT, not a blank string", () => {
+  // A holder row carries free prose (ADR-0346 D3) and nothing validates it, so "" and "   " both
+  // reach here. Rendering either would print a holder who appears to have said something and said
+  // nothing — so the field is omitted rather than carried empty.
+  for (const blank of ["", "   ", "\t\n  "]) {
+    const state = classifyIncrementClaim({ ok: true, rows: [claim({ intent: blank })] }, NOW);
+    assert.equal(state.state, "held");
+    assert.equal(
+      state.state === "held" && state.holder.intent,
+      undefined,
+      `intent ${JSON.stringify(blank)} must be absent, never carried as a blank`,
+    );
+  }
+  // And a real intent is TRIMMED rather than passed through with its padding.
+  const padded = classifyIncrementClaim({ ok: true, rows: [claim({ intent: "  real work  " })] }, NOW);
+  assert.equal(padded.state === "held" && padded.holder.intent, "real work");
+});
+
+test("claimHoldsWork(undefined) is false — an increment nobody classified holds nothing", () => {
+  // The counts call this for EVERY forward row, including any the map has no entry for. Reaching
+  // into an absent state would throw and take the whole render down with it; answering `true` would
+  // hide open work. Neither: an absent state is simply not a live hold.
+  assert.equal(claimHoldsWork(undefined), false);
 });

@@ -88,14 +88,18 @@ export function classifyIncrementClaim(read: IncrementClaimRead, now: Date): Inc
   if (!read.ok) return { state: "unknown", reason: read.reason };
 
   const work = classifyClaims(read.rows, now).filter(({ claim }) => claimGrade(claim) === "work");
-  if (work.length === 0) return { state: "unheld" };
-
   const live = work.filter((w) => !w.stale);
   // OLDEST first within each band: `claimsFor` is already in queue order (ascending `claimed_at`,
   // ADR-0200 D2), so the first row is the one the store treats as the holder. Preserving that order
   // is what keeps this surface naming the same session the refusal message would name.
-  const chosen = live.length > 0 ? live[0] : work[0];
-  /* c8 ignore next */
+  //
+  // ONE guard, not two. An explicit `work.length === 0` early return stood here beside this one and
+  // was redundant: with no work rows there is no first row either, so both arms returned `unheld` and
+  // the second subsumed the first. That made the pair mutually masking — negating either left the
+  // other to produce the identical answer, so no test could tell them apart, which the mutation rung
+  // reported as two survivors and a dead branch rather than as the duplication it was.
+  const liveHolder = live[0];
+  const chosen = liveHolder ?? work[0];
   if (chosen === undefined) return { state: "unheld" };
 
   // Built in statements rather than a conditional spread: `exactOptionalPropertyTypes` plus the
@@ -108,7 +112,7 @@ export function classifyIncrementClaim(read: IncrementClaimRead, now: Date): Inc
   };
   const intent = chosen.claim.intent.trim();
   const holder: IncrementClaimHolder = intent === "" ? base : { ...base, intent };
-  return live.length > 0 ? { state: "held", holder } : { state: "stale", holder };
+  return liveHolder === undefined ? { state: "stale", holder } : { state: "held", holder };
 }
 
 /**
