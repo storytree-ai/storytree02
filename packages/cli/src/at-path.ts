@@ -183,6 +183,12 @@ export const LITERAL_FLAGS: ReadonlySet<string> = new Set([
   // `node build <id> --real --time-budget <minutes>` (ADR-0581 D2): the build's wall clock, as a
   // number of minutes. A figure, never prose — `@path` here would read a file where an integer goes.
   "time-budget",
+  // `node build <id> --real --hold-grace <minutes>` (ADR-0592 D3) and `node extend <id> --minutes <n>`:
+  // both are figures, for the same reason `--time-budget` is. (`node extend`'s `--run` needs no entry —
+  // it is the same run-id flag `node adjudicate` already declares, below, and one flag is in one list.
+  // `--reason` is PROSE and already declared: it is the durable why an extension is recorded with.)
+  "hold-grace",
+  "minutes",
   // `node build <id> --real --revise-test <run-id>` (ADR-0571 D3): ONE run id naming the failed build
   // whose escalation record the re-run's test author revises against. An identity, never content —
   // the orchestrator names WHICH escalation and never handles its text, so `@path` here would bring

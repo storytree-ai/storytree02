@@ -252,3 +252,15 @@ test("`node build --time-budget` is LITERAL — a number of minutes, never prose
   assert.equal(LITERAL_FLAGS.has("time-budget"), true, "time-budget must be literal");
   assert.equal(PROSE_FLAGS.has("time-budget"), false, "a count of minutes is a figure, never a record");
 });
+
+test("ADR-0592's two figure flags are LITERAL, not prose", () => {
+  // The generic exhaustiveness sweep above only asks that every declared string flag be classified
+  // somewhere, so it stays green if one drifts to the wrong list — which for these two would make
+  // `--hold-grace @notes.md` read a FILE where a number belongs. Named here because that sweep is also
+  // what kills their mutants, and a mutant killed only by a test this branch did not touch is one the
+  // branch's own suite cannot discriminate.
+  assert.equal(LITERAL_FLAGS.has("hold-grace"), true);
+  assert.equal(PROSE_FLAGS.has("hold-grace"), false);
+  assert.equal(LITERAL_FLAGS.has("minutes"), true);
+  assert.equal(PROSE_FLAGS.has("minutes"), false);
+});

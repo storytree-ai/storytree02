@@ -102,7 +102,8 @@ import type { SessionIdentity } from "./noticeboard.js";
 import { emitWisp, gateEmitWisp } from "./wisp-smoke.js";
 import type { EmitWispArgs, EmitWispDeps, GateEmitWispOpts } from "./wisp-smoke.js";
 import { staleExistenceClaimRefusal } from "./stale-existence-claim.js";
-import { chooseTimeBudgetMs } from "./time-budget.js";
+import { resolveHoldsDir } from "./build-hold.js";
+import { chooseHoldGraceMs, chooseTimeBudgetMs } from "./time-budget.js";
 
 /**
  * ADR-0082: the story's OWN UAT crown rolled up from its per-test signed verdicts, as a report line.
@@ -565,6 +566,14 @@ export interface StoryBuildOpts {
    * — and nothing has decided one. Default: two hours per member, held by the spine.
    */
   timeBudget?: string | undefined;
+  /**
+   * `--hold-grace <minutes>` — how long each member build HOLDS at a spent clock for the orchestrator
+   * (ADR-0592 D3). Per MEMBER, exactly as {@link timeBudget} is: the hold is a property of one build's
+   * clock, and a chain has one clock per member rather than one across the chain.
+   */
+  holdGrace?: string | undefined;
+  /** Injectable for tests: where a member announces a hold. Default `defaultHoldsDir()`. */
+  holdsDir?: string | undefined;
   /** `--actor` — the signer chain's flag tier. */
   actor?: string;
   /**
@@ -746,6 +755,15 @@ export async function storyBuild(
         "--max-turns is fixed at 1 with --runtime codex: each prove-it phase is exactly one " +
         "non-interactive Codex turn. Omit the flag or pass --max-turns 1.",
       next: [`storytree story build ${storyId} ${real ? "--real --increment <increment-id>" : "--live"} --runtime codex`],
+    };
+  }
+  // ADR-0592 D3: how long each member's spent clock holds for the orchestrator.
+  const holdGrace = chooseHoldGraceMs(opts.holdGrace, { real });
+  if (!holdGrace.ok) {
+    return {
+      ok: false,
+      body: holdGrace.reason,
+      next: [`storytree story build ${storyId} --real --increment <increment-id> --hold-grace 10`],
     };
   }
   // ADR-0581 D2: each member build's wall clock. The whole decision — parse, validate, and the
@@ -958,6 +976,7 @@ export async function storyBuild(
   // drives, its record present and describing that member's own returned escalation — before the
   // ledger preflight, the database, the claims, the worktree and every leaf.
   const escalationsDir = resolveEscalationsDir(opts.escalationsDir);
+  const holdsDir = resolveHoldsDir(opts.holdsDir);
   const revisionTarget = parseStoryRevisionTarget(opts.reviseTest, driveOrder.map((n) => n.id));
   if (!revisionTarget.ok) return { ok: false, body: revisionTarget.reason, next: [] };
   let testRevision: TestRevision | undefined;
@@ -1222,6 +1241,13 @@ export async function storyBuild(
             // Unconditional: `undefined` IS "no override" to the build, so a guard would be a mutant
             // no test could kill.
             realArgs.timeBudgetMs = timeBudget.ms;
+            // ADR-0592: per member too, and for the same reason — a member that spends its own clock is
+            // the one that holds, and it announces the hold under ITS OWN id. ⚠ A peek matches on the id
+            // in the registered argv, which for a chain is the STORY's (ADR-0588's own warning), so the
+            // orchestrator extends `node extend <member-id>` while it peeks the story. `node extend`
+            // answers a miss by listing what is actually held, so the mismatch is a pointer.
+            realArgs.holdGraceMs = holdGrace.ms;
+            realArgs.holdsDir = holdsDir;
             // ADR-0571 (amended for story chains): every member records its own returned escalation
             // under its id and this chain's run id, and ONLY the member the revision names receives it
             // — its record's unitId is that member's id (readTestRevision refuses any other).
