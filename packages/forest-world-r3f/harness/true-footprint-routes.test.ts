@@ -71,20 +71,27 @@ test('⚠⚠ THE FIXTURE ISLAND’S TRUE FOOTPRINT IS THE RECIPE’S OWN HEX CLU
 
   // ⚠ THE RED→GREEN OF THE DELETION. Until 2026-09-08 this arm went through the repair and came
   // back at ~135 too; the mapper now lays the drawing down as written, so it is the squashed ribbon
-  // the 2D page actually carries — the same width, a third of the depth.
+  // the 2D page actually carries — the same width, a fraction of the depth. Under ADR-0593 D1 (land
+  // camera 20 -> 50 degrees) that fraction grew: 46.2 (≈ sin 20° of 135) at the retired camera, now
+  // 103.4 (≈ sin 50° of 135) — still squashed relative to the true 135, but far less so.
   const drawn = depthOf(drawing);
   assert.ok(Math.abs(drawn.w - shape.w) < 1e-9, 'width untouched — x is the projection’s fixed axis');
-  assert.ok(drawn.d > 40 && drawn.d < 55, `drawn depth ${drawn.d}`);
+  assert.ok(drawn.d > 95 && drawn.d < 110, `drawn depth ${drawn.d}`);
 
   // ⚠ AND THE TWO DIFFER BY EXACTLY THE PROJECTION, TO THE DRAWING'S OWN ROUNDING AND NO CLOSER —
   // a bound that is derived, not chosen. The scene writes its path coordinates to ONE decimal, so
-  // each arm carries up to ±0.05 on the coordinate it rounds, and dividing the drawn z by sin 20°
-  // multiplies its share by 2.9238. A tolerance tighter than that fails on noise; one looser than a
-  // cell (>= 8.66 units across) would accept a different island.
+  // each arm carries up to ±0.05 on the coordinate it rounds, and dividing the drawn z by
+  // sin(land camera) multiplies its share by `1 / sin(land camera)`. At the live 50-degree camera
+  // that is ~1.3054 (it was ~2.9238 at the retired 20 degrees — raising the camera shrinks the
+  // amplifier, so the tolerance TIGHTENED from ~0.1962 to ~0.1153). A tolerance tighter than that
+  // fails on noise; one looser than a cell (>= 8.66 units across) would accept a different island.
   const rounding = 0.05;
   const tolerance = rounding * (1 + 1 / groundFlattening());
-  assert.ok(tolerance > 0.18 && tolerance < 0.25, `tolerance ${tolerance}`);
-  assert.ok(Math.abs(drawn.d / groundFlattening() - shape.d) < tolerance, `${drawn.d} / sin 20° against ${shape.d}`);
+  assert.ok(tolerance > 0.1 && tolerance < 0.13, `tolerance ${tolerance}`);
+  assert.ok(
+    Math.abs(drawn.d / groundFlattening() - shape.d) < tolerance,
+    `${drawn.d} / sin(land camera) against ${shape.d}`,
+  );
 
   // Cell for cell, not only edge to edge: every plan-view cell has a twin in the drawing whose ring
   // matches once the drawn z is divided by the projection. Read RELATIVE TO THE ISLAND'S CENTRE —
@@ -154,9 +161,12 @@ test('⚠⚠ RECIPE_ISLAND_AREA IS THE FIXTURE ISLAND’S OWN AREA THROUGH THE S
   //      multiplied by 1/sin 20° = 2.9238. Read off a plan-view scene the rounding is carried once,
   //      so the residue over thirteen IDEAL hexes (24,622.0) falls from ~9.8 units² to ~3.1. The new
   //      figure is the CLOSER of the two to the recipe's own geometry.
-  //   3. THE SQUASHED RIBBON (the scene at the DECLARED camera, unsized) — 8,424.6; the true
-  //      footprint is exactly 1 / sin 20° = 2.9238x that. It is what the mapper now lays down for a
-  //      caller that hands over a drawing (ADR-0546 D1), which is why it stays pinned.
+  //   3. THE SQUASHED RIBBON (the scene at the DECLARED camera, unsized) — 18,850.1 at the live
+  //      50-degree camera (ADR-0593 D1; it was 8,424.6 at the retired 20 degrees); the true
+  //      footprint is exactly `1 / sin(land camera)` (~1.3054 now, ~2.9238 before) times that. It
+  //      is what the mapper now lays down for a caller that hands over a drawing (ADR-0546 D1),
+  //      which is why it stays pinned — to whatever the live camera makes it, not to a literal
+  //      camera value.
   //
   // ⚠ WHICH SCENE CARRIES WHICH BASIS MOVED ON 2026-09-08 AND THE NUMBERS DID NOT. Bases 2 and 3
   // used to be selected by an argument to the MAPPER; they are selected by the camera the SCENE is
@@ -174,7 +184,10 @@ test('⚠⚠ RECIPE_ISLAND_AREA IS THE FIXTURE ISLAND’S OWN AREA THROUGH THE S
   );
   assert.ok(Math.abs(drawnTrue - 24625.1) < 0.05, `drawn true-footprint area ${drawnTrue}`);
   const drawn = cellsArea(parcelCellsFrom(worldTo3D(islandScene(), { landAreaPerCapability: null })));
-  assert.ok(Math.abs(drawn - 8424.6) < 0.05, `drawn area ${drawn} — the old basis`);
+  // Re-measured under ADR-0593 D1 (land camera 20 -> 50 degrees): 18,850.1, up from 8,424.6 at the
+  // retired 20 degrees — `drawnTrue` is unaffected (basis 2 is built at `PLAN_VIEW_ELEVATION_DEG`,
+  // which did not move), so the ratio below is what actually carries the camera's move.
+  assert.ok(Math.abs(drawn - 18850.1) < 0.05, `drawn area ${drawn} — the old basis`);
   // ⚠ TO THE DRAWING'S ROUNDING, NOT TO THE BIT, AND THAT LOOSENING IS ADR-0546 D1's. The two used
   // to be the SAME scene, one of them stretched by the mapper, so the ratio was the stretch exactly.
   // They are two separate builds now — one at plan view, one at the land camera — each rounding its

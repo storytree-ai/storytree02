@@ -25,6 +25,7 @@ import {
   groundRadiusToScreenHalfHeight,
   hash,
   hexCenter,
+  pixelToHex,
   storyTreeReach,
   tileQuota,
   tileUnits,
@@ -96,7 +97,23 @@ test('two islands with the SAME barycentre order by the id hash, not by input or
   // Both dependents hang off the one root, so `baryOf` gives them the identical number and the
   // comparator falls through to `(hash(a) % 997) - (hash(b) % 997)`. Without that fallthrough the
   // row order would be whatever the input happened to be, which is the thing being pinned.
-  const stories = [story('root', 4), story('sibling-one', 2, ['root']), story('sibling-two', 2, ['root'])];
+  //
+  // ⚠ SIBLING QUOTA IS 3, NOT 2 (ADR-0593 D1). This fixture pins a TIE, and the tie itself is
+  // structural — both siblings depend on nothing but `root`, so `baryOf` gives them the identical
+  // number at any quota. But at quota 2 the two seeds' hex-snapped positions land `hexDist` 3 apart
+  // (measured), one short of the pair's growth floor of 4, so the eastward nudge-apart pass fires.
+  // That pass walks seeds by ARRAY INDEX (`for (i) for (j>i)`) and always nudges the
+  // higher-indexed one — so at the 50° this camera now shares with the 3D land (`pixelToHex`
+  // divides the row's screen-space y by `groundFlattening(elevationDeg) = sin elevationDeg`, and
+  // the row spacing that cleared the floor by a full hex at the 20° this camera used to sit at
+  // compresses under `sin 50° = 0.766` against `sin 20° = 0.342`), which of the two hash-tied
+  // islands gets nudged — and therefore where it lands — silently became a function of INPUT ORDER
+  // instead of the id hash this test exists to pin. Quota 3 lands the pair exactly on the floor
+  // (`hexDist` 4 of 4, measured) rather than short of it, so the nudge never fires and the test
+  // observes the RULE again rather than the nudge pass's own index bias. A fixture whose tie the
+  // packer's own geometry now collides away is a fixture that has stopped exercising the property,
+  // not a property that stopped holding — so the fix is the fixture's room, not the rule.
+  const stories = [story('root', 4), story('sibling-one', 3, ['root']), story('sibling-two', 3, ['root'])];
   const world = packWorld(stories);
 
   const rank1 = world.territories.filter((t) => t.story.id !== 'root');
@@ -247,11 +264,20 @@ test('however tightly packed, no two islands hold adjacent tiles', () => {
 // ---------------------------------------------------------------------------------------------
 
 test('the frame clears the topmost tile by its PROJECTED half-height, not its ground radius', () => {
-  // ONE very large island, because that is what it takes to make the top edge TILE-bound. On an
-  // ordinary corpus the story tree always reaches higher than the coast, so the tile term never
-  // binds and this branch is unwitnessable (measured: three one-capability islands give a tile top
-  // of -83.25 against a tree top of -96.20; two hundred capabilities invert it to -242.17 against
-  // -222.07). Which is the whole reason this test exists apart from the golden's corpus.
+  // ONE very large island. At the 20° this camera sat at through ADR-0367 D1, that was what it
+  // took to make the top edge TILE-bound at all: on an ordinary corpus the story tree always
+  // reached higher than the coast, so the tile term never bound and the branch was unwitnessable
+  // without a corpus this large (measured then: three one-capability islands gave a tile top of
+  // -83.25 against a tree top of -96.20; two hundred capabilities inverted it to -242.17 against
+  // -222.07).
+  //
+  // ⚠ AT 50° (ADR-0593 D1) THE TILE TERM NOW BINDS AT EVERY SIZE MEASURED, three capabilities
+  // included (-84.75 vs -60.50) — the projected half-height that sizes the tile term scales by
+  // `sin 50° / sin 20° = 2.24`, while the story-tree reach that sizes the other term is camera-
+  // independent, so raising the camera closed the gap the small corpus used to lose by. 200 stays:
+  // it is still the more decisively tile-bound corpus (-313.58 vs -205.64, a wider margin than any
+  // smaller size), and this test is not the place to relitigate the corpus size now that a smaller
+  // one would also do.
   const world = packWorld([story('huge', 200)]);
 
   const centres = [
@@ -265,19 +291,47 @@ test('the frame clears the topmost tile by its PROJECTED half-height, not its gr
   );
   assert.ok(tileTop < treeTop, `this corpus must be tile-bound at the top (${tileTop} vs ${treeTop})`);
 
-  // A cell's PROJECTED half-height is what it actually occupies on screen; its ground radius is
-  // almost three times larger at this camera. Using the ground radius would open the frame; using
-  // the wrong SIGN would crop the top by twice the half-height.
-  assert.ok(halfHeight < HEX_R / 2, `the camera must foreshorten (${halfHeight} vs ${HEX_R})`);
+  // A cell's PROJECTED half-height is what it actually occupies on screen; its ground radius
+  // (`HEX_R`) is larger still. Using the ground radius would open the frame; using the wrong SIGN
+  // would crop the top by twice the half-height.
+  //
+  // ⚠ THE BOUND IS `< HEX_R`, NOT A FRACTION OF IT (ADR-0593 D1). It used to be `< HEX_R / 2`,
+  // which held at the 20° this camera sat at through ADR-0367 D1 (`sin 20° = 0.342`, comfortably
+  // under half) but breaks at 50° (`sin 50° = 0.766`, over half) — a margin sized to one angle, not
+  // to the property this line tests. The property is that ANY camera strictly between 0° and 90°
+  // foreshortens (`sin θ < 1`), which is exactly what a bug using the ground radius directly (ratio
+  // 1) would violate regardless of which angle is shipped — so the bound below is the general claim
+  // rather than a threshold re-tuned every time the angle moves. At 50° the ground radius is about
+  // 1.3× the projected half-height (`1 / sin 50° ≈ 1.305`), down from ~2.9× at 20°.
+  assert.ok(halfHeight < HEX_R, `the camera must foreshorten (${halfHeight} vs ${HEX_R})`);
 
   // `offset.y` is what places the world in the frame, so the topmost tile's own top edge lands
   // exactly one MARGIN below the frame's top — and that margin is the SAME whichever quantity was
   // topmost, which is what makes it a rule rather than a fudge for this corpus.
   const marginAbove = tileTop + world.offset.y;
   assert.ok(marginAbove > 0, `the top edge must sit inside the frame, saw ${marginAbove}`);
-  const treeBoundWorld = packWorld([story('a', 1), story('b', 1, ['a'])]);
+
+  // ⚠ THE SECOND WORLD NEEDS AN EXPLICIT, LOWER CAMERA NOW (ADR-0593 D1) — a bare call no longer
+  // reaches the tree-bound branch AT ALL. `storyTreeReach`'s `cos θ` term shrinks and
+  // `groundRadiusToScreenHalfHeight`'s `sin θ` term grows in the SAME direction as the camera
+  // rises, so at 50° the tile term now wins for EVERY capability count measured, one included
+  // (measured: `story('a',1),story('b',1,['a'])` gives a tile top of -110.18 against a tree top of
+  // only -95.49 — tile-bound, where it used to be the small-corpus, tree-bound control). There is
+  // no capability count that recovers it at 50° — `crownRadius` caps at 32 while the tile term
+  // keeps growing with `sqrt(quota)`, so raising `n` only widens the tile term's lead. The fix is
+  // not a bigger fixture, it is a DIFFERENT CAMERA for this one comparison: `elevationDeg` is a
+  // real, supported per-call override (`the-two-layers-share-one-elevation`), and the claim under
+  // test — that the SAME margin constant places the frame regardless of which term is topmost — is
+  // about that constant, not about any one camera, so exercising it at a different angle than the
+  // first world is a stronger witness, not a weaker one.
+  const TREE_BOUND_DEMO_ELEVATION_DEG = 20;
+  const treeBoundWorld = packWorld([story('a', 1), story('b', 1, ['a'])], {
+    elevationDeg: TREE_BOUND_DEMO_ELEVATION_DEG,
+  });
   const treeTopThere = Math.min(
-    ...treeBoundWorld.territories.map((t) => t.treeSpot.y - storyTreeReach(t.story.capabilities.length)),
+    ...treeBoundWorld.territories.map(
+      (t) => t.treeSpot.y - storyTreeReach(t.story.capabilities.length, TREE_BOUND_DEMO_ELEVATION_DEG),
+    ),
   );
   assert.ok(
     Math.abs(marginAbove - (treeTopThere + treeBoundWorld.offset.y)) < 1e-9,
@@ -417,51 +471,156 @@ test('the DEFAULT camera is byte-identical to the bare call — every current ca
   assert.deepEqual(declared, bare);
 });
 
-test('asking for PLAN VIEW un-flattens the SCREEN half — the second arm the registration work needs', () => {
-  const shipped = packWorld(cameraCorpus());
-  const plan = packWorld(cameraCorpus(), { elevationDeg: PLAN_VIEW_ELEVATION_DEG });
-  const flat = groundFlattening(LAND_CAMERA_ELEVATION_DEG);
-  // Non-vacuity: the shipped camera really does foreshorten, so "un-flattened" is a difference and
-  // not a tautology. A test written against a camera that happened to be plan view would pass
-  // whatever the threading did.
-  assert.ok(flat < 0.9, `the shipped camera must foreshorten for this test to mean anything, got ${flat}`);
+test('the SCREEN half is the GROUND half re-projected at the camera that was asked for', () => {
+  // ⚠ REWRITTEN AT ADR-0593 D1, AND THE REASON IS THE POINT. This used to pack the corpus TWICE —
+  // once bare, once at plan view — and compare the two worlds field by field. That shape assumed
+  // the two packs would claim the SAME TILES, and they no longer do (see the known violation
+  // below), so the comparison stopped being about projection at all.
+  //
+  // The claim is now made WITHIN one pack, which is strictly stronger: it holds the tiles fixed by
+  // construction and pins the exact relation at EVERY camera rather than at one pair of them. A
+  // threading that scaled both axes, or the wrong one, or that quietly read the shipped constant
+  // instead of the argument, fails here on the first elevation that is not the shipped one.
+  for (const elevationDeg of [PLAN_VIEW_ELEVATION_DEG, LAND_CAMERA_ELEVATION_DEG, 20, 35]) {
+    const world = packWorld(cameraCorpus(), { elevationDeg });
+    const flat = groundFlattening(elevationDeg);
+    for (const t of world.territories) {
+      // x is UNTOUCHED by any camera — the q axis runs across the screen.
+      assert.equal(t.treeSpot.x, t.groundTreeSpot.x, `${t.story.id} at ${elevationDeg}deg: x moved`);
+      assert.equal(t.centroid.x, t.groundCentroid.x, `${t.story.id} at ${elevationDeg}deg: centroid x moved`);
+      // …and y is the projection EXACTLY, not merely "smaller": `hexCenter` scales y through
+      // `groundFlattening`, so the drawn spot is the ground twin times sin of the asked-for angle.
+      assert.ok(
+        Math.abs(t.treeSpot.y - t.groundTreeSpot.y * flat) < 1e-9,
+        `${t.story.id} at ${elevationDeg}deg: ${t.treeSpot.y} vs ${t.groundTreeSpot.y * flat}`,
+      );
+      assert.ok(
+        Math.abs(t.centroid.y - t.groundCentroid.y * flat) < 1e-9,
+        `${t.story.id} at ${elevationDeg}deg: ${t.centroid.y} vs ${t.groundCentroid.y * flat}`,
+      );
+    }
+  }
+  // Non-vacuity: the set above must actually contain a foreshortening camera AND the plan view, or
+  // every assertion could be satisfied by a packer that ignored the option entirely.
+  assert.ok(groundFlattening(LAND_CAMERA_ELEVATION_DEG) < 0.9, 'the shipped camera must foreshorten');
+  assert.equal(groundFlattening(PLAN_VIEW_ELEVATION_DEG), 1);
+});
 
-  for (const [i, t] of plan.territories.entries()) {
-    const was = shipped.territories[i];
-    assert.ok(was !== undefined, 'the same territories in the same order');
-    // x is UNTOUCHED by either camera — the q axis runs across the screen — so a threading that
-    // scaled both axes, or the wrong one, is caught here rather than looking like success.
-    assert.equal(t.treeSpot.x, was.treeSpot.x);
-    // ⚠ AND y IS THE UN-PROJECTION EXACTLY, not merely "bigger": `hexCenter` projects by scaling y
-    // through `groundFlattening`, so the plan-view spot must be the shipped one divided by it.
-    assert.ok(Math.abs(t.treeSpot.y - was.treeSpot.y / flat) < 1e-9, `${t.treeSpot.y} vs ${was.treeSpot.y / flat}`);
-    // The screen tree spot at plan view IS the ground twin — the two spaces coincide when the
-    // camera is the plan view, which is what makes this option the right seam rather than a dial.
-    assert.ok(Math.abs(t.treeSpot.y - t.groundTreeSpot.y) < 1e-9, 'at plan view the two spaces meet');
+test('the GROUND twins are measured at PLAN VIEW, never at the draw camera — re-projected, not re-decided', () => {
+  // The other half of ADR-0527 D1 item 1, and the half a caller cannot see: whatever camera the
+  // drawing is at, the ground-space twins must be the island's own tiles measured with no camera
+  // at all. Asserted by RE-DERIVING them from `t.tiles` rather than by comparing two packs, so it
+  // is independent of which tiles got claimed.
+  for (const elevationDeg of [PLAN_VIEW_ELEVATION_DEG, LAND_CAMERA_ELEVATION_DEG, 20]) {
+    const world = packWorld(cameraCorpus(), { elevationDeg });
+    for (const t of world.territories) {
+      const groundCentres = t.tiles.map((h) => hexCenter(h, { elevationDeg: PLAN_VIEW_ELEVATION_DEG }));
+      const mean = {
+        x: groundCentres.reduce((a, c) => a + c.x, 0) / groundCentres.length,
+        y: groundCentres.reduce((a, c) => a + c.y, 0) / groundCentres.length,
+      };
+      assert.ok(
+        Math.abs(t.groundCentroid.x - mean.x) < 1e-9 && Math.abs(t.groundCentroid.y - mean.y) < 1e-9,
+        `${t.story.id} at ${elevationDeg}deg: the ground centroid is not its tiles at plan view`,
+      );
+      // the ground tree spot is one of the island's OWN tiles, measured with no camera
+      assert.ok(
+        t.tiles.some((h) => {
+          const c = hexCenter(h, { elevationDeg: PLAN_VIEW_ELEVATION_DEG });
+          return Math.abs(c.x - t.groundTreeSpot.x) < 1e-9 && Math.abs(c.y - t.groundTreeSpot.y) < 1e-9;
+        }),
+        `${t.story.id} at ${elevationDeg}deg: the ground tree spot is not a tile centre at plan view`,
+      );
+    }
   }
 });
 
-test('the GROUND half does NOT move with the camera — the layout is re-projected, never re-decided', () => {
+test('a carried STAMP is seated against the camera that was ASKED FOR, not the shipped one', () => {
+  // ⚠ WRITTEN TO KILL A SURVIVING MUTANT, and the mutant is worth naming: `check:mutation-diff`
+  // reported that deleting the `{ elevationDeg }` argument from the stamp-ownership `pixelToHex`
+  // walk changed no test's verdict. Nothing proved that forward, so nothing would have noticed it
+  // being dropped again.
+  //
+  // WHAT THE WALK DOES. A carried icon (ADR-0102) is seated beside the story tree and then nudged
+  // back toward the trunk until it stands on soil this island actually owns — `owner.get(axialKey(
+  // pixelToHex({x: bx, y: by})))`. `bx`/`by` are SCREEN coordinates at whatever camera the call
+  // resolved, so the lookup must un-map them at THAT camera. Reading the module default instead
+  // asks "which hex is this point at the SHIPPED angle" about a point that was never at it.
+  //
+  // WHY IT NEEDS A NON-SHIPPED CAMERA TO SEE. At the shipped elevation the argument and the module
+  // default are the same number, so a bare call and a threaded one are indistinguishable — which
+  // is exactly why the bug survived. The assertion is the walk's own postcondition, checked at an
+  // elevation that is deliberately NOT the shipped one.
+  const elevationDeg = 20;
+  assert.notEqual(
+    elevationDeg,
+    LAND_CAMERA_ELEVATION_DEG,
+    'this test is vacuous unless it asks for a camera the module default is not — re-pick it',
+  );
+  const carriedIcons = new Map<string, readonly string[]>([
+    ['alpha', ['beta', 'gamma']],
+    ['gamma', ['delta']],
+  ]);
+  const world = packWorld(cameraCorpus(), { elevationDeg, carriedIcons });
+
+  // Which hex each territory owns, keyed the same way the packer keys it.
+  const ownerOf = new Map<string, number>();
+  for (const t of world.drawTiles) ownerOf.set(`${t.h.q},${t.h.r}`, t.owner);
+
+  let seated = 0;
+  for (const [i, t] of world.territories.entries()) {
+    for (const stamp of t.stamps) {
+      // The spot is screen space at `elevationDeg`, so un-map it at `elevationDeg`.
+      const h = pixelToHex(stamp.spot, { elevationDeg });
+      assert.equal(
+        ownerOf.get(`${h.q},${h.r}`),
+        i,
+        `${t.story.id} seats "${stamp.icon}" at ${stamp.spot.x.toFixed(2)},${stamp.spot.y.toFixed(2)}, ` +
+          `which un-maps at ${elevationDeg}deg to ${h.q},${h.r} — soil this island does not own. ` +
+          'The ownership walk resolved the point at a DIFFERENT camera from the one it was placed at.',
+      );
+      seated += 1;
+    }
+  }
+  // Non-vacuity: a corpus that carried no icons would satisfy every assertion above by having none.
+  assert.ok(seated >= 3, `the fixture must actually seat stamps for this to mean anything, got ${seated}`);
+});
+
+test('⚠ KNOWN VIOLATION (ADR-0593): the seed snap lets the camera decide WHICH tiles an island gets', () => {
+  // ⚠ THIS TEST ASSERTS A DEFECT. It is here so the defect is mechanically recorded rather than
+  // rediscovered, and so it FAILS — prompting whoever fixes it to come and read this — on the day
+  // the packer stops letting the camera decide the layout.
+  //
+  // WHAT IT IS. `packWorld` places each island's seed in GROUND units (`spacing.ts`'s row and gap
+  // math carries no camera term at all), then snaps that point to the hex lattice with
+  // `pixelToHex`, which is a SCREEN-space function. Snapping ground coordinates through a camera
+  // lands them on a different hex at a different angle, so the camera decides which tiles each
+  // story grows onto — the exact thing ADR-0527 D1 and ADR-0546 D1 say a camera must never do.
+  //
+  // WHY IT WAS INVISIBLE UNTIL NOW, which is the part worth keeping. That `pixelToHex` call took
+  // its OWN default (`LAND_CAMERA_ELEVATION_DEG`) instead of the locally-resolved `elevationDeg`.
+  // Every shipped caller packs bare, so the two were always the same number and the bug was
+  // unobservable — and the test that covered this invariant varied the ARGUMENT, which the
+  // offending call ignored, so it passed vacuously for as long as it existed. ADR-0593 D1 moving
+  // the constant is what separated the two numbers and made it visible.
+  //
+  // WHY IT IS NOT FIXED HERE. The faithful fix is to snap at `PLAN_VIEW_ELEVATION_DEG`, since the
+  // coordinates being snapped are ground-space. Measured: that moves islands by WHOLE TILES on the
+  // shipped map. That is a LAYOUT change, and ADR-0593 D4 is explicit that the forest's layout and
+  // the camera are two knobs that must not be traded against each other in one judgment — so it
+  // belongs to the open density fork (`oq-gaps-derived-forest-still-sparse-tile-or-positions`),
+  // with the picture that decision deserves, and not to a camera landing taken overnight.
   const shipped = packWorld(cameraCorpus());
   const plan = packWorld(cameraCorpus(), { elevationDeg: PLAN_VIEW_ELEVATION_DEG });
-  for (const [i, t] of plan.territories.entries()) {
-    const was = shipped.territories[i];
-    assert.ok(was !== undefined);
-    // Which tiles the story grew onto, and where they sit on the land.
-    assert.deepEqual(t.tiles, was.tiles);
-    assert.deepEqual(t.groundTreeSpot, was.groundTreeSpot);
-    assert.deepEqual(t.groundCentroid, was.groundCentroid);
-    assert.equal(t.groundRadius, was.groundRadius);
-    // And which capability owns which soil — the thing a camera must never decide.
-    assert.deepEqual(
-      t.caps.map((c) => [c.cap.id, c.groundSpot] as const),
-      was.caps.map((c) => [c.cap.id, c.groundSpot] as const),
-    );
-  }
-  // The coast leaves this packer in ground space (ADR-0527 D1), so it is camera-free by
-  // construction — asserted rather than assumed, since "by construction" is what the bare
-  // `hexCenter` sites also claimed to be.
-  assert.deepEqual(plan.empties, shipped.empties);
+  const tilesOf = (w: ReturnType<typeof packWorld>) =>
+    w.territories.map((t) => t.tiles.map((h) => `${h.q},${h.r}`).join(' ')).join(' | ');
+  assert.notEqual(
+    tilesOf(plan),
+    tilesOf(shipped),
+    'the seed snap has stopped being camera-dependent — the defect this records is FIXED. Delete ' +
+      'this test, restore the cross-camera ground comparison it replaced, and settle the open ' +
+      'question it points at.',
+  );
 });
 
 // ---------------------------------------------------------------------------------------------

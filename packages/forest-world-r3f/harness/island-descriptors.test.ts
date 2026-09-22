@@ -53,7 +53,12 @@ test('PROJECTION ROUND TRIP: unprojecting then re-projecting is the identity', (
   // And the ground is STRICTLY TALLER than its projection — that is what unprojecting did.
   const bounds = groundBounds(CELLS);
   const flat = groundFlattening(LAND_CAMERA_ELEVATION_DEG);
-  assert.ok(flat < 0.5, `sanity: sin(20 deg) should be ~0.342, got ${flat}`);
+  // Sanity on the flattening itself, camera-agnostic: any elevation strictly between 0 and 90
+  // degrees foreshortens the ground plane (0 < sin θ < 1), which is the only fact this round-trip
+  // test relies on — it was `sin(20 deg) ~= 0.342 < 0.5` while the land camera was 20 degrees
+  // (ADR-0367 D1); ADR-0593 D1 moved it to 50 degrees, where `sin(50 deg) ~= 0.766`, still inside
+  // (0, 1) and still a real foreshortening, so the `< 1` bound below is the camera-agnostic form.
+  assert.ok(flat > 0 && flat < 1, `sanity: groundFlattening should foreshorten (0,1), got ${flat}`);
   assert.ok(
     bounds.h > bounds.w * 0.5,
     `ground depth ${bounds.h.toFixed(1)} vs width ${bounds.w.toFixed(1)} — an island this ` +
@@ -61,7 +66,7 @@ test('PROJECTION ROUND TRIP: unprojecting then re-projecting is the identity', (
   );
 });
 
-test('the ground island is EXACTLY 1/sin(20 deg) deeper than its own projection', () => {
+test('the ground island is EXACTLY 1/sin(land camera) deeper than its own projection', () => {
   // The layout-independent form, and the one that actually catches a missing or
   // half-applied unprojection.
   //
@@ -74,8 +79,9 @@ test('the ground island is EXACTLY 1/sin(20 deg) deeper than its own projection'
   //
   // So compare the island against ITSELF. The extractor divides y by the flattening and
   // nothing else, so the ground extent must be the projected extent scaled by exactly
-  // 1/sin(20 deg) in y and unchanged in x — true for any layout, and false the moment the
-  // unprojection is dropped (ratio 1) or applied twice (ratio 1/sin^2).
+  // 1/sin(land camera) in y and unchanged in x — true for any layout AND for any elevation the
+  // land camera is set to (it was 20 degrees under ADR-0367 D1, moved to 50 under ADR-0593 D1),
+  // and false the moment the unprojection is dropped (ratio 1) or applied twice (ratio 1/sin^2).
   const ground = groundBounds(CELLS);
   const projected = groundBounds(
     CELLS.map((c) => ({
@@ -84,7 +90,15 @@ test('the ground island is EXACTLY 1/sin(20 deg) deeper than its own projection'
     })),
   );
   const flat = groundFlattening(LAND_CAMERA_ELEVATION_DEG);
-  assert.ok(Math.abs(flat - Math.sin((20 * Math.PI) / 180)) < 1e-9, 'the flattening is not sin(20)');
+  // Sanity on `groundFlattening` itself, checked independently of `Math.sin` isn't possible
+  // without restating the SUT's own arithmetic, so this cross-checks against the DECLARED
+  // constant rather than a baked angle — it is a live-value regression guard (did the wiring
+  // between the two stay `sin(LAND_CAMERA_ELEVATION_DEG)`?), not a projection-correctness proof;
+  // the projection-correctness proof is the ratio assertion below, which is genuinely camera-free.
+  assert.ok(
+    Math.abs(flat - Math.sin((LAND_CAMERA_ELEVATION_DEG * Math.PI) / 180)) < 1e-9,
+    `the flattening is not sin(${LAND_CAMERA_ELEVATION_DEG})`,
+  );
 
   assert.ok(
     Math.abs(ground.w - projected.w) < 1e-6,

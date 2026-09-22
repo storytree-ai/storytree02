@@ -14,18 +14,26 @@
 // `worldTo3D` adds nothing to its input, so ALL of the difference between the same island built at
 // two cameras is `buildScene`'s single projection: `projectGround` scales ground depth by
 // `sin(elevation)` ABOUT THE DRAWING'S ORIGIN. So the plan-view arm must be the declared-camera arm
-// with z divided by `sin 20°` — one global scalar, no island centres, nothing per-family. If the
-// mapper ever starts adding geometry of its own again, this is the test that reds.
+// with z divided by `sin(land camera)` — one global scalar, no island centres, nothing per-family.
+// If the mapper ever starts adding geometry of its own again, this is the test that reds.
 //
 // ⚠ AND IT IS THE DELETION'S OWN RED→GREEN. Before ADR-0546 the two arms had the SAME depth (135.0
-// each — the repair made the drawing true) and this relation failed by a factor of 2.92. After it,
-// the drawn island is the squashed ribbon the page actually carries (233.8 x 46.2) and the plan-view
-// island is the recipe's own hex cluster (233.8 x 135.0), which is 1/sin 20° deeper.
+// each — the repair made the drawing true) and this relation failed by a factor of `1 / sin(land
+// camera)` (2.92 at the land camera's original 20 degrees). After it, the drawn island is the
+// squashed ribbon the page actually carries and the plan-view island is the recipe's own hex
+// cluster (233.8 x 135.0), which is `1 / sin(land camera)` deeper. ADR-0593 D1 moved the land
+// camera 20 -> 50 degrees, which un-squashes the drawing (233.8 x 46.2 -> 233.8 x 103.4) without
+// touching the plan-view arm (still 233.8 x 135.0, since `PLAN_VIEW_ELEVATION_DEG` did not move)
+// or the relation itself, which is re-asserted below at whatever `LAND_CAMERA_ELEVATION_DEG` is
+// live rather than restated as a 20-degree literal.
 //
-// ⚠ THE AGREEMENT IS TIGHTER THAN THE ONE THE DELETION REPLACED — 0.128 units against 0.348, and
-// the reason is worth keeping: the old figure was the RELAXED SUBSTRATE's own residue across a
-// ninety-degree swing plus the repair's per-island arithmetic, where this is the drawing's
-// one-decimal rounding carried through one multiplication. Nothing was tuned to get it.
+// ⚠ THE AGREEMENT IS TIGHTER THAN THE ONE THE DELETION REPLACED — 0.079 units against 0.348 (it
+// was 0.128 at the retired 20-degree camera; the one-decimal rounding is amplified by the same
+// SHRINKING `1 / sin(land camera)` multiplier discussed at `TOLERANCE` below, so the noise floor
+// tightened again), and the reason the comparison is worth keeping: the old figure was the
+// RELAXED SUBSTRATE's own residue across a ninety-degree swing plus the repair's per-island
+// arithmetic, where this is the drawing's one-decimal rounding carried through one
+// multiplication. Nothing was tuned to get it.
 //
 // ⚠ NARROWED, NEVER ASSERTED, AND THE ORIGINAL FILE'S HARDEST-WON LESSON. A first draft of the
 // measurement declared a structural `{ kind, x?, y?, z? }` and reached the mapper's output through
@@ -65,13 +73,24 @@ function extent(ds: readonly InstanceDescriptor[], axis: 'x' | 'z'): number {
   return Math.max(...v) - Math.min(...v);
 }
 
-/** The drawing writes its path coordinates to ONE decimal, so a coordinate carries up to ±0.05 of
- *  rounding — and the plan-view arm's z is the drawn z divided by `sin 20°`, which multiplies that
- *  rounding by 2.9238. Derived, never chosen: a tolerance tighter than the rounding fails on noise,
- *  and one looser than a cell (>= 8.66 units across) would accept a different island. */
-const TOLERANCE = 0.05 * (1 / groundFlattening());
+/** The drawing writes its path coordinates to ONE decimal, so BOTH x and z carry up to ±0.05 of
+ *  rounding — x untouched by the projection, z multiplied by `1 / sin(land camera)` on the way
+ *  back to the ground plane (50 degrees since ADR-0593 D1; it was 20 before). The nearest-twin
+ *  match below is a Euclidean distance over both axes at once, so the bound has to be the
+ *  Euclidean SUM of the two roundings — `hypot(0.05, 0.05 / sin(land camera))` — not the z term
+ *  alone.
+ *
+ *  ⚠ THAT DISTINCTION USED TO BE INVISIBLE. At the retired 20-degree camera the z term
+ *  (~0.1462) so dominated the x term (0.05) that the z-only bound and the correct hypot bound
+ *  (~0.1545) were both comfortably above the measured worst case (~0.128) — either formula
+ *  passed. Raising the camera to 50 degrees shrinks the z term to ~0.0653, close enough to the
+ *  untouched x term that dropping x is no longer safe: the z-only bound is BELOW the measured
+ *  worst case (~0.079), and only the hypot form (~0.0822) still holds. Derived, never chosen: a
+ *  tolerance tighter than the rounding fails on noise, and one looser than a cell (>= 8.66 units
+ *  across) would accept a different island. */
+const TOLERANCE = Math.hypot(0.05, 0.05 / groundFlattening());
 
-test('⚠⚠ THE MAPPER UN-PROJECTS NOTHING (ADR-0546 D1): the plan-view arm IS the drawing with z divided by sin 20°, globally', () => {
+test('⚠⚠ THE MAPPER UN-PROJECTS NOTHING (ADR-0546 D1): the plan-view arm IS the drawing with z divided by sin(land camera)', () => {
   const trueGround = drawn(arm(PLAN_VIEW_ELEVATION_DEG));
   const drawing = drawn(arm(LAND_CAMERA_ELEVATION_DEG));
 
@@ -81,7 +100,10 @@ test('⚠⚠ THE MAPPER UN-PROJECTS NOTHING (ADR-0546 D1): the plan-view arm IS 
   const kinds = (ds: readonly InstanceDescriptor[]): string => [...ds.map((d) => d.kind)].sort().join(',');
   assert.equal(kinds(trueGround), kinds(drawing), 'and the same kinds, in the same multiset');
 
-  assert.ok(TOLERANCE > 0.14 && TOLERANCE < 0.16, `tolerance ${TOLERANCE}`);
+  // Re-derived under ADR-0593 D1 (land camera 20 -> 50 degrees): TOLERANCE ~= 0.0822, down from
+  // ~0.1545 at the retired 20 degrees (see the derivation comment above for why the x term now
+  // matters). Still well inside a cell (>= 8.66 units across).
+  assert.ok(TOLERANCE > 0.08 && TOLERANCE < 0.085, `tolerance ${TOLERANCE}`);
 
   // Matched WITHIN KIND and best-first: a mixed population and an in-order greedy walk each inflate
   // a defect on their own, and together they once turned 0.348 units into a reported 62.
@@ -122,9 +144,13 @@ test('⚠⚠ THE DELETION IS VISIBLE IN THE EXTENTS: the drawing is the squashed
   assert.ok(Math.abs(extent(trueGround, 'x') - 233.8) < 0.5, `width ${extent(trueGround, 'x')}`);
 
   // ⚠ THE RED→GREEN. Until ADR-0546 the mapper repaired the drawing, so BOTH depths were 135.0 and
-  // this assertion could not distinguish them. It now reads the un-repaired drawing: 46.2.
+  // this assertion could not distinguish them. It now reads the un-repaired drawing: 103.4, up
+  // from 46.2 at the retired 20-degree camera (ADR-0593 D1 raised it to 50) — the true-ground
+  // depth (135.0) is unchanged because `PLAN_VIEW_ELEVATION_DEG` never moved, but the DRAWING is
+  // far less squashed at 50 degrees, so it sits much closer to the true depth than it used to:
+  // 46.2 / 135.0 ~= 0.342 = sin(20 deg) then, 103.4 / 135.0 ~= 0.766 = sin(50 deg) now.
   assert.ok(Math.abs(extent(trueGround, 'z') - 135.0) < 0.5, `true depth ${extent(trueGround, 'z')}`);
-  assert.ok(Math.abs(extent(drawing, 'z') - 46.2) < 0.5, `drawn depth ${extent(drawing, 'z')}`);
+  assert.ok(Math.abs(extent(drawing, 'z') - 103.4) < 0.5, `drawn depth ${extent(drawing, 'z')}`);
   assert.ok(
     Math.abs(extent(drawing, 'z') / groundFlattening() - extent(trueGround, 'z')) < TOLERANCE,
     'the depth differs by exactly the projection',

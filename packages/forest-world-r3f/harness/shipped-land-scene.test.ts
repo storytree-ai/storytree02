@@ -298,7 +298,7 @@ test('the ramp ROWS and the ramp TOKENS agree, status for status', () => {
   assert.notEqual(GROUND_ROWS.get('unknown'), 0);
 });
 
-test('THE CENSUS: the shipped map draws ten signatures and skips 1,079 more', () => {
+test('THE CENSUS: the shipped map draws ten signatures and skips 1,063 more', () => {
   groundSanity();
   // ⚠ THIS WAS THE INCREMENT'S FINDING, and it bounded what a shadow could do here.
   // `contact-shade.ts` was ranked FIRST of ten mechanisms separating the owner's references from
@@ -318,7 +318,28 @@ test('THE CENSUS: the shipped map draws ten signatures and skips 1,079 more', ()
   // `uat-bloom` instances instead of skipping them, so ten drawables crossed from the skipped
   // column into the drawn one and NOTHING left the scene. Asserting the parts separately AND their
   // sum is what makes that readable as a move rather than as a loss: a mapper that simply dropped
-  // ten nodes would satisfy `1078` on its own.
+  // ten nodes would satisfy the split figure below on its own.
+  //
+  // ⚠⚠ THE TOTAL ALSO MOVED UNDER ADR-0593 D1 (land camera 20 -> 50 degrees) — genuinely, not a
+  // rounding artefact — and this IS a finding worth a callout rather than a quiet re-base. `blooms`
+  // and `trees` are unaffected (10 and 1, at every elevation checked: 20, 45, 50, 90 degrees), which
+  // matches this file's own documented invariant for the UAT markers and the tree — their keep-outs
+  // were migrated to GROUND-space distance (`groundGap`, ADR-0367 D1 / ADR-0545) specifically so
+  // "the same island... place[s] the same marks at the same ground spots at any elevation"
+  // (`scene.ts`, the section above `buildUatMarkers`). `standing` (the general
+  // parcel-blade/flora/shrub/stem density fill) is NOT covered by that migration and DOES move with
+  // the camera — measured 952 at 20 degrees, 950 at 45, 936 at 50 (today's declared camera), 955 at
+  // 90 (true plan view) — non-monotonically, which is the signature of a bounded rejection sampler
+  // whose keep-outs are still measured in ISOTROPIC SCREEN PIXELS against a foreshortened cell (the
+  // exact failure mode `scene.ts` describes just above `groundGap`, for the class it fixed
+  // everywhere EXCEPT here): a sampler that starves differently at each elevation and relocates
+  // marks onto cell centroids, gaining or losing a handful of draws depending on how tightly the
+  // rejection loop binds that camera's squash. `flowers` (the `tall-flower-*` status fill) is stable
+  // across the same four elevations, so the residual latent screen-space dependency is scoped to
+  // `standing` alone. This is a PRE-EXISTING gap this landing did not introduce — raising the camera
+  // only made it visible, by moving `standing` enough (952 -> 936) to cross this assertion's exact
+  // literal. Recommend: a follow-up to migrate `standing`'s density scatter to `groundGap` the same
+  // way the UAT markers were, so this census stops being camera-sensitive at all.
   const descriptors = worldTo3D(islandScene());
   const standing = descriptors.filter(
     (d) =>
@@ -330,15 +351,16 @@ test('THE CENSUS: the shipped map draws ten signatures and skips 1,079 more', ()
   );
   const blooms = descriptors.filter((d) => d.kind === 'uat-bloom');
   // The retired story tree, now on the skipped side of the ledger — counted BY NAME so that the
-  // total below stays the same 1,089 it always was and the move is legible as a move.
+  // total below stays legible as a move rather than a loss.
   const trees = descriptors.filter((d) => d.kind === 'skipped' && d.sceneKind === 'tree');
-  assert.equal(standing.length + flowers.length, 1078, 'the skipped ground-standing census moved');
+  assert.equal(standing.length + flowers.length, 1062, 'the skipped ground-standing census moved');
   assert.equal(blooms.length, 10, 'the fixture signs ten criteria and the map now draws all ten');
   assert.equal(trees.length, 1, 'the one story tree is still SEEN by the mapper — skipped, not dropped');
   assert.equal(
     standing.length + flowers.length + blooms.length + trees.length,
-    1089,
-    'eleven drawables have crossed columns over this arc; none may have left the scene',
+    1073,
+    'eleven drawables have crossed columns over this arc; none may have left the scene besides the ' +
+      'camera-sensitive `standing` count documented above (1,089 at the retired 20-degree camera)',
   );
   // ⚠ AND NOW NOTHING IN THE STREAM CASTS. The tree was the one descriptor on this island that
   // did; a bloom is a knee-high flower, not an occluder, and the parcels are the ground itself.

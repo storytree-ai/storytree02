@@ -2,8 +2,9 @@
 //
 // ADR-0367 D1 gave the land a declared camera, and `hexCenter` / `hexCorners` / `pixelToHex` /
 // `hexPath` started projecting the ground through it: a ground-plane displacement away from the
-// camera now covers `sin 20° ≈ 0.342` of the screen it used to. `camera.test.ts` fences that
-// projection. This suite fences the half the projection LEFT BEHIND.
+// camera now covers `sin 50° ≈ 0.766` of the screen it used to (`sin 20° ≈ 0.342` at the original
+// ADR-0367 D1 camera; the value moved under ADR-0593). `camera.test.ts` fences that projection.
+// This suite fences the half the projection LEFT BEHIND.
 //
 // Everything scattered ON the land — the UAT flowers, the garden heroes, the stepping-stone walk, the
 // lavender and grass accents — is placed by rejection sampling that measures distances against those
@@ -11,12 +12,14 @@
 // them carried a hand-picked `0.7` y-squash inherited from the wisp orbit, older than the camera and
 // unrelated to it. So the marks were being tested in one space against geometry drawn in another, and
 // the failure has one direction: `groundGap >= hypot` always, so an isotropic screen keep-out never
-// admits a placement the ground would reject — it OVER-enforces. A 15 px spacing floor is a ~44
-// ground-unit floor on a cell 34% as tall. Downstream that shows up two ways. A bounded rejection
-// sampler starves on a tight or concave island and relocates the mark onto a cell centroid; and the
-// stone walk, whose count is a leg length divided by a spacing, loses stones outright because the leg
-// was measured on screen while the spacing was a ground fraction. Measured on the fixture below before
-// this suite existed: 9 stones in plan view against 7 at the declared camera, every UAT flower on a
+// admits a placement the ground would reject — it OVER-enforces. A 15 px spacing floor is a ~20
+// ground-unit floor on a cell 77% as tall (was ~44 ground units on a cell 34% as tall at the
+// original 20° camera — flatter cameras inflate the defect more). Downstream that shows up two
+// ways. A bounded rejection sampler starves on a tight or concave island and relocates the mark
+// onto a cell centroid; and the stone walk, whose count is a leg length divided by a spacing, loses
+// stones outright because the leg was measured on screen while the spacing was a ground fraction.
+// Measured on the fixture below before this suite existed, AT THE ORIGINAL 20° CAMERA: 9 stones in
+// plan view against 7 at the declared camera, every UAT flower on a
 // DIFFERENT ground spot at every elevation, and every garden hero likewise.
 //
 // THE INVARIANT, and why it is the right one. A mark belongs to the GROUND. The island in ground
@@ -339,11 +342,12 @@ test('the UAT scatter assertion has TEETH: the PRE-CAMERA rule is camera-DEPENDE
   // MEASURED, not assumed, and it corrects a plausible-sounding story: the isotropic screen metric
   // never ADMITS a placement the ground metric would reject, because dividing a y-delta by `sin θ` can
   // only make a gap larger — `groundGap >= hypot` always. It fails the other way, by OVER-enforcing:
-  // at the declared camera a `hypot > 15` screen test is a `> 15 / sin 20° ≈ 44` ground test, so the
-  // sampler is silently asking for ~2.9x the room its own constants name, which is what exhausts the
-  // draws on a tight or concave island and relocates the mark onto a cell centroid. On the roomy
-  // convex disc below it does NOT exhaust them — so this control asserts the mechanism (different
-  // ground, inflated keep-out) rather than a starvation this fixture does not exhibit.
+  // at the declared camera a `hypot > 15` screen test is a `> 15 / sin 50° ≈ 19.6` ground test, so the
+  // sampler is silently asking for ~1.3x the room its own constants name (ADR-0593 shrank this from
+  // ~2.9x at the original 20° camera, where `1 / sin 20° ≈ 2.92`), which is what exhausts the draws
+  // on a tight or concave island and relocates the mark onto a cell centroid. On the roomy convex
+  // disc below it does NOT exhaust them — so this control asserts the mechanism (different ground,
+  // inflated keep-out) rather than a starvation this fixture does not exhibit.
   const preCamera = (elevationDeg: number): string[] => {
     const isl = island(elevationDeg);
     const t = territory(isl);
@@ -391,10 +395,11 @@ test('the UAT scatter assertion has TEETH: the PRE-CAMERA rule is camera-DEPENDE
   );
   // The inflation, stated on the two metrics themselves so it cannot depend on which samples happened
   // to win: a purely north–south pair 15 SCREEN pixels apart at the declared camera stands this far
-  // apart on the ground. That ratio IS the defect's magnitude.
+  // apart on the ground. That ratio IS the defect's magnitude — `1 / sin 50° ≈ 1.305`, so the
+  // threshold below is `1.3`, just under the exact value the way `2.9` sat just under `1 / sin 20°`.
   const demanded = 15 / groundFlattening(LAND_CAMERA_ELEVATION_DEG);
   assert.ok(
-    demanded > 15 * 2.9,
+    demanded > 15 * 1.3,
     `a 15 px screen keep-out only demands ${demanded.toFixed(1)} ground units at the declared camera — ` +
       'if that inflation were small, measuring in the wrong space would not lose marks and this suite ' +
       'would be fencing nothing',
@@ -441,8 +446,14 @@ test('the NAMEPLATE BAND has TEETH: it binds on this fixture, and the SCREEN ban
     (t.labelY * groundFlattening(deg) - ART.units(14)) / groundFlattening(deg);
   const atDeclared = screenBandGroundCut(LAND_CAMERA_ELEVATION_DEG);
   const atPlan = screenBandGroundCut(PLAN_VIEW_ELEVATION_DEG);
+  // The gap is exact, not a guess: `screenBandGroundCut` subtracts a fixed SCREEN offset before
+  // dividing back by `sin θ`, so the two cuts differ by exactly `units(14) · |1/sin θ − 1|`. At the
+  // declared 50° camera `1/sin 50° ≈ 1.305`, so the gap is `≈0.305 · units(14)` — far smaller than
+  // the `≈1.924 · units(14)` it was at the original 20° camera (`1/sin 20° ≈ 2.924`), because the
+  // flatter camera used to do the over-enforcing. `0.3` sits just under the exact 0.305, the same
+  // margin-below-derivation the `1.3` / `2.9` thresholds above use.
   assert.ok(
-    Math.abs(atDeclared - atPlan) > ART.units(14),
+    Math.abs(atDeclared - atPlan) > ART.units(14) * 0.3,
     `the screen band drew the same ground line at both cameras (${atDeclared.toFixed(1)} vs ` +
       `${atPlan.toFixed(1)}) — if it did, replacing it would have been a rename`,
   );

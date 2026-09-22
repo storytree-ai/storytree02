@@ -303,26 +303,29 @@ test('groundPolarOffset leaves the across-screen axis alone and foreshortens dep
 
   const south = groundPolarOffset(Math.PI / 2, 100);
   assert.ok(Math.abs(south.x) < 1e-9);
-  assert.ok(Math.abs(south.y - 34.2020143) < 1e-6, `south.y=${south.y}`); // 100 · sin 20°, NOT 100 · 0.66
+  assert.ok(Math.abs(south.y - 76.6044443) < 1e-6, `south.y=${south.y}`); // 100 · sin 50°, NOT 100 · 0.66
 
   const west = groundPolarOffset(Math.PI, 100);
   assert.ok(Math.abs(west.x + 100) < 1e-9);
   assert.ok(Math.abs(west.y) < 1e-9);
 
   const north = groundPolarOffset(-Math.PI / 2, 100);
-  assert.ok(Math.abs(north.y + 34.2020143) < 1e-6); // the sign survives
+  assert.ok(Math.abs(north.y + 76.6044443) < 1e-6); // the sign survives
 
   const se = groundPolarOffset(Math.PI / 4, 100);
   assert.ok(Math.abs(se.x - 70.7106781) < 1e-6);
   assert.ok(Math.abs(se.y - 70.7106781 * sin) < 1e-6);
 });
 
-test('CONTROL: the retired 0.66 squash disagrees by the measured 1.93x on the depth axis', () => {
-  // The hand-picked top-down squash the studio layout used before the land had a camera.
+test('CONTROL: the retired 0.66 squash disagrees by the measured 0.86x on the depth axis', () => {
+  // The hand-picked top-down squash the studio layout used before the land had a camera. At 20°
+  // this ratio was 1.9297 (the retired squash OVER-reached the true projection); at the ADR-0593
+  // 50° camera sin θ has grown past 0.66, so the same fixed squash now UNDER-reaches instead — the
+  // control's whole point is that the two numbers disagree, and they still do, on the other side.
   const retiredY = Math.sin(Math.PI / 2) * 100 * 0.66;
   const fixed = groundPolarOffset(Math.PI / 2, 100);
   assert.ok(Math.abs(retiredY - 66) < 1e-9);
-  assert.ok(Math.abs(retiredY / fixed.y - 1.9297) < 1e-4, `ratio=${retiredY / fixed.y}`); // 0.66 / sin 20°
+  assert.ok(Math.abs(retiredY / fixed.y - 0.8616) < 1e-4, `ratio=${retiredY / fixed.y}`); // 0.66 / sin 50°
 });
 
 test('a ground circle projects to a screen ellipse of the camera own aspect', () => {

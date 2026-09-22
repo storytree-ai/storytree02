@@ -74,7 +74,14 @@ import { FIT_ZOOM, orientedCamera, type CrowdZoom } from './shipped-crowd-scene.
 import { kitFacts, type KitFacts } from './shipped-detail-scene.js';
 import { backgroundBytes, familyCensus } from './shipped-grass-scene.js';
 import { landBox, screenExtent, type PixelBox, type ScreenExtent } from './shipped-land-ratio-scene.js';
-import { fitCamera, loadSpacingArms, viewElevationDeg, type Fit, type SpacingArm } from './shipped-spacing-scene.js';
+import {
+  SPACING_EVIDENCE_ELEVATION_DEG,
+  fitCamera,
+  loadSpacingArms,
+  viewElevationDeg,
+  type Fit,
+  type SpacingArm,
+} from './shipped-spacing-scene.js';
 import { shippedLayoutArm } from './shipped-wheat-scene.js';
 import { VISIBLE_DELTA, sensitivityReasons, visibleDeltaDistribution, type VisibleDeltaReading } from './visible-delta.js';
 
@@ -155,9 +162,15 @@ export function drawnStream(layout: SpacingArm): InstanceDescriptor[] {
   if (hit !== undefined) return hit;
   // ⚠ THE COMMITTED SCENE IS A 2D DRAWING and the mapper stopped repairing one (ADR-0546 D1) —
   // converted at the reader, before any floor is applied. `frozen-drawing.ts` carries the why.
-  const built = trueGroundFromDrawing(worldTo3D(layout.file.scene, { landAreaPerCapability: null })).filter(
-    (d): d is InstanceDescriptor => d.kind !== 'skipped',
-  );
+  //
+  // ⚠ PINNED TO `SPACING_EVIDENCE_ELEVATION_DEG`, NEVER THE LIVE DEFAULT (see that constant's own
+  // comment in `shipped-spacing-scene.ts`). `layout.file.scene` is this same evidence dir's
+  // committed export, drawn at whatever the land camera was the day it was captured — un-projecting
+  // it at today's camera instead recovers neither the drawing nor the true footprint.
+  const built = trueGroundFromDrawing(
+    worldTo3D(layout.file.scene, { landAreaPerCapability: null }),
+    SPACING_EVIDENCE_ELEVATION_DEG,
+  ).filter((d): d is InstanceDescriptor => d.kind !== 'skipped');
   drawnMemo.set(layout.record.id, built);
   return built;
 }

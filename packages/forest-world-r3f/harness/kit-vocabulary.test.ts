@@ -367,8 +367,25 @@ test('props ride the relief rather than floating over it', () => {
 
 test('a wider footprint pushes the props apart rather than being ignored', () => {
   // The footprint is an ARGUMENT, so a placement that ignored it would look correct in every
-  // test above — they all pass the same table. Doubling it must move the arrangement.
-  const wide = Object.fromEntries(KIT_ROLES.map((r) => [r, FOOT[r] * 2])) as Record<KitRole, number>;
+  // test above — they all pass the same table. Widening it must move the arrangement.
+  //
+  // ⚠ DOUBLING NO LONGER DOES, under ADR-0593 D1 (land camera 20 -> 50 degrees) — re-measured, not
+  // guessed, and it is a real property of the current geometry rather than a flake. `bestCandidate`
+  // scores each of 96 fixed candidate points by its worst clearance against everything already
+  // placed (`distance - (radius + occupant.radius)`), and picks the argmax; doubling every role's
+  // footprint scales `radius` (and so `need`) uniformly, which shifts every candidate's score by
+  // the same amount for a GIVEN occupant set and therefore does not always change the argmax. At
+  // the retired 20-degree camera this fixture's cells were squashed enough that a 2x widening
+  // reliably crossed that argmax somewhere in 21 placements (measured: 3-5 of them moved, swept
+  // across 20/30/90 degrees for comparison). At the live 50-degree camera the true-ground cells are
+  // far LESS squashed (ADR-0593 D2's whole trade), so there is more slack around each candidate's
+  // optimum and 2x — even up to 3.5x — now lands on a genuine 0-diff coincidence for this seed and
+  // fixture (swept 1.5x through 3.8x: 0 diffs until just past 3.8x, then 6-7 diffs from 4x on,
+  // stable through 8x). So the widening here is 5x, chosen with margin past that measured
+  // threshold rather than tuned to the minimum that happens to pass — the qualitative claim ("a
+  // widened footprint moves the arrangement") is what is being proved, and 5x proves it robustly
+  // rather than by coincidence the way 2x now would.
+  const wide = Object.fromEntries(KIT_ROLES.map((r) => [r, FOOT[r] * 5])) as Record<KitRole, number>;
   const narrow = dress();
   const spread = dressIslandFromKit({
     scene: islandScene(),

@@ -7,9 +7,11 @@
 //
 // WHAT WAS WRONG. `substrate.ts` built the whole mesh on PROJECTED coordinates, and `VKEY` decided
 // vertex IDENTITY — "are these two vertices the same point?" — by rounding them to 0.1 px. Under the
-// declared camera the ground's depth axis is compressed by `sin 20° ≈ 0.342`, so a bucket 0.1 px tall
-// on screen is 0.292 units tall on the ground: the tolerance was nearly 3× looser across depth than
-// across width, and every seed derived from that key was a function of the camera.
+// declared camera the ground's depth axis is compressed by `sin θ` — `≈0.766` at the current 50°
+// camera (ADR-0593), so a bucket 0.1 px tall on screen is `≈0.131` units tall on the ground: the
+// tolerance is looser across depth than across width by `1 / sin θ`, `≈1.305×` today (it was
+// `≈0.342` / `≈0.292` units / nearly 3× looser at the original 20° camera this suite was first
+// written against), and every seed derived from that key was a function of the camera.
 //
 // ⚠ WHAT IT COST, MEASURED — and NOT what the increment predicted, so do not carry the old claim
 // forward. The increment cites PR #1344's "50 → 52 cells". That is NOT reproducible: comparing this
@@ -192,17 +194,24 @@ test('TEETH (b) — the key the old rule used really was camera-dependent, and t
       'suite can no longer tell the fix from what it replaced.',
   );
 
-  // And the anisotropy itself, as arithmetic on two real points rather than as prose: 0.1 units
-  // apart in DEPTH is ONE point to the old screen key at the declared camera (0.1 × sin 20° = 0.034
-  // px, well inside a 0.1-px bucket) and TWO to the ground key. That is the merge hazard the old
-  // tolerance opened. It never fired on the real lattice — see the header — but it is what "the
-  // tolerance was 2.92× looser on one axis" means, and it is checkable rather than asserted.
+  // And the anisotropy itself, as arithmetic on two real points rather than as prose. The old screen
+  // key merges two points whenever their DEPTH gap `g` satisfies `g · sin θ · 10` rounding to the
+  // same integer as 0, i.e. `g < 0.05 / sin θ`; the ground key keeps them apart once `g` rounds to a
+  // DIFFERENT integer than 0, i.e. `g > 0.05`. ADR-0593's 50° camera still opens a window between
+  // those two bounds — `0.05 < g < 0.05 / sin 50° ≈ 0.0653` — just a narrower one than the original
+  // 20° camera's `0.05 < g < 0.05 / sin 20° ≈ 0.1462`, because the anisotropy itself shrank from
+  // `1 / sin 20° ≈ 2.924×` to `1 / sin 50° ≈ 1.305×`. `g = 0.06` sits inside the new window: ONE
+  // point to the screen key at the declared camera (`0.06 × sin 50° ≈ 0.046` px, still inside a
+  // 0.1-px bucket) and TWO to the ground key (`0.06` rounds past its own 0.05-unit half-bucket).
+  // That is the merge hazard the old tolerance opened; it never fired on the real lattice — see the
+  // header — but it is what "the tolerance was looser on one axis" means, checkable rather than
+  // asserted, at whatever elevation the land camera currently declares.
   const a: Pt = { x: 0, y: 0 };
-  const b: Pt = { x: 0, y: 0.1 };
+  const b: Pt = { x: 0, y: 0.06 };
   assert.equal(
     screenKey(a, LAND_CAMERA_ELEVATION_DEG),
     screenKey(b, LAND_CAMERA_ELEVATION_DEG),
-    'the screen key must merge these two — 0.1 ground units is 0.034 px at sin(20°)',
+    'the screen key must merge these two — 0.06 ground units is well under half a 0.1-px bucket at sin(50°)',
   );
   assert.notEqual(groundKey(a), groundKey(b), 'the ground key must keep them apart');
 });

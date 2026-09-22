@@ -31,7 +31,8 @@ import {
 } from '../src/coast-clip.js';
 import { LAND_SCALE } from '../src/land-per-capability.js';
 import { scaleAboutIslands } from '../src/true-footprint.js';
-import type { InstanceDescriptor } from '../src/world-to-3d.js';
+import { worldTo3D, type InstanceDescriptor } from '../src/world-to-3d.js';
+import { islandScene } from './island-fixture.js';
 import {
   ALL_COAST_ARMS,
   COAST_ARMS,
@@ -41,6 +42,25 @@ import {
 } from './shipped-coast-scene.js';
 import { crowdCells, crowdSize } from './shipped-crowd-scene.js';
 import { drawnParcels, shippedParcels } from './shipped-land-scene.js';
+
+/**
+ * THE CAMERA AT WHICH THE DRAWN RIBBON'S COAST ACTUALLY FOLDS — a REGIME, not the shipped camera's
+ * value, and pinned here as a LITERAL deliberately never derived from `LAND_CAMERA_ELEVATION_DEG`.
+ *
+ * Measured 2026-09-05 at 20° (`sin 20° = 0.342`): the drawn ribbon's z-depth is foreshortened
+ * enough that the coast's concave notches cross when offset by `coastCurve` — see `THE PREMISE`
+ * below. The shipped camera moved to 50° under ADR-0593 D1 (`sin 50° = 0.766`); at that
+ * foreshortening the SAME notches no longer cross, so the shipped camera no longer reaches this
+ * regime (`the SHIPPED camera … no longer folds`, further down).
+ *
+ * The fold-cap MECHANISM this file proves (`coastCapping` / the rim-vertex cap) is real, correct,
+ * live code guarding a case that can still occur — a sufficiently foreshortened camera, or a
+ * sufficiently convoluted coast — so these tests pin the REGIME that exercises it rather than
+ * inheriting whichever elevation happens to ship today. Losing that coverage because today's
+ * camera doesn't trip it would leave working code wholly unwitnessed, and would silently re-open
+ * the moment anyone lowered the camera again.
+ */
+const FOLD_REGIME_ELEVATION_DEG = 20;
 
 /**
  * The island the studio actually ships, as the mapper emits it — built LAZILY.
@@ -57,7 +77,15 @@ function shippedIsland(): InstanceDescriptor[] {
 }
 
 /** The same island as the 2D map DRAWS it — the projected ribbon the 3D ground plane was until
- *  ADR-0517 D1. The fold cap's premise lives here: see `THE PREMISE` below.
+ *  ADR-0517 D1 — AT THE FOLD REGIME ({@link FOLD_REGIME_ELEVATION_DEG}), not at whatever camera
+ *  ships today. The fold cap's premise lives here: see `THE PREMISE` below.
+ *
+ *  ⚠ NOT `drawnParcels()` — that function follows the SHIPPED camera
+ *  (`LAND_CAMERA_ELEVATION_DEG`, 50° since ADR-0593 D1) by design, because its other reader
+ *  (`shipped-crowd-scene.ts`) needs the real map's own spacing. This function instead builds the
+ *  ribbon directly through `islandScene`/`worldTo3D`, pinning `cameraElevationDeg` to the fold
+ *  regime, so the historical fold-cap assertions below keep testing the geometry they were written
+ *  against rather than silently follow the shipped camera wherever it later moves.
  *
  *  ⚠ READ AT LAND_SCALE (`land-per-capability.ts`), and the reason is the coast clip's own: since
  *  the ratio sizes every island, `coastCurve` outsets by `jitteredOutset × LAND_SCALE` (the 2D
@@ -70,8 +98,23 @@ function shippedIsland(): InstanceDescriptor[] {
  *  the pins verbatim. */
 let drawn: InstanceDescriptor[] | null = null;
 function drawnIsland(): InstanceDescriptor[] {
-  drawn ??= scaleAboutIslands(drawnParcels(), () => ({ x: LAND_SCALE, z: LAND_SCALE }));
+  drawn ??= scaleAboutIslands(
+    worldTo3D(islandScene({ cameraElevationDeg: FOLD_REGIME_ELEVATION_DEG }), {
+      landAreaPerCapability: null,
+    }).filter((d): d is InstanceDescriptor => d.kind === 'cell-ground'),
+    () => ({ x: LAND_SCALE, z: LAND_SCALE }),
+  );
   return drawn;
+}
+
+/** The same ribbon, but at the camera the product actually SHIPS — `drawnParcels()` unmodified,
+ *  which follows `LAND_CAMERA_ELEVATION_DEG` (50° since ADR-0593 D1). Named separately from
+ *  {@link drawnIsland} so a call site can never confuse the fold regime with the shipped fact —
+ *  the one new assertion below (`the SHIPPED camera … no longer folds`) is what this is for. */
+let shippedDrawn: InstanceDescriptor[] | null = null;
+function shippedDrawnIsland(): InstanceDescriptor[] {
+  shippedDrawn ??= scaleAboutIslands(drawnParcels(), () => ({ x: LAND_SCALE, z: LAND_SCALE }));
+  return shippedDrawn;
 }
 
 /**
@@ -180,6 +223,25 @@ test('⚠ THE PREMISE: the coast the 2D map draws SELF-INTERSECTS — and on the
   const curve = coastCurve(rim, 'context-traversal-capture');
   assert.equal(isSimpleRing(curve.outset), true, 'the true footprint’s outset coast is simple');
   assert.equal(isSimpleRing(curve.smooth), true);
+});
+
+test('the SHIPPED camera (50°, ADR-0593 D1) no longer reaches the fold regime', () => {
+  // THE FACT THAT MAKES THE PIN ABOVE HONEST RATHER THAN A DODGE. The fold-cap mechanism is real
+  // and still worth guarding (see `FOLD_REGIME_ELEVATION_DEG`'s doc comment), but the camera this
+  // studio actually ships no longer trips it: at `LAND_CAMERA_ELEVATION_DEG` (50°, `sin 50° =
+  // 0.766`) the drawn ribbon is close enough to its true shape that the notches which crossed at
+  // 20° (`sin 20° = 0.342`) no longer do. This is a MECHANICAL check of that drift, not a note —
+  // if the shipped camera is ever lowered back into the fold regime, this assertion goes false and
+  // says so, which is exactly the re-read the regime pin above is standing in for.
+  const shippedDrawnRim = rimLoops(ringsOf(shippedDrawnIsland()))[0]!;
+  assert.equal(isSimpleRing(shippedDrawnRim), true, 'the raw hex silhouette should still be simple');
+  const shippedDrawnCurve = coastCurve(shippedDrawnRim, 'context-traversal-capture');
+  assert.equal(
+    isSimpleRing(shippedDrawnCurve.outset),
+    true,
+    'the shipped camera should no longer fold the drawn ribbon — if this is false, the shipped camera dropped back into the fold regime and FOLD_REGIME_ELEVATION_DEG needs a re-read',
+  );
+  assert.equal(isSimpleRing(shippedDrawnCurve.smooth), true);
 });
 
 test('the control is the map with no coast at all', () => {

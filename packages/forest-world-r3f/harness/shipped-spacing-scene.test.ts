@@ -26,6 +26,7 @@ import {
   READ_ISLAND,
   SPACING_CONTROL_ARM,
   SPACING_EVIDENCE_DIR,
+  SPACING_EVIDENCE_ELEVATION_DEG,
   SPACING_SHOTS,
   armStream,
   fitCamera,
@@ -284,9 +285,18 @@ test('⚠ NON-VACUITY: the same committed export fed straight through the mapper
     islandFootprints(worldTo3D(arm.file.scene).filter((d): d is InstanceDescriptor => d.kind !== 'skipped')),
   );
   // Not merely "smaller": the two differ by EXACTLY the projection the export was written through,
-  // 1 / sin 20° = 2.9238 — which is what says the conversion undoes that projection and nothing else.
+  // `1 / sin(SPACING_EVIDENCE_ELEVATION_DEG)` = 1 / sin 20° = 2.9238 — which is what says the
+  // conversion undoes that projection and nothing else.
+  //
+  // ⚠ AGAINST THE EVIDENCE'S OWN PINNED ELEVATION, NOT THE LIVE `groundFlattening()` — and the
+  // distinction is the whole point of this test now. Before ADR-0593 D1 the two were the same
+  // number, so comparing against the live default and against the pinned constant could not be
+  // told apart; they diverge the moment the live camera ever differs from the day this evidence
+  // was captured, which is exactly today. `armStream` converts this frozen export at
+  // `SPACING_EVIDENCE_ELEVATION_DEG` (see its own comment for why), so this ratio must be judged
+  // against that SAME pinned value or it would be asserting the wrong thing about the wrong axis.
   assert.ok(
-    Math.abs(converted / raw - 1 / groundFlattening()) < 1e-3,
+    Math.abs(converted / raw - 1 / groundFlattening(SPACING_EVIDENCE_ELEVATION_DEG)) < 1e-3,
     `unconverted ${raw} against converted ${converted} — ratio ${converted / raw}`,
   );
 });

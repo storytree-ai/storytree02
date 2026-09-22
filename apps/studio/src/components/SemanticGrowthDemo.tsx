@@ -43,6 +43,7 @@ import { useMemo, useState } from 'react';
 import {
   arrivalGrowPlan,
   CHAPTER2_ORGANIC_POSE_TO_POSE_REGISTRY,
+  CHAPTER2_ROUND3_LAB_ELEVATION_DEG,
   CHAPTER2_ROUND3_TREE_CANDIDATES,
   chapter2Round3TreeCandidate,
   spriteUprightReconciliation,
@@ -494,11 +495,16 @@ const INCUMBENT_HERO_TRACK_ID = 'chapter2-hero-tree-pose-track-v1';
  * vertical squash standing in for the low top-down view the generator would not produce — "a
  * comparison stand-in, never a solved camera".
  *
- * The land now declares a camera, and it is the same one the tree is authored at, so what makes a
- * tree look planted is the shared projection rather than this dial. The default is DERIVED from that
- * shared value ({@link spriteUprightReconciliation}) and is therefore 1 — no squash — for a track
- * authored at the land's own camera. The four steps stay so the owner can still compare, and a
- * default that stops being 1 is a live signal that the mounted track needs re-rendering.
+ * The default is DERIVED from {@link spriteUprightReconciliation}, reconciled against the LAB's own
+ * witness camera ({@link CHAPTER2_ROUND3_LAB_ELEVATION_DEG}) — deliberately NOT the land's. ADR-0593
+ * moved `LAND_CAMERA_ELEVATION_DEG` (20 -> 50), but this lab is a static witness stage comparing
+ * candidates against EACH OTHER, never a variant of the working map (see the constant's own doc
+ * comment for the measured one-consumer fact this rests on), so its own composition must keep
+ * rendering exactly as it always has: every candidate here is either authored at the lab's 20° or
+ * hand-authored with no camera at all, so the default stays 1 — no squash — regardless of where the
+ * land's camera moves. The four steps stay so the owner can still compare, and a default that stops
+ * being 1 would be a live signal that the MOUNTED CANDIDATE needs re-rendering at the lab's own
+ * angle, never that the land moved.
  *
  * The dial is STATELESS — the rendered geometry is a pure function of the selected value, so it
  * holds nothing for Replay to clear, and Replay deliberately does NOT snap the owner's chosen
@@ -506,7 +512,7 @@ const INCUMBENT_HERO_TRACK_ID = 'chapter2-hero-tree-pose-track-v1';
  */
 const R3_LAB_PROJECTIONS = Object.freeze([1, 0.9, 0.82, 0.72] as const);
 const r3LabDefaultProjection = (candidate: Chapter2HeroTreeCandidate): number =>
-  spriteUprightReconciliation(candidate.renderedCameraElevationDeg);
+  spriteUprightReconciliation(candidate.renderedCameraElevationDeg, CHAPTER2_ROUND3_LAB_ELEVATION_DEG);
 const R3_LAB_DEFAULT_CANDIDATE: Chapter2HeroTreeCandidateId = 'incumbent';
 
 function heroTreeTrack(candidate: Chapter2HeroTreeCandidate): OrganicPoseTrack {
