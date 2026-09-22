@@ -147,7 +147,7 @@ dressed prop belongs to the ground it stands on.
 5. Assert ground cover thins where the path and props already occupy the cell — dressing composes
    with itself and does not double-populate.
 
-## Contracts (2)
+## Contracts (3)
 
 Both are assertions about `island-path.ts`, the canvas-side connector that decides where a
 dependency trail comes ashore. They are this lane's FIRST contracts — the lane was born of a split
@@ -168,6 +168,15 @@ carrying no proof at all — and they are the pair the `real:` arm above authors
      those 52 becomes a dock, no junction does, and all 35 islands carry at least one dock. It is
      the fence ADR-0596 D5 asks for: a later change that drops a segment, loses an edge key or
      re-loses a landing reds here instead of quietly redrawing the map.
+   - **covers —** `packages/forest-world-r3f/src/island-path.ts`
+3. **`fld-a-dock-lands-on-an-island-the-trail-names`** — proximity chooses among the islands a
+   trail connects, never the set
+   - **asserts —** when a visible `trail-strip` carries `edges`, its terminal end docks on the
+     nearest rim among the islands those `from->to` keys name — even when a NEARER rim belongs to an
+     island the keys do not name. A strip carrying no edge keys keeps the nearest-rim rule (the
+     harness fixtures are in that class), and a named island beyond `DOCK_REACH` still forms no
+     dock. On the real map this makes the 35-island assertion unconditional: no island a dependency
+     trail terminates at is left without a dock.
    - **covers —** `packages/forest-world-r3f/src/island-path.ts`
 
 ## Proof walkthrough
@@ -211,6 +220,33 @@ distance test, the reach widens to 4x the shipped beach width and becomes a sani
   `proofCommand`), and the file's existing 23 tests must stay green: several of them assert
   `DOCK_REACH`'s own value and its derivation, so widening it means updating those assertions in the
   same test file rather than leaving them red.
+
+**UNIT 2 — CONTRACT 3, AND IT IS THE DEFECT CONTRACT 2's FENCE THEN CAUGHT (ADR-0597).** Unit 1
+landed and its real-map assertion failed by exactly one island. `uat-detail-studio` is reached by 18
+routed segments; exactly one of them TERMINATES there rather than at a junction, and that landing
+sits **5.29 ground units** from `uat-detail-studio`'s own clipped rim and **4.43** from
+`studio-cloud`'s. Both are inside the reach, so the nearest-island rule inside `islandDocks` awards
+the dock to `studio-cloud` — an island neither of the segment's edge keys
+(`uat-criterion-detail->uat-detail-studio`, `studio->uat-detail-studio`) mentions. The consequence is
+not a missing path but a FALSE one: `studio-cloud` wears a worn path asserting a dependency it does
+not have, in the same visual vocabulary the true ones use.
+
+- **The identity is already on the descriptor.** Every `trail-strip` carries `edges`, the `from->to`
+  keys of the routed `depends_on` edges through that segment. Measured on the export: 35 distinct
+  edge-key endpoints, and all 35 are island ids, none unresolved. Restrict each terminal end's
+  candidate rims to the islands its own keys name, and let proximity choose among THOSE.
+- **The change must stay surgical, and that is checkable.** Re-run across the export: 51 of the 52
+  terminal ends dock exactly where they already do, exactly 1 moves, 0 fail to dock, and all 35
+  islands gain a dock. A rule change that rewrote the map would be a different proposal.
+- **The two fallbacks are deliberate, and both must be asserted rather than assumed.** A strip with
+  no edge keys keeps the nearest-rim rule — the harness crowd fixtures build exactly that shape, and
+  a synthetic landing whose island nobody stated is still a landing. And a NAMED island beyond
+  `DOCK_REACH` still forms no dock: this narrows the candidate set and never relaxes the bound.
+- **Order matters and is one-directional.** The junction exclusion runs FIRST. A shared end is not a
+  landing whatever its edge keys say, so naming an island can never rescue a junction into a dock.
+- **The existing real-map test currently PINS the shortfall** as `['uat-detail-studio']`. Closing
+  contract 3 makes that list empty, so the pin is updated in the same test file — the fence becoming
+  unconditional is part of the deliverable, not a separate tidy-up.
 
 ## Guidance
 

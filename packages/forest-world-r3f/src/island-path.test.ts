@@ -291,6 +291,14 @@ test('fld-a-dock-lands-on-an-island-the-trail-names: named rims beat a nearer un
   const unnamed = islandDocks(channel, [strip({ x: 42, z: 200 }, { x: 43, z: 20 })]);
   assert.deepEqual(unnamed.get('west'), []);
   assert.deepEqual(unnamed.get('east'), [{ x: 44, z: 20 }]);
+  // ⚠ ABSENT AND EMPTY ARE THE SAME ANSWER (ADR-0597 D2), and they are different SHAPES —
+  // `edges: []` is what every fixture here builds, while the field is genuinely OPTIONAL on the
+  // descriptor and a caller may omit it. `check:mutation-diff` found the `?? []` fallback reached
+  // by no test at all, so only the empty-array arm was ever exercised.
+  const noField = strip({ x: 42, z: 200 }, { x: 43, z: 20 });
+  delete (noField as { edges?: string[] }).edges;
+  assert.equal(noField.edges, undefined);
+  assert.deepEqual(islandDocks(channel, [noField]).get('east'), [{ x: 44, z: 20 }]);
   const tooFar = islandDocks(channel, [strip({ x: 42, z: 200 }, { x: 200, z: 20 }, { edges: ['source->west'] })]);
   assert.deepEqual([...tooFar.entries()], [['west', []], ['east', []]]);
 
