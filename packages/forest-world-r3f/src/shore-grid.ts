@@ -35,6 +35,11 @@ export interface EdgeGrid {
   /** Every edge, in the order the buckets index. */
   readonly edges: readonly CoastEdge[];
   /**
+   * Whether each grid cell, plus its one-cell border, can have a candidate edge in its 3x3
+   * neighbourhood. The border makes a query just outside the edge extent a lookup too.
+   */
+  readonly nearMask: Uint8Array;
+  /**
    * The edges worth testing for this point, as indices into {@link edges}.
    *
    * ⚠ AN EMPTY RESULT IS A PROOF, NOT A HINT: it means every edge is at least `width` away, so a
@@ -44,6 +49,8 @@ export interface EdgeGrid {
    * move on; the alternative is one allocation per texel, and there are 5.4 M of them.
    */
   candidates(x: number, z: number): readonly number[];
+  /** True when the point's candidate neighbourhood is known to be empty. */
+  far(x: number, z: number): boolean;
 }
 
 /**
@@ -179,6 +186,25 @@ export function buildSegmentGrid(edges: readonly CoastEdge[], width: number): Ed
     }
   }
 
+  // Store the answer to the neighbourhood-empty question for every grid cell and its immediate
+  // border. A point further out cannot see a bucket at all, while the padded cells cover the one
+  // outside cell whose 3x3 neighbourhood can still reach the grid.
+  const maskWidth = nx + 2;
+  const nearMask = new Uint8Array(maskWidth * (nz + 2));
+  for (const maskJ of indices(nz + 2)) {
+    const cj = maskJ - 1;
+    for (const maskI of indices(nx + 2)) {
+      const ci = maskI - 1;
+      for (const j of NEIGHBOUR_OFFSETS.map((d) => cj + d)) {
+        if (j < 0 || j >= nz) continue;
+        for (const i of NEIGHBOUR_OFFSETS.map((d) => ci + d)) {
+          if (i < 0 || i >= nx) continue;
+          if (buckets[j * nx + i]!.length !== 0) nearMask[maskJ * maskWidth + maskI] = 1;
+        }
+      }
+    }
+  }
+
   // ⚠ ONE REUSED SCRATCH BUFFER AND A QUERY STAMP, rather than a Set per call. This is called once
   // per texel — 5.4 M times for the forest atlas — and allocating there is most of what an index
   // is supposed to save.
@@ -225,12 +251,21 @@ export function buildSegmentGrid(edges: readonly CoastEdge[], width: number): Ed
     return hits;
   };
 
+  const far = (x: number, z: number): boolean => {
+    const ci = cellIndex(x, minX, cell);
+    const cj = cellIndex(z, minZ, cell);
+    if (ci < -1 || ci > nx || cj < -1 || cj > nz) return true;
+    return nearMask[(cj + 1) * maskWidth + ci + 1]! === 0;
+  };
+
   return {
     cell,
     nx,
     nz,
     edges,
+    nearMask,
     candidates: collect,
+    far,
   };
 }
 

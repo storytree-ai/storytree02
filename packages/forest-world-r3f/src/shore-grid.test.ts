@@ -15,6 +15,7 @@ import {
   ringEdges,
   spanOf,
   type CoastEdge,
+  type EdgeGrid,
   type NearestSample,
 } from './shore-grid.js';
 import { shoreField } from './shore-fall.js';
@@ -507,4 +508,54 @@ test('⚠ the UN-PROJECTED forest fits the cap — so the grid is NOT what stand
   // blocker rested on is visible in one place rather than inferred across two files.
   const projected = buildSegmentGrid([{ ax: 0, az: 0, bx: 2289.7, bz: 3545.4 }], SAND_CELL);
   assert.ok(projected.cell <= grid.cell, 'a deeper forest needs at least as coarse a cell, never finer');
+});
+
+test('shore-far-field-is-one-lookup: the padded near mask agrees with the neighbourhood walk everywhere', () => {
+  // A rectangular, OPEN edge set makes the index's extent unambiguous while leaving a 3-by-3-cell
+  // interior that cannot contain a near answer. It is deliberately several cells wide: a one-cell
+  // fixture could make a mask that only describes the boundary look correct.
+  const cap = 2;
+  const edges: CoastEdge[] = [
+    { ax: 0, az: 0, bx: 12, bz: 0 },
+    { ax: 12, az: 0, bx: 12, bz: 12 },
+    { ax: 12, az: 12, bx: 0, bz: 12 },
+    { ax: 0, az: 12, bx: 0, bz: 0 },
+  ];
+  const grid = buildSegmentGrid(edges, cap) as EdgeGrid & {
+    readonly nearMask: Uint8Array;
+    far(x: number, z: number): boolean;
+  };
+
+  // The first two assertions make a missing public surface an ASSERTION red, rather than allowing
+  // an undefined property access to disguise the regression as a loading failure.
+  assert.ok('nearMask' in grid, 'the grid exposes its precomputed near-cell mask');
+  assert.ok('far' in grid, 'the grid answers whether a point is beyond the near field');
+  assert.equal(grid.nearMask.length, (grid.nx + 2) * (grid.nz + 2));
+
+  // The mask has one padded cell around the grid, hence the +1 offset for a grid cell. The bottom
+  // edge occupies the middle bottom cell; the centre is three cells from every edge.
+  const maskAt = (i: number, j: number) => grid.nearMask[(j + 1) * (grid.nx + 2) + i + 1]!;
+  assert.ok(maskAt(3, 0) !== 0, 'a cell adjacent to an edge is marked near');
+  assert.equal(maskAt(3, 3), 0, 'a cell three cells from every edge is marked far');
+
+  let probes = 0;
+  for (let x = -6.13; x <= 18; x += 0.73) {
+    for (let z = -6.13; z <= 18; z += 0.73) {
+      // This covers one cell beyond the grid and points genuinely outside it, on every side.
+      assert.equal(grid.far(x, z), grid.candidates(x, z).length === 0, `far disagrees at (${x}, ${z})`);
+      const got = nearestOnSegments(grid, x, z, cap);
+      const expected = bruteOpen(edges, x, z, cap);
+      assert.ok(Math.abs(got.distance - expected.distance) < 1e-9, `distance differs at (${x}, ${z})`);
+      assert.ok(
+        Math.abs(got.gx - expected.gx) < 1e-9 && Math.abs(got.gz - expected.gz) < 1e-9,
+        `gradient differs at (${x}, ${z}): (${got.gx}, ${got.gz}) vs (${expected.gx}, ${expected.gz})`,
+      );
+      probes += 1;
+    }
+  }
+  assert.ok(probes > 1000, `only ${probes} expanded-grid probes`);
+
+  const empty = buildSegmentGrid([], cap) as typeof grid;
+  assert.equal(empty.far(100, -100), true, 'an empty grid is always far');
+  assert.deepEqual(nearestOnSegments(empty, 100, -100, cap), { distance: cap, gx: 0, gz: 0 });
 });
