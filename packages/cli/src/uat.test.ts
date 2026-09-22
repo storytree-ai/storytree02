@@ -525,6 +525,82 @@ test("rerevision: a clean story reports no drift and writes nothing", async () =
   assert.match(r.body, /all bind their current content/);
 });
 
+test("rerevision: a CRLF story is READ, not reported as declaring nothing", async () => {
+  // The sharp edge this verb used to have: the designated REPAIR verb certified success at exit 0
+  // precisely when the file was unreadable. A CRLF story file is ordinary input on Windows.
+  const body = storyBody(boundItem(C1, "**Clean** _(witness: human)_: bound.")).replace(
+    /\n/g,
+    "\r\n",
+  );
+  const r = await uatCommand(
+    { mode: "rerevision", target: "demo" },
+    { write: true },
+    baseDeps({ readStoryBody: () => body }),
+  );
+  assert.equal(r.ok, true);
+  assert.match(r.body, /1 criterion revision\(s\) checked/, "the item is seen, not skipped");
+});
+
+test("rerevision: REFUSES a section that declares identities it could not parse", async () => {
+  // `checked: 0` has two causes and they must not look alike. Here the identities are plainly
+  // authored and no item parsed, so the section could not be READ.
+  const body =
+    "## UAT Test Criteria\n\n- **Claim** _(criterion-id: " +
+    C1 +
+    ")_ _(revision-id: uatr1:0000)_: not a numbered item.\n";
+  const r = await uatCommand(
+    { mode: "rerevision", target: "demo" },
+    { write: true },
+    baseDeps({ readStoryBody: () => body }),
+  );
+  assert.equal(r.ok, false, "a parse that could not be read must never certify success");
+  // The WORDING is pinned, not sampled. A refusal with no repair is the failure this arc exists to
+  // remove, so what the message tells the reader to do IS the deliverable — the same rule the
+  // manifest composer's refusals are held to ("every refusal is worded as its own repair").
+  // Sampling it with a few `assert.match`es leaves most of the message unasserted: measured here,
+  // seven mutants emptied whole sentences — including "Check, in this order:" and the `join("\n")`
+  // that makes it readable at all — with every sampled phrase still matching.
+  assert.equal(
+    r.body,
+    [
+      '"demo": the UAT section declares criterion identities that could not be read — zero items parsed.',
+      "",
+      "This is not a story that declares no criteria — that section would carry no",
+      "(criterion-id:) at all. Something here parsed to zero items while plainly naming some,",
+      "so the section is UNREADABLE and nothing was written.",
+      "",
+      "Check, in this order:",
+      "  1. every criterion is a NUMBERED list item (`1. `, `2. `) — a bullet is not one;",
+      "  2. the `## UAT Test Criteria` heading is not nested under another `##` section;",
+      "  3. `git diff --stat` does not report the file as binary (a stray NUL byte).",
+      "",
+      "Line endings are no longer a cause: they are normalised at the parse boundary.",
+    ].join("\n"),
+  );
+  // A refusal hands back somewhere to go. Pinned as a whole for the same reason the body is, and
+  // because `next` is optional — an exact compare needs no narrowing and adds no operator of its
+  // own for the mutation rung to ask about. These are the RAW lines; the envelope emitter is what
+  // prefixes them at print time, so a change there does not reach this assertion.
+  assert.deepEqual(r.next, [
+    "storytree uat list demo --pg",
+    "git diff -- stories/demo/story.md",
+  ]);
+});
+
+test("rerevision: a story deliberately declaring NO criteria still reports nothing to do", async () => {
+  // 15 of the 42 heading-bearing stories are in this state and are honest (ADR-0294 D4) — refusing
+  // them would tax the honest case, which is why the discriminator is the criterion-id, not the heading.
+  const body =
+    "## UAT Test Criteria\n\n**None — this story is retired.** An empty section here is a statement\nrather than a gap (ADR-0294 D4).\n";
+  const r = await uatCommand(
+    { mode: "rerevision", target: "demo" },
+    { write: true },
+    baseDeps({ readStoryBody: () => body }),
+  );
+  assert.equal(r.ok, true);
+  assert.match(r.body, /Nothing to do/);
+});
+
 test("rerevision: bare REPORTS drift, refuses, and writes nothing", async () => {
   const original = boundItem(C1, "**Claim** _(witness: human)_: original.");
   const drifted = storyBody(original.replace("original.", "edited."));

@@ -19,6 +19,7 @@
     "check:boundaries": "pnpm -C packages/cli exec node --import ../../scripts/tsx-cache-off.mjs --import tsx src/check-boundaries.ts",
     "check:manifest-fragments": "pnpm -C packages/cli exec node --import ../../scripts/tsx-cache-off.mjs --import tsx src/check-manifest-fragments.ts",
     "check:ownership-totality": "pnpm -C packages/cli exec node --import ../../scripts/tsx-cache-off.mjs --import tsx src/check-ownership-totality.ts",
+    "check:reliability-gate-parity": "pnpm -C packages/cli exec node --import ../../scripts/tsx-cache-off.mjs --import tsx src/check-reliability-gate-parity.ts",
     "check:contract-grammar": "pnpm -C packages/cli exec node --import ../../scripts/tsx-cache-off.mjs --import tsx src/check-contract-grammar.ts",
     "check:mirror-conformance": "pnpm -C packages/cli exec node --import ../../scripts/tsx-cache-off.mjs --import tsx src/check-mirror-conformance.ts",
     "check:mirror-conformance-live": "pnpm -C packages/cli exec node --import ../../scripts/tsx-cache-off.mjs --import tsx src/check-mirror-conformance.ts --arm live",

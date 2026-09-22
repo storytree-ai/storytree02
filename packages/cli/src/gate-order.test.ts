@@ -157,7 +157,7 @@ test("the REAL gate plan still runs both expensive legs (the wall the axes are m
   }
 });
 
-test("the REAL gate plan is exactly the nine ADR-0311 survivors plus the ADR-0336, ADR-0454, ADR-0223, ADR-0317, ADR-0403, ADR-0445, ADR-0458, ADR-0459, ADR-0556, ground-space, land-art, palette-transcription, desktop-route-coverage and anti-slop additions, in order", () => {
+test("the REAL gate plan is exactly the nine ADR-0311 survivors plus the ADR-0336, ADR-0454, ADR-0223, ADR-0317, ADR-0403, ADR-0445, ADR-0458, ADR-0459, ADR-0556, ground-space, land-art, palette-transcription, desktop-route-coverage, reliability-gate-parity and anti-slop additions, in order", () => {
   assert.deepEqual(
     GATE_PLAN.map((step) => step.command),
     [
@@ -186,6 +186,13 @@ test("the REAL gate plan is exactly the nine ADR-0311 survivors plus the ADR-033
       // to this branch's own added/edited contracts, so it belongs with its `check:ownership-totality`
       // neighbour, whose `chooseBaseRef` anchor it reuses.
       "pnpm check:contract-grammar",
+      // `declared-reliability-gate-is-run-by-a-rung` (verification-integrity-arc), added
+      // 2026-09-22: a story's declared `## Reliability Gates` command, held to something that
+      // actually runs it. Disk-only and no git, so it sits with its offline neighbours; it is on
+      // the CI wall as well as in the gate, because the escape it catches is CI-shaped — 3ea9c3cc
+      // retired a pane, updated every unit test it broke, and left the `studio` UAT journey red
+      // precisely because nothing runs it.
+      "pnpm check:reliability-gate-parity",
       "pnpm check:mirror-conformance",
       // The ABSENCE half of the line above (`traversal-panel-arc`, increment
       // `desktop-route-coverage-is-unasked`, 2026-08-29): conformance compares the payloads of

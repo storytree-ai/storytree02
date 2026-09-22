@@ -7,7 +7,11 @@ import { MIRRORS } from "./mirror-conformance.js";
 import {
   concurrencyFor,
   isSpawnUatTest,
+  type AdjudicatedMutant,
   adjudicateMutants,
+  auditSuppressionDirectives,
+  formatSuppressionAudit,
+  parseSuppressionDirectives,
   changedLinesAreCodeFree,
   noChangedTestOutcome,
   isCodeFreeLine,
@@ -2701,4 +2705,492 @@ test("entryPointsFromShellScripts: dedupes and sorts across scripts, and an empt
     ]),
     ["packages/cli/src/a.ts", "packages/cli/src/z.ts"],
   );
+});
+
+// ── SUPPRESSION DIRECTIVES (`mutation-suppression-directive-announces-itself`) ────────────────────
+//
+// An inert `Stryker disable next-line` is invisible: Stryker emits no unused-directive diagnostic,
+// and the comment that binds is textually identical to the one that does not. These pin the three
+// answers the audit can give and, for the render, the WHOLE line rather than a phrase of it.
+
+/** An adjudicated mutant, with only the fields the suppression audit reads set meaningfully. */
+function mutantAt(args: {
+  file: string;
+  line: number;
+  mutator: string;
+  status: string;
+}): AdjudicatedMutant {
+  return {
+    file: args.file,
+    line: args.line,
+    column: 1,
+    endColumn: 2,
+    mutator: args.mutator,
+    status: args.status,
+    outcome: args.status === "Ignored" ? "excluded" : "survived",
+    replacement: null,
+    killedByFiles: [],
+  };
+}
+
+const SUPPRESSED_SOURCE = [
+  "const a = 1;",
+  "// Stryker disable next-line ConditionalExpression: EQUIVALENT — both arms agree.",
+  "const b = a > 0 ? 1 : 1;",
+].join("\n");
+
+test("parseSuppressionDirectives reads the mutator list, the comment line and its target", () => {
+  assert.deepEqual(parseSuppressionDirectives("packages/cli/src/a.ts", SUPPRESSED_SOURCE), [
+    {
+      file: "packages/cli/src/a.ts",
+      line: 2,
+      targetLine: 3,
+      mutators: ["ConditionalExpression"],
+    },
+  ]);
+});
+
+test("parseSuppressionDirectives splits a comma list and keeps Stryker's `all` wildcard", () => {
+  const source = [
+    "// Stryker disable next-line ConditionalExpression,StringLiteral: EQUIVALENT",
+    "x();",
+    "// Stryker disable next-line all: EQUIVALENT — redundant with the filter below.",
+    "y();",
+    "/* Stryker disable next-line Regex: EQUIVALENT */",
+    "z();",
+  ].join("\n");
+  assert.deepEqual(
+    parseSuppressionDirectives("f.ts", source).map((d) => [d.line, d.targetLine, d.mutators]),
+    [
+      [1, 2, ["ConditionalExpression", "StringLiteral"]],
+      [3, 4, ["all"]],
+      [5, 6, ["Regex"]],
+    ],
+  );
+});
+
+test("parseSuppressionDirectives finds a directive written after a ternary arm", () => {
+  // Two of this repo's live directives sit here, because that is where the expression they justify
+  // begins. Anchoring the pattern at the start of the LINE rather than at the comment opener would
+  // silently drop both, and dropping a directive means never auditing it.
+  const source = ["const s = flag", "  ? // Stryker disable next-line StringLiteral: EQUIVALENT", '    "a"', '  : "b";'].join(
+    "\n",
+  );
+  // The TARGET matters as much as the find, and this shape is the only one that can prove it. The
+  // search for the bound node must start strictly BELOW the directive: here the directive's own
+  // line carries code (the `?` arm), so a search that included it would bind the directive to
+  // ITSELF — line 2 instead of line 3. On an ordinary whole-line `//` directive the two readings
+  // agree, because that line is comment and gets skipped either way.
+  assert.deepEqual(parseSuppressionDirectives("f.ts", source), [
+    { file: "f.ts", line: 2, targetLine: 3, mutators: ["StringLiteral"] },
+  ]);
+});
+
+test("parseSuppressionDirectives ignores PROSE that merely mentions a directive", () => {
+  // Every one of these shapes is live in this repo — six files discuss their own directives, and
+  // this module is one of them. A pattern that matched them would invent an `unmatched` finding for
+  // every paragraph about the mechanism, which is worse than no audit: it teaches the reader to
+  // stop reading the output.
+  //
+  // All four are rejected by the SAME clause, and it is the anchoring rather than the backticks:
+  // `Stryker` has to be the first thing in the comment. The docstring lines never open a comment on
+  // their own line at all, and the two `//` lines put other words first.
+  const source = [
+    " * Hoisted out of the chain below, because a `Stryker disable next-line` written inline",
+    " * binds to nothing.",
+    "// the comment `Stryker disable next-line ConditionalExpression` would not attach here",
+    "// ⚠ ONE LINE ON PURPOSE: Stryker disable next-line binds to the NEXT LINE, so wrapping",
+    "const real = 1;",
+  ].join("\n");
+  assert.deepEqual(parseSuppressionDirectives("f.ts", source), []);
+});
+
+test("parseSuppressionDirectives cannot tell a directive from prose that opens a comment with it", () => {
+  // THE RESIDUAL FALSE POSITIVE, pinned so it is a known limit rather than a surprise. Nothing
+  // distinguishes this from a real directive except meaning, and the mutator it captures is an
+  // English word — so the audit reports one UNMATCHED line. It costs an advisory line and no more,
+  // which is a large part of why this audit warns rather than reds.
+  assert.deepEqual(
+    parseSuppressionDirectives("f.ts", "// Stryker disable next-line binds to the NEXT line\nx();").map((d) => [
+      d.line,
+      d.mutators,
+    ]),
+    [[1, ["binds"]]],
+  );
+});
+
+test("auditSuppressionDirectives counts a directive that really suppressed its mutant", () => {
+  const audit = auditSuppressionDirectives({
+    sources: new Map([["packages/cli/src/a.ts", SUPPRESSED_SOURCE]]),
+    changed: [{ file: "packages/cli/src/a.ts", ranges: [{ start: 1, end: 3 }] }],
+    mutants: [mutantAt({ file: "packages/cli/src/a.ts", line: 3, mutator: "ConditionalExpression", status: "Ignored" })],
+  });
+  assert.deepEqual(audit, { audited: 1, claims: 1, attached: 1, findings: [] });
+});
+
+test("auditSuppressionDirectives names an INERT directive — the friction's own shape", () => {
+  // The measured failure: the directive is right there above the line, and the mutant is Survived.
+  const audit = auditSuppressionDirectives({
+    sources: new Map([["packages/cli/src/a.ts", SUPPRESSED_SOURCE]]),
+    changed: [{ file: "packages/cli/src/a.ts", ranges: [{ start: 1, end: 3 }] }],
+    mutants: [
+      mutantAt({ file: "packages/cli/src/a.ts", line: 3, mutator: "ConditionalExpression", status: "Survived" }),
+    ],
+  });
+  assert.deepEqual(audit, {
+    audited: 1,
+    claims: 1,
+    attached: 0,
+    findings: [
+      {
+        file: "packages/cli/src/a.ts",
+        line: 2,
+        targetLine: 3,
+        mutator: "ConditionalExpression",
+        kind: "inert",
+        statuses: ["Survived"],
+      },
+    ],
+  });
+});
+
+test("auditSuppressionDirectives names an UNMATCHED directive separately from an inert one", () => {
+  // A different mutator entirely on the target line: the directive suppresses nothing, but nothing
+  // of ITS mutator is gating either. Conflating the two would send the reader to the wrong remedy.
+  const audit = auditSuppressionDirectives({
+    sources: new Map([["packages/cli/src/a.ts", SUPPRESSED_SOURCE]]),
+    changed: [{ file: "packages/cli/src/a.ts", ranges: [{ start: 1, end: 3 }] }],
+    mutants: [mutantAt({ file: "packages/cli/src/a.ts", line: 3, mutator: "StringLiteral", status: "Survived" })],
+  });
+  assert.deepEqual(audit.findings.map((f) => [f.kind, f.mutator, f.statuses]), [
+    ["unmatched", "ConditionalExpression", []],
+  ]);
+});
+
+test("auditSuppressionDirectives judges `all` against every mutant on the target line", () => {
+  const source = ["// Stryker disable next-line all: EQUIVALENT", "const b = x ?? y;"].join("\n");
+  const changed = [{ file: "a.ts", ranges: [{ start: 1, end: 2 }] }];
+  const attached = auditSuppressionDirectives({
+    sources: new Map([["a.ts", source]]),
+    changed,
+    mutants: [
+      mutantAt({ file: "a.ts", line: 2, mutator: "LogicalOperator", status: "Ignored" }),
+      mutantAt({ file: "a.ts", line: 2, mutator: "ConditionalExpression", status: "Ignored" }),
+    ],
+  });
+  assert.deepEqual([attached.claims, attached.attached, attached.findings.length], [1, 1, 0]);
+
+  // One survivor is enough to make the wildcard inert: `all` claims the whole line.
+  const partial = auditSuppressionDirectives({
+    sources: new Map([["a.ts", source]]),
+    changed,
+    mutants: [
+      mutantAt({ file: "a.ts", line: 2, mutator: "LogicalOperator", status: "Survived" }),
+      mutantAt({ file: "a.ts", line: 2, mutator: "ConditionalExpression", status: "Survived" }),
+    ],
+  });
+  assert.deepEqual(partial.findings.map((f) => [f.kind, f.mutator, f.statuses]), [["inert", "all", ["Survived"]]]);
+});
+
+test("auditSuppressionDirectives counts a comma list as one claim PER mutator", () => {
+  const source = ["// Stryker disable next-line ConditionalExpression,StringLiteral: EQUIVALENT", "const b = 1;"].join(
+    "\n",
+  );
+  const audit = auditSuppressionDirectives({
+    sources: new Map([["a.ts", source]]),
+    changed: [{ file: "a.ts", ranges: [{ start: 1, end: 2 }] }],
+    mutants: [
+      mutantAt({ file: "a.ts", line: 2, mutator: "ConditionalExpression", status: "Ignored" }),
+      mutantAt({ file: "a.ts", line: 2, mutator: "StringLiteral", status: "Survived" }),
+    ],
+  });
+  // ONE directive, TWO claims: half of it took and half did not, which a per-directive count could
+  // not express at all.
+  assert.deepEqual([audit.audited, audit.claims, audit.attached], [1, 2, 1]);
+  assert.deepEqual(audit.findings.map((f) => [f.kind, f.mutator]), [["inert", "StringLiteral"]]);
+});
+
+test("auditSuppressionDirectives stays silent about lines this run never instrumented", () => {
+  // The blind-spot rule. The directive is real and may well be inert, but its target line is
+  // outside the changed spans, so the report holds no mutant for it BECAUSE THE RUNG NEVER ASKED.
+  const audit = auditSuppressionDirectives({
+    sources: new Map([["packages/cli/src/a.ts", SUPPRESSED_SOURCE]]),
+    changed: [{ file: "packages/cli/src/a.ts", ranges: [{ start: 1, end: 1 }] }],
+    mutants: [mutantAt({ file: "packages/cli/src/a.ts", line: 1, mutator: "StringLiteral", status: "Killed" })],
+  });
+  assert.deepEqual(audit, { audited: 0, claims: 0, attached: 0, findings: [] });
+});
+
+test("auditSuppressionDirectives reads each file's OWN changed ranges, not the run's", () => {
+  // Two files, two different hunks. `b.ts` has its line 3 changed and `a.ts` does not, so `a.ts`'s
+  // directive is outside what this run instrumented and only `b.ts` may be judged. A lookup that
+  // ignored WHICH file a hunk belongs to would audit both and accuse `a.ts` of a directive the run
+  // never asked about.
+  const mutantsOn = (file: string) => [
+    mutantAt({ file, line: 3, mutator: "ConditionalExpression", status: "Survived" }),
+  ];
+  const audit = auditSuppressionDirectives({
+    sources: new Map([
+      ["a.ts", SUPPRESSED_SOURCE],
+      ["b.ts", SUPPRESSED_SOURCE],
+    ]),
+    changed: [
+      { file: "a.ts", ranges: [{ start: 1, end: 1 }] },
+      { file: "b.ts", ranges: [{ start: 3, end: 3 }] },
+    ],
+    mutants: [...mutantsOn("a.ts"), ...mutantsOn("b.ts")],
+  });
+  assert.deepEqual([audit.audited, audit.findings.map((f) => f.file)], [1, ["b.ts"]]);
+});
+
+test("auditSuppressionDirectives stays silent about a file the run produced no mutant for", () => {
+  // Narrowed away, or not mutable. Either way the absence is the instrument's, not the author's.
+  const audit = auditSuppressionDirectives({
+    sources: new Map([["packages/cli/src/a.ts", SUPPRESSED_SOURCE]]),
+    changed: [{ file: "packages/cli/src/a.ts", ranges: [{ start: 1, end: 3 }] }],
+    mutants: [mutantAt({ file: "packages/cli/src/other.ts", line: 3, mutator: "ConditionalExpression", status: "Survived" })],
+  });
+  assert.deepEqual(audit, { audited: 0, claims: 0, attached: 0, findings: [] });
+});
+
+test("auditSuppressionDirectives matches Stryker's per-run sandbox path by suffix", () => {
+  // The report's paths are absolute inside a sandbox directory whose name changes every run, so
+  // equality alone finds nothing — the same trap `resolveTestFiles` carries one layer down.
+  const audit = auditSuppressionDirectives({
+    sources: new Map([["packages/cli/src/a.ts", SUPPRESSED_SOURCE]]),
+    changed: [{ file: "packages/cli/src/a.ts", ranges: [{ start: 1, end: 3 }] }],
+    mutants: [
+      mutantAt({
+        file: "C:/code/storytree/.stryker-tmp/sandbox-91f2/packages/cli/src/a.ts",
+        line: 3,
+        mutator: "ConditionalExpression",
+        status: "Ignored",
+      }),
+    ],
+  });
+  assert.deepEqual([audit.audited, audit.claims, audit.attached, audit.findings.length], [1, 1, 1, 0]);
+});
+
+test("auditSuppressionDirectives reports findings in a stable file order", () => {
+  // THREE files, fed MIDDLE-OUT rather than reversed. A two-item case cannot distinguish a sort
+  // from its own inverse under bun/JSC — a comparator forced to a constant reverses a two-element
+  // input, which for reversed input IS the sorted answer. Three, with the middle one first, has no
+  // such coincidence: input order, reversed input order and swapped order are all distinguishable
+  // from `a, m, z`.
+  const source = ["// Stryker disable next-line ConditionalExpression: EQUIVALENT", "const b = x ? 1 : 1;"].join("\n");
+  const audit = auditSuppressionDirectives({
+    sources: new Map([
+      ["m.ts", source],
+      ["a.ts", source],
+      ["z.ts", source],
+    ]),
+    changed: ["m.ts", "a.ts", "z.ts"].map((file) => ({ file, ranges: [{ start: 1, end: 2 }] })),
+    mutants: ["m.ts", "a.ts", "z.ts"].map((file) =>
+      mutantAt({ file, line: 2, mutator: "ConditionalExpression", status: "Survived" }),
+    ),
+  });
+  assert.deepEqual(audit.findings.map((f) => f.file), ["a.ts", "m.ts", "z.ts"]);
+});
+
+test("formatSuppressionAudit renders nothing when the run judged no directive", () => {
+  assert.deepEqual(formatSuppressionAudit("[mutation-diff]", { audited: 0, claims: 0, attached: 0, findings: [] }), []);
+});
+
+test("formatSuppressionAudit renders the all-attached summary", () => {
+  assert.deepEqual(
+    formatSuppressionAudit("[mutation-diff]", { audited: 3, claims: 4, attached: 4, findings: [] }),
+    ["[mutation-diff] suppression directives in the changed spans: 3 directive(s), 4 mutator claim(s), 4 attached"],
+  );
+});
+
+test("formatSuppressionAudit renders an inert finding with the remedy", () => {
+  assert.deepEqual(
+    formatSuppressionAudit("[mutation-diff]", {
+      audited: 1,
+      claims: 1,
+      attached: 0,
+      findings: [
+        {
+          file: "packages/cli/src/a.ts",
+          line: 40,
+          targetLine: 41,
+          mutator: "ConditionalExpression",
+          kind: "inert",
+          // TWO statuses, because one cannot prove the separator: `join(", ")` and `join("")` are
+          // the same function on a single-element list, so a one-status fixture leaves the reader
+          // with `NoCoverageSurvived` and nothing to fail.
+          statuses: ["NoCoverage", "Survived"],
+        },
+      ],
+    }),
+    [
+      "[mutation-diff] suppression directives in the changed spans: 1 directive(s), 1 mutator claim(s), 0 attached",
+      "[mutation-diff]   INERT DIRECTIVE packages/cli/src/a.ts:40 disable next-line ConditionalExpression — " +
+        "line 41 still carries a LIVE ConditionalExpression mutant (NoCoverage, Survived), so the directive bound to nothing. " +
+        "A comment between the links of a chained expression attaches to no statement: extract the expression " +
+        "into a named function and put the directive above its return.",
+    ],
+  );
+});
+
+test("formatSuppressionAudit renders an unmatched finding with its own remedy", () => {
+  assert.deepEqual(
+    formatSuppressionAudit("[mutation-diff]", {
+      audited: 1,
+      claims: 1,
+      attached: 0,
+      findings: [
+        {
+          file: "packages/cli/src/a.ts",
+          line: 7,
+          targetLine: 8,
+          mutator: "Regex",
+          kind: "unmatched",
+          statuses: [],
+        },
+      ],
+    }),
+    [
+      "[mutation-diff] suppression directives in the changed spans: 1 directive(s), 1 mutator claim(s), 0 attached",
+      "[mutation-diff]   UNMATCHED DIRECTIVE packages/cli/src/a.ts:7 disable next-line Regex — line 8 carries " +
+        "no Regex mutant at all, so this suppresses nothing. Either the code moved out from under it, or the " +
+        "mutator name is not one Stryker emits here.",
+    ],
+  );
+});
+
+test("parseSuppressionDirectives accepts the irregular whitespace its pattern allows", () => {
+  // EVERY whitespace class in the pattern is load bearing, and a fixture written with tidy single
+  // spaces proves none of them: each `\s+` weakened to `\s` still matches tidy input, and so does
+  // each `\s*` weakened to `\S*` when there is nothing there to match. So this fixture is
+  // deliberately untidy — no space after the opener, doubled spaces between the words, and spaces
+  // on BOTH sides of the comma — which is exactly the input each weakening stops accepting.
+  assert.deepEqual(
+    parseSuppressionDirectives("f.ts", "//Stryker  disable   next-line   ConditionalExpression , StringLiteral: why\nx();"),
+    [{ file: "f.ts", line: 1, targetLine: 2, mutators: ["ConditionalExpression", "StringLiteral"] }],
+  );
+});
+
+test("auditSuppressionDirectives looks only at the line the directive names", () => {
+  // A directive on line 2 claims line 3 and nothing else. Line 5 carries a live mutant of the SAME
+  // mutator; if the line filter went, that one would be found and the directive would read as
+  // INERT when the honest answer is UNMATCHED — an accusation about a line nobody wrote it for.
+  const audit = auditSuppressionDirectives({
+    sources: new Map([["packages/cli/src/a.ts", SUPPRESSED_SOURCE]]),
+    changed: [{ file: "packages/cli/src/a.ts", ranges: [{ start: 1, end: 6 }] }],
+    mutants: [
+      mutantAt({ file: "packages/cli/src/a.ts", line: 5, mutator: "ConditionalExpression", status: "Survived" }),
+    ],
+  });
+  assert.deepEqual(audit.findings.map((f) => [f.kind, f.mutator, f.statuses]), [
+    ["unmatched", "ConditionalExpression", []],
+  ]);
+});
+
+test("auditSuppressionDirectives reports the target line's statuses in a stable order", () => {
+  // Fed in the order a report would NOT already be sorted in, so the sort is the thing under test
+  // rather than the input's own tidiness: `Set` keeps insertion order, so without the sort this
+  // comes back `Survived, NoCoverage`.
+  const audit = auditSuppressionDirectives({
+    sources: new Map([["packages/cli/src/a.ts", SUPPRESSED_SOURCE]]),
+    changed: [{ file: "packages/cli/src/a.ts", ranges: [{ start: 1, end: 3 }] }],
+    mutants: [
+      mutantAt({ file: "packages/cli/src/a.ts", line: 3, mutator: "ConditionalExpression", status: "Survived" }),
+      mutantAt({ file: "packages/cli/src/a.ts", line: 3, mutator: "ConditionalExpression", status: "NoCoverage" }),
+    ],
+  });
+  assert.deepEqual(audit.findings.map((f) => f.statuses), [["NoCoverage", "Survived"]]);
+});
+
+test("auditSuppressionDirectives calls a directive attached when it suppressed SOME of the line", () => {
+  // ONE Ignored is attachment. A line commonly carries several mutants of one mutator on different
+  // spans, and Stryker's directive takes the ones it binds to — requiring EVERY mutant on the line
+  // to be Ignored would report a working directive as inert on that ordinary shape.
+  const audit = auditSuppressionDirectives({
+    sources: new Map([["packages/cli/src/a.ts", SUPPRESSED_SOURCE]]),
+    changed: [{ file: "packages/cli/src/a.ts", ranges: [{ start: 1, end: 3 }] }],
+    mutants: [
+      mutantAt({ file: "packages/cli/src/a.ts", line: 3, mutator: "ConditionalExpression", status: "Ignored" }),
+      mutantAt({ file: "packages/cli/src/a.ts", line: 3, mutator: "ConditionalExpression", status: "Survived" }),
+    ],
+  });
+  assert.deepEqual([audit.claims, audit.attached, audit.findings.length], [1, 1, 0]);
+});
+
+test("auditSuppressionDirectives merges the ranges of a file the diff reports twice", () => {
+  // A unified diff emits one hunk per changed region, so one file arrives as several entries — and
+  // the directive's target line may sit in the SECOND of them. Keeping only the last would silently
+  // stop auditing everything in the first.
+  const audit = auditSuppressionDirectives({
+    sources: new Map([["packages/cli/src/a.ts", SUPPRESSED_SOURCE]]),
+    changed: [
+      { file: "packages/cli/src/a.ts", ranges: [{ start: 3, end: 3 }] },
+      { file: "packages/cli/src/a.ts", ranges: [{ start: 1, end: 1 }] },
+    ],
+    mutants: [
+      mutantAt({ file: "packages/cli/src/a.ts", line: 3, mutator: "ConditionalExpression", status: "Survived" }),
+    ],
+  });
+  assert.deepEqual([audit.audited, audit.findings.length], [1, 1]);
+});
+
+test("parseSuppressionDirectives binds past the REST of a multi-line justification", () => {
+  // ⚠ THE BUG THIS PINS WAS REAL, AND IT WAS IN THIS MODULE. `next-line` does not mean the next
+  // line of the FILE — Stryker attaches the directive to the node its whole comment block leads.
+  // A multi-line justification is the house style here (ADR-0478 asks for an adversarial one), so
+  // `line + 1` would report almost every honest directive in this repo as suppressing nothing.
+  //
+  // Measured on this very file: comments on lines 1672 and 1727 produced `Ignored` mutants on 1675
+  // and 1730. Blank lines inside the block are skipped for the same reason — they carry no node.
+  const source = [
+    "const a = 1;", //                                          1
+    "// Stryker disable next-line ConditionalExpression: EQUIV", // 2  <- the directive
+    "// both arms agree, because the ternary is only here for", //  3  <- still the block
+    "//   readability and every input reaches the same value.", //  4  <- still the block
+    "", //                                                         5  <- and a blank carries no node
+    "const b = a > 0 ? 1 : 1;", //                                  6  <- what it really binds to
+  ].join("\n");
+  assert.deepEqual(parseSuppressionDirectives("f.ts", source), [
+    { file: "f.ts", line: 2, targetLine: 6, mutators: ["ConditionalExpression"] },
+  ]);
+});
+
+test("parseSuppressionDirectives aims past EOF when a directive leads no code at all", () => {
+  // Left behind by a deletion. There is no node to bind to, so the honest answer is a target line
+  // the report can hold no mutant for — which the audit then names as UNMATCHED. Aiming at line 0
+  // (the other thing an absent index can mean) would instead read as the file's first line.
+  assert.deepEqual(
+    parseSuppressionDirectives("f.ts", ["x();", "// Stryker disable next-line Regex: stale", "// nothing below"].join("\n")),
+    [{ file: "f.ts", line: 2, targetLine: 4, mutators: ["Regex"] }],
+  );
+});
+
+test("auditSuppressionDirectives will not audit a line BELOW every changed range", () => {
+  // The directive binds to line 3; this run instrumented lines 5-9 only. Without the lower bound,
+  // line 3 reads as instrumented and the rung accuses a directive it never asked about.
+  const audit = auditSuppressionDirectives({
+    sources: new Map([["a.ts", SUPPRESSED_SOURCE]]),
+    changed: [{ file: "a.ts", ranges: [{ start: 5, end: 9 }] }],
+    mutants: [mutantAt({ file: "a.ts", line: 3, mutator: "ConditionalExpression", status: "Survived" })],
+  });
+  assert.deepEqual(audit, { audited: 0, claims: 0, attached: 0, findings: [] });
+});
+
+test("auditSuppressionDirectives accepts a line in ANY of one hunk's ranges", () => {
+  // ONE entry carrying TWO ranges, with the target in the second. `some` is the whole claim here —
+  // `every` would require line 3 to sit in the 1-1 range too, and silently stop auditing the file.
+  const audit = auditSuppressionDirectives({
+    sources: new Map([["a.ts", SUPPRESSED_SOURCE]]),
+    changed: [
+      {
+        file: "a.ts",
+        ranges: [
+          { start: 1, end: 1 },
+          { start: 3, end: 3 },
+        ],
+      },
+    ],
+    mutants: [mutantAt({ file: "a.ts", line: 3, mutator: "ConditionalExpression", status: "Survived" })],
+  });
+  assert.deepEqual([audit.audited, audit.findings.map((f) => f.kind)], [1, ["inert"]]);
 });

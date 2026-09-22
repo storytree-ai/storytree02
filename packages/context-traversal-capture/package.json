@@ -10,7 +10,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "bun test --timeout 300000 src/"
+    "test": "bun test --preload ../../scripts/tsx-cache-off.mjs --timeout 300000 src/"
   },
   "dependencies": {
     "@storytree/context-traversal-telemetry": "workspace:*",

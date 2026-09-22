@@ -7,7 +7,7 @@
   "main": "dist/main.cjs",
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.electron.json",
-    "test": "bun test --timeout 300000 src/ electron/",
+    "test": "bun test --preload ../../scripts/tsx-cache-off.mjs --timeout 300000 src/ electron/",
     "pretest:e2e": "pnpm --filter studio build && pnpm run build:electron",
     "test:e2e": "node --test --test-force-exit --test-concurrency=1 e2e/*.e2e.mjs",
     "build:electron": "esbuild electron/main.ts electron/preload.ts --bundle --platform=node --format=cjs --external:electron --external:@napi-rs/keyring --external:node-pty --outdir=dist --out-extension:.js=.cjs && node scripts/write-build-stamp.mjs",

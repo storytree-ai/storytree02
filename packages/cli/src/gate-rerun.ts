@@ -404,9 +404,20 @@ export function treeChangedSince(
  * provably identical tree. `fixed` and `passed-on-rerun` are the same observation under weaker
  * evidence and are named differently on purpose — collapsing them would let a session read "flake"
  * off a run where it had changed the code, which is the arc's own defect wearing new clothes.
+ *
+ * `store-unobserved` is the fourth, and it exists because an identical tree is NOT the same evidence
+ * for every step. The tree digest's aperture is the repository; the shared live store sits outside it
+ * (`LIVE_STORE_READING_CHECKS` in `gate-order.ts` names the ten steps whose verdicts read it). For
+ * one of those, "HEAD and the working tree are unchanged" rules out a code fix and rules out NOTHING
+ * about the store — so a real store-side repair and an infrastructure flake are indistinguishable
+ * from here, and the commonest cause is the repair. Calling that a `flake-signature` asserts "nothing
+ * was fixed in between" over precisely the state the comparison cannot see, which is
+ * `asset:an-observable-is-evidence-only-for-what-it-observes` violated by the very surface this arc
+ * built to stop it.
  */
 export type RerunVerdict =
   | "flake-signature"
+  | "store-unobserved"
   | "fixed"
   | "passed-on-rerun"
   | "still-failing"
@@ -430,8 +441,18 @@ export function compareRerun(input: {
   readonly results: readonly GateStepResult[];
   readonly selected: ReadonlySet<string>;
   readonly treeChanged: boolean | null;
+  /**
+   * Does this command's verdict read mutable live-store state? INJECTED, so this module stays pure
+   * and the classification has exactly one home (`readsLiveStore` over
+   * `LIVE_STORE_READING_CHECKS`) rather than a second copy here that could drift from the plan.
+   *
+   * A caller that cannot answer passes a predicate returning TRUE — the fail-closed direction, which
+   * withholds the flake claim — never one returning false, which would re-assert the acquittal this
+   * parameter exists to withhold.
+   */
+  readonly readsLiveStore: (command: string) => boolean;
 }): RerunComparison[] {
-  const { record, results, selected, treeChanged } = input;
+  const { record, results, selected, treeChanged, readsLiveStore } = input;
   const before = new Map(record.steps.map((s) => [s.command, s.status]));
   const out: RerunComparison[] = [];
   for (const r of results) {
@@ -440,14 +461,29 @@ export function compareRerun(input: {
     if (was === undefined) continue;
     let verdict: RerunVerdict = "other";
     if (was === "fail" && r.status === "pass") {
-      verdict =
-        treeChanged === false ? "flake-signature" : treeChanged === true ? "fixed" : "passed-on-rerun";
+      verdict = judgeFailToPass(treeChanged, readsLiveStore(r.command));
     } else if (was === "fail" && r.status === "fail") {
       verdict = "still-failing";
     }
     out.push({ command: r.command, before: was, after: r.status, verdict });
   }
   return out;
+}
+
+/**
+ * The fail→pass verdict, as a function of the two pieces of evidence and nothing else.
+ *
+ * ORDER MATTERS. A CHANGED tree is `fixed` whatever the step reads — the code moved, so that is the
+ * explanation on offer and the store is beside the point. An UNKNOWABLE tree is `passed-on-rerun`,
+ * which already acquits nothing, so the store adds no further doubt. Only the `treeChanged === false`
+ * branch splits, and only there does reading the store change what the evidence supports: the
+ * repository is provably unchanged, so for a repository-only step that IS a flake signature, while
+ * for a store-reading step it is silence about the one thing that could have moved.
+ */
+function judgeFailToPass(treeChanged: boolean | null, readsStore: boolean): RerunVerdict {
+  if (treeChanged === true) return "fixed";
+  if (treeChanged === null) return "passed-on-rerun";
+  return readsStore ? "store-unobserved" : "flake-signature";
 }
 
 /**
@@ -472,6 +508,17 @@ export function renderRerunComparison(
           `      FAILED in ${at} and PASSED here, with HEAD and the working tree PROVABLY unchanged`,
           `      between the two runs. Nothing was fixed in between, so that red is not attributable`,
           `      to this branch's code — it is infrastructure noise, not a defect.`,
+        );
+        break;
+      case "store-unobserved":
+        lines.push(
+          `    PASSED, STORE UNOBSERVED  ${c.command}`,
+          `      FAILED in ${at} and PASSED here, with HEAD and the working tree PROVABLY unchanged —`,
+          `      but this step's verdict also reads the SHARED LIVE STORE, which the tree digest does`,
+          `      not observe. So repository sameness rules out a code fix and rules out nothing about`,
+          `      the store: a real store-side repair (yours, or a sibling session's \`--pg\` write) and`,
+          `      infrastructure noise look identical from here. This is NOT a flake signature and the`,
+          `      earlier red is NOT acquitted. If you repaired live state, this is that repair working.`,
         );
         break;
       case "fixed":

@@ -10,7 +10,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "bun test --timeout 300000 src/ harness/",
+    "test": "bun test --preload ../../scripts/tsx-cache-off.mjs --timeout 300000 src/ harness/",
     "dev": "vite harness",
     "capture": "node --import ../../scripts/tsx-cache-off.mjs --import tsx harness/capture.mjs",
     "hardware-floor": "node --import ../../scripts/tsx-cache-off.mjs --import tsx harness/hardware-floor.mjs",

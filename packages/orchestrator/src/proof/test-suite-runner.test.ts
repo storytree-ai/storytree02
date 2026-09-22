@@ -183,8 +183,22 @@ test(
       }
     }
     // The two shapes this repo actually runs, named exactly, so a silent change to either is red.
+    //
+    // ⚠ THE `--preload` PAIR IS THE POINT OF THIS ASSERTION NOW, not noise in it. Every bun package
+    // whose suites can spawn a child carries the tsx cache-off shim (`bun-test-tsx-cache-off-totality`,
+    // ADR-0401), and `--preload` takes a VALUE — so a resolver that did not know that would drop the
+    // path as a positional and hand a worker `bun test --preload --timeout 300000`, which is a
+    // different command that happens to start the same way. `--preload` is in
+    // BUN_TEST_FLAGS_TAKING_A_VALUE, and this line is what proves it stays there.
     const agent = seen.find((s) => s.dir === "packages/agent");
-    assert.deepEqual(agent?.runner, ["bun", "test", "--timeout", "300000"]);
+    assert.deepEqual(agent?.runner, [
+      "bun",
+      "test",
+      "--preload",
+      "../../scripts/tsx-cache-off.mjs",
+      "--timeout",
+      "300000",
+    ]);
     const orchestrator = seen.find((s) => s.dir === "packages/orchestrator");
     assert.deepEqual(orchestrator?.runner, [
       "node",
