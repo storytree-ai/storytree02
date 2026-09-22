@@ -418,11 +418,31 @@ export function enumerateTestFiles(repoRoot: string): string[] {
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
   });
-  return out
+  const files = out
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
     .sort();
+  // ⚠ AN EMPTY CENSUS IS REFUSED, and this is the sharpest lesson of the increment rather than
+  // defensive padding. `git ls-files` does NOT fail inside a gitignored directory — it succeeds and
+  // returns nothing, so a caller gets a clean, confident report over ZERO files. That reads as a
+  // healthy `0.00%` and is indistinguishable in a summary from a suite with no slop in it.
+  //
+  // MEASURED, on this increment's own first gate run: `check:mutation-diff` copies the tree into
+  // `.stryker-tmp/sandbox-<id>` WITHOUT a `.git`, and `git ls-files` there returned 0 of 977 files
+  // while exiting 0. `measurement-instrument-must-be-typechecked` states the general rule this is an
+  // instance of — a zero deserves more suspicion than a wrong-looking number, because a zero is what
+  // both a true absence and a broken reader produce. There is no true absence here: this repo tracks
+  // 977 test files, so zero can only mean the reader is pointed somewhere it cannot see.
+  if (files.length === 0) {
+    throw new Error(
+      `no git-tracked test files under ${repoRoot} — refusing to report a census over zero files. ` +
+        "`git ls-files` returns nothing (exit 0) when run outside a git work tree or inside an " +
+        "ignored directory, so a zero here is a statement about this reader's position and never " +
+        "about the suite. Point it at a git checkout, or pass an explicit file list.",
+    );
+  }
+  return files;
 }
 
 /** The IO shell: enumerate, read, fold. Every judgement-bearing decision is in the pure half above. */

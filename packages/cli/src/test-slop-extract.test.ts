@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -17,6 +18,25 @@ import {
 } from "./test-slop-extract.js";
 
 const REPO_ROOT = path.resolve(fileURLToPath(import.meta.url), "..", "..", "..", "..");
+
+/**
+ * IS THE TREE THIS SUITE IS RUNNING IN A GIT CHECKOUT? Three of the assertions below make a claim
+ * ABOUT THE REPOSITORY — that the enumeration is a census of 900-odd tracked files — and there is no
+ * repository to make that claim about when the suite runs from a COPY of the tree.
+ *
+ * That is not hypothetical: `check:mutation-diff` copies the tree into `.stryker-tmp/sandbox-<id>`
+ * without a `.git`, ran this suite there on its first gate run, and `git ls-files` answered with 0 of
+ * 977 files at exit 0 — so `coverage.units > 10_000` failed, Stryker's initial dry run aborted, and
+ * the rung evaluated no mutant at all. Both halves of the repair are here: the module now REFUSES an
+ * empty census rather than reporting a clean zero, and these tests assert the appropriate claim for
+ * where they are.
+ *
+ * ⚠ IT IS DERIVED, NOT DECLARED, AND IT IS FALSIFIABLE IN BOTH DIRECTIONS — which is what keeps it
+ * from being an opt-out. A guard that merely tolerated an empty enumeration would swallow a real
+ * regression in the enumerator; instead, in a checkout the full census MUST hold, and outside one the
+ * refusal MUST fire. Neither branch can pass by doing nothing.
+ */
+const IS_GIT_CHECKOUT = existsSync(path.join(REPO_ROOT, ".git"));
 
 /**
  * THE FIXTURE IS A REAL FILE ON DISK, NOT AN INLINE TEMPLATE LITERAL — and that is a requirement of
@@ -337,7 +357,29 @@ test("test-slop-extract: renderCoverage names the files it could not account for
  * the repo's own index, and it names the concrete slice that was measured last time so the comparison
  * is in the assertion rather than in a memory.
  */
-test("test-slop-extract: the enumeration is a census of git-tracked test files, not a slice", () => {
+test("test-slop-extract: an enumeration that finds nothing REFUSES rather than reporting a clean zero", () => {
+  // The defect the mutation sandbox exposed, asserted directly. `git ls-files` succeeds and returns
+  // nothing inside an ignored directory, so this is the one failure mode that arrives looking healthy.
+  // `.gate-logs` is gitignored and always present in a worktree that has run the gate, so it is a real
+  // instance rather than a contrived one; `os.tmpdir()` covers the no-work-tree case.
+  for (const outside of [path.join(REPO_ROOT, ".gate-logs"), tmpdir()]) {
+    if (!existsSync(outside)) continue;
+    assert.throws(
+      () => enumerateTestFiles(outside),
+      /refusing to report a census over zero files|not a git repository|does not exist/i,
+      `enumerating ${outside} returned a zero census instead of refusing — a rate over it would read as clean`,
+    );
+  }
+});
+
+test("test-slop-extract: the enumeration is a census of git-tracked test files, not a slice", (t) => {
+  if (!IS_GIT_CHECKOUT) {
+    // Not a checkout, so there is no census to assert. Verify the REFUSAL fires instead — the branch
+    // still proves something, and it cannot be satisfied by an enumerator that quietly returns [].
+    assert.throws(() => enumerateTestFiles(REPO_ROOT), /refusing to report a census over zero files/);
+    t.diagnostic(`SKIPPED the census: ${REPO_ROOT} is not a git checkout — the refusal was asserted instead`);
+    return;
+  }
   const files = enumerateTestFiles(REPO_ROOT);
   assert.ok(files.length > 900, `expected the whole suite; enumerated only ${files.length}`);
   // Every workspace the withdrawn run silently missed must be present. `apps/` above all: the old glob
@@ -354,7 +396,12 @@ test("test-slop-extract: the enumeration is a census of git-tracked test files, 
   assert.deepEqual(TEST_FILE_GLOBS, ["*.test.ts", "*.test.tsx"]);
 });
 
-test("test-slop-extract: the whole repo extracts with every file accounted for", () => {
+test("test-slop-extract: the whole repo extracts with every file accounted for", (t) => {
+  if (!IS_GIT_CHECKOUT) {
+    assert.throws(() => extractRepoTestUnits(REPO_ROOT), /refusing to report a census over zero files/);
+    t.diagnostic(`SKIPPED the whole-repo extraction: ${REPO_ROOT} is not a git checkout`);
+    return;
+  }
   const { units, coverage } = extractRepoTestUnits(REPO_ROOT);
   // Nothing may be lost between enumeration and the report.
   assert.equal(coverage.parsed + coverage.unreadable.length, coverage.enumerated);
