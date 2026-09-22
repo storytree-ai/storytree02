@@ -53,6 +53,9 @@ function mkWorld(): HexWorld {
         // `Territory` and are deliberately the same numbers — this chrome never projects.
         groundCentroid: { x: 50, y: 50 },
         groundTreeSpot: { x: 50, y: 45 },
+        // The pre-snap ground anchor (`Territory.groundSeed`). Chrome never reads it; it is here
+        // because the packer always emits it, and a fixture that omitted it would not be a world.
+        groundSeed: { x: 50, y: 45 },
         caps: [],
         decor: [],
         wheatTiles: new Set<string>(),
@@ -89,6 +92,7 @@ function mkWorld(): HexWorld {
         // `Territory` and are deliberately the same numbers — this chrome never projects.
         groundCentroid: { x: 150, y: 50 },
         groundTreeSpot: { x: 150, y: 45 },
+        groundSeed: { x: 150, y: 45 },
         caps: [],
         decor: [],
         wheatTiles: new Set<string>(),

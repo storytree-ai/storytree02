@@ -605,10 +605,20 @@ describe('semantic-growth studio demo (`?semanticGrowth=demo`) — asa: sgsd-cle
       //
       // And once more on 2026-09-22 (ADR-0593 D1): the cell count moved again (26 -> 24, asserted
       // above) because the packer's screen-space hex ownership is itself a function of the land
-      // camera, so the wave partition over those 24 cells follows — one connected wave per ring
-      // still holds, still a rise and taper, now `1,4,6,4,3,4,2`. Re-measured against the current
-      // build, not re-derived; caught here loudly, as this assertion is for.
-      expect(section?.getAttribute('data-svg-island-accretion-waves')).toBe('1,4,6,4,3,4,2');
+      // camera, so the wave partition over those 24 cells followed — `1,4,6,4,3,4,2`.
+      //
+      // ⚠ And once more on 2026-09-23, with a cause that RETIRES the sentence above rather than
+      // extending it: `the-packer-decides-in-ground-space-not-through-the-camera` established that
+      // hex ownership being "a function of the land camera" was a DEFECT, not a property. The
+      // packer places each seed in GROUND units and was snapping it to the lattice through
+      // `pixelToHex`, a screen-space function, so the camera decided which tiles a story grew onto
+      // — which ADR-0527 D1 and ADR-0546 D1 both forbid. The snap is now taken at plan view, the
+      // fixture's island sits on the tiles the spacing math asked for, and the adjacency partition
+      // follows the tiles as it always has: `1,4,5,3,2,3,4,2`. The CELL COUNT is unchanged at 24
+      // (asserted above) and the waves still sum to it, still one connected wave per ring, still a
+      // rise and a taper. Re-measured against the current build, not re-derived; caught here
+      // loudly, as this assertion is for.
+      expect(section?.getAttribute('data-svg-island-accretion-waves')).toBe('1,4,5,3,2,3,4,2');
       const legend = flagged.querySelector('[data-island-accretion-legend="true"]');
       expect(legend).toBeTruthy();
       for (const term of [
