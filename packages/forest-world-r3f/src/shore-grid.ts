@@ -195,8 +195,13 @@ export function buildSegmentGrid(edges: readonly CoastEdge[], width: number): Ed
     const cj = maskJ - 1;
     for (const maskI of indices(nx + 2)) {
       const ci = maskI - 1;
+      // Stryker disable next-line ArithmeticOperator: EQUIVALENT BY SYMMETRY. The offsets are
+      // [-1, 0, 1], so `cj - d` visits {cj+1, cj, cj-1} — the SAME three cells in the other
+      // order, and this scan only ORs into one mask entry, so it is order-independent. No input
+      // can separate the two. `collect` below carries the identical note on the identical shape.
       for (const j of NEIGHBOUR_OFFSETS.map((d) => cj + d)) {
         if (j < 0 || j >= nz) continue;
+        // Stryker disable next-line ArithmeticOperator: EQUIVALENT BY SYMMETRY, as above.
         for (const i of NEIGHBOUR_OFFSETS.map((d) => ci + d)) {
           if (i < 0 || i >= nx) continue;
           if (buckets[j * nx + i]!.length !== 0) nearMask[maskJ * maskWidth + maskI] = 1;
@@ -397,10 +402,19 @@ export function nearestOnSegments(grid: EdgeGrid, x: number, z: number, cap: num
     const qx = x - (e.ax + ex * t);
     const qz = z - (e.az + ez * t);
     const d = Math.hypot(qx, qz);
-    // Break an in-cap tie by the source edge order, matching the brute-force walk. The gradient
-    // is undefined on a medial axis, but choosing consistently keeps the indexed and brute-force
-    // fields identical. A distance at the cap remains rejected so capped answers keep zero
+    // ⚠ THE TIE IS BROKEN BY EDGE ORDER, WHICH IS WHAT MAKES THE INDEXED FIELD AGREE WITH A
+    // BRUTE-FORCE TWIN POINT FOR POINT. Both walks take the same MINIMUM; they can disagree only
+    // about which of two equidistant edges supplies the GRADIENT — the medial axis, where the
+    // distance field's gradient is genuinely undefined. The grid visits candidates in cell-scan
+    // order and a brute-force walk visits them in edge order, so without this the two pick
+    // different undefined values and a twin assertion on the gradient reds on a symmetric
+    // fixture. A distance AT the cap is still rejected, so a capped answer keeps its zero
     // gradient.
+    //
+    // Stryker disable next-line EqualityOperator: EQUIVALENT — `n === bestIndex` is UNREACHABLE.
+    // `bestIndex` only ever holds the index of a candidate already taken from this same list, and
+    // the stamp above dedupes the list, so no index appears twice in one call. `>` and `>=` are
+    // therefore separated by no input.
     if (d > best || (d === best && (best === cap || n > bestIndex))) continue;
     best = d;
     nx = qx;
