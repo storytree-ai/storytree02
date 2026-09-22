@@ -193,51 +193,6 @@ export interface SdkFeedbackRun {
   code: number | null;
 }
 
-/**
- * One read-only helper a worker started, and what it cost the build's clock (ADR-0589 D3).
- *
- * The DURATION is the point rather than the count: "four helpers" and "four helpers that took
- * eleven minutes between them" are different facts about the same build, and only the second
- * explains where a budget went. Helpers run inside the slice's own query, so the budget's abort
- * already bounds them and no second timer exists — what was missing was the report.
- */
-export interface SdkHelperRun {
-  phase: AuthoringPhase;
-  /** The declared agent type the worker started — today always {@link HELPER_AGENT_TYPE}. */
-  agentType: string;
-  /** Wall-clock milliseconds between this helper's `SubagentStart` and its `SubagentStop`. */
-  ms: number;
-}
-
-/**
- * Fold one `SubagentStart`/`SubagentStop` pair into the helper record (ADR-0589 D3). Pure and
- * exported so the pairing is provable without an SDK: `pending` is the caller's start-time map,
- * keyed by the `agent_id` BOTH events carry.
- *
- * A stop with no matching start yields nothing rather than a zero-millisecond helper. That is the
- * honest reading — the pair is what carries the duration, and a synthesised `0 ms` row would claim
- * a helper cost nothing when what actually happened is that its start was never seen.
- */
-export function foldHelperStop(args: {
-  phase: AuthoringPhase;
-  agentId: string;
-  agentType: string;
-  stoppedAt: number;
-  pending: Map<string, number>;
-}): SdkHelperRun | undefined {
-  const startedAt = args.pending.get(args.agentId);
-  if (startedAt === undefined) return undefined;
-  args.pending.delete(args.agentId);
-  return {
-    phase: args.phase,
-    agentType: args.agentType,
-    // Floored at zero: a clock that steps backwards mid-slice (an NTP correction on a two-hour
-    // build is not exotic) would otherwise report a NEGATIVE duration, which no reader of an
-    // envelope can interpret and which would silently reduce a summed total.
-    ms: Math.max(0, args.stoppedAt - startedAt),
-  };
-}
-
 /** Constructor args for {@link ClaudeAgentAuthor}. */
 export interface ClaudeAgentAuthorArgs {
   /** The workspace the leaf works in — `cwd` for the SDK session; writes outside it are denied. */
@@ -739,15 +694,12 @@ export class ClaudeAgentAuthor implements PhaseAuthor {
   /** Every bounded feedback run the leaf made, in order (run_proof/run_typecheck, exit codes). */
   readonly feedbackRuns: SdkFeedbackRun[] = [];
 
-  /** Every read-only helper a worker started, with what it cost the build's clock (ADR-0589 D3). */
-  readonly helperRuns: SdkHelperRun[] = [];
-
   constructor(args: ClaudeAgentAuthorArgs) {
     this.#args = args;
     this.#usesRealSdk = args.queryFn === undefined;
     this.#queryFn = args.queryFn ?? ((q): AsyncIterable<unknown> => query(q));
     this.#mcpServerFactory = args.mcpServerFactory ?? createSdkMcpServer;
-    this.#clock = args.clock ?? { setTimeout, clearTimeout, now: () => Date.now() };
+    this.#clock = args.clock ?? { setTimeout, clearTimeout };
   }
 
   /**
@@ -798,11 +750,6 @@ export class ClaudeAgentAuthor implements PhaseAuthor {
     // call, exactly like feedbackUsed above — a new slice starts with nothing recorded, and exactly
     // the first VALID call in THIS slice may ever set it.
     let escalation: AuthoringEscalation | undefined;
-    // The per-SLICE helper start times, keyed by the `agent_id` both subagent events carry
-    // (ADR-0589 D3). Per-slice like the two above: a helper cannot outlive the query it ran inside,
-    // so a start still pending when the slice ends is one whose stop never arrived, and carrying it
-    // into the next slice would pair it with an unrelated stop and report a duration spanning both.
-    const helperStartedAt = new Map<string, number>();
 
     // The system prompt: the injected library agent for this phase + the runtime closing. Resolved
     // BEFORE the SDK loop so a live leaf with no injected prompt fails closed without any spend.
@@ -894,38 +841,6 @@ export class ClaudeAgentAuthor implements PhaseAuthor {
                     permissionDecisionReason: decision.reason,
                   },
                 };
-              },
-            ],
-          },
-        ],
-        // ADR-0589 D3. No matcher: these events carry no tool name to match on, and every helper is
-        // in scope. Both hooks observe and return `{}` — they decide nothing, so a fault in the
-        // accounting can never change what a slice is allowed to do.
-        SubagentStart: [
-          {
-            hooks: [
-              async (input) => {
-                if (input.hook_event_name !== "SubagentStart") return {};
-                helperStartedAt.set(input.agent_id, this.#clock.now());
-                return {};
-              },
-            ],
-          },
-        ],
-        SubagentStop: [
-          {
-            hooks: [
-              async (input) => {
-                if (input.hook_event_name !== "SubagentStop") return {};
-                const run = foldHelperStop({
-                  phase,
-                  agentId: input.agent_id,
-                  agentType: input.agent_type,
-                  stoppedAt: this.#clock.now(),
-                  pending: helperStartedAt,
-                });
-                if (run !== undefined) this.helperRuns.push(run);
-                return {};
               },
             ],
           },
