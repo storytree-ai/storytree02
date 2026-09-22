@@ -103,12 +103,17 @@ test('two islands with the SAME barycentre order by the id hash, not by input or
   // number at any quota. But at quota 2 the two seeds' hex-snapped positions land `hexDist` 3 apart
   // (measured), one short of the pair's growth floor of 4, so the eastward nudge-apart pass fires.
   // That pass walks seeds by ARRAY INDEX (`for (i) for (j>i)`) and always nudges the
-  // higher-indexed one — so at the 50° this camera now shares with the 3D land (`pixelToHex`
-  // divides the row's screen-space y by `groundFlattening(elevationDeg) = sin elevationDeg`, and
-  // the row spacing that cleared the floor by a full hex at the 20° this camera used to sit at
-  // compresses under `sin 50° = 0.766` against `sin 20° = 0.342`), which of the two hash-tied
-  // islands gets nudged — and therefore where it lands — silently became a function of INPUT ORDER
-  // instead of the id hash this test exists to pin. Quota 3 lands the pair exactly on the floor
+  // higher-indexed one — so which of the two hash-tied islands got nudged, and therefore where it
+  // landed, silently became a function of INPUT ORDER instead of the id hash this test exists to
+  // pin.
+  //
+  // ⚠ WHAT TRIGGERED IT IS NOW HISTORY, and it was a symptom of the defect
+  // `the-packer-decides-in-ground-space-not-through-the-camera` has since fixed rather than of the
+  // camera move itself: the snap ran the seeds' GROUND y through `pixelToHex`, which divides by
+  // `groundFlattening(elevationDeg) = sin elevationDeg`, so the row spacing that cleared the floor
+  // by a full hex under `sin 20° = 0.342` compressed under `sin 50° = 0.766`. The snap no longer
+  // reads a camera at all — it is taken at plan view, where that factor is 1 — so no future camera
+  // decision can squeeze this fixture again. Quota 3 lands the pair exactly on the floor
   // (`hexDist` 4 of 4, measured) rather than short of it, so the nudge never fires and the test
   // observes the RULE again rather than the nudge pass's own index bias. A fixture whose tie the
   // packer's own geometry now collides away is a fixture that has stopped exercising the property,
@@ -472,12 +477,14 @@ test('the DEFAULT camera is byte-identical to the bare call — every current ca
 });
 
 test('the SCREEN half is the GROUND half re-projected at the camera that was asked for', () => {
-  // ⚠ REWRITTEN AT ADR-0593 D1, AND THE REASON IS THE POINT. This used to pack the corpus TWICE —
-  // once bare, once at plan view — and compare the two worlds field by field. That shape assumed
-  // the two packs would claim the SAME TILES, and they no longer do (see the known violation
-  // below), so the comparison stopped being about projection at all.
+  // ⚠ REWRITTEN AT ADR-0593 D1, AND THE REASON IS WORTH KEEPING. This used to pack the corpus
+  // TWICE — once bare, once at plan view — and compare the two worlds field by field. While the
+  // seed snap read a camera the two packs claimed DIFFERENT TILES, so that comparison stopped
+  // being about projection at all. `the-packer-decides-in-ground-space-not-through-the-camera` has
+  // since fixed the snap and the two-pack comparison is live again below — but this test stays in
+  // its within-one-pack form, which is strictly stronger and does not depend on that repair.
   //
-  // The claim is now made WITHIN one pack, which is strictly stronger: it holds the tiles fixed by
+  // The claim is made WITHIN one pack: it holds the tiles fixed by
   // construction and pins the exact relation at EVERY camera rather than at one pair of them. A
   // threading that scaled both axes, or the wrong one, or that quietly read the shipped constant
   // instead of the argument, fails here on the first elevation that is not the shipped one.
@@ -606,50 +613,142 @@ test('a carried STAMP is seated against the camera that was ASKED FOR, not the s
   // file and `check:mutation-diff`'s per-test coverage does not attribute it to this line — so
   // without this pin the forward on that line is unwitnessed by the rung that asks.
   // WHEN THIS GOES RED: find what moved the stamp walk and say so; re-record only after that.
+  //
+  // ⚠ RE-RECORDED ONCE, 2026-09-23, and here is what moved it — the walk's own arithmetic is
+  // untouched. `the-packer-decides-in-ground-space-not-through-the-camera` changed the BASIS the
+  // seed snap quantises at (a camera → plan view), so this three-island corpus grows onto
+  // different tiles and every stamp is seated on different soil. The previous record was
+  // `alpha:beta 2.11,-26.97 | alpha:gamma 17.05,-26.97 | beta:gamma 11.69,-66.70 |
+  // gamma:beta -26.63,-66.70`. Note the y magnitudes roughly HALVE, which is the fix visible in
+  // one number: the old snap divided ground y by `sin 20° = 0.342` before rounding, stretching the
+  // layout ~2.9x down the rank axis, and the seating rows followed it down.
   const digest = world.territories
     .flatMap((t) => t.stamps.map((st) => `${t.story.id}:${st.icon} ${st.spot.x.toFixed(2)},${st.spot.y.toFixed(2)}`))
     .join(' | ');
   assert.equal(
     digest,
-    'alpha:beta 2.11,-26.97 | alpha:gamma 17.05,-26.97 | beta:gamma 11.69,-66.70 | gamma:beta -26.63,-66.70',
+    'alpha:beta -7.47,-9.95 | alpha:gamma 7.47,-9.95 | beta:gamma 11.69,-21.30 | gamma:beta -26.63,-21.30',
   );
 });
 
-test('⚠ KNOWN VIOLATION (ADR-0593): the seed snap lets the camera decide WHICH tiles an island gets', () => {
-  // ⚠ THIS TEST ASSERTS A DEFECT. It is here so the defect is mechanically recorded rather than
-  // rediscovered, and so it FAILS — prompting whoever fixes it to come and read this — on the day
-  // the packer stops letting the camera decide the layout.
+test('the GROUND half does NOT move with the camera — the layout is re-projected, never re-decided', () => {
+  // ⚠ RESTORED BY `the-packer-decides-in-ground-space-not-through-the-camera`, replacing the
+  // `⚠ KNOWN VIOLATION (ADR-0593)` test that stood here while the defect was live. Read the next
+  // test before this one: on its own THIS ONE IS NOT ENOUGH, and its earlier incarnation is the
+  // house's own worked example of a green that verified nothing.
   //
-  // WHAT IT IS. `packWorld` places each island's seed in GROUND units (`spacing.ts`'s row and gap
-  // math carries no camera term at all), then snaps that point to the hex lattice with
-  // `pixelToHex`, which is a SCREEN-space function. Snapping ground coordinates through a camera
-  // lands them on a different hex at a different angle, so the camera decides which tiles each
-  // story grows onto — the exact thing ADR-0527 D1 and ADR-0546 D1 say a camera must never do.
+  // WHAT IT PROVES. Asking for a different camera must re-PROJECT the map, never re-DECIDE it
+  // (ADR-0527 D1, ADR-0546 D1): the tiles each story grew onto, the ground twins measured from
+  // them, and which capability owns which soil are all the same at every elevation.
   //
-  // WHY IT WAS INVISIBLE UNTIL NOW, which is the part worth keeping. That `pixelToHex` call took
-  // its OWN default (`LAND_CAMERA_ELEVATION_DEG`) instead of the locally-resolved `elevationDeg`.
-  // Every shipped caller packs bare, so the two were always the same number and the bug was
-  // unobservable — and the test that covered this invariant varied the ARGUMENT, which the
-  // offending call ignored, so it passed vacuously for as long as it existed. ADR-0593 D1 moving
-  // the constant is what separated the two numbers and made it visible.
-  //
-  // WHY IT IS NOT FIXED HERE. The faithful fix is to snap at `PLAN_VIEW_ELEVATION_DEG`, since the
-  // coordinates being snapped are ground-space. Measured: that moves islands by WHOLE TILES on the
-  // shipped map. That is a LAYOUT change, and ADR-0593 D4 is explicit that the forest's layout and
-  // the camera are two knobs that must not be traded against each other in one judgment — so it
-  // belongs to the open density fork (`oq-gaps-derived-forest-still-sparse-tile-or-positions`),
-  // with the picture that decision deserves, and not to a camera landing taken overnight.
+  // WHAT IT CANNOT PROVE, WHICH IS WHY IT ONCE PASSED VACUOUSLY. It varies the ARGUMENT, so it is
+  // blind to any site that ignores the argument — including the one that ignored it by reading a
+  // fixed WRONG constant, which is exactly what the seed snap did. Two arms snapped at the same
+  // wrong basis agree with each other perfectly. So this test separates "camera-independent" from
+  // "camera-dependent" and nothing more; `the seed snap is taken in GROUND space` below is what
+  // separates "camera-independent" from "camera-independent AND in the right space".
   const shipped = packWorld(cameraCorpus());
   const plan = packWorld(cameraCorpus(), { elevationDeg: PLAN_VIEW_ELEVATION_DEG });
-  const tilesOf = (w: ReturnType<typeof packWorld>) =>
-    w.territories.map((t) => t.tiles.map((h) => `${h.q},${h.r}`).join(' ')).join(' | ');
-  assert.notEqual(
-    tilesOf(plan),
-    tilesOf(shipped),
-    'the seed snap has stopped being camera-dependent — the defect this records is FIXED. Delete ' +
-      'this test, restore the cross-camera ground comparison it replaced, and settle the open ' +
-      'question it points at.',
-  );
+  const steep = packWorld(cameraCorpus(), { elevationDeg: 20 });
+  for (const other of [plan, steep]) {
+    for (const [i, t] of other.territories.entries()) {
+      const was = shipped.territories[i];
+      assert.ok(was !== undefined);
+      // Which tiles the story grew onto, and where they sit on the land.
+      assert.deepEqual(t.tiles, was.tiles);
+      assert.deepEqual(t.groundSeed, was.groundSeed);
+      assert.deepEqual(t.groundTreeSpot, was.groundTreeSpot);
+      assert.deepEqual(t.groundCentroid, was.groundCentroid);
+      assert.equal(t.groundRadius, was.groundRadius);
+      // And which capability owns which soil — the thing a camera must never decide.
+      assert.deepEqual(
+        t.caps.map((c) => [c.cap.id, c.groundSpot] as const),
+        was.caps.map((c) => [c.cap.id, c.groundSpot] as const),
+      );
+    }
+    // The coast leaves this packer in ground space (ADR-0527 D1), so it is camera-free by
+    // construction — asserted rather than assumed, since "by construction" is what the bare
+    // `hexCenter` sites also claimed to be.
+    assert.deepEqual(other.empties, shipped.empties);
+  }
+  // Non-vacuity: the arms must actually ask for different cameras, or every deepEqual above is
+  // comparing a pack with itself.
+  assert.notEqual(PLAN_VIEW_ELEVATION_DEG, LAND_CAMERA_ELEVATION_DEG);
+  assert.notEqual(20, LAND_CAMERA_ELEVATION_DEG);
+});
+
+test('the seed snap is taken in GROUND space — the basis is plan view, not any camera', () => {
+  // ⚠ THIS IS THE TEST THE OLD ONE COULD NOT BE, and the distinction is the whole unit
+  // (`the-packer-decides-in-ground-space-not-through-the-camera`). Every island's seed is placed
+  // by `spacing.ts`'s row and gap arithmetic, which carries no camera term — it is GROUND space —
+  // and then quantised onto the hex lattice with `pixelToHex`, which reads its argument as SCREEN
+  // and divides `y` by `sin(elevation)` to recover ground. Hand it a ground point at elevation θ
+  // and the layout is STRETCHED vertically by `1 / sin θ` before it is rounded. Only plan view,
+  // where that factor is exactly 1, leaves the point where the spacing math put it.
+  //
+  // WHY IT CAN SEE WHAT THE COMPARISON ABOVE CANNOT. It does not compare two packs; it compares
+  // ONE pack against `Territory.groundSeed`, the pre-snap point the packer now publishes for
+  // exactly this purpose. A wrong constant is therefore just as visible as a wrong argument — the
+  // failure mode that hid the defect for as long as it lived.
+  //
+  // ⚠ ON `y` ALONE, AND ON PURPOSE. `pixelToHex` reads the camera in one place only, the division
+  // that recovers the row, so `y` is precisely where a wrong basis shows. `x` is the wrong channel
+  // twice over: the growth floor nudges a crowded seed EAST (`q + 1`), which moves `x` by a full
+  // hex and `y` by nothing, so `x` carries slack that has nothing to do with the camera.
+  //
+  // ⚠ CALIBRATED BY FAULT-SEEDING, so the green is read at its true strength — and the result is
+  // the reason this test exists rather than being folded into the one above. Two mutants were
+  // seeded into the snap and the whole suite re-run:
+  //    A — `{ elevationDeg }` (the argument, i.e. the state this file pinned as a KNOWN VIOLATION):
+  //        caught by BOTH this test and `the GROUND half does NOT move with the camera`.
+  //    B — the argument deleted, so `pixelToHex` takes its own `LAND_CAMERA_ELEVATION_DEG` default
+  //        (the ORIGINAL defect's exact shape): caught by THIS TEST ALONE. The comparison test is
+  //        structurally blind to it, because both of its arms snap at the same wrong constant and
+  //        therefore agree — which is how the defect survived its own covering test for as long as
+  //        it did.
+  const rowPitch = 1.5 * HEX_R; // hexCenter: y = 1.5 * R * r * flattening — one lattice row.
+  // THE BAR IS ONE ROW, and it is derived rather than chosen: the only thing that may separate a
+  // seed tile's plan-view centre from the point that was snapped is the lattice's own cube
+  // rounding. Measured on this corpus the worst separation is 0.63 rows, so 1.0 leaves margin
+  // without admitting a whole row of drift.
+  const bar = rowPitch;
+
+  for (const elevationDeg of [PLAN_VIEW_ELEVATION_DEG, LAND_CAMERA_ELEVATION_DEG, 20, 35]) {
+    const world = packWorld(cameraCorpus(), { elevationDeg });
+    for (const t of world.territories) {
+      // `tiles[0]` IS the snapped seed — the packer seeds `tilesByStory` with it before growing.
+      const seedTile = t.tiles[0];
+      assert.ok(seedTile !== undefined, `${t.story.id} has no tiles`);
+      const recovered = hexCenter(seedTile, { elevationDeg: PLAN_VIEW_ELEVATION_DEG });
+      const off = Math.abs(recovered.y - t.groundSeed.y);
+      assert.ok(
+        off < bar,
+        `${t.story.id} at ${elevationDeg}deg: its seed tile sits ${(off / rowPitch).toFixed(2)} lattice rows ` +
+          `from the ground point the spacing math placed (${t.groundSeed.y.toFixed(2)} vs ${recovered.y.toFixed(2)}). ` +
+          'The seed snap is reading a camera instead of plan view, so the camera is deciding which ' +
+          'tiles this story grows onto.',
+      );
+    }
+  }
+
+  // ⚠ NON-VACUITY, COMPUTED RATHER THAN ASSERTED. The bar above is only meaningful if a wrong
+  // basis would actually breach it on THIS corpus — a forest packed tightly around the origin
+  // would satisfy the assertion at every elevation and prove nothing. So derive, from the seeds
+  // themselves, what each wrong basis would cost and check it clears the bar with room.
+  const seeds = packWorld(cameraCorpus()).territories.map((t) => t.groundSeed);
+  for (const wrong of [LAND_CAMERA_ELEVATION_DEG, 20]) {
+    // Snapping a ground point as if it were screen at `wrong` recovers `y / sin(wrong)`.
+    const stretch = 1 / groundFlattening(wrong) - 1;
+    const worst = Math.max(...seeds.map((s) => Math.abs(s.y) * stretch));
+    assert.ok(
+      worst > 3 * bar,
+      `a ${wrong}deg basis would displace this corpus by only ${(worst / rowPitch).toFixed(2)} rows, ` +
+        `which the ${(bar / rowPitch).toFixed(2)}-row bar cannot catch — the corpus needs deeper ranks`,
+    );
+  }
+  // …and the bar must not be so wide that it admits the smallest wrong basis anyway.
+  assert.ok(groundFlattening(LAND_CAMERA_ELEVATION_DEG) < 1, 'the shipped camera must foreshorten');
+  assert.equal(groundFlattening(PLAN_VIEW_ELEVATION_DEG), 1);
 });
 
 // ---------------------------------------------------------------------------------------------
