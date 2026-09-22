@@ -89,12 +89,13 @@ import type { NodeBuildConfig, RealProofConfig } from "./proof-config.js";
 import { commitAuthored, platformShellCommand } from "./build-worktree.js";
 import type { CommitScope } from "./build-worktree.js";
 import {
+  holdingBudget,
   routeTypecheckByFile,
   setAsideImplementation,
   wallClockBudget,
   worktreeScopeFingerprint,
 } from "./repair.js";
-import type { BuildBudget } from "./repair.js";
+import type { BuildBudget, HoldChannel } from "./repair.js";
 
 /**
  * The resolver (drive-machinery Phase B, plan §2): turn a loaded {@link NodeSpec} into the full
@@ -534,6 +535,20 @@ export interface RealResolveOptions extends BaseResolveOptions {
    * The orchestrator's peek-and-extend arrives behind this same seam.
    */
   buildBudget?: BuildBudget | undefined;
+  /**
+   * ADR-0592 D4 — how a build that spends its clock announces the hold and learns the orchestrator's
+   * decision. Supplied (every real build, by `node-build.ts`), a spent budget HOLDS here; absent, it
+   * ends the build exactly as ADR-0584 built it. The concrete file channel lives in `packages/drive`,
+   * which depends on this package and not the other way round, so it can only ever arrive injected.
+   */
+  holdChannel?: HoldChannel | undefined;
+  /**
+   * ADR-0592 D3 — how long a held build waits, in milliseconds, as the orchestrator set it with
+   * `--hold-grace`. `undefined` = no override, so the ten-minute default stands and is NOT restated
+   * here. `0` disables the hold, which is why that flag's reader honours a zero where `--time-budget`'s
+   * refuses one.
+   */
+  holdGraceMs?: number | undefined;
 }
 
 /**
@@ -1027,9 +1042,10 @@ function resolveReal(
   // which ADR-0584 D5 leaves standing for any caller that wires no budget, so no path is left with
   // no brake at all. ADR-0581 names the REAL build, and `--runtime pi` (live-smoke only) keeps its
   // own turn ceiling.
-  const buildBudget: BuildBudget =
-    opts.buildBudget ??
-    wallClockBudget(opts.timeBudgetMs !== undefined ? { budgetMs: opts.timeBudgetMs } : {});
+  // ADR-0592 D1: the SAME object, now able to hold. Which budget is constructed turns on one thing —
+  // whether a channel was wired for it to be held for — and the swap is a change in one place exactly
+  // as ADR-0584 D1's single object promised.
+  const buildBudget: BuildBudget = opts.buildBudget ?? buildTheBudget(opts);
 
   let author: PhaseAuthor;
   let liveAuthor: LiveAuthor | undefined;
@@ -2165,4 +2181,29 @@ export function liveSmokePrompts(spec: NodeSpec, runtime: LiveRuntime = "claude"
       "```js\nmodule.exports = { add: (a, b) => a + b };\n```\n\n" +
       `Write that file and stop — the spine observes the official green itself.`,
   };
+}
+
+/**
+ * The build's one budget: holding when a channel was wired for it (ADR-0592 D1), plain wall clock
+ * otherwise.
+ *
+ * Each option is narrowed to a named const by a ternary and then spread UNCONDITIONALLY — an inline
+ * conditional spread of `{}` is what `no-conditional-empty-object-spread` refuses — and the two
+ * defaults (two hours, ten minutes) deliberately stay in ONE place each rather than being copied down
+ * here, so an omitted flag arrives as "no override" and never as a stale number.
+ *
+ * EXPORTED so a test can name and drive it. Unexported, every budget test in this package was evidence
+ * about an INJECTED `buildBudget`, and the one line that decides whether a real build can be held at
+ * all was reached by nothing (`unproven-seam-default`) — the same reason `runGitBuffer` is exported
+ * from `repair.ts`.
+ */
+export function buildTheBudget(opts: {
+  readonly timeBudgetMs?: number | undefined;
+  readonly holdChannel?: HoldChannel | undefined;
+  readonly holdGraceMs?: number | undefined;
+}): BuildBudget {
+  const budget = opts.timeBudgetMs !== undefined ? { budgetMs: opts.timeBudgetMs } : {};
+  if (opts.holdChannel === undefined) return wallClockBudget(budget);
+  const grace = opts.holdGraceMs !== undefined ? { graceMs: opts.holdGraceMs } : {};
+  return holdingBudget({ channel: opts.holdChannel, ...budget, ...grace });
 }

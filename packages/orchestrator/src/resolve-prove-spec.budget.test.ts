@@ -26,6 +26,7 @@ import { budgetSpentError } from "@storytree/agent";
 import { InMemoryStore } from "@storytree/storage-protocol";
 
 import { loadNodeSpec } from "./node-spec.js";
+import { buildTheBudget } from "./resolve-prove-spec.js";
 import { DEFAULT_BUILD_BUDGET_MS } from "./repair.js";
 import type { BuildBudget } from "./repair.js";
 import { resolveProveSpec } from "./resolve-prove-spec.js";
@@ -188,4 +189,80 @@ test("a-real-build-runs-on-one-wall-clock: an explicit --max-turns is still hono
   const result = await author.author("IMPLEMENT", "author the implementation");
   assert.equal(result.ok, false);
   assert.equal(result.ok === false ? result.exhausted : undefined, true);
+});
+
+// ---------------------------------------------------------------------------
+// WHICH budget a real build gets (ADR-0592 D1) — `buildTheBudget`, the seam's own default
+// ---------------------------------------------------------------------------
+
+test("buildTheBudget-with-no-channel-is-the-NON-holding-clock", async () => {
+  // The whole switch, asserted at the one line that decides it. Without a channel there is nowhere to
+  // announce a hold, so a spent clock must end the build exactly as ADR-0584 built it — and the
+  // ADR-0581 D2 wording is how a reader tells the two budgets apart from the outside.
+  const budget = buildTheBudget({ timeBudgetMs: 1 });
+  assert.equal(budget.budgetMs, 1);
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  const decision = await budget.mayRepair();
+  assert.equal(decision.ok, false);
+  assert.match(decision.ok === false ? decision.reason : "", /so no repair was started \(ADR-0581 D2\)/);
+});
+
+test("buildTheBudget-with-a-channel-HOLDS-and-takes-the-decision", async () => {
+  // The same call with a channel wired must produce the holding budget — which is provable from the
+  // outside in one way only: a spent clock that comes back OK because something answered it.
+  let opened = 0;
+  const budget = buildTheBudget({
+    timeBudgetMs: 1,
+    holdGraceMs: 60_000,
+    holdChannel: {
+      open: () => {
+        opened += 1;
+        return Promise.resolve();
+      },
+      poll: () => Promise.resolve({ kind: "extend" as const, minutes: 30, reason: "answered" }),
+      close: () => Promise.resolve(),
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  const decision = await budget.mayRepair();
+  assert.equal(decision.ok, true, "a spent clock with an answer waiting must admit the repair");
+  assert.equal(decision.ok === true && decision.extension?.reason, "answered");
+  assert.equal(opened, 1, "and it must have announced itself, not merely consulted the channel");
+  assert.equal(budget.budgetMs, 1 + 30 * 60_000, "the worker's own view of the clock moved with it");
+});
+
+test("buildTheBudget-omits-both-figures-rather-than-copying-either-default", () => {
+  // The defaults live in ONE place each (`DEFAULT_BUILD_BUDGET_MS`, `DEFAULT_HOLD_GRACE_MS`). An
+  // omitted flag must arrive as "no override" so the far copy can never go stale — which is observable
+  // here as the budget landing on the spine's own default rather than on any number this file knows.
+  assert.equal(buildTheBudget({}).budgetMs, DEFAULT_BUILD_BUDGET_MS);
+  assert.equal(
+    buildTheBudget({
+      holdChannel: { open: () => Promise.resolve(), poll: () => Promise.resolve(undefined), close: () => Promise.resolve() },
+    }).budgetMs,
+    DEFAULT_BUILD_BUDGET_MS,
+    "wiring a hold must not change the budget it holds on",
+  );
+});
+
+test("buildTheBudget-honours-a-zero-grace-as-the-hold-OPT-OUT", async () => {
+  // `--hold-grace 0` is the documented way back to ADR-0584's behaviour, so it must reach here intact
+  // rather than being swallowed as falsy — which is exactly what an `opts.holdGraceMs ||` would do.
+  let opened = 0;
+  const budget = buildTheBudget({
+    timeBudgetMs: 1,
+    holdGraceMs: 0,
+    holdChannel: {
+      open: () => {
+        opened += 1;
+        return Promise.resolve();
+      },
+      poll: () => Promise.resolve({ kind: "extend" as const, minutes: 30, reason: "would be ignored" }),
+      close: () => Promise.resolve(),
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  const decision = await budget.mayRepair();
+  assert.equal(decision.ok, false, "a zero grace disables the hold, so the answer is never read");
+  assert.equal(opened, 0, "and the hold is never announced at all");
 });

@@ -32,6 +32,7 @@ import os from "node:os";
 import {
   type AliveProbe,
   type ClassifiedSpawn,
+  type PeekHold,
   type PeekPhaseMark,
   type SpawnRegistryIo,
   attemptPolicyPeekCaveat,
@@ -39,9 +40,11 @@ import {
   foldBuildPeek,
   listRegisteredSessions,
   nodeAliveProbe,
+  listStoredHolds,
   nodeSpawnRegistryIo,
   readOwnership,
   renderBuildPeek,
+  resolveHoldsDir,
 } from "@storytree/drive";
 
 import type { Envelope } from "./envelope.js";
@@ -54,17 +57,66 @@ export interface NodePeekDeps {
   readonly probe: AliveProbe;
   readonly now: () => number;
   readonly machine: () => string | null;
+  /**
+   * This unit's announced hold, when it has one (ADR-0592 D6) — the THIRD input, beside the registry
+   * and the store. A separate seam rather than a directory on this bag, so a test injects an answer
+   * instead of a filesystem, and so the fold still reads nothing itself.
+   *
+   * ⚠ It resolves `undefined` for BOTH "no hold" and "the holds directory could not be read", and the
+   * render says nothing in either case. That second half is the CALLEE's guarantee, not this seam's own:
+   * `listStoredHolds` catches each `readdir`/`readFile` individually and a corrupt notice in its parser,
+   * so it resolves fewer rows rather than rejecting. `commands.ts` still catches at the call site, so a
+   * future callee that did reject would narrow the peek rather than break it. That is deliberate: a peek is a read that must keep working
+   * when things around it are broken, and a build that is not held is the overwhelmingly common case.
+   * The hold's own expiry is what bounds the harm — a hold nobody was told about still stops itself.
+   */
+  readonly readHold: (unitId: string) => Promise<PeekHold | undefined>;
 }
 
-/** The live wiring: the real registry, the real probe, the real clock, this box's hostname. */
-export function defaultNodePeekDeps(): NodePeekDeps {
+/**
+ * The live wiring: the real registry, the real probe, the real clock, this box's hostname.
+ *
+ * `holdsDir` defaults to the real per-user directory and production never passes it. It is the seam a
+ * test needs to prove this bag's `readHold` DELEGATES rather than answering a constant — an absent-hold
+ * case cannot, because `() => undefined` satisfies it too. Pointing `os.homedir()` at a fake home is not
+ * an option: these suites run under Bun, whose `os.homedir()` does not re-read `HOME`/`USERPROFILE` the
+ * way Node's does, so that technique passes on Windows and silently finds nothing on Linux.
+ */
+export function defaultNodePeekDeps(holdsDir = resolveHoldsDir(undefined)): NodePeekDeps {
   return {
     io: nodeSpawnRegistryIo(),
     root: defaultRegistryRoot(),
     probe: nodeAliveProbe,
     now: () => Date.now(),
     machine: () => machineName(os.hostname()),
+    readHold: async (unitId) => (await latestHoldFor(unitId, holdsDir)) ?? undefined,
   };
+}
+
+/**
+ * The newest hold this unit has announced on this machine, or null.
+ *
+ * NEWEST rather than "the one" because the notices are keyed by run: a unit built twice could in
+ * principle have two, and the one an orchestrator is being asked about is the latest.
+ *
+ * `dir` defaults to the real per-user holds directory and production never passes it. It exists so a
+ * test can drive THIS function against a temp directory: the obvious alternative — pointing
+ * `os.homedir()` at a fake home through `HOME`/`USERPROFILE` — is NOT portable, because these suites
+ * run under Bun, whose `os.homedir()` does not re-read those variables the way Node's does. That
+ * technique passed on Windows and silently found nothing on Linux CI. A build's own
+ * `close()` removes its notice, so in practice there is at most one live — the sort is what makes the
+ * abnormal case answer something honest rather than arbitrary.
+ */
+export async function latestHoldFor(unitId: string, dir = resolveHoldsDir(undefined)): Promise<PeekHold | null> {
+  // No `.catch()` here: `listStoredHolds` already swallows every I/O failure it can reach (a missing
+  // directory, an unreadable unit dir, a corrupt notice file all resolve to fewer rows, never a
+  // rejection — see its own doc comment). A second catch here would be pure decoration duplicating a
+  // guarantee the callee already gives, and it was itself an unreachable NoCoverage survivor.
+  const holds = await listStoredHolds(dir);
+  const mine = holds.filter((h) => h.unitId === unitId);
+  // No empty-array branch: `mine[-1]` is `undefined`, which `?? null` already answers, so a length
+  // test would be a second spelling of the same answer — and an unkillable mutant.
+  return mine[mine.length - 1] ?? null;
 }
 
 /**
@@ -96,17 +148,36 @@ export function nodePeekCommand(
   unitId: string,
   marks: readonly PeekPhaseMark[] | null,
   deps: NodePeekDeps,
+  hold?: PeekHold | undefined,
 ): Envelope {
+  // Each option is narrowed to a named const and spread UNCONDITIONALLY: an inline conditional spread
+  // of `{}` is what `no-conditional-empty-object-spread` refuses, and `exactOptionalPropertyTypes`
+  // refuses `hold: undefined` against an optional key.
+  // Stryker disable next-line ConditionalExpression: EQUIVALENT — a plain property read cannot tell an
+  // ABSENT key from one explicitly set to `undefined`, and `input.hold` is the only place this is read,
+  // so both arms behave identically. Not simplifiable either: the two lint rules named above forbid the
+  // alternatives.
+  const held = hold === undefined ? {} : { hold };
   const peek = foldBuildPeek({
     unitId,
     spawns: readMachineSpawns(deps),
     marks,
     nowMs: deps.now(),
+    ...held,
   });
   const body = [machineScopeLine(deps.machine()), "", renderBuildPeek(peek)].join("\n");
   const next: string[] = [];
   // The read that lies, offered beside the one that corrects it (ADR-0588 D4) — and offered FIRST
   // when the peek is the thing that makes it readable.
+  // ADR-0592 D6: a held build is waiting on a decision that EXPIRES, so the two answers are offered
+  // ahead of everything else — including the attempt-policy read, which is the right first offer for a
+  // running build and the wrong one for a build that is asking the reader a question.
+  if (peek.hold.held && peek.hold.answerable) {
+    next.push(
+      `storytree node extend ${unitId} --minutes 30 --reason "<why>"`,
+      `storytree node extend ${unitId} --stop --reason "<why>"`,
+    );
+  }
   if (peek.liveness === "running") next.push(`storytree node attempts ${unitId} --pg`);
   if (!peek.storeRead) next.push(`storytree node peek ${unitId} --pg`);
   next.push(`storytree node log ${unitId} --pg`, "storytree own --all");

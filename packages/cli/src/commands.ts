@@ -230,6 +230,12 @@ import {
 import { gatherFromDisk, ownershipCommand, ownershipHelp } from "./ownership.js";
 // `shared-box-session-ownership-arc` inc 1 — the session's own background-work inventory.
 import { ownCommand, ownHelp } from "./own.js";
+import {
+  type NodeExtendDeps,
+  type NodeExtendOpts,
+  defaultNodeExtendDeps,
+  nodeExtendCommand,
+} from "./node-extend.js";
 import { type NodePeekDeps, defaultNodePeekDeps, nodePeekCommand, readMachineSpawns } from "./node-peek.js";
 import {
   lintPanelHelp,
@@ -2324,6 +2330,8 @@ export interface RunDeps {
    * stat-ing anything.
    */
   readonly nodePeek?: NodePeekDeps;
+  /** ADR-0592: the held-build answer verb's seams — injected, so its cases need no disk and no clock. */
+  readonly nodeExtend?: NodeExtendDeps;
   /**
    * The attestation log (ADR-0044 `attestation-signals`): the live store when --pg;
    * null/absent offline — `storytree attest` then refuses (writes/reads both need it).
@@ -2777,6 +2785,8 @@ interface BuildValues {
   budget?: string;
   "max-turns"?: string;
   "time-budget"?: string;
+  /** `--hold-grace <minutes>` (ADR-0592 D3) — how long a spent `--real` build holds for its orchestrator. */
+  "hold-grace"?: string;
   "revise-test"?: string;
   increment?: string;
   actor?: string;
@@ -2810,6 +2820,13 @@ export function nodeStoryBuildOpts(values: BuildValues): NodeBuildOpts {
   // drive owns the parse, the validation and the real-route narrowing, so a malformed value is
   // refused there with the operator's own text quoted back rather than as `NaN`.
   opts.timeBudget = values["time-budget"];
+  // ADR-0592 D3: the same shape, and the same reason — `chooseHoldGraceMs` owns the whole reading,
+  // including the one rule that differs (it HONOURS a zero, where `--time-budget` refuses one).
+  // ⚠ This line is the silent half of a CLI flag: the flag table above parses `--hold-grace` whether or
+  // not this exists, so without it the flag is accepted, ignored, and the hold quietly keeps its
+  // default. Registered and unthreaded is the shape no unit test of the drive can see, which is why
+  // `node-build-hold-grace-flag.test.ts` drives it from the argv.
+  opts.holdGrace = values["hold-grace"];
   // ADR-0571 D3: unguarded, because `reviseTest` admits undefined — a guard here would be a mutant
   // no test could kill. `story build` reads the same field as `<member-id>:<run-id>` (ADR-0571,
   // amended for story chains) and refuses it without --real.
@@ -3266,6 +3283,7 @@ export function makeGateDeps(
       if (values["max-turns"] !== undefined) driverDeps.maxTurns = Number(values["max-turns"]);
       // Unguarded and raw, for the reason `nodeStoryBuildOpts` states: the drive owns the reading.
       driverDeps.timeBudget = values["time-budget"];
+      driverDeps.holdGrace = values["hold-grace"];
       return driveBuildTestsGate(gate, signer, driverDeps);
     },
     now: () => new Date(),
@@ -3293,7 +3311,7 @@ function buildHelp(): Envelope {
       "",
       "flags: --dry-run (scripted, offline) · --live (subscription leaf smoke) · --real (real build)",
       "       --runtime claude|codex|pi (default: codex) · --model <runtime-model-id>",
-      "       --budget <usd> (Claude only) · --max-turns <n> · --time-budget <minutes> (--real)   ·   --runtime pi is --live only (ADR-0449)",
+      "       --budget <usd> (Claude only) · --max-turns <n> · --time-budget <minutes> (--real) · --hold-grace <minutes> (--real)   ·   --runtime pi is --live only (ADR-0449)",
       "       --revise-test <run-id> (node/gate --real) · <member-id>:<run-id> (story --real) — a test revision against that failed run's escalation (ADR-0571)",
       "       --increment <id> (REQUIRED with --real, refused without it) — the arc increment a paid attempt is filed under (ADR-0576)",
       "",
@@ -3491,6 +3509,13 @@ export const CLI_OPTIONS = {
   budget: { type: "string" },
   "max-turns": { type: "string" },
   "time-budget": { type: "string" },
+  // `node build <id> --real --hold-grace <minutes>` (ADR-0592 D3): how long a spent build HOLDS for the
+  // orchestrator before stopping itself. `0` disables the hold.
+  "hold-grace": { type: "string" },
+  // `node extend <unit-id> --minutes <n> | --stop` (ADR-0592 D3): the orchestrator's answer to a hold.
+  // `--run` needs no entry here — it is the same run-id flag `node adjudicate` already declares below.
+  minutes: { type: "string" },
+  stop: { type: "boolean", default: false },
   // `node build <id> --real --revise-test <run-id>` (ADR-0571): re-run the unit as a test revision
   // against that run's escalation record. `node build` only — `story build` refuses it.
   "revise-test": { type: "string" },
@@ -3943,7 +3968,36 @@ export async function run(argv: readonly string[], deps: RunDeps): Promise<Envel
         deps.workLog === undefined || deps.workLog === null
           ? null
           : foldWorkLog(await deps.workLog.readEvents(), third);
-      return nodePeekCommand(third, marks, peekDeps);
+      // ADR-0592 D6: the third input. Read HERE rather than inside the fold, exactly as the registry and
+      // the work log are — and swallowed, because a peek must not stop answering because one directory
+      // could not be read.
+      const heldNotice = await peekDeps.readHold(third).catch(() => undefined);
+      return nodePeekCommand(third, marks, peekDeps, heldNotice);
+    }
+    if (sub === "extend") {
+      // ADR-0592 D3/D4: the orchestrator's answer to a held build — buy it more time, or stop it.
+      //
+      // ⚠ NO `--pg`, and that is the point rather than an omission. The hold is a file in the per-user
+      // record family precisely so a held build stays answerable when the store is down — the one
+      // dependency a build in trouble is most likely to have lost. Refusing without a database here
+      // would reintroduce exactly the stall the file channel exists to prevent.
+      if (third === undefined) {
+        return {
+          ok: false,
+          body: "storytree node extend <unit-id> --minutes <n> | --stop — which held build?",
+          next: [
+            'storytree node extend <unit-id> --minutes 30 --reason "<why>"',
+            'storytree node extend <unit-id> --stop --reason "<why>"',
+          ],
+        };
+      }
+      const extendOpts: NodeExtendOpts = {
+        minutes: values.minutes,
+        stop: values.stop === true,
+        reason: values.reason,
+        run: values.run,
+      };
+      return nodeExtendCommand(third, extendOpts, deps.nodeExtend ?? defaultNodeExtendDeps());
     }
     if (sub === "walls") {
       // FREE, read-only: the write-scope wall READING (ADR-0446) — how often the spine's phase
