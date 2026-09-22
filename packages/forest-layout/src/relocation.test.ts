@@ -87,6 +87,7 @@ test('the projection compares every derived territory field', () => {
     'decor',
     'groundCentroid',
     'groundRadius',
+    'groundSeed',
     'groundTreeSpot',
     'labelY',
     'radius',

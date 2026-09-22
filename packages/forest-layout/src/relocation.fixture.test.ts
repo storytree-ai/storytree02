@@ -201,6 +201,7 @@ export interface ProjectableWorld {
     readonly treeSpot: { x: number; y: number };
     readonly groundCentroid: { x: number; y: number };
     readonly groundTreeSpot: { x: number; y: number };
+    readonly groundSeed: { x: number; y: number };
     readonly caps: readonly {
       readonly cap: { readonly id: string };
       readonly x: number;
@@ -242,6 +243,7 @@ export function projectWorld(world: ProjectableWorld): WorldProjection {
       treeSpot: t.treeSpot,
       groundCentroid: t.groundCentroid,
       groundTreeSpot: t.groundTreeSpot,
+      groundSeed: t.groundSeed,
       caps: t.caps.map((c) => ({ cap: c.cap.id, x: c.x, y: c.y, groundSpot: c.groundSpot })),
       decor: t.decor,
       wheatTiles: [...t.wheatTiles].sort(),
