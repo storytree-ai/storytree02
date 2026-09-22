@@ -76,7 +76,7 @@ import { LAND_RELIEF_AMPLITUDE, landRelief } from '../src/land-relief.js';
 import { occlusionGres, shadowCoverage, type ShadowCaster } from '../src/land-shadow.js';
 import type { InstanceDescriptor } from '../src/world-to-3d.js';
 import { SHIPPED_COAST, clipToCoast, type CoastPoint } from '../src/coast-clip.js';
-import { bearingFrom, islandRims, type IslandRim } from '../src/island-path.js';
+import { DOCK_REACH, bearingFrom, islandRims, type IslandRim } from '../src/island-path.js';
 import { CROWD_POPULATION, CROWD_VIEWPORT, crowdLayout } from './crowd-layout.js';
 import type { CrowdIsland } from './crowd-layout.js';
 import { readIdentity, type RendererIdentity } from './frame-cost-scene.js';
@@ -503,9 +503,20 @@ export function crowdCasters(size: CrowdSize): ShadowCaster[] {
  */
 export const CROWD_LANDING_BEARINGS: readonly number[] = [-160, 25];
 
-/** How far offshore each synthetic strip starts, in ground units — well outside `DOCK_REACH`, so
- *  only the landward end docks and the seaward end is a trail's ordinary far end. */
-export const CROWD_STRIP_OFFSHORE = 40 * LAND_SCALE;
+/**
+ * How far offshore each synthetic strip starts, in ground units — well outside {@link DOCK_REACH},
+ * so only the landward end docks and the seaward end is a trail's ordinary far end.
+ *
+ * ⚠ DERIVED FROM THE REACH SINCE 2026-09-23 (ADR-0596), because it was a literal that quietly
+ * stopped meaning what its own sentence claimed. It read `40 * LAND_SCALE` = 15.08 while the reach
+ * was 5.09, which was indeed "well outside". When ADR-0596 widened the reach to 13.57 the seaward
+ * ends — which sit 12.74 to 14.70 from the NEAREST rim point, not the 15.08 they sit from their own
+ * landing, because the coast curves away — fell inside it: 16 of 70 started docking, every crowd
+ * island grew a third dock, and the connector drew a path out to sea. Twice the reach restores the
+ * margin and, more to the point, keeps it: the fixture can no longer disagree with the constant it
+ * is defined against.
+ */
+export const CROWD_STRIP_OFFSHORE = 2 * DOCK_REACH;
 
 /**
  * THE RIM VERTEX NEAREST A BEARING from the island's centroid — the recipe's `coast_at`, in the

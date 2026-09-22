@@ -209,6 +209,23 @@ test('fld-a-routed-junction-is-never-a-dock: a shared in-reach end is excluded w
   assert.deepEqual(docks.get('junction-rim'), [{ x: 100, z: 50 }]);
 });
 
+test('fld-a-routed-junction-is-never-a-dock: a GHOST run sharing a landing cannot un-dock it', () => {
+  // ⚠ THE JUNCTION RULE READS DOCKABLE STRIPS ONLY, and that guard is load-bearing rather than
+  // tidy: an under-island ghost run (ADR-0504 D3) legitimately shares its rim crossing with the
+  // visible trail it dives beneath. Counted alongside the visible strips, that coincidence would
+  // read as a junction and silently REMOVE a real landing — a ghost the canvas never draws
+  // deleting a path it has no business touching. `check:mutation-diff` found this span unguarded
+  // by any test; this is the input that separates the two behaviours.
+  const rim = [island('ghosted-rim', 0, 0, 100)];
+  const landing = { x: 103, z: 50 };
+  const visible = strip({ x: 180, z: 50 }, landing);
+  const ghost = strip({ x: 40, z: 50 }, landing, { kind: 'trail-ghost-strip', hidden: true });
+  assert.deepEqual(islandDocks(rim, [visible, ghost]).get('ghosted-rim'), [{ x: 100, z: 50 }]);
+  // A visible peer at the SAME position is a junction, so the fixture is not simply too lenient.
+  const peer = strip({ x: 40, z: 50 }, landing);
+  assert.deepEqual(islandDocks(rim, [visible, peer]).get('ghosted-rim'), []);
+});
+
 test('fld-every-terminal-trail-end-docks-on-the-real-map: every terminal landing in the shipped stream docks on clipped ground', () => {
   const source = JSON.parse(
     readFileSync(fileURLToPath(new URL('../../../docs/research/chapter2-real-forest-2026-09-08/scenes/shipped.json', import.meta.url)), 'utf8'),
