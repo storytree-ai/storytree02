@@ -117,9 +117,12 @@ export function scanForControlBytes(file: string, bytes: Buffer): ControlByteFin
   let line = 1;
   let lineStart = 0;
 
-  for (let i = 0; i < bytes.length; i += 1) {
-    const byte = bytes[i];
-    if (byte === undefined) continue;
+  // ⚠ ITERATED BY `entries()` RATHER THAN BY INDEX, and that is a test-strength choice rather than
+  // a style one. An indexed loop under `noUncheckedIndexedAccess` needs a `byte === undefined`
+  // guard that is unreachable at runtime, and both the guard and the `i < length` bound are then
+  // EQUIVALENT MUTANTS — `check:mutation-diff` reports them as survivors no test can ever kill,
+  // which is noise that trains a reader to skim the report. `entries()` has neither.
+  for (const [i, byte] of bytes.entries()) {
     if (byte === 0x0a) {
       line += 1;
       lineStart = i + 1;
@@ -143,9 +146,8 @@ function renderLine(bytes: Buffer, lineStart: number): string {
   let end = bytes.indexOf(0x0a, lineStart);
   if (end === -1) end = bytes.length;
   let out = "";
-  for (let i = lineStart; i < end; i += 1) {
-    const byte = bytes[i];
-    if (byte === undefined) continue;
+  // `subarray` rather than an indexed walk, for the equivalent-mutant reason in the scanner above.
+  for (const byte of bytes.subarray(lineStart, end)) {
     out += isRefusedByte(byte) ? `<0x${byte.toString(16).padStart(2, "0")}>` : String.fromCharCode(byte);
   }
   return out;
