@@ -565,7 +565,13 @@ describe('semantic-growth studio demo (`?semanticGrowth=demo`) — asa: sgsd-cle
       // capability, the `+ 2` quota retired — so the fixture's island is drawn on fewer hexes and
       // the relaxed mesh decomposes into half the cells. What is NOT allowed to move is asserted
       // alongside — one connected adjacency wave per ring.
-      expect(section?.getAttribute('data-svg-island-accretion-cells')).toBe('26');
+      // 26 -> 24 on 2026-09-22 (ADR-0593 D1, LAND_CAMERA_ELEVATION_DEG 20 -> 50): the packer's hex
+      // ownership (`packages/forest-layout/src/pack.ts`) resolves ties in SCREEN space via
+      // `pixelToHex`/`hexCenter`, both parameterised on the land's camera — moving the elevation
+      // reflows which hexes this fixture's parcel is actually assigned, independent of anything a
+      // camera/lab-scoping change could fix from this file's side. Re-measured against the current
+      // build rather than re-derived; the packer, not this assertion, owns the number.
+      expect(section?.getAttribute('data-svg-island-accretion-cells')).toBe('24');
       expect(section?.getAttribute('data-svg-island-accretion-duration-ms')).toBe('1600');
       // 50 cells over 8 connected waves. The counts have moved twice before — from 52 /
       // `1,4,8,13,13,9,4` when `islands-sit-too-far-apart-and-the-resting-zoom-is-too-far-out`
@@ -596,7 +602,13 @@ describe('semantic-growth studio demo (`?semanticGrowth=demo`) — asa: sgsd-cle
       // `1,4,6,3,3,4,3,2` at the shipped 0.1 (ADR-0528 D5) — the partition is a function of where the
       // seed lands, and the pick moved the fixture's second island's seed. Caught here loudly, as
       // this assertion is for.
-      expect(section?.getAttribute('data-svg-island-accretion-waves')).toBe('1,4,6,3,3,4,3,2');
+      //
+      // And once more on 2026-09-22 (ADR-0593 D1): the cell count moved again (26 -> 24, asserted
+      // above) because the packer's screen-space hex ownership is itself a function of the land
+      // camera, so the wave partition over those 24 cells follows — one connected wave per ring
+      // still holds, still a rise and taper, now `1,4,6,4,3,4,2`. Re-measured against the current
+      // build, not re-derived; caught here loudly, as this assertion is for.
+      expect(section?.getAttribute('data-svg-island-accretion-waves')).toBe('1,4,6,4,3,4,2');
       const legend = flagged.querySelector('[data-island-accretion-legend="true"]');
       expect(legend).toBeTruthy();
       for (const term of [
@@ -1547,8 +1559,10 @@ describe('Chapter 2 round-3 comparison lab (`?organicGrowth=r3-lab`)', () => {
       // Same fixture/golden as the organic-island-accretion gate above — see its comment for why
       // 52 -> 50 (islands-sit-too-far-apart-and-the-resting-zoom-is-too-far-out's spacing cut),
       // then 50 -> 52 (ADR-0521, the ratio-derived spacing re-seeded the fixture's second island),
-      // then 52 -> 26 (ADR-0528, one hex per capability: the island is drawn on fewer hexes).
-      expect(section.getAttribute('data-svg-island-accretion-cells')).toBe('26');
+      // then 52 -> 26 (ADR-0528, one hex per capability: the island is drawn on fewer hexes), then
+      // 26 -> 24 (ADR-0593 D1: the packer's screen-space hex ownership is a function of the land
+      // camera too, so moving it 20 -> 50 reflowed which hexes this fixture's parcel is assigned).
+      expect(section.getAttribute('data-svg-island-accretion-cells')).toBe('24');
       expect(section.getAttribute('data-svg-island-accretion-duration-ms')).toBe('1600');
 
       // The picker names every candidate, with the incumbent pressed by default.

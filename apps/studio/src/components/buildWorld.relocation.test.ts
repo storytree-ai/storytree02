@@ -72,18 +72,41 @@ function asTreeStories(fixture: readonly FixtureStory[]): TreeStory[] {
 
 const stories = asTreeStories(relocationCorpus());
 
+/** The land camera the relocation golden was CAPTURED at (ADR-0367 D1's original value), restated
+ *  here as its own literal rather than imported from the package fixture: the two files prove
+ *  opposite halves (chrome vs packer) and must each be able to state their inputs without
+ *  depending on the other's constant. Pinned deliberately NOT to `LAND_CAMERA_ELEVATION_DEG`: the
+ *  golden is a fixed record of the map before the packing moved, and the relocation claim — that
+ *  `buildWorld` reproduces the pre-move map exactly — is camera-independent. ADR-0593 D1 later
+ *  moved the live constant to 50; without this pin, every arm below would silently pick up
+ *  whatever the constant is TODAY, and the comparison would stop proving "did the move change the
+ *  map" and start proving "did the map change since capture" — which it did, on purpose, for a
+ *  reason this file has nothing to do with. */
+const GOLDEN_CAPTURE_ELEVATION_DEG = 20;
+
 /** The five arms, as the STUDIO enters them — the same five the package compares, but reached
  *  through `buildWorld`'s own options rather than through pre-computed chrome. */
 const arms = {
-  shipped: () => buildWorld(stories, { buildings: true }),
-  scatter: () => buildWorld(stories, { buildings: true, plantsScatter: true }),
-  bare: () => buildWorld(stories, { buildings: false }),
+  shipped: () => buildWorld(stories, { buildings: true, elevationDeg: GOLDEN_CAPTURE_ELEVATION_DEG }),
+  scatter: () =>
+    buildWorld(stories, {
+      buildings: true,
+      plantsScatter: true,
+      elevationDeg: GOLDEN_CAPTURE_ELEVATION_DEG,
+    }),
+  bare: () => buildWorld(stories, { buildings: false, elevationDeg: GOLDEN_CAPTURE_ELEVATION_DEG }),
   legacy: () =>
     buildWorld(stories, {
       buildings: true,
       spacing: { legacy: { rankGap: 40, islandGap: 60, rankSwing: 140 } },
+      elevationDeg: GOLDEN_CAPTURE_ELEVATION_DEG,
     }),
-  tightest: () => buildWorld(stories, { buildings: true, spacing: { ratio: 0 } }),
+  tightest: () =>
+    buildWorld(stories, {
+      buildings: true,
+      spacing: { ratio: 0 },
+      elevationDeg: GOLDEN_CAPTURE_ELEVATION_DEG,
+    }),
 } satisfies Record<string, () => ReturnType<typeof buildWorld>>;
 
 describe('buildWorld lays out the same map after the packing moved into its own package', () => {
@@ -142,7 +165,12 @@ describe('the chrome half — what the packer is handed, and can never work out 
     // The two halves meet HERE: `buildWorld`'s chrome, and `packWorld` called directly on the
     // fixture's stated inputs, must produce the identical map. If the fixture's literals ever stop
     // describing what the chrome computes, this is what says so — not a silent pair of greens.
-    const viaChrome = projectWorld(buildWorld(stories, { buildings: true }));
+    // Pinned to the same GOLDEN_CAPTURE_ELEVATION_DEG as every arm above: this comparison is
+    // numeric (budget 0), and `shippedArm.opts` below carries the package fixture's own pinned
+    // 20° — without matching it here, the two sides would disagree on camera alone.
+    const viaChrome = projectWorld(
+      buildWorld(stories, { buildings: true, elevationDeg: GOLDEN_CAPTURE_ELEVATION_DEG }),
+    );
     const shippedArm = relocationArms()['shipped'];
     expect(shippedArm).toBeDefined();
     const direct = projectWorld(packWorld(shippedArm!.stories, shippedArm!.opts));

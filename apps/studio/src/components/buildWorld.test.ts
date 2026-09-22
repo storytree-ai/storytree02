@@ -8,7 +8,7 @@
 // is owner-attested.
 
 import { describe, it, expect } from 'vitest';
-import { AXIAL_DIRS } from '@storytree/forest-world';
+import { AXIAL_DIRS, LAND_CAMERA_ELEVATION_DEG } from '@storytree/forest-world';
 
 import { buildWorld, parseArtRungs, parseMapElevation, parseSpacingTuning } from './TreeView.js';
 import { ISLAND_SPACING_RATIO, ISLAND_SPACING_RUNGS } from '@storytree/forest-layout';
@@ -204,9 +204,73 @@ describe('buildWorld — ADR-0521: the gaps derive from island size', () => {
     const near = Math.abs(centroid(fixture(), 'left', 0).x - centroid(fixture(), 'right', 0).x);
     const far = Math.abs(centroid(fixture(), 'left', 0.6).x - centroid(fixture(), 'right', 0.6).x);
     expect(far).toBeGreaterThan(near);
-    // 0.6 × the mean radius of two 13-tile islands is ≈ 79 ground units before the lattice snaps
-    // the seeds; the snapped distance must still have moved by at least one hex step (≈ 47).
-    expect(far - near).toBeGreaterThan(40);
+    // ⚠ THE FLOOR MOVED WITH ADR-0593 D1, AND THE REASON IS WORTH READING BEFORE TOUCHING IT.
+    //
+    // This used to require a move of at least one hex step (≈ 47), justified as "0.6 × the mean
+    // radius of two 13-tile islands is ≈ 79 ground units before the lattice snaps the seeds".
+    // Measured on this fixture either side of the camera move, with nothing else changed:
+    //
+    //     land camera 20°   near 100.17   far 146.33   moved 46.16   (≈ 0.92 of a ground radius)
+    //     land camera 50°   near 110.62   far 131.52   moved 20.90   (≈ 0.42 of a ground radius)
+    //
+    // The nominal ask is 0.6 of a radius at both. The lattice snap overshoots it at 20° and
+    // undershoots it at 50°, so raising the camera costs this dial rather more than half its
+    // in-row authority. That is a LAYOUT observation and it belongs to the open density question
+    // (`oq-gaps-derived-forest-still-sparse-tile-or-positions`), NOT to the camera: ADR-0593 D4 is
+    // explicit that the angle and the density are two knobs and a session that trades one against
+    // the other has confused them. So this floor is re-based and the spacing rule is untouched.
+    //
+    // 15 is a materiality floor, not the measurement: it sits comfortably above the sub-pixel
+    // regime a rounding artefact would live in and comfortably below the response at either
+    // camera, so it still fails a dial that has stopped biting without re-passing on a snap.
+    expect(far - near).toBeGreaterThan(15);
+  });
+
+  it('the elevation ARGUMENT alone decides the layout — the ambient constant never leaks in', () => {
+    // ⚠ THIS PROPERTY WAS FALSE UNTIL THIS LANDING, AND ITS ABSENCE IS WHY A "50° MAP" COULD BE
+    // REVIEWED THAT WAS NOT ONE. `packWorld` threads a caller's `elevationDeg` through almost
+    // everything, and TWO call sites silently took `LAND_CAMERA_ELEVATION_DEG`'s default instead:
+    // the seed snap (`pixelToHex`, which decides WHICH HEX each island is planted on, so the error
+    // moved islands by whole tiles) and the world's top bound (`storyTreeReach`, so the box was
+    // sized at one camera while the map inside it was drawn at another). Both are fixed here.
+    //
+    // ⚠ NOTHING COULD SEE IT BEFORE, and that is the part worth keeping. Every shipped caller packs
+    // BARE, so the module default and the local variable were always the same number and a site
+    // that read the wrong one was indistinguishable from a site that read the right one. The gap
+    // only opens when a caller actually exercises the override — which is exactly what the staging
+    // run for the held question did, and why its "50°" rows came back as today's map
+    // (ADR-0593, Context).
+    //
+    // So the claim is a DEPENDENCE claim, not a value one: pack the same corpus at two explicit
+    // cameras and the two layouts must differ; pack it at the shipped camera explicitly and it must
+    // equal the bare call. A site that ignored its argument would satisfy the second and fail the
+    // first; a site that ignored the constant would fail the second.
+    const layout = (elevationDeg?: number) => {
+      const opts = elevationDeg === undefined ? {} : { elevationDeg };
+      const w = buildWorld(fixture(), { spacing: { ratio: 0.6 }, ...opts });
+      const t = (id: string) => w.territories.find((x) => x.story.id === id)!;
+      return {
+        // ACROSS-screen separation: x is untouched by the projection itself, so this moves ONLY if
+        // the argument reached the seed snap. It is the `pixelToHex` half.
+        separationX: Math.abs(t('left').centroid.x - t('right').centroid.x),
+        // the world's own box, which is the `storyTreeReach` half
+        height: w.height,
+        // and the tiles each island actually claimed
+        tiles: t('left').tiles.map((h) => `${h.q},${h.r}`).join(' '),
+      };
+    };
+
+    const at20 = layout(20);
+    const at50 = layout(50);
+    const bare = layout();
+
+    // the ARGUMENT bites — all three, and each catches a different missed forward
+    expect(at20.separationX).not.toBe(at50.separationX);
+    expect(at20.height).not.toBe(at50.height);
+    expect(at20.tiles).not.toBe(at50.tiles);
+
+    // …and the DEFAULT is the declared constant and nothing else
+    expect(bare).toEqual(layout(LAND_CAMERA_ELEVATION_DEG));
   });
 
   it('adjacent ranks sit FURTHER apart at a larger ratio — the row gap is the same fraction', () => {
@@ -299,12 +363,45 @@ describe('the-two-layers-share-one-elevation — ?elevation= renders an arm, and
     const at20 = buildWorld(stories, { buildings: false, elevationDeg: 20 });
     const at50 = buildWorld(stories, { buildings: false, elevationDeg: 50 });
     const bare = buildWorld(stories, { buildings: false });
-    // the DEFAULT is 20° — the shipped `LAND_CAMERA_ELEVATION_DEG` — so a bare call is the 20° arm
-    expect(at20.width).toBeCloseTo(bare.width, 9);
-    expect(at20.height).toBeCloseTo(bare.height, 9);
+    // ⚠ THE DEFAULT IS NOW 50° — ADR-0593 D1 moved `LAND_CAMERA_ELEVATION_DEG` from 20 to 50 so the
+    // flat map and the 3D land share one elevation and `registrationCamera` stops refusing. A bare
+    // call is therefore the 50° arm; it was the 20° arm until 2026-09-22.
+    expect(at50.width).toBeCloseTo(bare.width, 9);
+    expect(at50.height).toBeCloseTo(bare.height, 9);
     // neither projection touches x, so the drawn width is the same at both elevations...
     expect(at50.width).toBeCloseTo(at20.width, 9);
     // ...and the drawn DEPTH is what moves: sin(50°)/sin(20°) = 2.24x more screen height.
     expect(at50.height).toBeGreaterThan(at20.height);
+  });
+
+  it('the elevation reaches the ISLAND ITSELF, not merely the world box around it', () => {
+    // ⚠ WHY THIS EXISTS, AND IT IS NOT A DUPLICATE OF THE TEST ABOVE. Width and height are the
+    // only things that test checks, and a world box is the LAST thing to move: it is derived from
+    // the packing, which the `?elevation=` flag already reached. The island's own drawn geometry
+    // comes from a different path, and for six days nobody noticed the two had come apart — the
+    // held question's "50° map" rows were drawn at 20° and reviewed as 50° renders, because the
+    // pictures' outer dimensions had moved and nothing asked whether their CONTENTS had
+    // (ADR-0593, Context).
+    //
+    // So assert the projection itself, on the island. The packer hands back each territory's
+    // centroid twice — once on the ground (`groundCentroid`, camera-independent) and once as
+    // DRAWN (`centroid`, projected at the declared camera). Orthographic elevation scales depth by
+    // `sin θ` and leaves `x` alone, so the two must stand in exactly that relation, at whichever
+    // angle the caller asked for. A drawing that quietly fell back to some other elevation fails
+    // here however plausible its bounding box looks.
+    const sin = (deg: number) => Math.sin((deg * Math.PI) / 180);
+    for (const [elevationDeg, world] of [
+      [20, buildWorld([library()], { buildings: false, elevationDeg: 20 })],
+      [50, buildWorld([library()], { buildings: false, elevationDeg: 50 })],
+      // …and the BARE call, which is the one a member actually opens.
+      [LAND_CAMERA_ELEVATION_DEG, buildWorld([library()], { buildings: false })],
+    ] as const) {
+      const t = world.territories[0]!;
+      expect(t.centroid.x).toBeCloseTo(t.groundCentroid.x, 9);
+      expect(t.centroid.y).toBeCloseTo(t.groundCentroid.y * sin(elevationDeg), 9);
+      // the tree stands on the same ground it is drawn on, by the same rule
+      expect(t.treeSpot.x).toBeCloseTo(t.groundTreeSpot.x, 9);
+      expect(t.treeSpot.y).toBeCloseTo(t.groundTreeSpot.y * sin(elevationDeg), 9);
+    }
   });
 });

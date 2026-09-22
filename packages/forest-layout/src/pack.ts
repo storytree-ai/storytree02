@@ -34,8 +34,10 @@ import {
   HEX_R,
   HEX_W,
   TILE_DEPTH,
+  TILE_DEPTH_WORLD,
   groundRadiusToScreenHalfHeight,
   unprojectGround,
+  uprightForeshortening,
   PLAN_VIEW_ELEVATION_DEG,
   LAND_CAMERA_ELEVATION_DEG,
   groundPolarOffset,
@@ -115,16 +117,27 @@ export interface PackOptions {
   /** WHICH CAMERA THE SCREEN HALF OF THIS LAYOUT IS PROJECTED AT (ADR-0527 D1 item 1); absent ⇒
    *  the shipped {@link LAND_CAMERA_ELEVATION_DEG}, so every existing caller is byte-unchanged.
    *
-   *  ⚠ IT MOVES THE SCREEN HALF ONLY, AND THAT ASYMMETRY IS THE POINT. Everything this packer
-   *  DECIDES — which tile a story grows onto, which capability owns which ground, where the coast
-   *  runs — is taken at {@link PLAN_VIEW_ELEVATION_DEG} and is camera-independent by construction,
-   *  so asking for another elevation re-projects the drawing without re-deciding the layout. A
-   *  ground twin (`groundCentroid`, `groundTreeSpot`, `groundSpot`, `groundLabelY`, the coast
-   *  loops) is unmoved by this option BY DESIGN; if one of them ever moves, the two spaces have
-   *  stopped being the same world seen twice.
+   *  ⚠ IT IS MEANT TO MOVE THE SCREEN HALF ONLY — and TODAY IT DOES NOT, which this comment says
+   *  out loud rather than continuing to promise. The INTENT stands: everything this packer DECIDES
+   *  — which tile a story grows onto, which capability owns which ground, where the coast runs —
+   *  should be taken at {@link PLAN_VIEW_ELEVATION_DEG} and be camera-independent, so that asking
+   *  for another elevation re-projects the drawing without re-deciding the layout. Every ground
+   *  twin (`groundCentroid`, `groundTreeSpot`, `groundSpot`, `groundLabelY`, the coast loops) is
+   *  DERIVED that way and holds.
    *
-   *  It exists so `the-two-layers-share-one-elevation` can RENDER both arms for the owner. It does
-   *  not pick the shared elevation, which is his look to sign. */
+   *  ⚠ THE ONE EXCEPTION IS THE SEED SNAP, AND IT IS LOAD-BEARING. Each island's seed is placed in
+   *  GROUND units and then snapped to the lattice with `pixelToHex`, a SCREEN-space function — so
+   *  the camera does, today, decide which tiles a story grows onto. That was unobservable until
+   *  ADR-0593 D1 moved `LAND_CAMERA_ELEVATION_DEG`, because the offending call read the module
+   *  default while every caller took it too, and the test covering the invariant varied the
+   *  ARGUMENT that call ignored — so it passed vacuously. The faithful repair is to snap at
+   *  {@link PLAN_VIEW_ELEVATION_DEG}; measured, that moves islands by WHOLE TILES on the shipped
+   *  map, which makes it a LAYOUT decision rather than a camera one (ADR-0593 D4) and parks it on
+   *  the open density fork. `pack.test.ts`'s `⚠ KNOWN VIOLATION (ADR-0593)` pins the defect so it
+   *  cannot be rediscovered, and fails the day it is fixed.
+   *
+   *  It exists so `the-two-layers-share-one-elevation` can RENDER both arms. ADR-0593 D1 has since
+   *  settled which elevation the two layers share — 50 degrees, both of them. */
   elevationDeg?: number;
 }
 
@@ -297,6 +310,16 @@ export function packWorld<S extends LayoutStory>(
   const plantsScatter = opts?.plantsScatter ?? false;
   // THE ONE PLACE THE CAMERA IS RESOLVED, so no site below can quietly read a different one.
   const elevationDeg = opts?.elevationDeg ?? LAND_CAMERA_ELEVATION_DEG;
+  // `TILE_DEPTH` (`@storytree/forest-world`) is a MODULE-LEVEL constant, frozen at whatever
+  // `LAND_CAMERA_ELEVATION_DEG` reads at import time — it cannot itself take an `elevationDeg`
+  // argument. Every SCREEN-space site below that used to read it directly was silently drawing
+  // the extrusion at the SHIPPED camera even when this call asked for another one (the same class
+  // of gap the seed-snap fix above closes). This re-derives it from its ground input
+  // (`TILE_DEPTH_WORLD`) at the camera THIS call actually resolved, so it moves with `elevationDeg`
+  // the way `hexHalfHeight` beside it already does. `groundLabelY` below is the one place that
+  // must NOT use this — it deliberately stays keyed to the frozen `TILE_DEPTH` (see its own
+  // comment): a ground twin is unmoved by this option BY DESIGN.
+  const tileDepth = TILE_DEPTH_WORLD * uprightForeshortening(elevationDeg);
   // ⚠ A NAMED WRAPPER RATHER THAN `hexCenter` AT EACH SITE, and it is the fix for the trap the
   // comments below document at length: `.map(hexCenter)` feeds each tile's ARRAY INDEX into the
   // options slot. This closes over the resolved camera and takes exactly one argument, so a
@@ -494,7 +517,31 @@ export function packWorld<S extends LayoutStory>(
   // seed jitter.
   // EQUIVALENT — `seedPx` was given an entry for every index by the loop above.
   // Stryker disable next-line ObjectLiteral: EQUIVALENT — see the note above.
-  const seeds: Axial[] = stories.map((_, i) => pixelToHex(seedPx.get(i) ?? { x: 0, y: 0 }));
+  //
+  // ⚠ MUST read the local `elevationDeg`, not `pixelToHex`'s own default (ADR-0593 D1). This call
+  // went unnoticed while `LAND_CAMERA_ELEVATION_DEG` and every caller's (absent) `opts.elevationDeg`
+  // happened to agree — every SHIPPED caller packs bare, so `elevationDeg` here IS
+  // `LAND_CAMERA_ELEVATION_DEG` and this forward is a PROVABLE NO-OP for all of them, byte-identical
+  // to the old default. What it changes is only the case where a caller actually EXERCISES the
+  // reserved override — today the relocation fixture (pinning the golden's 20° capture camera while
+  // the shipped default moved on) and the studio's `?elevation=` flag — where it replaces a
+  // silently MIXED-camera pack (seed jitter at the requested angle, this snap alone at whatever the
+  // module ships) with a coherent one. That is why this reproduces the golden at the pinned 20°
+  // exactly: the golden was captured bare, at a 20° constant with nothing to mix, so a coherent 20°
+  // pack IS what it recorded.
+  //
+  // ⚠ A SEPARATE, GENUINE FINDING, RECORDED AND DELIBERATELY NOT TAKEN HERE. `seedPx` is built
+  // above entirely from `spacing.ts`'s row/gap math (`estRadius`, `rankGapFor`, `islandGapFor`),
+  // which carries no camera term at all — it is GROUND space, the same space `hexCenter` recovers
+  // at `PLAN_VIEW_ELEVATION_DEG` everywhere else in this file (the coast, the garden ring, the
+  // trail islands). Read strictly, the LAND camera is therefore the wrong basis for this particular
+  // snap, and `PLAN_VIEW_ELEVATION_DEG` would be the semantically faithful choice — measured, it
+  // moves the SHIPPED arm's tiles by a whole hex (`drawTiles[0].q: 26 vs -3` against today's golden),
+  // i.e. it is a LAYOUT change, not a camera one. ADR-0593 D4 reserves exactly that kind of layout
+  // question for the open density fork (`oq-gaps-derived-forest-still-sparse-tile-or-positions`) and
+  // this landing may not smuggle a layout move in under a camera one — so this stays a `LAND_CAMERA`
+  // read, on purpose, pending that decision.
+  const seeds: Axial[] = stories.map((_, i) => pixelToHex(seedPx.get(i) ?? { x: 0, y: 0 }, { elevationDeg }));
   // Each nudge moves one seed one hex EAST, so the passes converge; the bound is a guard against a
   // pathological input, not a budget — at 24 a crowded rank ran out of passes with two seeds still
   // inside each other's floor, and the moat below then had nothing to keep (measured on a 60-island
@@ -759,12 +806,13 @@ export function packWorld<S extends LayoutStory>(
 
     // ADR-0367's named accepted cost: `HEX_R` is a GROUND radius, so a nameplate baseline that adds
     // it raw sat a cell-radius below the tiles in plan view and ~18 px too low the moment the land
-    // got a camera. The projected half-height is what a cell actually occupies on screen; TILE_DEPTH
-    // is already projected (an upright extrusion, so cos θ) and stays as it is.
+    // got a camera. The projected half-height is what a cell actually occupies on screen; `tileDepth`
+    // is already projected (an upright extrusion, so cos θ, re-derived at THIS call's camera above)
+    // and stays as it is.
     const labelY =
       Math.max(...centers.map((p) => p.y), centroid.y) +
       groundRadiusToScreenHalfHeight(HEX_R, elevationDeg) +
-      TILE_DEPTH +
+      tileDepth +
       tileUnits(8);
     // The SAME baseline on the ground (ADR-0545), built the way every other ground twin here is
     // built — from the plan-view tile centres, never by un-projecting `labelY`. The island's own
@@ -799,7 +847,13 @@ export function packWorld<S extends LayoutStory>(
       let by = treeSpot.y + tileUnits(7 + tier * 6); // a touch in front of the trunk base, lower per tier
       // EQUIVALENT — as the garden walk above: the land test ends it, the bound is a guard.
       // Stryker disable next-line ConditionalExpression,EqualityOperator,UpdateOperator: EQUIVALENT — see the note above.
-      for (let k = 0; k < 5 && owner.get(axialKey(pixelToHex({ x: bx, y: by }))) !== i; k++) {
+      //
+      // ⚠ `{ elevationDeg }` MUST be threaded, same as the garden walk's own `pixelToHex` a few
+      // dozen lines up: `bx`/`by` are built from `treeSpot`, which is SCREEN space at whatever
+      // camera this call resolved, not the module's own default. Reading it bare (as this line
+      // did until ADR-0593 D1) silently keys the ownership lookup to the SHIPPED camera instead —
+      // invisible while every caller took the default, live the moment one asks for another.
+      for (let k = 0; k < 5 && owner.get(axialKey(pixelToHex({ x: bx, y: by }, { elevationDeg }))) !== i; k++) {
         bx += (treeSpot.x - bx) * 0.3;
         by += (treeSpot.y - by) * 0.3;
       }
@@ -934,6 +988,14 @@ export function packWorld<S extends LayoutStory>(
             `trails:dag:${stories.map((s) => s.id).sort().join('|')}`,
           ),
           trailIslands,
+          // ⚠ THIRD ARGUMENT, NOT LEFT AT ITS DEFAULT (ADR-0593 D1). `routeTrails` above deliberately
+          // reasons in GROUND space (the comment above `trailIslands` explains why), and this is the
+          // ONE place that projects the routed network back to screen space. Its own default is the
+          // module's `LAND_CAMERA_ELEVATION_DEG`, not this call's resolved camera — left bare, every
+          // trail segment and cave would draw at the SHIPPED angle regardless of what `elevationDeg`
+          // this `packWorld` call actually asked for, the same class of gap as the seed-snap fix
+          // above (and the largest by far: a whole trail network foreshortened at the wrong θ).
+          elevationDeg,
         )
       : { segments: [], edges: [], caves: [], dropped: [] };
 
@@ -962,12 +1024,19 @@ export function packWorld<S extends LayoutStory>(
   const minY =
     Math.min(
       ...allCenters.map((p) => p.y - hexHalfHeight),
-      ...territories.map((t) => t.treeSpot.y - storyTreeReach(t.story.capabilities.length)),
+      // ⚠ `elevationDeg` MUST be threaded here (ADR-0593 D1): `storyTreeReach`'s own default is the
+      // SHIPPED `LAND_CAMERA_ELEVATION_DEG`, not this call's resolved camera, and a bare call
+      // silently mixed cameras within the SAME `Math.min` this `hexHalfHeight` term sits in —
+      // the world's top bound was drawn at whatever the module happened to ship while the rest of
+      // the map moved with the requested angle. Caught by
+      // `an explicit elevation moves the whole scene box, not just the tiles` below, which fails on
+      // the un-threaded call.
+      ...territories.map((t) => t.treeSpot.y - storyTreeReach(t.story.capabilities.length, elevationDeg)),
     ) - MARGIN;
   const maxY =
     Math.max(...allCenters.map((p) => p.y), ...territories.map((t) => t.labelY + tileUnits(34))) +
     hexHalfHeight +
-    TILE_DEPTH +
+    tileDepth +
     MARGIN / 2;
 
   return {

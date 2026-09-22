@@ -712,6 +712,33 @@ export interface Chapter2HeroTreeCandidate {
 const APPLIED_RULE =
   'alpha-weighted x across bottom three occupied rows; bottom-most occupied y (alpha > 8)';
 
+/**
+ * THE ROUND-3 LAB'S OWN WITNESS CAMERA — deliberately NOT `LAND_CAMERA_ELEVATION_DEG` (ADR-0593).
+ *
+ * `?organicGrowth=r3-lab` / `?semanticGrowth=demo` is a static witness stage for comparing
+ * hero-tree candidates against each other, not a variant of the product's working map: measured at
+ * ADR-0593 landing time, `chapter2Round3TreeCandidate` and `CHAPTER2_ROUND3_TREE_CANDIDATES` have
+ * exactly ONE non-test consumer in the whole repo — `SemanticGrowthDemo.tsx`'s lab/demo witness
+ * stage — and `land-camera-composition.test.ts` carries a mechanical control that fails the moment
+ * a second consumer shows up, so this fact stays checked rather than merely asserted here.
+ *
+ * The lab therefore draws and compares its own composition — the accretion island, the shared
+ * plant track, the hero tree — at the angle its committed frames actually carry: 20°, the
+ * `code-blender` candidate's `renderedCameraElevationDeg`. `LAND_CAMERA_ELEVATION_DEG` moved from
+ * 20 to 50 under ADR-0593 D1, but the lab's own pictures were never rendered at the land's camera in
+ * the first place (they are compared against EACH OTHER, not planted on land) and must not move
+ * just because the land's declared angle did.
+ *
+ * ⚠ THIS IS A LITERAL, never derived from `LAND_CAMERA_ELEVATION_DEG` — for exactly the reason
+ * `renderedCameraElevationDeg` is a literal on each candidate below: a value that reads the land's
+ * own binding can never be observed to disagree with it, which is the tautology ADR-0367 D1 exists
+ * to end. If a hero-tree track from this registry is ever mounted on the WORKING map instead of the
+ * lab, it must be reconciled against `LAND_CAMERA_ELEVATION_DEG`, not this constant — and the
+ * mechanical control named above is what forces that decision to be made explicitly rather than
+ * inherited by accident.
+ */
+export const CHAPTER2_ROUND3_LAB_ELEVATION_DEG = 20;
+
 /** The lab's four hero-tree candidates, in comparison order. */
 export const CHAPTER2_ROUND3_TREE_CANDIDATES: readonly Chapter2HeroTreeCandidate[] = Object.freeze([
   Object.freeze({

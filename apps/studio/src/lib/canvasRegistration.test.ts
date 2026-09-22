@@ -144,18 +144,99 @@ describe('the canvas and the labels stay registered', () => {
   });
 });
 
-describe('the condition, and it is not met today', () => {
-  it('REFUSES two different elevations, because the disagreement is anisotropic', () => {
+/**
+ * The two elevations the shipped layers declared BEFORE ADR-0593 D1 — the flat map at 20 degrees,
+ * the 3D renderer at 50. They are LITERALS here, deliberately not the shipped constants, because
+ * what the refusal tests below witness is a property of the SOLVER rather than of today's values:
+ * the seam must go on refusing a genuine mismatch now that the shipped pair is no longer one.
+ *
+ * ⚠ KEEPING THEM IS THE WHOLE POINT. Re-pointing these tests at the (now equal) shipped constants
+ * would delete every refusal assertion in this file by making its input un-refusable — the suite
+ * would stay green while the guard it covers went untested, which is this repo's most-repeated
+ * fault class. This pair is the historical disagreement the mount was blocked on
+ * (ADR-0530, `the-two-layers-share-one-elevation`).
+ */
+const HISTORICAL_MAP_ELEVATION_DEG = 20;
+const HISTORICAL_CANVAS_ELEVATION_DEG = 50;
+
+describe('the condition, and the shipped layers NOW MEET IT (ADR-0593 D1)', () => {
+  it('THE SHIPPED LAYERS REGISTER: the map and the 3D renderer declare ONE elevation', () => {
+    // ⚠ THIS IS THE ASSERTION THE INCREMENT EXISTS TO MAKE, and it could not have passed before
+    // 2026-09-22. `LAND_CAMERA_ELEVATION_DEG` was 20 while `SHIPPED_ELEVATION_DEG` was 50, so
+    // `registrationCamera` refused every pairing of the two layers the product actually draws, and
+    // the mount (ADR-0530 route C) was blocked on exactly that. ADR-0593 D1 moved the map's
+    // constant to 50 and this is the condition coming true.
+    //
+    // ⚠ IT READS THE TWO SHIPPED CONSTANTS, NEVER A SHARED LOCAL PARAMETER. Every other test in
+    // this file hands ONE elevation to both sides, which proves the solver registers a layer with
+    // ITSELF and says nothing whatever about whether the two things the product draws agree. That
+    // gap is not hypothetical: it is how the held question's "50 degree map" rows came to be 20
+    // degree maps that nobody noticed for six days (ADR-0593, Context).
+    expect(LAND_CAMERA_ELEVATION_DEG).toBe(SHIPPED_ELEVATION_DEG);
+
     const svg: Camera = { tx: -412.5, ty: 133.25, scale: 0.6528 };
     const solved = registrationCamera(svg, FRAME, {
       mapElevationDeg: LAND_CAMERA_ELEVATION_DEG,
       canvasElevationDeg: SHIPPED_ELEVATION_DEG,
     });
+    expect(solved.ok).toBe(true);
+    if (!solved.ok) return;
+    // A success carries no `depthScaleRatio` and should not: the ratio is a property of the
+    // REFUSAL, reported so a reader can act on the miss. What a success owes instead is the seam's
+    // own contract — `zoom = scale` (ADR-0272 D2), the single delivered px-per-world-unit the
+    // canvas must take so both layers move together under one CSS transform.
+    expect(solved.camera.zoom).toBe(svg.scale);
+
+    // …and REGISTERING is a claim about PIXELS, not about a boolean. The same ground point has to
+    // land in the same place through both projections, across a forest as deep as the real one.
+    // `buildWorld.test.ts` once checked only a world box's width and height, which is how a map
+    // that had not moved at all passed review as a 50 degree render.
+    for (const point of DRAWING_POINTS) {
+      const a = worldToScreen(svg, point.x, point.y);
+      const b = canvasScreenOf(
+        solved.camera,
+        FRAME,
+        groundOfDrawing(point, LAND_CAMERA_ELEVATION_DEG),
+        SHIPPED_ELEVATION_DEG,
+      );
+      expect(b.x).toBeCloseTo(a.x, 9);
+      expect(b.y).toBeCloseTo(a.y, 9);
+    }
+
+    // ⚠ CONTROL — WITHOUT THIS THE LOOP ABOVE PROVES NOTHING. Every point is fed through the SAME
+    // elevation on both sides, so a `canvasScreenOf` that ignored its elevation argument entirely
+    // would satisfy it. Re-run the identical comparison with the canvas side projected at the
+    // elevation the map used to be drawn at: the near point still lands (the disagreement is
+    // proportional to depth, so it vanishes at the top of the forest) and the FAR one must not.
+    const far = { x: 200, y: 3664 };
+    const drifted = canvasScreenOf(
+      solved.camera,
+      FRAME,
+      groundOfDrawing(far, LAND_CAMERA_ELEVATION_DEG),
+      HISTORICAL_MAP_ELEVATION_DEG,
+    );
+    const truth = worldToScreen(svg, far.x, far.y);
+    expect(drifted.x).toBeCloseTo(truth.x, 9);
+    expect(Math.abs(drifted.y - truth.y)).toBeGreaterThan(100);
+  });
+
+  it('STILL REFUSES two different elevations, because the disagreement is anisotropic', () => {
+    // The guard that blocked the mount, asserted on the pair that blocked it. It has to keep
+    // biting: nothing stops a future camera decision re-opening this gap, and a solver that
+    // silently registered a mismatch would walk the labels off their islands at the far end of a
+    // 3,524-unit forest rather than refusing.
+    const svg: Camera = { tx: -412.5, ty: 133.25, scale: 0.6528 };
+    const solved = registrationCamera(svg, FRAME, {
+      mapElevationDeg: HISTORICAL_MAP_ELEVATION_DEG,
+      canvasElevationDeg: HISTORICAL_CANVAS_ELEVATION_DEG,
+    });
     expect(solved.ok).toBe(false);
     if (solved.ok) return;
-    // The measured figure, re-derived from the two constants rather than recalled: the canvas
-    // delivers 2.2398x the depth the SVG layer does for the same ground.
-    const want = Math.sin((SHIPPED_ELEVATION_DEG * Math.PI) / 180) / Math.sin((LAND_CAMERA_ELEVATION_DEG * Math.PI) / 180);
+    // The measured figure, re-derived from the two angles rather than recalled: a canvas at 50
+    // degrees delivers 2.2398x the depth a 20 degree SVG layer does for the same ground.
+    const want =
+      Math.sin((HISTORICAL_CANVAS_ELEVATION_DEG * Math.PI) / 180) /
+      Math.sin((HISTORICAL_MAP_ELEVATION_DEG * Math.PI) / 180);
     expect(solved.depthScaleRatio).toBeCloseTo(want, 12);
     expect(solved.depthScaleRatio).toBeCloseTo(2.2398, 4);
     expect(solved.reason).toMatch(/anisotropic|share one\s+elevation/);
@@ -164,11 +245,12 @@ describe('the condition, and it is not met today', () => {
   it('is a DEPTH-only disagreement — the x axis already agrees, which is why no scale fixes it', () => {
     // ⚠ THE HALF THAT MAKES THE REFUSAL NECESSARY RATHER THAN FUSSY. If BOTH axes were out by the
     // same factor, one uniform zoom would register the layers and there would be nothing to refuse.
-    // They are not: x is exact and depth is out by sin(50°)/sin(20°).
+    // They are not: x is exact and depth is out by sin(50°)/sin(20°). This is also why ADR-0593 D2
+    // accepts a deeper world box rather than treating it as something a zoom could give back.
     const svg: Camera = { tx: -412.5, ty: 133.25, scale: 0.6528 };
     const mapCamera = registrationCamera(svg, FRAME, {
-      mapElevationDeg: LAND_CAMERA_ELEVATION_DEG,
-      canvasElevationDeg: LAND_CAMERA_ELEVATION_DEG,
+      mapElevationDeg: HISTORICAL_MAP_ELEVATION_DEG,
+      canvasElevationDeg: HISTORICAL_MAP_ELEVATION_DEG,
     });
     expect(mapCamera.ok).toBe(true);
     if (!mapCamera.ok) return;
@@ -181,7 +263,12 @@ describe('the condition, and it is not met today', () => {
     };
     // The SAME ground, projected by a canvas looking from 50° with the map's own zoom.
     const at = (p: { x: number; y: number }) =>
-      canvasScreenOf(mapCamera.camera, FRAME, groundOfDrawing(p, LAND_CAMERA_ELEVATION_DEG), SHIPPED_ELEVATION_DEG);
+      canvasScreenOf(
+        mapCamera.camera,
+        FRAME,
+        groundOfDrawing(p, HISTORICAL_MAP_ELEVATION_DEG),
+        HISTORICAL_CANVAS_ELEVATION_DEG,
+      );
     const canvasSep = { x: at(b).x - at(a).x, y: at(b).y - at(a).y };
 
     expect(canvasSep.x / svgSep.x).toBeCloseTo(1, 12);
@@ -223,13 +310,13 @@ describe('the condition, and it is not met today', () => {
   it('names the MISMATCH in terms a reader can act on, including the ratio and both angles', () => {
     const svg: Camera = { tx: -412.5, ty: 133.25, scale: 0.6528 };
     const solved = registrationCamera(svg, FRAME, {
-      mapElevationDeg: LAND_CAMERA_ELEVATION_DEG,
-      canvasElevationDeg: SHIPPED_ELEVATION_DEG,
+      mapElevationDeg: HISTORICAL_MAP_ELEVATION_DEG,
+      canvasElevationDeg: HISTORICAL_CANVAS_ELEVATION_DEG,
     });
     expect(solved.ok).toBe(false);
     if (solved.ok) return;
-    expect(solved.reason).toContain(`${LAND_CAMERA_ELEVATION_DEG}°`);
-    expect(solved.reason).toContain(`${SHIPPED_ELEVATION_DEG}°`);
+    expect(solved.reason).toContain(`${HISTORICAL_MAP_ELEVATION_DEG}°`);
+    expect(solved.reason).toContain(`${HISTORICAL_CANVAS_ELEVATION_DEG}°`);
     expect(solved.reason).toContain('2.2398x the depth');
     expect(solved.reason).toContain('The x axis agrees exactly and the depth axis does not');
     expect(solved.reason).toContain('cannot be removed by any uniform scale, pan or zoom');

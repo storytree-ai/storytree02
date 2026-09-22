@@ -223,10 +223,16 @@ test('⚠⚠ THE LAYOUT HOLDS STILL between the control and every rung on the fo
   // The compact picture sizes its frame from the shipped island: the forest is much smaller.
   const compact = groundDepth(armDescriptors(SHIPPED_ARM, COMPACT).filter((d) => d.kind === 'cell-ground'));
   const held = groundDepth(armDescriptors(SHIPPED_ARM, FOREST).filter((d) => d.kind === 'cell-ground'));
-  // Not LAND_SCALE of it: the held-still frame is sized from the DRAWN ribbon (233.8 × 46.2, the
-  // 2D layout's own spacing), the compact one from the shipped island (88 × 51), so the frame
-  // area moves by (88·51)/(233.8·46.2) ≈ 0.42 — about 0.65 edge to edge.
-  assert.ok(compact.w < held.w * 0.75 && compact.w > held.w * 0.5, `compact ${compact.w} against held-still ${held.w}`);
+  // Not LAND_SCALE of it: the held-still frame is sized from the DRAWN ribbon's own spacing (the
+  // 2D layout's island pitch), the compact one from the shipped island's own footprint, and
+  // NEITHER is the compact side's business — `compact.w` is unaffected by the land camera at all.
+  // Under ADR-0593 D1 (land camera 20 -> 50 degrees) the ribbon's own depth un-squashes from 46.2
+  // to 103.4 (see `true-surface-equivalence.test.ts`), so the held-still forest's inter-island
+  // pitch opens up and its packed WIDTH grows with it (a taller per-island footprint reflows how
+  // many islands a row holds) — which SHRINKS the compact/held-still width ratio: it was ~0.65
+  // edge-to-edge at 20 degrees ((88 × 51) against (233.8 × 46.2), ≈0.42 by area), and re-measured
+  // here at 50 degrees it is ~0.455 edge-to-edge (compact 1465.4, held-still 3219.3).
+  assert.ok(compact.w < held.w * 0.55 && compact.w > held.w * 0.35, `compact ${compact.w} against held-still ${held.w}`);
   assert.equal(COMPACT.size.layout, 'compact');
   assert.equal(FOREST.size.layout, undefined);
   assert.deepEqual(picturesAt(8).map((p) => p.id), ['one', 'forest']);

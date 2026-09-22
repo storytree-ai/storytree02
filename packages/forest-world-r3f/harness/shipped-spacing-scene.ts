@@ -108,6 +108,28 @@ export { VISIBLE_DELTA };
 export const SPACING_EVIDENCE_DIR = 'chapter2-forest-spacing-2026-09-06';
 export const SPACING_SCENES_ROUTE = `/reference/${SPACING_EVIDENCE_DIR}/scenes`;
 
+/**
+ * THE LAND CAMERA THIS EVIDENCE WAS DRAWN AT — a FACT ABOUT THE COMMITTED FILE, frozen the moment
+ * `manifest.json` was generated (2026-09-05T22:24:25Z), and independent of whatever
+ * `LAND_CAMERA_ELEVATION_DEG` reads today.
+ *
+ * ⚠⚠ WHY THIS EXISTS AT ALL, AND WHY IT IS A LITERAL RATHER THAN THE LIVE CONSTANT. Every `d` path
+ * coordinate in these committed scenes was squashed by `sin` of WHATEVER THE LAND CAMERA WAS THE DAY
+ * THIS EXPORT RAN — 20 degrees, the only value `LAND_CAMERA_ELEVATION_DEG` had ever held before
+ * ADR-0593 D1 moved it to 50. `landStreamFromDrawing`'s `elevationDeg` parameter defaults to the
+ * LIVE constant specifically so a caller building a drawing THIS INSTANT can omit it — but that
+ * default is the wrong answer for a file that was written on a DIFFERENT instant. Passing it
+ * anyway un-projects a 20-degree-squashed drawing by `1 / sin(50 deg)` instead of `1 / sin(20
+ * deg)`, which neither recovers the true footprint nor reproduces the drawing — it lands on a
+ * residual squash of `sin(20 deg) / sin(50 deg)` ~= 0.4466 relative to true, which is why every
+ * island in this evidence came back a squashed 0.458-aspect ribbon instead of the roughly-square
+ * (~1.03) shape the recipe actually drew, the moment `LAND_CAMERA_ELEVATION_DEG` first moved.
+ * `armStream` (below) and `shipped-island-floor-scene.ts`'s `drawnStream` both pin to this constant
+ * rather than the live one for exactly that reason — a frozen export un-projects at the elevation
+ * IT WAS DRAWN AT, never at whatever the caller's camera happens to be today.
+ */
+export const SPACING_EVIDENCE_ELEVATION_DEG = 20;
+
 /** The island every `one` picture is centred on — the real story the harness fixture is shaped after. */
 export const READ_ISLAND = 'context-traversal-capture';
 
@@ -229,7 +251,12 @@ export function armStream(arm: SpacingArm): InstanceDescriptor[] {
   // owns the ORDER: this page used to spell the three steps itself, and spells them through the
   // shared function since 2026-09-08 so the studio's land view and this page cannot drift into two
   // pipelines that look alike.
-  const built = landStreamFromDrawing(arm.file.scene).filter(
+  //
+  // ⚠ PINNED TO `SPACING_EVIDENCE_ELEVATION_DEG`, NEVER THE LIVE DEFAULT — see that constant's own
+  // comment. This file is read off disk, drawn at whatever the land camera was the day it was
+  // exported; un-projecting it at today's camera instead recovers neither the drawing nor the true
+  // footprint.
+  const built = landStreamFromDrawing(arm.file.scene, SPACING_EVIDENCE_ELEVATION_DEG).filter(
     (d): d is InstanceDescriptor => d.kind !== 'skipped',
   );
   streamMemo.set(arm.record.id, built);

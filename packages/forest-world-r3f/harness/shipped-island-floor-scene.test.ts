@@ -32,7 +32,13 @@ import {
   islandTable,
   readIslandCentre,
 } from './shipped-island-floor-scene.js';
-import { SPACING_EVIDENCE_DIR, validateManifest, type SpacingArm, type SpacingSceneFile } from './shipped-spacing-scene.js';
+import {
+  SPACING_EVIDENCE_DIR,
+  SPACING_EVIDENCE_ELEVATION_DEG,
+  validateManifest,
+  type SpacingArm,
+  type SpacingSceneFile,
+} from './shipped-spacing-scene.js';
 import { shippedLayoutArm } from './shipped-wheat-scene.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -76,8 +82,13 @@ test('⚠⚠ THE SHIPPED ARM IS THE SHIPPED MAPPER, BYTE FOR BYTE — and the co
   // the 2D map on 2026-09-06, so it carries the drawing's foreshortened ground. What the canvas
   // would be handed for THIS layout is therefore the export un-projected and then sized —
   // `frozen-drawing.ts` carries why that conversion is an input adapter and not the deleted repair.
+  //
+  // ⚠ PINNED TO `SPACING_EVIDENCE_ELEVATION_DEG`, NEVER THE LIVE DEFAULT — restated here rather
+  // than read off `drawnStream` so this test independently re-derives what "shipped" means, per
+  // its own title. See that constant's own comment in `shipped-spacing-scene.ts` for why a frozen
+  // export un-projects at the elevation it was drawn at rather than at today's camera.
   const bare = sizeIslandsByCapability(
-    trueGroundFromDrawing(worldTo3D(LAYOUT.file.scene, { landAreaPerCapability: null })),
+    trueGroundFromDrawing(worldTo3D(LAYOUT.file.scene, { landAreaPerCapability: null }), SPACING_EVIDENCE_ELEVATION_DEG),
     LAND_AREA_PER_CAPABILITY,
   ).filter((d): d is InstanceDescriptor => d.kind !== 'skipped');
   assert.deepEqual(shipped, bare);

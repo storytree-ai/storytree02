@@ -98,7 +98,9 @@ test('a cave’s BEARING turns with its rim, rather than riding through unchange
   const [out] = trueGroundFromDrawing([cave]);
   assert.ok(out !== undefined);
   // Stretching z about the origin swings a 45° rim normal TOWARD the x axis: the normal is
-  // `(cos b, sin b / factor)` and the factor is ~2.9, so the angle shrinks. Derived, not recalled.
+  // `(cos b, sin b / factor)` where `factor = 1 / sin(land camera)` — ~1.31 at the declared 50°
+  // (ADR-0593; it was ~2.92 at the retired 20°) — so the angle shrinks either way. Derived, not
+  // recalled, and re-derived below from the live constant rather than restated as a literal.
   const factor = 1 / groundFlattening(LAND_CAMERA_ELEVATION_DEG);
   const want = Math.atan2(Math.sin(Math.PI / 4) / factor, Math.cos(Math.PI / 4));
   assert.ok(Math.abs((out.bearing ?? 0) - want) < 1e-9, `bearing ${out.bearing}`);
@@ -149,9 +151,10 @@ test('an elevation BELOW THE HORIZON refuses too — a negative scale is a mirro
     [1, 0],
     [1, 1],
   ]);
-  // ⚠ A DIFFERENT FAILURE FROM EDGE-ON, and the one a finiteness check alone lets through: at -20°
-  // the factor is a perfectly finite -2.92, so the descriptors come back looking entirely ordinary
-  // with the whole forest flipped front-to-back. Nothing downstream could tell.
+  // ⚠ A DIFFERENT FAILURE FROM EDGE-ON, and the one a finiteness check alone lets through: at the
+  // negated declared elevation (-50°, ADR-0593; it was -20° at the retired camera) the factor is a
+  // perfectly finite ~-1.31, so the descriptors come back looking entirely ordinary with the whole
+  // forest flipped front-to-back. Nothing downstream could tell.
   assert.ok(Number.isFinite(1 / groundFlattening(-LAND_CAMERA_ELEVATION_DEG)));
   assert.ok(1 / groundFlattening(-LAND_CAMERA_ELEVATION_DEG) < 0);
   assert.throws(() => trueGroundFromDrawing([cell], -LAND_CAMERA_ELEVATION_DEG), /not a scale/);
@@ -226,10 +229,19 @@ test('the pipeline sizes the TRUE island, not the squashed one — the order is 
   );
   // ⚠ THE SEPARATION, stated so the assertion above cannot be satisfied by the wrong order. Sizing
   // BEFORE the un-projection measures the drawing's squashed area, so the island comes out
-  // `1 / sin 20°` = 2.92x too large — a plausible forest, and never an error.
+  // `1 / sin(land camera)` too large — a plausible forest, and never an error. At the declared 50°
+  // (ADR-0593) that factor is `1 / sin 50°` ≈ 1.3054 — smaller than the retired 20°'s ≈ 2.9238
+  // (raising the camera un-squashes the drawing, so the wrong order has less room to be wrong in),
+  // but still a real, order-of-magnitude-distinguishable-from-noise inflation. 1.25 sits with
+  // margin below the true 1.3054 so a rounding wobble in the geometry can't trip the bound.
   const squashedOrderArea = LAND_AREA_PER_CAPABILITY / groundFlattening(LAND_CAMERA_ELEVATION_DEG);
-  assert.ok(squashedOrderArea / LAND_AREA_PER_CAPABILITY > 2.9, 'the two orders are far apart');
-  assert.ok(Math.abs(area - squashedOrderArea) > LAND_AREA_PER_CAPABILITY, 'and this is not that one');
+  assert.ok(squashedOrderArea / LAND_AREA_PER_CAPABILITY > 1.25, 'the two orders are far apart');
+  // And the SUT's actual (correctly-ordered) area must clear the same 25%-of-a-ratio's-worth gap
+  // from the wrong-order answer — margin below the true ≈0.3054×LAND_AREA_PER_CAPABILITY gap.
+  assert.ok(
+    Math.abs(area - squashedOrderArea) > LAND_AREA_PER_CAPABILITY * 0.25,
+    'and this is not that one',
+  );
 });
 
 test('the pipeline sizes ONCE, and a RIBBON is where sizing twice shows', () => {
@@ -307,7 +319,9 @@ test('the pipeline stands the island UPRIGHT — the drawing’s squash is gone 
   const ring = cells[0]!.points ?? [];
   const width = Math.max(...ring.map((p) => p.x)) - Math.min(...ring.map((p) => p.x));
   const depth = Math.max(...ring.map((p) => p.z)) - Math.min(...ring.map((p) => p.z));
-  // A square island drawn at 20° is a 2.92:1 letterbox on the page; on true ground it is square
-  // again. The scaling is isotropic, so the RATIO is what the un-projection is judged on.
+  // A square island drawn at the declared 50° (ADR-0593) is a ~1.31:1 letterbox on the page (it
+  // was a 2.92:1 letterbox at the retired 20° — less squashed at the steeper camera, but still
+  // squashed); on true ground it is square again either way. The scaling is isotropic, so the
+  // RATIO is what the un-projection is judged on, and that judgement is camera-agnostic.
   assert.ok(Math.abs(width / depth - 1) < 1e-9, `${width} x ${depth}`);
 });

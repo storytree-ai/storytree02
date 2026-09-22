@@ -121,25 +121,53 @@ export interface RelocationArm {
   readonly opts: PackOptions;
 }
 
+/** The land camera the relocation golden was CAPTURED at (ADR-0367 D1's original value).
+ *  Pinned as a literal, deliberately NOT `LAND_CAMERA_ELEVATION_DEG`: the golden is a fixed
+ *  record of the map before the packing moved, and the relocation claim — that `packWorld`
+ *  reproduces the old `buildWorld` exactly — is camera-independent. ADR-0593 D1 later moved the
+ *  live constant to 50; re-capturing the golden at 50 would compare today's code with itself
+ *  and prove nothing. */
+const GOLDEN_CAPTURE_ELEVATION_DEG = 20;
+
 /**
  * The five arms, so no branch of the packer is unwitnessed: the SHIPPED map; the `plantsScatter`
  * garden branch; the BARE call the studio's Shared Islands panel makes (no exclusion, no stamps);
  * the `legacy` control arm a comparison page stands (the three retired absolute gaps); and the
  * TIGHTEST rung, ratio 0, where the hex growth floor and the one-hex moat are the only thing
  * holding two islands apart.
+ *
+ * ⚠ EVERY ARM PINS `elevationDeg: GOLDEN_CAPTURE_ELEVATION_DEG` (ADR-0593 D1). The golden was
+ * captured while the shared camera was 20°; without the pin, every arm would silently pick up
+ * whatever `LAND_CAMERA_ELEVATION_DEG` is TODAY, and the relocation proof would stop comparing
+ * "did the move change the map" and start comparing "did the map change since capture" — which it
+ * did, on purpose, for a reason this fixture has nothing to do with.
  */
 export function relocationArms() {
   return {
-    shipped: { stories: laidOutCorpus(), opts: { carriedIcons: CARRIED_ICONS } },
-    scatter: { stories: laidOutCorpus(), opts: { plantsScatter: true, carriedIcons: CARRIED_ICONS } },
-    bare: { stories: relocationCorpus(), opts: {} },
+    shipped: {
+      stories: laidOutCorpus(),
+      opts: { carriedIcons: CARRIED_ICONS, elevationDeg: GOLDEN_CAPTURE_ELEVATION_DEG },
+    },
+    scatter: {
+      stories: laidOutCorpus(),
+      opts: { plantsScatter: true, carriedIcons: CARRIED_ICONS, elevationDeg: GOLDEN_CAPTURE_ELEVATION_DEG },
+    },
+    bare: { stories: relocationCorpus(), opts: { elevationDeg: GOLDEN_CAPTURE_ELEVATION_DEG } },
     legacy: {
       stories: laidOutCorpus(),
-      opts: { carriedIcons: CARRIED_ICONS, spacing: { legacy: PRE_ADR0521_SPACING } },
+      opts: {
+        carriedIcons: CARRIED_ICONS,
+        spacing: { legacy: PRE_ADR0521_SPACING },
+        elevationDeg: GOLDEN_CAPTURE_ELEVATION_DEG,
+      },
     },
     tightest: {
       stories: laidOutCorpus(),
-      opts: { carriedIcons: CARRIED_ICONS, spacing: { ratio: 0 } },
+      opts: {
+        carriedIcons: CARRIED_ICONS,
+        spacing: { ratio: 0 },
+        elevationDeg: GOLDEN_CAPTURE_ELEVATION_DEG,
+      },
     },
   } satisfies Record<string, RelocationArm>;
 }

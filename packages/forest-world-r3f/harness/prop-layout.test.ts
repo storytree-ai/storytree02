@@ -210,14 +210,24 @@ test('rimLoop is ONE closed loop of exactly 52 points, each edge 13.4-13.8 units
   const gaps = RIM.map((p, i) => gap(p, RIM[(i + 1) % RIM.length]!));
   const min = Math.min(...gaps);
   const max = Math.max(...gaps);
-  // Measured: 13.4083 to 13.7419. The band is what proves the loop CLOSES: a walk that
-  // jumped across the island to a stranded fragment would show up here as a huge segment,
+  // Re-measured under ADR-0593 D1 (land camera 20 -> 50 degrees): 13.4402 to 13.5762 — inside
+  // the same band this asserted at 20 degrees (13.4083 to 13.7419), which is expected rather
+  // than coincidental: the rim lives in TRUE-GROUND space (un-projected out of the drawing), so
+  // it is nominally camera-independent, and the residual movement is quantization noise from the
+  // scene's own SVG serialization at fixed decimal precision (`toFixed(1)`, `app-surface`'s
+  // painter), amplified on the way back out by `1 / sin(land camera)`. That amplifier SHRANK
+  // (2.92x at 20 degrees, 1.31x at 50 degrees), so the new noise floor is if anything tighter,
+  // and the band below still holds with room. The band is what proves the loop CLOSES: a walk
+  // that jumped across the island to a stranded fragment would show up here as a huge segment,
   // and one that doubled back would show up as a tiny one.
   assert.ok(min > 13.4 && max < 13.8, `rim edge lengths ran ${min.toFixed(4)}..${max.toFixed(4)}`);
   const perimeter = pathLength(RIM, true);
+  // Re-measured for the same reason: 701.548, down from 702.013 at the retired 20-degree camera
+  // — a 0.07% move, consistent with the same shrinking quantization amplifier above rather than
+  // any change to the rim's shape (RIM.length above is still exactly 52).
   assert.ok(
-    Math.abs(perimeter - 702.013) < 0.01,
-    `rim perimeter ${perimeter.toFixed(3)}, measured 702.013`,
+    Math.abs(perimeter - 701.548) < 0.01,
+    `rim perimeter ${perimeter.toFixed(3)}, measured 701.548`,
   );
 });
 
@@ -356,8 +366,22 @@ test("every parcel yields a loop, and its centroid sits inside its OWN parcel's 
   // vertices sit where the pre-camera mesh put them. A pinched parcel's outline follows those
   // vertices, so its point count follows too. Nothing structural moved -- the enclosed area still
   // matches the parcel's cells exactly (asserted above), and both are still pinched.
-  assert.equal(parcelLoop(CELLS, 'cap-1').length, 28);
-  assert.equal(parcelLoop(CELLS, 'cap-5').length, 18);
+  //
+  // They moved AGAIN, 28 -> 16 and 18 -> 12, under ADR-0593 D1 (land camera 20 -> 50 degrees) —
+  // and for a THIRD, related reason. `chainBoundary`'s vertex/edge index (`vertexKey`/`edgeKey`
+  // above, rounded to 1e-3 ground units) is what decides whether two cells' nominally-shared
+  // corner is recognised as ONE point (the edge between them is interior and cancels) or as two
+  // near-duplicate points a fraction of a unit apart (each half then reads as its own boundary
+  // edge). The rim lives in TRUE-GROUND space, recovered by dividing the drawing's
+  // already-quantized (`toFixed(1)`) coordinates by `sin(land camera)` — an amplifier that
+  // SHRANK from 2.92x at 20 degrees to 1.31x at 50 degrees (see the rim edge-length comment
+  // above), so the sub-millimetre noise reaching these vertices shrank with it. Fewer corners
+  // now straddle the 1e-3 rounding boundary, so more of a pinched parcel's nominally-shared
+  // corners are recognised as shared — which is fewer distinct points on its outline, never
+  // more. The enclosed area still matches the parcel's cells exactly (asserted above, still
+  // true), and both are still pinched.
+  assert.equal(parcelLoop(CELLS, 'cap-1').length, 16);
+  assert.equal(parcelLoop(CELLS, 'cap-5').length, 12);
 });
 
 test('parcelLoop refuses a parcel that does not exist', () => {
@@ -463,9 +487,14 @@ test('resample survives degenerate input rather than returning something unloopa
 
 test('smoothLoop rounds the corners off without eating the island', () => {
   const raw = turningOf(RIM);
+  // Re-measured under ADR-0593 D1 (land camera 20 -> 50 degrees): the rim's sharpest corner
+  // moved from 60.111 to 60.457 degrees — a 0.6% move, the same quantization-noise effect
+  // documented at the rim edge-length assertion above (the true-ground vertices are recovered
+  // by an un-projection whose amplifier shrank from 2.92x to 1.31x), not a change of shape: RIM
+  // is still exactly 52 points and this is still its one sharpest corner.
   assert.ok(
-    Math.abs(raw.max - 60.111) < 0.01,
-    `the rim's sharpest corner measures 60.111 degrees, got ${raw.max.toFixed(3)}`,
+    Math.abs(raw.max - 60.457) < 0.01,
+    `the rim's sharpest corner measures 60.457 degrees, got ${raw.max.toFixed(3)}`,
   );
 
   const once = smoothLoop(RIM, 1, true);
@@ -476,26 +505,32 @@ test('smoothLoop rounds the corners off without eating the island', () => {
   const t1 = turningOf(once);
   const t2 = turningOf(twice);
 
-  // WHAT FALLS is the sharpest corner: 60.111 -> 30.362 -> 16.229 degrees, roughly halving
-  // each round. That is the measure of "reads as a coast rather than as a board".
-  assert.ok(Math.abs(t1.max - 30.362) < 0.01, `one round: max corner ${t1.max.toFixed(3)}`);
-  assert.ok(Math.abs(t2.max - 16.229) < 0.01, `two rounds: max corner ${t2.max.toFixed(3)}`);
+  // WHAT FALLS is the sharpest corner: 60.457 -> 30.335 -> 16.276 degrees, roughly halving
+  // each round (re-measured with the rim above; the halving PROPERTY is camera-independent,
+  // only the starting corner moved). That is the measure of "reads as a coast rather than as
+  // a board".
+  assert.ok(Math.abs(t1.max - 30.335) < 0.01, `one round: max corner ${t1.max.toFixed(3)}`);
+  assert.ok(Math.abs(t2.max - 16.276) < 0.01, `two rounds: max corner ${t2.max.toFixed(3)}`);
   assert.ok(t1.max < raw.max / 1.9 && t2.max < t1.max / 1.8, 'each round must halve the worst corner');
 
   // WHAT DOES NOT MOVE is the total turning — Chaikin splits each corner into two whose
   // turns sum to the original. Anyone reaching for total turning as a smoothness metric
-  // would measure exactly nothing, so it is pinned here as the counter-example.
+  // would measure exactly nothing, so it is pinned here as the counter-example. This property
+  // is camera-agnostic by construction (Chaikin conserves total turning for ANY input loop),
+  // so it is asserted as an internal identity rather than against a re-based literal.
   assert.ok(
     Math.abs(t1.total - raw.total) < 1e-9 && Math.abs(t2.total - raw.total) < 1e-9,
     `total turning moved: ${raw.total} -> ${t1.total} -> ${t2.total}`,
   );
 
-  // AND THE AREA COST, measured: 99.883% retained after one round, 99.853% after two.
+  // AND THE AREA COST, re-measured: 99.880% retained after one round, 99.851% after two (was
+  // 99.883% / 99.853% at the retired 20-degree camera — the same small quantization move, not
+  // a change in how much Chaikin shaves off).
   const rimArea = areaOf(RIM);
   const f1 = areaOf(once) / rimArea;
   const f2 = areaOf(twice) / rimArea;
-  assert.ok(Math.abs(f1 - 0.99883) < 1e-4, `one round retained ${f1.toFixed(6)} of the area`);
-  assert.ok(Math.abs(f2 - 0.99853) < 1e-4, `two rounds retained ${f2.toFixed(6)} of the area`);
+  assert.ok(Math.abs(f1 - 0.99880) < 1e-4, `one round retained ${f1.toFixed(6)} of the area`);
+  assert.ok(Math.abs(f2 - 0.99851) < 1e-4, `two rounds retained ${f2.toFixed(6)} of the area`);
   assert.ok(f2 < f1 && f1 < 1, 'Chaikin only ever shrinks');
 });
 
@@ -519,7 +554,10 @@ test('smoothLoop on an OPEN path keeps its endpoints', () => {
 
 test('pathLength / pointAt walk the loop consistently', () => {
   const total = pathLength(RIM, true);
-  assert.ok(Math.abs(total - 702.013) < 0.01);
+  // Same re-measured perimeter as the rim edge-length assertion above (701.548, down from
+  // 702.013 at the retired 20-degree land camera) — restated here rather than imported so
+  // this test does not depend on assertion order in the other one.
+  assert.ok(Math.abs(total - 701.548) < 0.01);
   assert.equal(pathLength([{ x: 0, z: 0 }], true), 0);
 
   const start = pointAt(RIM, 0, true);

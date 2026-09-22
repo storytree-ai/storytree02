@@ -11,8 +11,19 @@
  *
  * The second reads the placement out of `organicLayerBox` — the function `SceneView` itself renders
  * from — rather than restating the arithmetic, so a drift in the renderer fails here.
+ *
+ * ⚠ ONE CAMERA PER SURFACE, NOT ONE CAMERA FOR THE WHOLE REPO (ADR-0593). "The land and the objects
+ * on it read one camera" is a claim about objects that actually STAND on the land. The round-3
+ * comparison lab's candidates (`CHAPTER2_ROUND3_TREE_CANDIDATES`) do not — they are a static witness
+ * stage comparing hero-tree renders against EACH OTHER — so the tests below that exercise that
+ * registry compare its shipped frames against `CHAPTER2_ROUND3_LAB_ELEVATION_DEG`, the lab's own
+ * witness camera, never against `LAND_CAMERA_ELEVATION_DEG`. See that constant's doc comment
+ * (`chapter2-round3-tree-candidates.ts`) for the measured one-consumer fact this rests on, and the
+ * "has TEETH" control near the bottom of this file for the mechanical check that keeps it true.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   HEX_R,
@@ -35,6 +46,7 @@ import {
   type OrganicLayerPlacement,
 } from './land-camera.js';
 import {
+  CHAPTER2_ROUND3_LAB_ELEVATION_DEG,
   CHAPTER2_ROUND3_TREE_CANDIDATES,
   chapter2Round3TreeCandidate,
 } from './chapter2-round3-tree-candidates.js';
@@ -77,7 +89,7 @@ function plantedHeroTree(h: Axial, elevationDeg: number): OrganicLayerPlacement 
 }
 
 describe('the land and its objects read ONE declared camera', () => {
-  it('the shipped sprite frames are still rendered at the land’s declared camera', () => {
+  it('the shipped sprite frames are still rendered at the round-3 lab’s own witness camera', () => {
     // WHAT THIS REPLACED, AND WHY. This assertion used to read
     //     expect(codeBlender.authoredCameraElevationDeg).toBe(LAND_CAMERA_ELEVATION_DEG)
     // while the registration's value WAS `LAND_CAMERA_ELEVATION_DEG` — so it compared the constant
@@ -89,21 +101,79 @@ describe('the land and its objects read ONE declared camera', () => {
     //
     // The registration now records the angle its frames were actually rendered at, as a literal, so
     // this is a real comparison of two independent facts.
+    //
+    // AND WHY THE THIRD ARGUMENT CHANGED (ADR-0593). This candidate ships frames rendered at 20°
+    // and does not stand on the land at all — it is mounted only by the round-3 comparison lab, a
+    // static witness stage — so the surface it is checked against is the LAB's own witness camera
+    // (`CHAPTER2_ROUND3_LAB_ELEVATION_DEG`, also 20°), not `LAND_CAMERA_ELEVATION_DEG` (now 50°
+    // under ADR-0593 D1). Comparing against the land here would demand a re-render this sprite does
+    // not owe: nothing mounts it on land drawn at the land's camera.
     const codeBlender = chapter2Round3TreeCandidate('code-blender');
     expect(codeBlender.renderedCameraElevationDeg).toBe(20);
     assertSpriteRenderMatchesLandCamera(
       codeBlender.heroTreeTrackId,
       codeBlender.renderedCameraElevationDeg,
+      CHAPTER2_ROUND3_LAB_ELEVATION_DEG,
     );
   });
 
-  it('EVERY track’s shipped frames are current against the land camera', () => {
+  it('EVERY track’s shipped frames are current against the round-3 lab’s own witness camera', () => {
+    // See the test above for why the comparison surface is the LAB's camera and not the land's:
+    // every candidate in this registry is mounted only by the round-3 comparison lab.
     for (const c of CHAPTER2_ROUND3_TREE_CANDIDATES) {
       expect(
-        () => assertSpriteRenderMatchesLandCamera(c.heroTreeTrackId, c.renderedCameraElevationDeg),
-        `${c.id} ships frames rendered at a camera the land no longer declares`,
+        () =>
+          assertSpriteRenderMatchesLandCamera(
+            c.heroTreeTrackId,
+            c.renderedCameraElevationDeg,
+            CHAPTER2_ROUND3_LAB_ELEVATION_DEG,
+          ),
+        `${c.id} ships frames rendered at a camera the round-3 lab no longer declares`,
       ).not.toThrow();
     }
+  });
+
+  it('has TEETH: the round-3 lab registry is mounted ONLY by the lab — the moment a second consumer appears, its camera choice must be re-decided rather than inherited', () => {
+    // The two tests above compare every candidate's shipped frames against the LAB's own witness
+    // camera rather than the land's, which is correct ONLY because nothing in this registry stands
+    // on the working map today. That is a fact about the current import graph, not a law — and if it
+    // ever stops being true, comparing against the lab's fixed 20° instead of
+    // `LAND_CAMERA_ELEVATION_DEG` would silently mis-plant whatever got mounted on the real land.
+    //
+    // So this scans every non-test TypeScript source file this repo ships (its own package, the one
+    // known consumer's app, and the public website — the three places this repo has ever shipped
+    // land art from) for a reference to the registry's exports, and fails the instant a second
+    // consumer shows up. It does not guess what the right comparison would be for that new consumer
+    // — it only refuses to let the "compare against the lab" decision above survive unexamined.
+    const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+    const REGISTRY_FILE = fileURLToPath(new URL('./chapter2-round3-tree-candidates.ts', import.meta.url));
+    const BARREL_FILE = fileURLToPath(new URL('./index.ts', import.meta.url));
+    const REGISTRY_IDENTIFIERS = ['chapter2Round3TreeCandidate', 'CHAPTER2_ROUND3_TREE_CANDIDATES'];
+    const scanTrees: ReadonlyArray<{ label: string; dir: string }> = [
+      { label: 'packages/app-surface/src', dir: resolve(repoRoot, 'packages/app-surface/src') },
+      { label: 'apps/studio/src', dir: resolve(repoRoot, 'apps/studio/src') },
+      { label: 'web/src', dir: resolve(repoRoot, 'web/src') },
+    ];
+    const consumers: string[] = [];
+    for (const { label, dir } of scanTrees) {
+      if (!existsSync(dir)) continue; // web/ is a submodule; skip precisely as check:web-engine does
+      const entries = (readdirSync(dir, { recursive: true, encoding: 'utf8' }) as string[])
+        .map((entry) => entry.replace(/\\/g, '/'))
+        .filter((entry) => /\.(?:ts|tsx)$/.test(entry))
+        .filter((entry) => !entry.includes('.test.'));
+      for (const entry of entries) {
+        const full = resolve(dir, entry);
+        if (full === REGISTRY_FILE || full === BARREL_FILE) continue; // definition and re-export, not a mount
+        const source = readFileSync(full, 'utf8');
+        if (REGISTRY_IDENTIFIERS.some((id) => source.includes(id))) consumers.push(`${label}/${entry}`);
+      }
+    }
+    expect(
+      consumers.sort(),
+      'a new consumer of the round-3 lab registry must decide, in this file, whether its mounted ' +
+        'track stands on the lab (compare against CHAPTER2_ROUND3_LAB_ELEVATION_DEG, as above) or ' +
+        'the working map (compare against LAND_CAMERA_ELEVATION_DEG) — never inherit either choice',
+    ).toEqual(['apps/studio/src/components/SemanticGrowthDemo.tsx']);
   });
 
   it('a stale render is REFUSED — recording 20 deg against a land declared at 35 is not current', () => {
