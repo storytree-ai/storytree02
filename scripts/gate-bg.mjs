@@ -46,6 +46,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { resolveRepoBash } from "./resolve-bash.mjs";
+import { resolveBunForChild, withBunOnPath } from "./resolve-bun.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const script = path.join(here, "gate-bg.sh");
@@ -123,6 +124,41 @@ try {
   process.exit(1);
 }
 
+// (4) BUN MUST BE RESOLVABLE FOR THE CHILD, or the gate spends a full cycle on a false red
+//     (`verification-integrity-arc`, increment `verification-integrity-gate-bg-bun-path`).
+//     `packages/proof-protocol` runs `bun test src/`, and Bun is a PATH tool rather than a workspace
+//     dependency, so `pnpm install` cannot supply it. Windows broadcasts a PATH change to NEW
+//     processes only, so a harness that started before Bun was wired keeps a PATH without it and
+//     every child inherits the stale one — the dispatch returns in ~1s, and the gate dies ten
+//     minutes later inside a test step with `'bun' is not recognized`, a message naming neither the
+//     cause nor the repair. Documented in CLAUDE.md and in agent memory, and still hit across at
+//     least three sessions: ADR-0352's "fix it at the write, not at the outcome".
+//
+//     REPAIR ALWAYS, REFUSE ONLY FOR THE GATE — and those are different because a wrong refusal is
+//     the guard tripping the honest case, which this file already declined to do for pipes.
+//     Prepending a directory whose executable was just verified cannot hurt a command that never
+//     invokes Bun, so it applies to every dispatch. Refusing cannot be so casual: `pnpm gate:bg
+//     <cmd>` replaces `pnpm gate` entirely, and a custom command may have nothing to do with Bun —
+//     so an unresolvable Bun is fatal only when the dispatch would actually run the gate, and is
+//     otherwise one printed line the reader can act on or ignore. The refusal comes BEFORE the log
+//     directory and the spawn, so it leaves nothing behind that reads as a handle.
+const bun = resolveBunForChild({ env: process.env, platform: process.platform });
+const dispatchRunsTheGate = cmd.length === 0 || describedCmd.includes("pnpm gate");
+if (bun.status === "absent") {
+  if (dispatchRunsTheGate) {
+    console.error(
+      [
+        `gate:bg: REFUSED — ${bun.message}`,
+        "Nothing was dispatched. This refusal costs a second; the gate would have cost a full cycle",
+        "and then died inside a test step with a message naming neither Bun nor the repair.",
+      ].join("\n"),
+    );
+    process.exit(1);
+  }
+  console.error(`gate:bg: WARNING — ${bun.message}`);
+  console.error("gate:bg: dispatching anyway, because this is a custom command rather than the gate.");
+}
+
 const log = chooseLogPath();
 try {
   mkdirSync(path.dirname(log), { recursive: true });
@@ -138,7 +174,10 @@ const child = spawn(bash, [script, ...cmd], {
   cwd: repoRoot,
   detached: true,
   stdio: "ignore",
-  env: { ...process.env, GATE_BG_LOG: log },
+  // `withBunOnPath` prepends the VERIFIED per-user Bun bin directory when the inherited PATH lacks
+  // it, and returns the environment unchanged otherwise. Prepended rather than appended so it beats
+  // a stale entry that used to hold Bun — the shape a long-lived harness's PATH actually has.
+  env: { ...withBunOnPath(process.env, bun, process.platform), GATE_BG_LOG: log },
 });
 
 // A launch failure has to be caught SYNCHRONOUSLY. Once `unref()` runs there is nothing keeping the
@@ -173,6 +212,17 @@ process.stdout.write(
     `gate:bg pid:         ${String(child.pid ?? "unknown")}`,
     `gate:bg log:         ${log}`,
     `gate:bg exit-file:   ${log}.exit`,
+    // Printed only when it actually happened, and printed because a SILENT repair is the next
+    // version of the same problem: a session whose PATH is stale should learn that its environment
+    // is out of date here, where the answer is "start a new shell", rather than from the next tool
+    // that needs Bun and has no repair to offer.
+    ...(bun.status === "prepend"
+      ? [
+          `gate:bg bun:         REPAIRED — ${bun.dir} prepended to ${bun.pathKey} for the gate.`,
+          "gate:bg              This process's PATH is STALE (Windows updates new processes only),",
+          "gate:bg              so start a NEW shell to fix it beyond this one dispatch.",
+        ]
+      : []),
     "",
     "This is a DISPATCH, not a verdict — the gate is still running and this command's exit code",
     "reports only that it started. Read the result with:",
