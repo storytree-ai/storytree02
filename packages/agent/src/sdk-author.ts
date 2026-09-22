@@ -40,15 +40,18 @@ import type { FeedbackChoice, FeedbackChoiceParameter } from "./feedback-choice.
  * re-shaped hook/permission API turns into a RED gate instead of a quietly-opened write wall.
  */
 export type {
+  AgentDefinition,
   HookJSONOutput,
   HookPermissionDecision,
   ModelUsage,
   Options,
   PermissionMode,
   PreToolUseHookInput,
+  SubagentStartHookInput,
+  SubagentStopHookInput,
 } from "@anthropic-ai/claude-agent-sdk";
 
-import type { ModelUsage } from "@anthropic-ai/claude-agent-sdk";
+import type { AgentDefinition, ModelUsage } from "@anthropic-ai/claude-agent-sdk";
 
 /**
  * The SDK's own key for the runtime-declared context window, pinned to `ModelUsage` at COMPILE
@@ -83,10 +86,16 @@ export type SdkQueryFn = (args: {
  * are counted apart (ADR-0446), which is why the kind is stamped AT the refusal rather than sniffed
  * downstream out of the refusal text.
  *
+ * `helper` is the fourth and it is a DIFFERENT KIND OF FACT from the other three (ADR-0589 D2). They
+ * say a worker asked for a path it may not have; this one says a write arrived from a HELPER, which
+ * no phase scope would ever have admitted. It is counted apart for the same reason: a helper write
+ * reaching the hook at all means the declared tool list did not hold, and that is a finding about
+ * the SDK rather than about the phase — invisible if it is folded into the scope count.
+ *
  * A LOCAL union, deliberately: `@storytree/agent` depends on no other storytree package, so it does
  * not reach for proof-protocol's `ScopeRefusalKind`. The drive maps one onto the other at the sink.
  */
-export type SdkRefusalKind = "scope" | "outside-workspace" | "no-path";
+export type SdkRefusalKind = "scope" | "outside-workspace" | "no-path" | "helper";
 
 /** A fail-closed write refusal the hook recorded (mirrors the owned loop's WriteViolation). */
 export interface SdkWriteViolation {
@@ -184,6 +193,51 @@ export interface SdkFeedbackRun {
   code: number | null;
 }
 
+/**
+ * One read-only helper a worker started, and what it cost the build's clock (ADR-0589 D3).
+ *
+ * The DURATION is the point rather than the count: "four helpers" and "four helpers that took
+ * eleven minutes between them" are different facts about the same build, and only the second
+ * explains where a budget went. Helpers run inside the slice's own query, so the budget's abort
+ * already bounds them and no second timer exists — what was missing was the report.
+ */
+export interface SdkHelperRun {
+  phase: AuthoringPhase;
+  /** The declared agent type the worker started — today always {@link HELPER_AGENT_TYPE}. */
+  agentType: string;
+  /** Wall-clock milliseconds between this helper's `SubagentStart` and its `SubagentStop`. */
+  ms: number;
+}
+
+/**
+ * Fold one `SubagentStart`/`SubagentStop` pair into the helper record (ADR-0589 D3). Pure and
+ * exported so the pairing is provable without an SDK: `pending` is the caller's start-time map,
+ * keyed by the `agent_id` BOTH events carry.
+ *
+ * A stop with no matching start yields nothing rather than a zero-millisecond helper. That is the
+ * honest reading — the pair is what carries the duration, and a synthesised `0 ms` row would claim
+ * a helper cost nothing when what actually happened is that its start was never seen.
+ */
+export function foldHelperStop(args: {
+  phase: AuthoringPhase;
+  agentId: string;
+  agentType: string;
+  stoppedAt: number;
+  pending: Map<string, number>;
+}): SdkHelperRun | undefined {
+  const startedAt = args.pending.get(args.agentId);
+  if (startedAt === undefined) return undefined;
+  args.pending.delete(args.agentId);
+  return {
+    phase: args.phase,
+    agentType: args.agentType,
+    // Floored at zero: a clock that steps backwards mid-slice (an NTP correction on a two-hour
+    // build is not exotic) would otherwise report a NEGATIVE duration, which no reader of an
+    // envelope can interpret and which would silently reduce a summed total.
+    ms: Math.max(0, args.stoppedAt - startedAt),
+  };
+}
+
 /** Constructor args for {@link ClaudeAgentAuthor}. */
 export interface ClaudeAgentAuthorArgs {
   /** The workspace the leaf works in — `cwd` for the SDK session; writes outside it are denied. */
@@ -261,6 +315,58 @@ export interface ClaudeAgentAuthorArgs {
 
 /** The tool surface the leaf gets: read/search + scoped writes. NO Bash — see module doc. */
 const LEAF_TOOLS = ["Read", "Write", "Edit", "Glob", "Grep"];
+
+/**
+ * The SDK's subagent door (ADR-0589 D1). Held apart from {@link LEAF_TOOLS} rather than appended to
+ * it because the two lists answer different questions: `LEAF_TOOLS` is what the WORKER may do to the
+ * workspace, and this is the one tool that starts something else. A reader auditing the write
+ * surface should not have to notice that a spawn tool had been folded into it.
+ */
+const HELPER_SPAWN_TOOL = "Task";
+
+/** The one helper a worker may start (ADR-0589 D1). The `agents` map's only key. */
+export const HELPER_AGENT_TYPE = "explorer";
+
+/**
+ * The helper's WHOLE tool surface (ADR-0589 D1): read and search, nothing else.
+ *
+ * No `Write`/`Edit` — the first half of the doubled fence (D2), and the half that rests on the SDK
+ * honouring a declared tool list. No `Task` either, which is the bound on fan-out: a helper that
+ * could start helpers would spend the build's clock in a shape no report explains. No
+ * `mcp__spine__*`: the feedback tools are the WORKER's, and a helper running the proof would put a
+ * command the spine composed behind an agent the phase never sees.
+ */
+export const HELPER_AGENT_TOOLS = ["Read", "Glob", "Grep"];
+
+/**
+ * The single declared helper (ADR-0589 D1). `settingSources: []` (ADR-0583) means no project or user
+ * agent definitions load, so THIS MAP IS THE WHOLE ROSTER — a worker cannot reach this repository's
+ * own `story-author` or `librarian-curator`, which would put a WRITING agent behind a tool the phase
+ * write scope never sees.
+ *
+ * The prompt states the same limits the tool list enforces. That is not redundancy: a model told
+ * what it cannot have asks for what it can, where one that discovers a limit by refusal spends the
+ * build's own clock finding out (the reasoning ADR-0587 D2 gives for publishing a feedback tool's
+ * choices rather than only validating them).
+ */
+export function helperAgentDefinition(): AgentDefinition {
+  return {
+    description:
+      "Read-only explorer. Use it to understand unfamiliar code BEFORE you write — searching a " +
+      "large area, tracing a symbol's callers, or finding where a convention is established — so " +
+      "the raw reads land in its context window instead of yours, and you keep the digest. It " +
+      "cannot write, edit, or run anything, and it cannot start helpers of its own.",
+    tools: [...HELPER_AGENT_TOOLS],
+    prompt:
+      "You are a read-only explorer helping a build worker inside storytree's prove-it gate. Search " +
+      "and read the workspace and answer the question you were given with a CITED digest: the " +
+      "findings, each with the `path:line` it rests on, and an explicit note of anything you looked " +
+      "for and did not find. Report what the code actually says rather than what it ought to say. " +
+      "You have Read, Glob and Grep and nothing else — you cannot write, edit or run anything, and " +
+      "you cannot start helpers of your own. You observe nothing and decide nothing: you are not " +
+      "authoring the unit, and red and green are the spine's alone. Answer and stop.",
+  };
+}
 
 /** Tools the PreToolUse scope hook gates (everything that takes a `file_path` write target). */
 const WRITE_TOOL_MATCHER = "Write|Edit";
@@ -444,9 +550,32 @@ export function decideWrite(args: {
   toolName: string;
   toolInput: unknown;
   isWriteAllowed: (phase: AuthoringPhase, relPath: string) => boolean;
+  /**
+   * The SDK's subagent identifier, present on a hook input ONLY when the call came from inside a
+   * helper (ADR-0589 D2). The SDK's own types name this as the field that distinguishes a subagent
+   * call from a main-thread one — `agent_type` does not, because it is also set on the main thread
+   * of an `--agent` session.
+   */
+  agentId?: string | undefined;
 }):
   | { allow: true; relPath: string }
   | { allow: false; relPath: string; reason: string; kind: SdkRefusalKind } {
+  // ADR-0589 D2 — the second half of the doubled fence, and it is FIRST on purpose: it refuses
+  // before a path is read, in every phase, whatever the scope would have said. A helper has no write
+  // tool at all (`HELPER_AGENT_TOOLS`), but that half is a REQUEST to the SDK, and no offline test
+  // can establish that the SDK honours a declared tool list. This half is a refusal this codebase
+  // makes itself, so it holds whatever the tool list did or did not do — a fence resting only on
+  // someone else's contract is a fence with no local witness.
+  if (args.agentId !== undefined && args.agentId.length > 0) {
+    return {
+      allow: false,
+      relPath: "(helper)",
+      kind: "helper",
+      reason:
+        `write refused: '${args.toolName}' came from helper agent '${args.agentId}' — helpers are ` +
+        "read-only and may never write, in any phase (the write scope is the worker's alone)",
+    };
+  }
   const filePath = extractFilePath(args.toolInput);
   if (filePath === null) {
     return {
@@ -610,12 +739,15 @@ export class ClaudeAgentAuthor implements PhaseAuthor {
   /** Every bounded feedback run the leaf made, in order (run_proof/run_typecheck, exit codes). */
   readonly feedbackRuns: SdkFeedbackRun[] = [];
 
+  /** Every read-only helper a worker started, with what it cost the build's clock (ADR-0589 D3). */
+  readonly helperRuns: SdkHelperRun[] = [];
+
   constructor(args: ClaudeAgentAuthorArgs) {
     this.#args = args;
     this.#usesRealSdk = args.queryFn === undefined;
     this.#queryFn = args.queryFn ?? ((q): AsyncIterable<unknown> => query(q));
     this.#mcpServerFactory = args.mcpServerFactory ?? createSdkMcpServer;
-    this.#clock = args.clock ?? { setTimeout, clearTimeout };
+    this.#clock = args.clock ?? { setTimeout, clearTimeout, now: () => Date.now() };
   }
 
   /**
@@ -666,6 +798,11 @@ export class ClaudeAgentAuthor implements PhaseAuthor {
     // call, exactly like feedbackUsed above — a new slice starts with nothing recorded, and exactly
     // the first VALID call in THIS slice may ever set it.
     let escalation: AuthoringEscalation | undefined;
+    // The per-SLICE helper start times, keyed by the `agent_id` both subagent events carry
+    // (ADR-0589 D3). Per-slice like the two above: a helper cannot outlive the query it ran inside,
+    // so a start still pending when the slice ends is one whose stop never arrived, and carrying it
+    // into the next slice would pair it with an unrelated stop and report a duration spanning both.
+    const helperStartedAt = new Map<string, number>();
 
     // The system prompt: the injected library agent for this phase + the runtime closing. Resolved
     // BEFORE the SDK loop so a live leaf with no injected prompt fails closed without any spend.
@@ -698,12 +835,18 @@ export class ClaudeAgentAuthor implements PhaseAuthor {
       cwd: this.#args.cwd,
       model: this.#args.model ?? "claude-sonnet-5",
       ...turnCeiling,
-      tools: LEAF_TOOLS,
+      tools: [...LEAF_TOOLS, HELPER_SPAWN_TOOL],
       allowedTools: [
         ...LEAF_TOOLS,
+        HELPER_SPAWN_TOOL,
         `mcp__${FEEDBACK_SERVER}__${ESCALATE_TOOL_NAME}`,
         ...this.feedbackToolNames,
       ],
+      // ADR-0589 D1: the worker's WHOLE helper roster. Read this beside `settingSources: []` below
+      // — with no filesystem settings loaded, nothing else can define an agent, so a worker's reach
+      // is exactly this one read-only explorer and nothing this repository defines for its own
+      // sessions.
+      agents: { [HELPER_AGENT_TYPE]: helperAgentDefinition() },
       permissionMode: "bypassPermissions",
       // No filesystem settings (ADR-0583). Left unset, the SDK loads user, project and local
       // settings "to match CLI defaults", so every worker phase ran the repository's own
@@ -730,6 +873,9 @@ export class ClaudeAgentAuthor implements PhaseAuthor {
                   toolName: input.tool_name,
                   toolInput: input.tool_input,
                   isWriteAllowed: this.#args.isWriteAllowed,
+                  // Absent for the main thread, set only inside a helper (ADR-0589 D2). Passed
+                  // through rather than read here so the whole refusal stays one pure decision.
+                  agentId: input.agent_id,
                 });
                 if (decision.allow) {
                   return {};
@@ -748,6 +894,38 @@ export class ClaudeAgentAuthor implements PhaseAuthor {
                     permissionDecisionReason: decision.reason,
                   },
                 };
+              },
+            ],
+          },
+        ],
+        // ADR-0589 D3. No matcher: these events carry no tool name to match on, and every helper is
+        // in scope. Both hooks observe and return `{}` — they decide nothing, so a fault in the
+        // accounting can never change what a slice is allowed to do.
+        SubagentStart: [
+          {
+            hooks: [
+              async (input) => {
+                if (input.hook_event_name !== "SubagentStart") return {};
+                helperStartedAt.set(input.agent_id, this.#clock.now());
+                return {};
+              },
+            ],
+          },
+        ],
+        SubagentStop: [
+          {
+            hooks: [
+              async (input) => {
+                if (input.hook_event_name !== "SubagentStop") return {};
+                const run = foldHelperStop({
+                  phase,
+                  agentId: input.agent_id,
+                  agentType: input.agent_type,
+                  stoppedAt: this.#clock.now(),
+                  pending: helperStartedAt,
+                });
+                if (run !== undefined) this.helperRuns.push(run);
+                return {};
               },
             ],
           },

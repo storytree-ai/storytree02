@@ -342,3 +342,67 @@ test("append-slice-scope: a pi slice's row reaches the store and parses on the w
   assert.equal(appended, 1);
   assert.deepEqual(warnings, [], "a pi row must persist, not be swallowed by a validation warning");
 });
+
+// ── ADR-0589 D2: a helper write refusal is NOT a write-fence firing ──────────
+
+test("fold-claude-helper: a helper refusal is never counted as a scoped refusal", () => {
+  // It carries no path (it is refused before one is read), so admitting it to `refusals` would
+  // force a fabricated `path` onto a required field and inflate every "how often did the write
+  // fence fire?" reading — the exact harm `ScopeToolSurfaceRefusal` was given its own field for.
+  const docs = sliceScopeDocs(
+    IDS,
+    liveAuthorScopeWalls(
+      claude([
+        {
+          phase: "AUTHOR_TEST",
+          tool: "Write",
+          path: "(helper)",
+          reason: "write refused: 'Write' came from helper agent 'agent-7'",
+          kind: "helper",
+        },
+      ]),
+    ),
+  );
+
+  assert.equal(docs.length, 1, "the armed slice still banks its row");
+  assert.deepEqual(docs[0]?.refusals, [], "the write fence did not fire");
+  assert.equal(docs[0]?.noPathCalls, 0, "nor is it the disputed no-path case");
+  assert.deepEqual(docs[0]?.toolSurfaceRefusals, [], "nor a tool-surface refusal — Write IS on the surface");
+});
+
+test("fold-claude-helper: a REAL scope refusal in the same slice is still carried", () => {
+  // The control arm: without it, a fold that dropped EVERY violation would pass the test above.
+  const docs = sliceScopeDocs(
+    IDS,
+    liveAuthorScopeWalls(
+      claude([
+        { phase: "AUTHOR_TEST", tool: "Write", path: "(helper)", reason: "helper", kind: "helper" },
+        { phase: "AUTHOR_TEST", tool: "Write", path: "impl.cjs", reason: "out of scope", kind: "scope" },
+      ]),
+    ),
+  );
+
+  assert.deepEqual(docs[0]?.refusals, [
+    { kind: "scope", tool: "Write", path: "impl.cjs", reason: "out of scope" },
+  ]);
+});
+
+test("fold-claude-helper: a slice reached ONLY by a helper refusal is not invented into existence", () => {
+  // `sliceScopeDocs` derives its phase list partly from the refusals themselves. A helper refusal
+  // in a phase the leaf never ran must not conjure a row claiming that phase's wall was armed.
+  const docs = sliceScopeDocs(
+    IDS,
+    liveAuthorScopeWalls(
+      claude(
+        [{ phase: "IMPLEMENT", tool: "Write", path: "(helper)", reason: "helper", kind: "helper" }],
+        [{ phase: "AUTHOR_TEST" }],
+      ),
+    ),
+  );
+
+  assert.deepEqual(
+    docs.map((d) => d.phase),
+    ["AUTHOR_TEST"],
+    "only the slice that actually ran banks a row",
+  );
+});
