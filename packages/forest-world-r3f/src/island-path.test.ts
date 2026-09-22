@@ -91,8 +91,10 @@ const near = (p: CoastPoint, q: CoastPoint, eps = 1e-9): boolean =>
 // The constants
 // ---------------------------------------------------------------------------
 
-// test-updated (new behaviour): the dock reach is 1.5x the shipped beach, and the recipe`s shape constants are pinned — now pins the four-beach terminal reach required by the real clipped map.
-test('the dock reach is 1.5x the shipped beach, and the recipe`s shape constants are pinned', () => {
+// ⚠ RENAMED with its assertion (ADR-0596 D2): this was "the dock reach is 1.5x the shipped beach"
+// until 2026-09-23, when the real map showed 1.5 refusing 12 of 52 genuine landings. A test whose
+// name says 1.5 while it asserts 4 is the stale-prose failure this repo reds a gate for elsewhere.
+test('the dock reach is 4x the shipped beach, and the recipe`s shape constants are pinned', () => {
   assert.equal(DOCK_REACH, 4 * SAND_SHIPPED_BEACH_WIDTH);
   // × LAND_SCALE (`land-per-capability.ts`): 36 = 4 × the 9-unit beach judged on the TUNED
   // island; the shipped beach is 9 × LAND_SCALE, and the reach follows it.
@@ -224,8 +226,38 @@ test('fld-every-terminal-trail-end-docks-on-the-real-map: every terminal landing
   const terminals = [...ends.values()].filter((samePosition) => samePosition.length === 1);
   assert.equal(terminals.length, 52, 'the committed export must retain the measured terminal population');
 
-  const dockCount = [...islandDocks(cells, strips).values()].reduce((count, docks) => count + docks.length, 0);
+  // ⚠ THE INVENTORY IS ASSERTED TOO (ADR-0596 D5), because losing a SEGMENT and losing a LANDING
+  // look identical in a dock count: fewer strips means fewer terminal ends, and both sides of the
+  // equality above fall together. These three numbers are what the mapping is supposed to carry
+  // through from the routed network, and the export's own manifest records the same 90/103.
+  assert.equal(strips.length, 103, 'the shipped export routes 103 visible trail segments');
+  assert.equal(
+    strips.filter((s) => s.segment !== undefined && (s.edges ?? []).length > 0).length,
+    103,
+    'every segment keeps its stable id and at least one from->to edge key',
+  );
+  const edgeKeys = new Set(strips.flatMap((s) => s.edges ?? []));
+  assert.equal(edgeKeys.size, 90, 'the 90 routed depends_on edges all survive the mapping');
+
+  const docks = islandDocks(cells, strips);
+  const dockCount = [...docks.values()].reduce((count, found) => count + found.length, 0);
   assert.equal(dockCount, terminals.length, 'every terminal landing must reach the clipped map rim');
+  // ⚠ AND THE LANDINGS ARE SPREAD, not piled onto a few shores. Before ADR-0596 seven of these
+  // islands formed no dock and therefore wore no path at all — the defect a total count alone
+  // cannot see, since 52 docks on 28 islands satisfies the equality above just as well.
+  assert.equal(docks.size, 35, 'the export carries 35 islands with a rim');
+  // ⚠ ONE ISLAND IS STILL SHORT, AND IT IS A DIFFERENT DEFECT — pinned here rather than asserted
+  // away. `uat-detail-studio`'s only terminal landing sits 5.29 units off its own rim and 4.43 off
+  // `studio-cloud`'s, so the nearest-island rule hands the dock to a shore the trail's edge keys
+  // (`uat-criterion-detail->uat-detail-studio`, `studio->uat-detail-studio`) never name. ADR-0504's
+  // docstring premise — that two islands are never within one reach of the same end — is false on
+  // the real map. Closing it is this lane's next unit; until then the exact shortfall is recorded
+  // so it cannot grow unnoticed.
+  assert.deepEqual(
+    [...docks.entries()].filter(([, found]) => found.length === 0).map(([island]) => island),
+    ['uat-detail-studio'],
+    'exactly one island is left dockless, by the nearest-island rule rather than by the network',
+  );
 });
 
 test('islandDocks assigns an end within reach of TWO islands to the NEARER one, on either axis', () => {

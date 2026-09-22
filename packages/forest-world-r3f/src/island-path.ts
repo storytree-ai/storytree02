@@ -34,17 +34,27 @@ import type { InstanceDescriptor } from './world-to-3d.js';
 
 /**
  * HOW FAR FROM AN ISLAND'S RIM A STRIP ENDPOINT MAY SIT AND STILL COUNT AS THAT ISLAND'S DOCK,
- * in ground units — four times the shipped beach width, and the reason is the geometry of the two maps.
+ * in ground units — four times the shipped beach width, and since ADR-0596 it is a SANITY BOUND
+ * rather than the thing that decides what a dock is.
  *
  * A strip docks on the 2D map's coast. The 3D ground ends on a coast built by the SAME machinery
  * (`coast-clip.ts` imports `smoothCoast` rather than transcribing it), but the clip is CAPPED so
- * no parcel crosses itself — so on a tight bay the mesh's rim can fall short of the 2D coast by
- * up to the beach outset, and the strip's end then sits that far OFF the rim, out to sea. The
- * shipped sand band ({@link SAND_SHIPPED_BEACH_WIDTH}, 9 units) is the widest thing the coast
- * treatment draws, so four times it covers the measured clipped-map offset while remaining
- * an order
- * of magnitude under the gap between any two islands on the map — a strip's end can never be
- * within reach of two islands' rims at once on a map whose islands do not touch.
+ * no parcel crosses itself — and, more importantly, the shared router models each island as an
+ * obstacle DISC and docks on THAT rim rather than on the lobed coast polygon. Both effects leave a
+ * real landing sitting some way off the mesh rim, out to sea.
+ *
+ * ⚠ THE MULTIPLIER IS MEASURED NOW, NOT REASONED (ADR-0596). On the committed real-forest export
+ * the 52 TERMINAL strip ends sit a median of 3.63 ground units off the nearest rim and reach 9.56
+ * at worst; four beaches (13.57 at today's `LAND_SCALE`) clears that maximum by 42%. The previous
+ * 1.5 was reasoned from the clip cap alone, and it silently fell to 5.09 when the beach was
+ * rescaled by `LAND_SCALE` — refusing 12 of the 52 real landings and leaving 7 of 35 islands with
+ * no path at all, with every test in this package green.
+ *
+ * ⚠ IT IS NO LONGER WHAT KEEPS A JUNCTION OUT, and that is why widening it is safe. The old
+ * argument — that the reach is an order of magnitude under the gap between any two islands — still
+ * holds for the wrong-ISLAND case, but on the real map the nearest routed JUNCTION sits 7.60 units
+ * off a rim, INSIDE this reach. {@link islandDocks} excludes junctions structurally instead, so no
+ * choice of reach can admit one.
  */
 export const DOCK_REACH = 4 * SAND_SHIPPED_BEACH_WIDTH;
 
@@ -169,9 +179,17 @@ export function dockOnRim(grid: EdgeGrid, end: CoastPoint, reach: number = DOCK_
  * not occur on a map whose islands do not touch (the coast clip's own suite holds that), so this
  * is stated rather than relied on: a dock belongs to one shore.
  *
- * ⚠ ONLY TERMINAL ENDS DOCK. A position shared by two or more visible strips is a routed
- * junction, not a landing, and is excluded before the rim search. Coincidence uses `vertexKey`
- * (a tenth of a unit), the same quantisation used to deduplicate the remaining docks.
+ * ⚠⚠ ONLY TERMINAL ENDS DOCK (ADR-0596 D1). A position shared by two or more visible strips is a
+ * routed JUNCTION — where several edges funnel onto one trunk in open water — not a landing, and it
+ * is excluded before the rim search whatever its distance. On the real map 51 of the 103 distinct
+ * end positions are junctions, and they are NOT separable by distance: the furthest terminal end is
+ * 9.56 units off a rim and the nearest junction 7.60. Coincidence uses `vertexKey` (a tenth of a
+ * unit), the same quantisation the surviving docks are deduplicated by, so one rule of coincidence
+ * serves both.
+ *
+ * ⚠ DOCKS ARE STILL DEDUPLICATED BY POSITION after that. Two terminal ends a hair apart are one
+ * dock; left as two they would be "joined" by a path of zero length that the smoothing turns into a
+ * knot.
  */
 export function islandDocks(
   cells: readonly InstanceDescriptor[],
