@@ -21,6 +21,16 @@ import { liveLeafLines } from "./node-build.js";
 import { cannedLiveAuthor } from "./real-chain-fixture.js";
 
 /**
+ * The Codex branch's UNCONDITIONAL helper line (ADR-0589 D4), which every array below now ends
+ * with. It is unconditional for the same reason `codexFeedbackLine` always emits something: a
+ * reader comparing two runtimes' envelopes must not have to infer whether a missing line meant
+ * "the worker used none" or "this runtime has none". The Claude branch stays CONDITIONAL, and the
+ * last test in this file is what holds that difference.
+ */
+const CODEX_HELPERS_LINE =
+  "helpers:     none — the Codex runtime supplies no read-only helpers (its sandbox is per-process, not per-agent)";
+
+/**
  * A bare Codex leaf instance for the reporting fold — nothing is driven, no endpoint is opened.
  * `feedbackNames` seeds `feedbackToolNames` the same way real feedback commands would (via the
  * constructor's own `feedbackCommands` mapping), so "armed" is read from the leaf's own record
@@ -63,9 +73,16 @@ test("codex-envelope-reports-feedback-runs: non-empty feedbackRuns render exactl
   const codexLines = liveLeafLines(codex);
   const claudeLines = liveLeafLines(claude);
 
-  assert.equal(codexLines[codexLines.length - 1], EXPECTED_FEEDBACK_LINE);
-  assert.equal(claudeLines[claudeLines.length - 1], EXPECTED_FEEDBACK_LINE);
-  assert.equal(codexLines[codexLines.length - 1], claudeLines[claudeLines.length - 1]);
+  // Selected by PREFIX rather than by position: the Codex branch now ends with its helper line
+  // (ADR-0589 D4), so `length - 1` would compare the two branches' last lines and find them
+  // legitimately different — passing or failing for a reason that has nothing to do with the
+  // byte-identical FEEDBACK rendering this test exists to pin.
+  const codexFeedback = codexLines.filter((line) => line.startsWith("feedback:"));
+  const claudeFeedback = claudeLines.filter((line) => line.startsWith("feedback:"));
+
+  assert.deepEqual(codexFeedback, [EXPECTED_FEEDBACK_LINE]);
+  assert.deepEqual(claudeFeedback, [EXPECTED_FEEDBACK_LINE]);
+  assert.deepEqual(codexFeedback, claudeFeedback);
 });
 
 test("codex-envelope-reports-feedback-runs: armed with feedback tools but no calls names the armed tools instead of the none line", () => {
@@ -78,6 +95,7 @@ test("codex-envelope-reports-feedback-runs: armed with feedback tools but no cal
     "scope walls: no write refusals",
     "feedback:    0 bounded runs — armed with run_proof, run_typecheck; the leaf called none " +
       "(the spine's own observations decided)",
+    CODEX_HELPERS_LINE,
   ]);
 });
 
@@ -89,6 +107,7 @@ test("codex-envelope-reports-feedback-runs: a Codex leaf given no feedback tools
     "cost:        not metered — ChatGPT subscription quota (no API/list-price USD asserted)",
     "scope walls: no write refusals",
     "feedback:    none — the spine reruns every registered proof command out of band",
+    CODEX_HELPERS_LINE,
   ]);
 });
 
@@ -105,6 +124,7 @@ test("codex-envelope-reports-feedback-runs: a feedback run whose exit code is nu
     "cost:        not metered — ChatGPT subscription quota (no API/list-price USD asserted)",
     "scope walls: no write refusals",
     "feedback:    3 bounded run(s) — AUTHOR_TEST:run_proof=exit 1, IMPLEMENT:run_proof=green, IMPLEMENT:run_typecheck=exit none (feedback only; the spine's own observations decided)",
+    CODEX_HELPERS_LINE,
   ]);
 });
 
@@ -116,6 +136,7 @@ test("codex-envelope-reports-feedback-runs: armed with run_proof alone, the arme
     "cost:        not metered — ChatGPT subscription quota (no API/list-price USD asserted)",
     "scope walls: no write refusals",
     "feedback:    0 bounded runs — armed with run_proof; the leaf called none (the spine's own observations decided)",
+    CODEX_HELPERS_LINE,
   ]);
 });
 

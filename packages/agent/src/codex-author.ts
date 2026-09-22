@@ -641,6 +641,20 @@ export function buildCodexExecArgs(args: CodexExecArgsInput): string[] {
       ? ["--config", "mcp_servers={}"]
       : buildFeedbackMcpServersConfigArgs(args.feedback)),
     "--config",
+    // ADR-0589 D4 — the Codex worker gets NO read-only helpers, and this is a recorded finding
+    // rather than an omission. What makes the Claude helper safe is PER-AGENT tool restriction
+    // (`HELPER_AGENT_TOOLS` in `sdk-author.ts`). Nothing in this argv is per-agent: every line is a
+    // process-wide `--config key=value`, and `--sandbox workspace-write` above is a property of the
+    // `codex exec` PROCESS — so anything it starts inherits the worker's sandbox and its
+    // `features.shell_tool=true` shell below. Probed rather than assumed, and the probe was
+    // inconclusive, which is itself the answer: `codex` was not reachable from the deciding
+    // environment, so the config schema could not be read.
+    //
+    // Enabling it unverified is not neutral, and the harm is specific: a helper writing ANYTHING
+    // inside the replica joins the phase's observed diff, and one unlisted path refuses the WHOLE
+    // phase — so the worker would lose finished work to a refusal naming a file it never touched.
+    // ADR-0581 D5's "both workers" therefore reads Claude-only today, and carries an annotation
+    // saying so. Reopening this needs a per-agent restriction that outlives the process sandbox.
     "agents.enabled=false",
     "--config",
     "features.hooks=false",
