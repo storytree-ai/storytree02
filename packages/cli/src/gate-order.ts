@@ -613,12 +613,20 @@ export const STORE_REACH_WITHOUT_READ: ReadonlyMap<string, string> = new Map([
  * invariant can never disagree about which steps they are talking about.
  */
 export function readsLiveStore(step: GateStep): boolean {
-  // Stryker disable next-line ConditionalExpression: EQUIVALENT, and the narrowing is
-  // TYPE-REQUIRED rather than defensive. Forcing it true leaves `has(undefined)` for a step
-  // that names no check, and a Map keyed by string answers false either way — so no verdict
-  // can change. It cannot simply be dropped: `step.check` is `string | undefined`, and `has`
-  // takes a string, so the narrowing is what makes this compile at all.
-  return step.check !== undefined && LIVE_STORE_READING_CHECKS.has(step.check);
+  // ONE MUTANT ON ONE LINE, and the shape is chosen for that. This was
+  // `step.check !== undefined && …`, which put THREE `ConditionalExpression` mutants on one line:
+  // one genuinely unkillable (a check-less step must answer false, and `has` of a key no check
+  // carries also answers false, so the narrowing cannot change a verdict) and TWO that the tests
+  // DO kill (forcing the whole expression true or false is caught by `check:boundaries` and
+  // `check:agents` respectively). A `Stryker disable` is per-LINE and per-mutator, so suppressing
+  // the first silently suppressed the other two — a proof that quietly narrowed, which is what
+  // `mutation-suppression-directive-announces-itself` exists to catch. Coercing the absent case to
+  // a key no check uses leaves exactly one mutant here, of a different kind, and it is honestly
+  // unkillable: ANY replacement string is still a key the map does not hold.
+  // Stryker disable next-line StringLiteral: EQUIVALENT — `has("")` is false because no check is
+  // named `""`, and so is `has` of any other fabricated key, which is also the right answer for a
+  // step that names no check at all.
+  return LIVE_STORE_READING_CHECKS.has(step.check ?? "");
 }
 
 /**

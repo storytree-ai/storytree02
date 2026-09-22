@@ -420,6 +420,20 @@ export interface JudgedGate extends DeclaredGate {
   readonly baselined: string | undefined;
 }
 
+/**
+ * A judged gate the baseline CARRIES — the same row, with `baselined` required rather than optional.
+ *
+ * The distinction is load-bearing and it is why there is no runtime guard in the renderer. Every
+ * member of {@link ReliabilityGateParity.baselined} was selected BY having a blocker, so a
+ * `?? ""` or an `if (blocker === undefined) continue` there is unreachable — and an unreachable
+ * branch is a mutant nothing can kill, which then invites a `Stryker disable` whose blast radius is
+ * the whole LINE. Carrying the guarantee in the type instead means the only narrowing happens in the
+ * partition below, where it is part of a condition the tests already exercise.
+ */
+export interface BaselinedJudgedGate extends JudgedGate {
+  readonly baselined: string;
+}
+
 /** A baseline entry that no longer describes the corpus, and why it must go. */
 export interface StaleBaselineEntry {
   readonly story: string;
@@ -434,7 +448,7 @@ export interface ReliabilityGateParity {
   /** Breaches this branch is CHARGED for — every unrun gate the baseline does not cover. */
   readonly unrun: readonly JudgedGate[];
   /** Unrun gates carried by {@link UNRUN_GATE_BASELINE} — reported loudly, but not charged here. */
-  readonly baselined: readonly JudgedGate[];
+  readonly baselined: readonly BaselinedJudgedGate[];
   /** Baseline entries that are no longer breaches, or no longer exist. Each one FAILS the rung. */
   readonly staleBaseline: readonly StaleBaselineEntry[];
   /** Story files that declared a block, so an empty judged set can be told from an unread corpus. */
@@ -530,7 +544,9 @@ export function judgeReliabilityGateParity(input: {
   }
 
   const unrun = judged.filter((g) => !g.coverage.covered && g.baselined === undefined);
-  const baselined = judged.filter((g) => !g.coverage.covered && g.baselined !== undefined);
+  const baselined = judged.filter(
+    (g): g is BaselinedJudgedGate => !g.coverage.covered && g.baselined !== undefined,
+  );
   return {
     verdict: unrun.length === 0 && staleBaseline.length === 0 ? "pass" : "fail",
     judged,
@@ -557,14 +573,16 @@ export function formatReliabilityGateParity(parity: ReliabilityGateParity): stri
   // The declared debt prints on EVERY run, pass or fail. A baseline nobody is shown is how a
   // pre-existing breach becomes a permanent one.
   for (const gate of parity.baselined) {
+    // No fallback and no guard: {@link BaselinedJudgedGate} carries the guarantee in its TYPE, so
+    // there is nothing unreachable here for a mutant to live in and nothing to suppress. Both
+    // earlier shapes were worse in the same way — a `?? ""` and an `if (… === undefined) continue`
+    // are each unkillable, and suppressing either one takes the report line's own literal with it.
     lines.push(
       "",
       `${TAG} CARRIED, NOT PASSED — a declared gate nothing runs, held by the baseline:`,
       `${TAG}   ${gate.story}`,
       `${TAG}     \`${gate.command}\``,
-      // Stryker disable next-line StringLiteral: UNREACHABLE — every member of `parity.baselined`
-      // was selected BY having a `baselined` blocker, so the fallback cannot be taken.
-      `${TAG}     ${gate.baselined ?? ""}`,
+      `${TAG}     ${gate.baselined}`,
     );
   }
 
