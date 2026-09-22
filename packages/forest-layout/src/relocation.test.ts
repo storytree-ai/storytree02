@@ -4,11 +4,27 @@
 // increment's binding constraint is that the move changed the layout's OUTPUT by NOTHING: "this is
 // a relocation; the map it produces must be provably the same."
 //
-// ⚠ WHAT MAKES THIS A PROOF RATHER THAN AN ASSERTION. `relocation.golden.json` was captured from
-// the packer as it stood inside `TreeView.tsx` and committed in its own commit before a single line
-// moved. The relocation commit only RENAMED it, so `git log --follow -p` on the file shows one
-// content commit — the capture — and nothing else. A future edit that legitimately changes the map
-// re-captures it, in ITS OWN commit, saying what moved and why.
+// ⚠ THE PRE-MOVE ANCHOR IS SPENT, AND THIS FILE NO LONGER PROVES THE RELOCATION. Read this before
+// reading anything above it. `relocation.golden.json` was captured from the packer as it stood
+// inside `TreeView.tsx`, committed before a single line moved, and only RENAMED by the relocation
+// — which is what made the comparison a PROOF rather than an assertion. On 2026-09-23
+// `the-packer-decides-in-ground-space-not-through-the-camera` legitimately changed the map (the
+// seed snap stopped reading a camera), every island moved, and the golden was re-captured in its
+// own commit exactly as the paragraph this replaces provided for. The pre-move bytes are not lost
+// — `git log --follow -p` on the golden now shows TWO content commits, and the first is still the
+// original capture — but they are HISTORY, and no test compares against them any more.
+//
+// ⚠ SO BE PRECISE ABOUT WHAT THE FIVE COMPARISONS BELOW ARE WORTH NOW, because it is less than
+// they were and more than nothing. They still hold, at full strength, that the map does not move
+// by ACCIDENT: 14,057 numbers across five arms, calibrated by the fault seeding described below,
+// so any unintended change to any branch the fourteen stories reach reds here. And paired with
+// `apps/studio/src/components/buildWorld.relocation.test.ts` — which reads the SAME golden through
+// the studio's own `buildWorld` at budget 0 — they still hold that `buildWorld` = chrome ∘
+// `packWorld` end to end, which is two independent call paths agreeing rather than one asserting.
+// What they no longer hold is that today's map equals the map before the packing moved out of
+// `TreeView.tsx`. That claim had one job, it did it, and it cannot be re-made by a re-capture.
+// A future edit that legitimately changes the map re-captures again, in ITS OWN commit, saying
+// what moved and why — and adds its line here.
 //
 // ⚠ AND THIS IS ONLY HALF THE PROOF, deliberately. The golden was captured through the studio's
 // `buildWorld`, which computes two things this package cannot see: which stories are

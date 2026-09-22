@@ -121,12 +121,16 @@ export interface RelocationArm {
   readonly opts: PackOptions;
 }
 
-/** The land camera the relocation golden was CAPTURED at (ADR-0367 D1's original value).
- *  Pinned as a literal, deliberately NOT `LAND_CAMERA_ELEVATION_DEG`: the golden is a fixed
- *  record of the map before the packing moved, and the relocation claim — that `packWorld`
- *  reproduces the old `buildWorld` exactly — is camera-independent. ADR-0593 D1 later moved the
- *  live constant to 50; re-capturing the golden at 50 would compare today's code with itself
- *  and prove nothing. */
+/** The camera every arm asks for, pinned as a literal and deliberately NOT
+ *  `LAND_CAMERA_ELEVATION_DEG`.
+ *
+ *  ⚠ ITS REASON CHANGED WITH THE 2026-09-23 RE-CAPTURE and the old one no longer applies. It used
+ *  to be the angle the pre-move map was captured at, held fixed so the relocation claim stayed
+ *  readable; that anchor is spent (see `relocation.test.ts`'s header). What it does NOW is keep
+ *  every arm asking for a camera the module default is NOT, which is the only thing that makes
+ *  `PackOptions.elevationDeg` observable at all: at 50 a declared arm and a bare one are the same
+ *  call, so a golden captured there would witness the shipped path twice and the option never.
+ *  Its value is unchanged only because nothing recommends changing it. */
 const GOLDEN_CAPTURE_ELEVATION_DEG = 20;
 
 /**
@@ -136,11 +140,8 @@ const GOLDEN_CAPTURE_ELEVATION_DEG = 20;
  * TIGHTEST rung, ratio 0, where the hex growth floor and the one-hex moat are the only thing
  * holding two islands apart.
  *
- * ⚠ EVERY ARM PINS `elevationDeg: GOLDEN_CAPTURE_ELEVATION_DEG` (ADR-0593 D1). The golden was
- * captured while the shared camera was 20°; without the pin, every arm would silently pick up
- * whatever `LAND_CAMERA_ELEVATION_DEG` is TODAY, and the relocation proof would stop comparing
- * "did the move change the map" and start comparing "did the map change since capture" — which it
- * did, on purpose, for a reason this fixture has nothing to do with.
+ * ⚠ EVERY ARM PINS `elevationDeg: GOLDEN_CAPTURE_ELEVATION_DEG`, and that constant's own comment
+ * carries why — it is no longer about when the golden was captured.
  */
 export function relocationArms() {
   return {
