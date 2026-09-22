@@ -305,6 +305,9 @@ importers:
       '@storytree/library':
         specifier: workspace:*
         version: link:../library
+      '@storytree/notice-board':
+        specifier: workspace:*
+        version: link:../notice-board
       '@storytree/storage-protocol':
         specifier: workspace:*
         version: link:../storage-protocol

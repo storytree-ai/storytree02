@@ -28,7 +28,11 @@ export {
 // ADR-0581 D4 / ADR-0582: what the in-build repair loop consults — its budget, the repair briefs, the
 // typecheck router, and the set-aside that re-observes a revised test against the build's base source.
 export type {
+  ExtensionRecord,
   GitRunner,
+  HoldChannel,
+  HoldDecision,
+  HoldNotice,
   ProcessOutput,
   RepairBudget,
   RepairCause,
@@ -41,10 +45,12 @@ export type {
 } from "./repair.js";
 export {
   DEFAULT_BUILD_BUDGET_MS,
+  DEFAULT_HOLD_GRACE_MS,
   REPAIR_STREAM_CHARS,
   clipTail,
   codeRepairSection,
   diagnosticFiles,
+  holdingBudget,
   redObservationSection,
   renderObservation,
   routeTypecheckByFile,

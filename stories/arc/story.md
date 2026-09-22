@@ -20,9 +20,13 @@ uat_witness: machine
 # for exactly this key — an unstamped story is invisible to the initiative that produced it.
 arc: arc-tier-extraction-arc
 capabilities: [arc-derived-initiative-view, increment-freshness-check, arc-explicit-id-fidelity]
-# Story-level edges. The THREE outbound edges are `@storytree/arc`'s real runtime package.json
-# dependencies (ADR-0074 / ADR-0010 §3), declared consumer-side here; all three are code-backed, so
-# none is an `artifact_edges` honesty annotation (ADR-0166). The `cli` edge is declared PROVIDER-SIDE
+# Story-level edges. The FOUR outbound edges are `@storytree/arc`'s real runtime package.json
+# dependencies (ADR-0074 / ADR-0010 §3), declared consumer-side here; all four are code-backed, so
+# none is an `artifact_edges` honesty annotation (ADR-0166). `notice-board` is the newest and is
+# backed by `increment-claims.ts`: `arc show` says whether each open increment is HELD, and it decides
+# liveness with the notice-board organism's OWN `classifyClaims` / `isReclaimable` rather than a
+# second staleness threshold of its own — so the arc surface and the claim ledger cannot disagree
+# about which rows are live. The `cli` edge is declared PROVIDER-SIDE
 # here, as `consumed_by`, because `stories/cli` is the ADR-0074 §4 de-noised hub and carries
 # `depends_on: []` by decision — every spoke owns its own "I am wired into the CLI" edge, exactly as
 # `library` / `drive-machinery` / `notice-board` / `storage-protocol` already do. The two consuming
@@ -35,7 +39,7 @@ capabilities: [arc-derived-initiative-view, increment-freshness-check, arc-expli
 # (`cli → arc → cli`), which `check:boundaries` rule 2 refuses outright (ADR-0058), and it would also
 # be code-unbacked, which rule 4 refuses independently. See "Dependency graph" below for the two
 # couplings that USED to justify a cli edge and where each of them went.
-depends_on: [drive-machinery, library, storage-protocol]
+depends_on: [drive-machinery, library, notice-board, storage-protocol]
 consumed_by: [cli]
 # Deciding ADRs (ADR-0037 §2): 183 is the arc itself (D3 puts every containment edge on the CHILD,
 # which is what makes the upward view a query); 267 D4/D7 gives arcs the map's top drawer and derives

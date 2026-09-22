@@ -240,9 +240,26 @@ export interface CodexRunInfo {
 }
 
 /** Exact spine-authored packing list for one phase; neither field accepts globs. */
+/**
+ * Which observed change satisfies a phase (ADR-0595 D2, narrowing ADR-0356 D2).
+ *
+ * `required-target` is the original rule and stays the default: an observed change must include one of
+ * the manifest's REQUIRED targets. AUTHOR_TEST keeps it, because there the required target is the test
+ * file the proof command actually runs — the deliverable itself, not a proxy for it.
+ *
+ * `any-allowed-target` is what IMPLEMENT resolves with. There the required target is only a guess about
+ * where the fix lives, and a correct fix belonging in a sibling source file the unit's own scope named
+ * was refused — pressuring the leaf into a gratuitous edit to the named file so the phase would pass.
+ * The spine's own out-of-band red-green observation is the real oracle for whether IMPLEMENT worked, so
+ * the guess costs correctness and buys nothing the spine does not already know.
+ */
+export type CodexManifestChangeRule = "required-target" | "any-allowed-target";
+
 export interface CodexPromotionManifest {
   allowedTargets: string[];
   requiredTargets: string[];
+  /** Defaults to `required-target`, so a manifest that says nothing keeps ADR-0356 D2's rule. */
+  changeSatisfiedBy?: CodexManifestChangeRule | undefined;
 }
 
 /** Deterministic failure seam for rollback tests; production resolution never supplies it. */
@@ -388,7 +405,12 @@ function snapshotState(
 }
 
 function validatePromotionManifest(manifest: CodexPromotionManifest | undefined):
-  | { ok: true; allowed: Map<string, string>; required: Map<string, string> }
+  | {
+      ok: true;
+      allowed: Map<string, string>;
+      required: Map<string, string>;
+      satisfiedBy: CodexManifestChangeRule;
+    }
   | { ok: false } {
   if (
     manifest === undefined ||
@@ -417,14 +439,44 @@ function validatePromotionManifest(manifest: CodexPromotionManifest | undefined)
   };
   const allowed = collect(manifest.allowedTargets);
   const required = collect(manifest.requiredTargets);
+  // The rule is refused rather than defaulted: an unrecognized one is a malformed packing list, and
+  // quietly falling back would make a typo read as a deliberate choice of the stricter rule. It joins
+  // the existing guard rather than adding a second `return { ok: false }`, which would be an
+  // indistinguishable duplicate exit — the "redundant early-out" mutation shape.
+  const satisfiedBy = manifest.changeSatisfiedBy ?? "required-target";
   if (
     allowed === undefined ||
     required === undefined ||
+    (satisfiedBy !== "required-target" && satisfiedBy !== "any-allowed-target") ||
     [...required.keys()].some((key) => !allowed.has(key))
   ) {
     return { ok: false };
   }
-  return { ok: true, allowed, required };
+  return { ok: true, allowed, required, satisfiedBy };
+}
+
+/**
+ * Whether the phase's observed changes satisfy its manifest (ADR-0595 D2). The manifest DECLARES which
+ * rule applies rather than this function inferring it from the phase, so the spine stays the authority
+ * on its own packing list.
+ */
+function phaseChangeSatisfied(
+  manifest: {
+    allowed: Map<string, string>;
+    required: Map<string, string>;
+    satisfiedBy: CodexManifestChangeRule;
+  },
+  observedPaths: readonly string[],
+): boolean {
+  const targets = manifest.satisfiedBy === "any-allowed-target" ? manifest.allowed : manifest.required;
+  return observedPaths.some((observedPath) => targets.has(targetKey(observedPath)));
+}
+
+/** The refusal, naming the rule that was applied — the two read very differently to a debugger. */
+function unsatisfiedChangeError(satisfiedBy: CodexManifestChangeRule): string {
+  return satisfiedBy === "any-allowed-target"
+    ? "Codex completed without an observed change to any allowed target"
+    : "Codex completed without an observed required target change";
 }
 
 /**
@@ -493,16 +545,99 @@ function computeFeedbackToolTimeoutSec(commands: CodexFeedbackCommand[]): number
 export function wrapFeedbackCommandWithBound(
   command: CodexFeedbackCommand,
   bound: CodexBoundControl,
+  attribution: FeedbackWriteAttribution = noFeedbackWriteAttribution(),
 ): CodexFeedbackCommand {
   return {
     ...command,
     run: async (replicaRoot: string, choice?: FeedbackChoice) => {
       bound.suspend?.();
       try {
-        return await command.run(replicaRoot, choice);
+        // Inside the suspended bound: the snapshots are the SPINE's work, and the leaf's own clock
+        // should not be charged for the spine observing its replica.
+        return await attribution.around(() => command.run(replicaRoot, choice));
       } finally {
         bound.resume?.();
       }
+    },
+  };
+}
+
+/**
+ * WHAT THE SPINE'S OWN FEEDBACK RUNS LEFT BEHIND (ADR-0595 D1, narrowing ADR-0356 D3).
+ *
+ * ADR-0356 D3 refuses a whole phase when any observed replica path is unlisted, and was right to: when
+ * it was written the Codex author was the ONLY writer in the replica, so "a change nobody declared" and
+ * "a change the author made and did not declare" were the same set. ADR-0570 put a spine-hosted
+ * feedback endpoint inside the phase and ADR-0587's `run_tests` now runs whole existing test suites in
+ * there, so the spine is a writer too — and a cache or report file a test run drops would refuse forty
+ * minutes of authoring while naming a path the leaf never touched.
+ *
+ * This is NOT a hole in the fence, and that is the whole argument for it: D3's absoluteness protects
+ * PROMOTION, an unlisted path is never copied into the real worktree, and a suppressed path is still
+ * never promoted — it dies with the replica like any other. What the suppression removes is only that
+ * artefact's power to VETO legitimate promoted work. The one thing a leaf could smuggle through the gap
+ * is a write that lands nowhere.
+ *
+ * Three limits, each failing in the safe direction:
+ *  - **Additions only.** A feedback run may leave NEW files behind; it does not get to modify or delete
+ *    an existing one. A test runner doing either is a genuine surprise and still refuses.
+ *  - **Never a manifest member** (enforced at the call site), so an authored write is never silently
+ *    dropped instead of promoted — the one way this could destroy work rather than protect it.
+ *  - **Exact final state.** A path the leaf touched AFTER the run no longer matches what the run left,
+ *    so it refuses exactly as it does today.
+ *
+ * When a snapshot cannot be taken, nothing is attributed and the pre-existing refusal stands.
+ */
+export interface FeedbackWriteAttribution {
+  /**
+   * Run one feedback command, recording what the replica gained while it ran. The baseline is a LOCAL
+   * of this call rather than a field, so two runs that overlap cannot diff against each other's
+   * snapshot — nothing serialises the endpoint's tool calls, and a shared baseline would silently
+   * attribute one run's window to the other.
+   */
+  around<T>(body: () => Promise<T>): Promise<T>;
+  /** True when this change is a new file a feedback run left, untouched by the leaf since. */
+  causedBySpine(change: ReplicaChange): boolean;
+}
+
+/** The default attribution: nothing was ever observed, so nothing is ever excused. */
+export function noFeedbackWriteAttribution(): FeedbackWriteAttribution {
+  return {
+    around: async <T,>(body: () => Promise<T>) => body(),
+    causedBySpine: () => false,
+  };
+}
+
+/** @internal Exported so the attribution rule is testable without walking a real replica. */
+export function feedbackWriteAttribution(
+  root: string,
+  snapshot: (dir: string) => Promise<Map<string, ReplicaPathState>>,
+): FeedbackWriteAttribution {
+  /** relPath → the state the LAST run to touch it left it in. */
+  const left = new Map<string, ReplicaPathState | undefined>();
+  return {
+    async around<T>(body: () => Promise<T>): Promise<T> {
+      const before = await snapshot(root).catch(() => undefined);
+      try {
+        return await body();
+      } finally {
+        // A snapshot that cannot be taken attributes nothing, and the pre-existing refusal stands.
+        if (before !== undefined) {
+          const after = await snapshot(root).catch(() => undefined);
+          if (after !== undefined) {
+            for (const change of observedReplicaChanges(before, after)) {
+              left.set(change.relPath, change.after);
+            }
+          }
+        }
+      }
+    },
+    causedBySpine(change: ReplicaChange): boolean {
+      // Additions only: a path that already existed when the phase started is never spine detritus.
+      // No second `left.has` guard — past this line the path is a pure addition, so its `after` is
+      // always present, and `samePathState` already answers false for an unrecorded path.
+      if (change.before !== undefined) return false;
+      return samePathState(left.get(change.relPath), change.after);
     },
   };
 }
@@ -983,6 +1118,23 @@ async function snapshotReplica(root: string): Promise<Map<string, ReplicaPathSta
   return snapshot;
 }
 
+/**
+ * One notion of "this path is unchanged", shared by the phase diff and by ADR-0595 D1's attribution.
+ * Two absent states count as equal; an absent state and a present one never do.
+ *
+ * The absent cases are handled up front rather than with `a?.x === b?.x` chains. Those chains read
+ * more compactly and are strictly worse here: once the first comparison short-circuits, the later
+ * `?.` operands are unreachable whenever either side is undefined, so their mutants cannot be killed
+ * by any input — six unkillable mutants, measured, for a shape whose only merit was brevity.
+ */
+export function samePathState(
+  a: ReplicaPathState | undefined,
+  b: ReplicaPathState | undefined,
+): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return a.kind === b.kind && a.digest === b.digest && a.mode === b.mode;
+}
+
 function observedReplicaChanges(
   before: Map<string, ReplicaPathState>,
   after: Map<string, ReplicaPathState>,
@@ -992,11 +1144,7 @@ function observedReplicaChanges(
   for (const relPath of paths) {
     const beforeState = before.get(relPath);
     const afterState = after.get(relPath);
-    if (
-      beforeState?.kind === afterState?.kind &&
-      beforeState?.digest === afterState?.digest &&
-      beforeState?.mode === afterState?.mode
-    ) {
+    if (samePathState(beforeState, afterState)) {
       continue;
     }
     const change: ReplicaChange = { relPath };
@@ -1377,6 +1525,15 @@ export class CodexPhaseAuthor implements PhaseAuthor {
     const renderTargets = (targets: string[]): string =>
       targets.map((target) => `- \`${target}\``).join("\n");
     const armed = this.#feedbackCommands.length > 0;
+    // ADR-0595 D1. Built unconditionally, because guarding it on `armed && replica.seeded` would be
+    // two branches that change nothing: an unarmed phase never reaches a wrapper, so its record stays
+    // empty and excuses nothing, and an unseeded replica takes the reported-paths route that never
+    // consults this. Both guards were measured as unkillable mutants, which is what a condition with
+    // no observable false case always is.
+    const feedbackWrites: FeedbackWriteAttribution = feedbackWriteAttribution(
+      replicaDir,
+      snapshotReplica,
+    );
     const fullPrompt =
       `${agentBody.trim()}\n\n## Phase brief\n${prompt.trim()}\n\n` +
       "The spine will run all registered proof commands after you stop; their verdict is not yours.\n\n" +
@@ -1403,7 +1560,7 @@ export class CodexPhaseAuthor implements PhaseAuthor {
         // about it changes on the way to the endpoint — see `wrapFeedbackCommandWithBound` for the
         // field-dropping bug that is why this is a named function.
         const wrappedFeedbackCommands: CodexFeedbackCommand[] = this.#feedbackCommands.map(
-          (command) => wrapFeedbackCommandWithBound(command, bound),
+          (command) => wrapFeedbackCommandWithBound(command, bound, feedbackWrites),
         );
         feedbackHandle = await openCodexFeedbackEndpoint({
           phase,
@@ -1511,7 +1668,14 @@ export class CodexPhaseAuthor implements PhaseAuthor {
         } catch (error) {
           return { ok: false, error: `Codex replica observation failed: ${(error as Error).message}` };
         }
-        changes = observedReplicaChanges(beforeSnapshot!, afterSnapshot);
+        // ADR-0595 D1: drop what the spine's OWN feedback runs left, before the refusal fence reads
+        // the set. A manifest member is never dropped — it follows the ordinary path and is promoted,
+        // so an authored write can never be silently discarded here instead.
+        changes = observedReplicaChanges(beforeSnapshot!, afterSnapshot).filter(
+          (change) =>
+            (manifest.ok && manifest.allowed.has(targetKey(change.relPath))) ||
+            !feedbackWrites.causedBySpine(change),
+        );
         observedPaths = changes.map((change) => change.relPath);
       } else {
         // A runner-injected test may use a deliberately synthetic cwd. Keep that process seam useful,
@@ -1586,9 +1750,18 @@ export class CodexPhaseAuthor implements PhaseAuthor {
       }
 
       if (phaseViolations.length > 0) {
+        // The hint exists because this refusal used to be the most misleading one the leaf could earn:
+        // it named a path and left the reader to wonder whether a test run had dropped it (ADR-0595 D1).
+        // Armed, that question is already answered — new files a feedback run left are excluded before
+        // this fence reads the set, so a path that reaches here is one the LEAF touched.
+        const feedbackHint = armed
+          ? " (new files the spine's own feedback runs left are already excluded, so this path was" +
+            " changed by the leaf, pre-existed the phase, or is a manifest member refused by the" +
+            " phase predicate)"
+          : "";
         return failRun(
           refusedPaths.length > 0
-            ? `Codex phase promotion refused in full; observed unlisted or out-of-scope paths: ${refusedPaths.join(", ")}`
+            ? `Codex phase promotion refused in full; observed unlisted or out-of-scope paths: ${refusedPaths.join(", ")}${feedbackHint}`
             : `Codex phase scope was violated: ${phaseViolations[0]?.reason ?? "write refused"}`,
         );
       }
@@ -1643,11 +1816,8 @@ export class CodexPhaseAuthor implements PhaseAuthor {
         if (observedPaths.length === 0) {
           return failRun("Codex completed without reporting a file change in the synthetic runner seam");
         }
-        if (
-          manifest.ok &&
-          !observedPaths.some((observedPath) => manifest.required.has(targetKey(observedPath)))
-        ) {
-          return failRun("Codex completed without an observed required target change");
+        if (manifest.ok && !phaseChangeSatisfied(manifest, observedPaths)) {
+          return failRun(unsatisfiedChangeError(manifest.satisfiedBy));
         }
         return { ok: true };
       }
@@ -1663,8 +1833,8 @@ export class CodexPhaseAuthor implements PhaseAuthor {
           `Codex required target is missing or not a regular file after the run: ${missingRequired.join(", ")}`,
         );
       }
-      if (!observedPaths.some((observedPath) => manifest.required.has(targetKey(observedPath)))) {
-        return failRun("Codex completed without an observed required target change");
+      if (!phaseChangeSatisfied(manifest, observedPaths)) {
+        return failRun(unsatisfiedChangeError(manifest.satisfiedBy));
       }
       const promotionArgs: PromoteReplicaChangesArgs = {
         replicaRoot: replicaDir,

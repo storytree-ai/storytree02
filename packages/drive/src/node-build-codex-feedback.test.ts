@@ -20,15 +20,6 @@ import { CodexPhaseAuthor } from "@storytree/agent";
 import { liveLeafLines } from "./node-build.js";
 import { cannedLiveAuthor } from "./real-chain-fixture.js";
 
-/**
- * The Codex branch's UNCONDITIONAL helper line (ADR-0589 D4), which every array below now ends
- * with. It is unconditional for the same reason `codexFeedbackLine` always emits something: a
- * reader comparing two runtimes' envelopes must not have to infer whether a missing line meant
- * "the worker used none" or "this runtime has none". The Claude branch stays CONDITIONAL, and the
- * last test in this file is what holds that difference.
- */
-const CODEX_HELPERS_LINE =
-  "helpers:     none — the Codex runtime supplies no read-only helpers (its sandbox is per-process, not per-agent)";
 
 /**
  * A bare Codex leaf instance for the reporting fold — nothing is driven, no endpoint is opened.
@@ -95,7 +86,6 @@ test("codex-envelope-reports-feedback-runs: armed with feedback tools but no cal
     "scope walls: no write refusals",
     "feedback:    0 bounded runs — armed with run_proof, run_typecheck; the leaf called none " +
       "(the spine's own observations decided)",
-    CODEX_HELPERS_LINE,
   ]);
 });
 
@@ -107,7 +97,6 @@ test("codex-envelope-reports-feedback-runs: a Codex leaf given no feedback tools
     "cost:        not metered — ChatGPT subscription quota (no API/list-price USD asserted)",
     "scope walls: no write refusals",
     "feedback:    none — the spine reruns every registered proof command out of band",
-    CODEX_HELPERS_LINE,
   ]);
 });
 
@@ -124,7 +113,6 @@ test("codex-envelope-reports-feedback-runs: a feedback run whose exit code is nu
     "cost:        not metered — ChatGPT subscription quota (no API/list-price USD asserted)",
     "scope walls: no write refusals",
     "feedback:    3 bounded run(s) — AUTHOR_TEST:run_proof=exit 1, IMPLEMENT:run_proof=green, IMPLEMENT:run_typecheck=exit none (feedback only; the spine's own observations decided)",
-    CODEX_HELPERS_LINE,
   ]);
 });
 
@@ -136,7 +124,6 @@ test("codex-envelope-reports-feedback-runs: armed with run_proof alone, the arme
     "cost:        not metered — ChatGPT subscription quota (no API/list-price USD asserted)",
     "scope walls: no write refusals",
     "feedback:    0 bounded runs — armed with run_proof; the leaf called none (the spine's own observations decided)",
-    CODEX_HELPERS_LINE,
   ]);
 });
 

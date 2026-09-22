@@ -108,7 +108,8 @@ import {
 } from "./scope-walls.js";
 import type { LiveRunInfo, UsageRunIds } from "./usage.js";
 import { staleExistenceClaimRefusal } from "./stale-existence-claim.js";
-import { chooseTimeBudgetMs } from "./time-budget.js";
+import { fileHoldChannel, resolveHoldsDir } from "./build-hold.js";
+import { chooseHoldGraceMs, chooseTimeBudgetMs } from "./time-budget.js";
 import {
   makeBackstopRefusal,
   renderBackstopRefusalObservation,
@@ -1153,24 +1154,6 @@ function feedbackRunsLine(runs: readonly { phase: string; tool: string; code: nu
   );
 }
 
-/**
- * The helper line for the Claude branch (ADR-0589 D3): how many read-only helpers each phase
- * started, and how long they took.
- *
- * The TOTAL is rendered beside the per-helper breakdown because the two answer different questions —
- * "four helpers" and "four helpers that took eleven minutes between them" are different facts about
- * the same build, and only the second explains where a budget went. Seconds, floored: a helper that
- * ran is never reported as having taken no time.
- */
-function helperRunsLine(runs: readonly { phase: string; agentType: string; ms: number }[]): string {
-  const totalMs = runs.reduce((sum, h) => sum + h.ms, 0);
-  return (
-    `helpers:     ${runs.length} read-only helper(s), ${Math.floor(totalMs / 1000)}s total — ` +
-    `${runs.map((h) => `${h.phase}:${h.agentType}=${Math.floor(h.ms / 1000)}s`).join(", ")} ` +
-    "(exploration only; helpers never write, and the build's own clock bounds them)"
-  );
-}
-
 /** The namespace `CodexPhaseAuthor` puts on every feedback tool name; the armed line strips it. */
 // Stryker disable next-line Regex: EQUIVALENT — every `CodexPhaseAuthor.feedbackToolNames` entry is built as `mcp__spine__${name}` by its constructor (packages/agent/src/codex-author.ts), so the prefix always sits at index 0, and a non-global replace strips that same first occurrence with or without the `^` anchor.
 const SPINE_FEEDBACK_TOOL_PREFIX = /^mcp__spine__/;
@@ -1240,11 +1223,6 @@ export function liveLeafLines(liveAuthor: LiveAuthor): string[] {
         : []),
       `scope walls: ${liveAuthor.violations.length === 0 ? "no write refusals" : liveAuthor.violations.map((v) => `${v.phase}:${v.path}`).join(", ")}`,
       codexFeedbackLine(liveAuthor),
-      // ADR-0589 D4, stated rather than left as an empty line: a Codex build reports no helpers
-      // because it HAS none, not because its worker declined to use them. Unconditional for the
-      // same reason the line exists — a reader comparing two runtimes' envelopes must not have to
-      // infer which of those two a missing line meant.
-      "helpers:     none — the Codex runtime supplies no read-only helpers (its sandbox is per-process, not per-agent)",
     ];
   }
   // Split ONCE, exactly as the pi branch splits its tool-surface refusals and for the same reason
@@ -1280,7 +1258,6 @@ export function liveLeafLines(liveAuthor: LiveAuthor): string[] {
             "(helpers are declared read-only; the SDK admitted a write tool it was not given)",
         ]),
     ...(liveAuthor.feedbackRuns.length > 0 ? [feedbackRunsLine(liveAuthor.feedbackRuns)] : []),
-    ...(liveAuthor.helperRuns.length > 0 ? [helperRunsLine(liveAuthor.helperRuns)] : []),
   ];
 }
 
@@ -1396,6 +1373,37 @@ export function renderRepairs(result: Pick<ProveResult, "repairs">): string[] {
     ...repairs.map(
       (r, i) =>
         `  ${i + 1}. ${r.failedAt} ${r.check} → ${r.to === "AUTHOR_TEST" ? "test-writer" : "code-writer"}: ${r.detail}`,
+    ),
+  ];
+}
+
+/**
+ * ADR-0592 D5: every extension the orchestrator bought this build at a hold, in order — one line each
+ * naming when the hold fired, what the clock went from and to, and WHY the orchestrator granted it.
+ *
+ * The header says the thing a reader of an over-budget build most needs to know and would otherwise have
+ * to work out: an extension is NOT an attempt. A build that ran four hours on a two-hour budget and then
+ * failed is still ONE failed attempt under ADR-0563, because the `attempt` event was appended before the
+ * walk began (ADR-0576 D5) — so without this line the honest record reads like an accounting error.
+ *
+ * `[]` when the orchestrator granted none, so every envelope that was never held reads exactly as it
+ * always has. A pure reader of `ProveResult.extensions`.
+ */
+export function renderExtensions(result: Pick<ProveResult, "extensions">): string[] {
+  const extensions = result.extensions ?? [];
+  if (extensions.length === 0) return [];
+  // Stryker disable next-line OptionalChaining: EQUIVALENT — same reason as the fallback below: the length guard above makes the indexed access always defined.
+  const total = extensions[extensions.length - 1]?.toBudgetMs;
+  return [
+    `extensions:  ${extensions.length} granted by the orchestrator at a hold — the clock now ${
+      // Stryker disable next-line ConditionalExpression,StringLiteral: EQUIVALENT — `extensions.length === 0` returned above and ExtensionRecord.toBudgetMs is a mandatory number, so `total` is never undefined and this fallback is unreachable without a type-unsafe cast the house lint forbids.
+      total === undefined ? "(unknown)" : `${Math.floor(total / 60_000)} min`
+    }; an extension is NOT an attempt (ADR-0592 D5)`,
+    ...extensions.map(
+      (e, i) =>
+        `  ${i + 1}. held at ${Math.floor(e.heldAfterMs / 60_000)} min, ${Math.floor(
+          e.fromBudgetMs / 60_000,
+        )} min -> ${Math.floor(e.toBudgetMs / 60_000)} min: ${e.reason}`,
     ),
   ];
 }
@@ -1758,6 +1766,20 @@ export interface RealBuildArgs {
    */
   timeBudgetMs?: number | undefined;
   /**
+   * ADR-0592 D3: how long this build HOLDS at a spent clock, waiting for the orchestrator to extend it
+   * or stop it, as the orchestrator set it with `--hold-grace`. `undefined` = no override, so the
+   * ten-minute default stands; `0` disables the hold. Admits `undefined` explicitly because it is
+   * assigned UNCONDITIONALLY, for the reason `timeBudgetMs`' assignment states.
+   */
+  holdGraceMs?: number | undefined;
+  /**
+   * ADR-0592 D4: the per-user directory this build announces a hold under. Supplied (the default for a
+   * real build) the build can be extended; `undefined` wires NO channel, so a spent clock ends the build
+   * exactly as ADR-0584 built it. A hermetic suite injects a temp dir — the same seam `attemptsDir` and
+   * `escalationsDir` use, and for the same reason: no test may write into the operator's own records.
+   */
+  holdsDir?: string | undefined;
+  /**
    * ADR-0064: the isolated test-DB env for a `real.db:true` node — forced onto the proof command so
    * both the spine's CONFIRM observation and the leaf's `run_proof` connect to the disposable test
    * database (never production). Absent for non-db nodes.
@@ -1934,6 +1956,21 @@ export async function buildNodeReal(args: RealBuildArgs): Promise<RealBuildResul
   // exactly what "no override" means to the resolver, so a guard here would be a mutant no test
   // could kill — the two branches are indistinguishable from outside.
   resolveOptions.timeBudgetMs = args.timeBudgetMs;
+  // ADR-0592: the hold is wired only when there is somewhere to announce it. Unconditional for the
+  // grace (assigning `undefined` IS "no override"), conditional for the channel — its absence is the
+  // one thing that selects the non-holding budget, so it must stay absent rather than be set to it.
+  resolveOptions.holdGraceMs = args.holdGraceMs;
+  if (args.holdsDir !== undefined) {
+    resolveOptions.holdChannel = fileHoldChannel({
+      dir: args.holdsDir,
+      unitId: spec.id,
+      runId: args.runId,
+      // The banner goes to stderr so it reaches a session tailing the log even when stdout is being
+      // captured for the envelope — a hold nobody is told about is a hold nobody answers.
+      log: (line) => process.stderr.write(`${line}
+`),
+    });
+  }
   if (args.storyBaseline !== undefined) resolveOptions.storyBaseline = args.storyBaseline;
   const resolved = resolveProveSpec(spec, resolveOptions);
   if (!resolved.ok) {
@@ -2177,6 +2214,14 @@ export interface NodeBuildOpts {
    * with nothing to report but `NaN`.
    */
   timeBudget?: string | undefined;
+  /**
+   * `--hold-grace <minutes>` — how long a spent build waits for the orchestrator before stopping itself
+   * (ADR-0592 D3). RAW text for the same reason `timeBudget` is raw: one conversion, beside the refusal
+   * that quotes it back.
+   */
+  holdGrace?: string | undefined;
+  /** Injectable for tests: where a hold is announced. Default {@link defaultHoldsDir}. */
+  holdsDir?: string | undefined;
   /** `--actor` — the signer chain's flag tier (flag → STORYTREE_SIGNER → git email). */
   actor?: string;
   /**
@@ -2349,6 +2394,16 @@ export async function nodeBuild(
       next: [`storytree node build ${unitId} ${real ? "--real --increment <increment-id>" : "--live"} --runtime codex`],
     };
   }
+  // ADR-0592 D3: how long that clock, once spent, HOLDS for the orchestrator. Read beside the budget
+  // and refused on the same terms; the whole decision is `chooseHoldGraceMs`'s.
+  const holdGrace = chooseHoldGraceMs(opts.holdGrace, { real });
+  if (!holdGrace.ok) {
+    return {
+      ok: false,
+      body: holdGrace.reason,
+      next: [`storytree node build ${unitId} --real --increment <increment-id> --hold-grace 10`],
+    };
+  }
   // ADR-0581 D2: the build's wall clock. Refused before any spend when the figure cannot bound a
   // build, or when the route wires no budget at all — the whole decision is `chooseTimeBudgetMs`'s,
   // so this reads the same in all three callers rather than being re-derived per command.
@@ -2519,6 +2574,7 @@ export async function nodeBuild(
   // ADR-0586 D2: the sibling per-user family — an escalation record is a DIRECTIVE an explicit
   // --revise-test re-run consumes, an attempt record is a REPORT the next build reads for itself.
   const attemptsDir = resolveAttemptsDir(opts.attemptsDir);
+  const holdsDir = resolveHoldsDir(opts.holdsDir);
   let attemptReport: AttemptReport | undefined;
 
   // ADR-0051 §4: the live SDK leaf's per-phase system prompt IS the rendered Library agent
@@ -2709,6 +2765,8 @@ export async function nodeBuild(
         if (opts.budgetUsd !== undefined) realArgs.budgetUsd = opts.budgetUsd;
         if (opts.maxTurns !== undefined) realArgs.maxTurns = opts.maxTurns;
         realArgs.timeBudgetMs = timeBudget.ms;
+        realArgs.holdGraceMs = holdGrace.ms;
+        realArgs.holdsDir = holdsDir;
         realArgs.testRevision = testRevision;
         realArgs.escalationsDir = escalationsDir;
         realArgs.attemptsDir = attemptsDir;
@@ -2837,6 +2895,7 @@ export async function nodeBuild(
           `verdict:     NONE — failed closed at ${result.failedAt}: ${result.reason}`,
           ...renderEscalation(spec.id, runId, result),
           ...renderRepairs(result),
+          ...renderExtensions(result),
           ...renderTestChanges(result),
           ...renderRevisionRecord(spec.id, runId, runtime, revisionWrite, incrementId),
           ...renderAttemptRecord(attemptWrite),
@@ -2858,6 +2917,7 @@ export async function nodeBuild(
         `verdict:     ${verdictLine(result.verdict)}`,
         ...renderEscalation(spec.id, runId, result),
         ...renderRepairs(result),
+        ...renderExtensions(result),
         ...renderTestChanges(result),
         `evidence:    ${result.verdict.evidence.map((e) => e.kind).join(", ")}`,
         ...promotionLines,

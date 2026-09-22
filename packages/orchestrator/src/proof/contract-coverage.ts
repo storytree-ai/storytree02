@@ -223,6 +223,20 @@ export interface ObservedTest {
    * for the same reason as {@link call}.
    */
   parameterised?: boolean;
+  /**
+   * This declaration's own source span as `[start, end)` character offsets into the source that was
+   * read — the very span {@link bodyHash} fingerprints, kept rather than discarded so a caller can
+   * recover the TEXT. `bodyHash` answers "did this test change?"; a consumer that must show the test
+   * to a reader or a judge needs the bytes, and re-deriving them would mean a second matcher
+   * disagreeing with this one about where a declaration begins.
+   *
+   * Added for the test-slop extractor (`packages/cli/src/test-slop-extract.ts`, ADR-0594), whose
+   * whole premise is that the UNIT handed to a judge decides the verdict: a regex block-extractor
+   * over these same files sliced this repo's test-tooling FIXTURES out of their template literals and
+   * produced a flag rate that had to be withdrawn. Offsets are the cheapest thing this parse can hand
+   * over that makes the correct unit recoverable. OPTIONAL for the same reason {@link call} is.
+   */
+  span?: { readonly start: number; readonly end: number };
 }
 
 /** A test-runner call root whose first string arg names a test/suite. */
@@ -557,6 +571,10 @@ export function analyzeObservedTests(testSource: string, testFile: string): Obse
       if (visit(child, skipHere, childTitles)) subtreeSubstantive = true;
     });
     if (test !== null) {
+      // ONE read of the declaration's bounds, shared by the fingerprint, the recoverable span and the
+      // source-order key — three consumers of the same fact, so a second `getStart` could disagree.
+      const start = node.getStart(sf);
+      const end = node.getEnd();
       collected.push({
         test: {
           name: test.name,
@@ -568,9 +586,10 @@ export function analyzeObservedTests(testSource: string, testFile: string): Obse
           ancestors: ancestorTitles,
           call: test.call,
           parameterised: test.parameterised,
-          bodyHash: hashSpan(testSource.slice(node.getStart(sf), node.getEnd())),
+          bodyHash: hashSpan(testSource.slice(start, end)),
+          span: { start, end },
         },
-        pos: node.getStart(sf),
+        pos: start,
       });
     }
     return subtreeSubstantive;

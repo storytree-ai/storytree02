@@ -7,7 +7,6 @@ import {
   HELPER_AGENT_TOOLS,
   HELPER_AGENT_TYPE,
   decideWrite,
-  foldHelperStop,
   helperAgentDefinition,
 } from "./sdk-author.js";
 import type {
@@ -15,16 +14,20 @@ import type {
   Options,
   PreToolUseHookInput,
   SdkQueryFn,
-  SubagentStartHookInput,
-  SubagentStopHookInput,
 } from "./sdk-author.js";
 import type { AuthoringPhase } from "./phase-author.js";
 import type { WorkerBoundClock } from "./worker-budget.js";
 
 /**
- * OFFLINE tests for the worker's READ-ONLY HELPERS (ADR-0589): the declared roster, the doubled
- * write fence, and the per-helper accounting. Every one of these drives real code over the
- * injectable query seam — no SDK is spawned and nothing is billed.
+ * OFFLINE tests for the worker's READ-ONLY HELPERS (ADR-0589): the declared roster and the doubled
+ * write fence. Every one of these drives real code over the injectable query seam — no SDK is
+ * spawned and nothing is billed.
+ *
+ * There is deliberately NO per-helper accounting here. It was built (PR #1999) and the owner
+ * declined it; ADR-0589 D3 now records that enforcement was always one clock — a helper runs inside
+ * the slice's own query, whose single abort is armed at what is left of the build's budget — so the
+ * finer split answered a question nothing had asked. The SDK's own result message already carries
+ * `duration_ms` per slice, which answers "where did the budget go?" at slice grain for free.
  *
  * WHAT THESE CANNOT PROVE, stated here rather than left to be assumed: that the SDK HONOURS a
  * declared tool list. `HELPER_AGENT_TOOLS` is a REQUEST, and the tests below establish only that we
@@ -44,26 +47,6 @@ function scripted(messages: unknown[]): SdkQueryFn {
     for (const m of messages) {
       yield m;
     }
-  };
-}
-
-/** A clock whose instant a test moves by hand, so a duration is asserted rather than observed. */
-function handClock() {
-  let instant = 0;
-  const handle = setTimeout(() => undefined, 0);
-  clearTimeout(handle);
-  return {
-    advance: (ms: number) => {
-      instant += ms;
-    },
-    set: (ms: number) => {
-      instant = ms;
-    },
-    clock: {
-      setTimeout: () => handle,
-      clearTimeout: () => undefined,
-      now: () => instant,
-    } satisfies WorkerBoundClock,
   };
 }
 
@@ -108,36 +91,10 @@ function preToolUse(toolName: string, toolInput: unknown, agentId?: string): Pre
   return input;
 }
 
-/** A fully-typed SubagentStartHookInput (no cast — a change to its required shape fails the gate). */
-function subagentStart(agentId: string, agentType = HELPER_AGENT_TYPE): SubagentStartHookInput {
-  return {
-    hook_event_name: "SubagentStart",
-    agent_id: agentId,
-    agent_type: agentType,
-    session_id: "s-1",
-    transcript_path: "/work/space/transcript.jsonl",
-    cwd: CWD,
-  };
-}
-
-/** A fully-typed SubagentStopHookInput. */
-function subagentStop(agentId: string, agentType = HELPER_AGENT_TYPE): SubagentStopHookInput {
-  return {
-    hook_event_name: "SubagentStop",
-    agent_id: agentId,
-    agent_type: agentType,
-    stop_hook_active: false,
-    agent_transcript_path: `/work/space/agent-${agentId}.jsonl`,
-    session_id: "s-1",
-    transcript_path: "/work/space/transcript.jsonl",
-    cwd: CWD,
-  };
-}
-
 type WiredHook = NonNullable<NonNullable<Options["hooks"]>["PreToolUse"]>[number]["hooks"][number];
 
 /** Pull a wired hook closure out of the built Options exactly as the SDK would. */
-function wiredHook(options: Options, event: "PreToolUse" | "SubagentStart" | "SubagentStop"): WiredHook {
+function wiredHook(options: Options, event: "PreToolUse"): WiredHook {
   const matcher = options.hooks?.[event]?.[0];
   assert.ok(matcher !== undefined, `a ${event} matcher must be wired into the Options`);
   const hook = matcher.hooks[0];
@@ -389,200 +346,6 @@ test("D2 WIRED: the same hook ALLOWS the identical write from the main thread", 
   assert.deepEqual(denyOf(out).decision, undefined, "an in-scope worker write is not refused");
   assert.equal(author.violations.length, 0, "and nothing is recorded against the wall");
 });
-
-// ── D3: a helper spends the build's clock, and the envelope says so ──────────
-
-test("D3: foldHelperStop pairs a start with its stop and returns the duration", () => {
-  const pending = new Map<string, number>([["agent-1", 1_000]]);
-
-  const run = foldHelperStop({
-    phase: "IMPLEMENT",
-    agentId: "agent-1",
-    agentType: HELPER_AGENT_TYPE,
-    stoppedAt: 4_500,
-    pending,
-  });
-
-  assert.deepEqual(run, { phase: "IMPLEMENT", agentType: "explorer", ms: 3_500 });
-  assert.equal(pending.has("agent-1"), false, "the pairing consumes the start, so no stop pairs twice");
-});
-
-test("D3: a stop with NO matching start yields nothing — never a fabricated 0 ms helper", () => {
-  const pending = new Map<string, number>();
-
-  const run = foldHelperStop({
-    phase: "IMPLEMENT",
-    agentId: "unknown-agent",
-    agentType: HELPER_AGENT_TYPE,
-    stoppedAt: 9_000,
-    pending,
-  });
-
-  // A `0 ms` row would claim the helper cost nothing; what actually happened is that its start was
-  // never seen. The absence is the honest report.
-  assert.equal(run, undefined);
-});
-
-test("D3: a clock that steps BACKWARDS floors at zero rather than reporting a negative duration", () => {
-  // An NTP correction inside a two-hour build is not exotic. A negative ms would be uninterpretable
-  // in an envelope and would silently REDUCE a summed total.
-  const run = foldHelperStop({
-    phase: "AUTHOR_TEST",
-    agentId: "agent-1",
-    agentType: HELPER_AGENT_TYPE,
-    stoppedAt: 500,
-    pending: new Map([["agent-1", 2_000]]),
-  });
-
-  assert.deepEqual(run, { phase: "AUTHOR_TEST", agentType: "explorer", ms: 0 });
-});
-
-test("D3: two CONCURRENT helpers pair by their own agent_id, not by arrival order", () => {
-  // Pairing by order would give a LIFO stack, and the two durations would be swapped — each helper
-  // reported with the other's cost, summing to the right total, so no aggregate would reveal it.
-  const pending = new Map<string, number>([
-    ["agent-a", 0],
-    ["agent-b", 1_000],
-  ]);
-
-  const stoppedB = foldHelperStop({
-    phase: "IMPLEMENT",
-    agentId: "agent-b",
-    agentType: HELPER_AGENT_TYPE,
-    stoppedAt: 2_000,
-    pending,
-  });
-  const stoppedA = foldHelperStop({
-    phase: "IMPLEMENT",
-    agentId: "agent-a",
-    agentType: HELPER_AGENT_TYPE,
-    stoppedAt: 8_000,
-    pending,
-  });
-
-  assert.equal(stoppedB?.ms, 1_000, "b started at 1000 and stopped at 2000");
-  assert.equal(stoppedA?.ms, 8_000, "a started at 0 and stopped at 8000");
-});
-
-test("D3: the folded agentType is the one the STOP reported, not a constant", () => {
-  const run = foldHelperStop({
-    phase: "IMPLEMENT",
-    agentId: "agent-1",
-    agentType: "some-other-type",
-    stoppedAt: 100,
-    pending: new Map([["agent-1", 0]]),
-  });
-
-  // If a future roster gains a second helper, the report must name which one ran.
-  assert.equal(run?.agentType, "some-other-type");
-});
-
-test("D3 WIRED: the author records a helper's duration off the INJECTED clock", async () => {
-  const hand = handClock();
-  const { author, options } = await captureOptions("IMPLEMENT", hand.clock);
-  const start = wiredHook(options, "SubagentStart");
-  const stop = wiredHook(options, "SubagentStop");
-
-  hand.set(10_000);
-  await start(subagentStart("agent-1"), undefined, SIGNAL);
-  hand.advance(42_000);
-  await stop(subagentStop("agent-1"), undefined, SIGNAL);
-
-  assert.deepEqual(author.helperRuns, [{ phase: "IMPLEMENT", agentType: "explorer", ms: 42_000 }]);
-});
-
-test("D3 WIRED: the duration reads the SAME clock the slice deadline is armed on", async () => {
-  // The property, not a restatement of the test above: a helper timed on `Date.now()` while the
-  // deadline ran on an injected clock would report REAL elapsed time here — a handful of
-  // milliseconds — instead of the 42 seconds the injected clock says passed. One object, one
-  // reading (ADR-0589 D3).
-  const hand = handClock();
-  const { author, options } = await captureOptions("AUTHOR_TEST", hand.clock);
-
-  await wiredHook(options, "SubagentStart")(subagentStart("agent-1"), undefined, SIGNAL);
-  hand.advance(42_000);
-  await wiredHook(options, "SubagentStop")(subagentStop("agent-1"), undefined, SIGNAL);
-
-  assert.equal(
-    author.helperRuns[0]?.ms,
-    42_000,
-    "a duration read off the system clock would be a few ms, not the injected 42s",
-  );
-});
-
-test("D3 WIRED: two helpers in one slice are both recorded, each with its own duration", async () => {
-  const hand = handClock();
-  const { author, options } = await captureOptions("IMPLEMENT", hand.clock);
-  const start = wiredHook(options, "SubagentStart");
-  const stop = wiredHook(options, "SubagentStop");
-
-  await start(subagentStart("agent-a"), undefined, SIGNAL);
-  hand.advance(1_000);
-  await start(subagentStart("agent-b"), undefined, SIGNAL);
-  hand.advance(4_000);
-  await stop(subagentStop("agent-b"), undefined, SIGNAL); // b ran 4s
-  hand.advance(5_000);
-  await stop(subagentStop("agent-a"), undefined, SIGNAL); // a ran 10s
-
-  assert.equal(author.helperRuns.length, 2);
-  assert.deepEqual(
-    author.helperRuns.map((h) => h.ms),
-    [4_000, 10_000],
-    "recorded in STOP order, each with its own start's duration",
-  );
-});
-
-test("D3 WIRED: a start left pending when the slice ends never pairs with the NEXT slice's stop", async () => {
-  // The per-slice map is what holds this. A shared map would pair AUTHOR_TEST's orphaned start with
-  // IMPLEMENT's stop and report one helper whose duration spans both slices — a number larger than
-  // either slice ran for, attributed to a phase it did not run in.
-  const hand = handClock();
-  let captured: Options | undefined;
-  const author = new ClaudeAgentAuthor({
-    cwd: CWD,
-    isWriteAllowed: testOnlyInAuthor,
-    clock: hand.clock,
-    queryFn: (args) => {
-      captured = args.options;
-      return scripted([
-        { type: "result", subtype: "success", is_error: false, num_turns: 1, total_cost_usd: 0 },
-      ])(args);
-    },
-  });
-
-  await author.author("AUTHOR_TEST", "p");
-  const firstStart = wiredHook(captured as Options, "SubagentStart");
-  await firstStart(subagentStart("agent-1"), undefined, SIGNAL); // never stopped
-
-  hand.advance(600_000);
-
-  await author.author("IMPLEMENT", "p");
-  const secondStop = wiredHook(captured as Options, "SubagentStop");
-  await secondStop(subagentStop("agent-1"), undefined, SIGNAL);
-
-  assert.deepEqual(author.helperRuns, [], "an unpaired start does not survive its own slice");
-});
-
-test("D3 WIRED: the subagent hooks OBSERVE and decide nothing", async () => {
-  const hand = handClock();
-  const { options } = await captureOptions("IMPLEMENT", hand.clock);
-
-  const startOut = await wiredHook(options, "SubagentStart")(subagentStart("agent-1"), undefined, SIGNAL);
-  const stopOut = await wiredHook(options, "SubagentStop")(subagentStop("agent-1"), undefined, SIGNAL);
-
-  // Accounting must never be able to change what a slice is allowed to do: an empty output is the
-  // SDK's "no opinion". A `decision`/`permissionDecision` leaking out of an accounting hook would
-  // make a bookkeeping fault into a build outcome.
-  assert.deepEqual(startOut, {});
-  assert.deepEqual(stopOut, {});
-});
-
-test("D3: a slice with no helpers records none — an empty list is a measured zero", async () => {
-  const { author } = await captureOptions("IMPLEMENT");
-
-  assert.deepEqual(author.helperRuns, []);
-});
-
 // ── The helper's model-facing text, pinned WHOLE ─────────────────────────────
 
 /**
@@ -637,74 +400,4 @@ test("the helper-write refusal states WHY, not just that it refused", () => {
     "write refused: 'Write' came from helper agent 'agent-1' — helpers are read-only and may " +
       "never write, in any phase (the write scope is the worker's alone)",
   );
-});
-
-// ── The DEFAULT clock, and the hooks' own event guards ──────────────────────
-
-test("an author given NO clock still times helpers off a real one", () => {
-  // Every other test here injects a clock, so the production default — the branch a real build
-  // actually takes — is reached by none of them. A default whose `now()` returned nothing would
-  // yield NaN here and be invisible in every injected-clock test.
-  let captured: Options | undefined;
-  const author = new ClaudeAgentAuthor({
-    cwd: CWD,
-    isWriteAllowed: testOnlyInAuthor,
-    queryFn: (q) => {
-      captured = q.options;
-      return scripted([
-        { type: "result", subtype: "success", is_error: false, num_turns: 1, total_cost_usd: 0 },
-      ])(q);
-    },
-  });
-
-  return (async () => {
-    await author.author("IMPLEMENT", "p");
-    const options = captured as Options;
-    await wiredHook(options, "SubagentStart")(subagentStart("agent-1"), undefined, SIGNAL);
-    await wiredHook(options, "SubagentStop")(subagentStop("agent-1"), undefined, SIGNAL);
-
-    const ms = author.helperRuns[0]?.ms;
-    assert.equal(author.helperRuns.length, 1);
-    assert.equal(typeof ms, "number");
-    assert.equal(Number.isFinite(ms), true, "a default clock that reads nothing yields NaN here");
-    assert.ok((ms ?? -1) >= 0);
-  })();
-});
-
-test("the SubagentStart hook ignores an event that is not its own", async () => {
-  // The foreign input deliberately carries the SAME `agent_id` the stop below uses. A foreign
-  // input with NO id does not test the guard at all: without the guard the start would simply be
-  // keyed under `undefined`, the stop would still find nothing, and the run list would be empty
-  // either way. Matching the id is what makes the two outcomes differ — guard intact, nothing is
-  // recorded and the stop pairs with nothing; guard gone, the start is recorded and the stop pairs.
-  const hand = handClock();
-  const { author, options } = await captureOptions("IMPLEMENT", hand.clock);
-
-  await wiredHook(options, "SubagentStart")(
-    preToolUse("Write", { file_path: "x" }, "agent-1"),
-    "tu-1",
-    SIGNAL,
-  );
-  hand.advance(5_000);
-  await wiredHook(options, "SubagentStop")(subagentStop("agent-1"), undefined, SIGNAL);
-
-  assert.deepEqual(author.helperRuns, [], "no start was recorded, so no stop can pair with one");
-});
-
-test("the SubagentStop hook ignores an event that is not its own", async () => {
-  // Same construction, mirrored: the foreign stop carries the id of the start above, so without
-  // the guard it WOULD pair and record a helper — whose `agentType` would be `undefined`, since a
-  // PreToolUse input carries none. With the guard, nothing is recorded.
-  const hand = handClock();
-  const { author, options } = await captureOptions("IMPLEMENT", hand.clock);
-
-  await wiredHook(options, "SubagentStart")(subagentStart("agent-1"), undefined, SIGNAL);
-  hand.advance(5_000);
-  await wiredHook(options, "SubagentStop")(
-    preToolUse("Write", { file_path: "x" }, "agent-1"),
-    "tu-1",
-    SIGNAL,
-  );
-
-  assert.deepEqual(author.helperRuns, [], "a foreign event records nothing and pairs nothing");
 });

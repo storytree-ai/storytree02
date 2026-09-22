@@ -70,7 +70,14 @@ import type {
   TestObservation,
 } from "./phase-machine.js";
 import { codeRepairSection, redObservationSection, testRepairSection } from "./repair.js";
-import type { ProcessOutput, RepairCause, RepairCheck, RepairPolicy, RepairRecord } from "./repair.js";
+import type {
+  ExtensionRecord,
+  ProcessOutput,
+  RepairCause,
+  RepairCheck,
+  RepairPolicy,
+  RepairRecord,
+} from "./repair.js";
 
 /** The injected working-tree snapshot (ADR-0020 §4): the commit attested + whether the tree is clean. */
 export interface TreeState {
@@ -294,6 +301,13 @@ export type ProveResult =
        */
       repairs?: readonly RepairRecord[];
       /**
+       * ADR-0592 D5: every extension the orchestrator granted this build at a hold, in order — present
+       * only when it granted one. An extension is NOT an attempt (the `attempt` event is appended before
+       * the walk, ADR-0576 D5), and like a repair it is never part of the {@link Verdict}, whose evidence
+       * stays the last red and green the spine observed.
+       */
+      extensions?: readonly ExtensionRecord[];
+      /**
        * ADR-0585: every change the test-writer made to a test that existed before this build, each with
        * the reason it stated — present only when it changed one. Never part of the {@link Verdict}.
        */
@@ -337,6 +351,12 @@ export type ProveResult =
        * there was at least one. The refusal itself is the check that was not repaired (D5).
        */
       repairs?: readonly RepairRecord[];
+      /**
+       * ADR-0592 D5: every extension the orchestrator granted before the walk ended, in order — present
+       * only when it granted one. A build that stops on a spent budget is ONE failed attempt however
+       * many extensions preceded it (ADR-0563).
+       */
+      extensions?: readonly ExtensionRecord[];
       /**
        * ADR-0585: every change the test-writer made to a pre-existing test before the walk ended, each
        * with the reason it stated — present only when it changed one.
@@ -412,12 +432,18 @@ export async function proveUnit(spec: ProveSpec): Promise<ProveResult> {
   let greenObs: TestObservation | undefined;
   let greenReview: PerTestJudgement | undefined;
 
+  // ADR-0592 D5: every extension the orchestrator bought this build at a hold, oldest first.
+  const extensions: ExtensionRecord[] = [];
+
   // ADR-0585: what the test-writer did to the tests that were already here, as the last review read it.
   let testChanges: readonly TestChange[] = [];
 
   const withRepairs = (extras: FailExtras = {}): FailExtras => ({
     ...extras,
     repairs: [...repairs],
+    // ADR-0592 D5: an extension is recorded on EVERY ending, including the ending that eventually
+    // stopped the build — a build that bought two extra hours and still failed says so.
+    extensions: [...extensions],
     testChanges: [...testChanges],
   });
 
@@ -466,8 +492,15 @@ export async function proveUnit(spec: ProveSpec): Promise<ProveResult> {
     if (owner === undefined) return end(unowned);
     const edge = repairPhase(failure.failedAt, owner);
     if (!edge.ok) return end(edge.reason);
+    // ADR-0592 D1: THIS is where a spent build holds. `mayRepair()` is asynchronous for exactly that
+    // reason — a holding budget announces itself here, waits out its grace, and comes back having been
+    // extended or stopped. The spine neither knows nor cares which kind of budget it is talking to.
     const decision = await policy.budget.mayRepair();
     if (!decision.ok) return end(decision.reason);
+    // ADR-0592 D5: an extension rides the decision that granted it, so it is recorded at the moment it
+    // was bought, in the same place repairs are. It is NOT an attempt: `node-build.ts` appended the
+    // `attempt` event before this walk began (ADR-0576 D5), so nothing here can reach the ledger.
+    if (decision.extension !== undefined) extensions.push(decision.extension);
     repairs.push({ failedAt: failure.failedAt, check: failure.check, to: edge.next, detail: failure.detail });
     pending = { failure, owner };
     next = edge.next;
@@ -991,6 +1024,7 @@ export async function proveUnit(spec: ProveSpec): Promise<ProveResult> {
     const passed: Extract<ProveResult, { ok: true }> = { ok: true, verdict, phasesVisited: visited };
     if (overruledEscalation !== undefined) passed.overruledEscalation = overruledEscalation;
     if (repairs.length > 0) passed.repairs = [...repairs];
+    if (extensions.length > 0) passed.extensions = [...extensions];
     if (testChanges.length > 0) passed.testChanges = [...testChanges];
     return passed;
   }
@@ -1043,6 +1077,8 @@ interface FailExtras {
   perTestFindings?: readonly PerTestFinding[] | undefined;
   /** Stamped only when non-empty, so a walk that made no repair returns exactly what it always did. */
   repairs?: readonly RepairRecord[] | undefined;
+  /** Stamped only when non-empty, for the same reason (ADR-0592 D5). */
+  extensions?: readonly ExtensionRecord[] | undefined;
   /** Stamped only when non-empty, for the same reason. */
   testChanges?: readonly TestChange[] | undefined;
 }
@@ -1064,6 +1100,7 @@ function fail(
   if (extras.overruledEscalation !== undefined) result.overruledEscalation = extras.overruledEscalation;
   if (extras.perTestFindings !== undefined) result.perTestFindings = extras.perTestFindings;
   if (extras.repairs !== undefined && extras.repairs.length > 0) result.repairs = extras.repairs;
+  if (extras.extensions !== undefined && extras.extensions.length > 0) result.extensions = extras.extensions;
   if (extras.testChanges !== undefined && extras.testChanges.length > 0) result.testChanges = extras.testChanges;
   return result;
 }

@@ -12,6 +12,7 @@ import {
 } from "@storytree/agent";
 import type {
   ClaudeAgentAuthorArgs,
+  CodexManifestChangeRule,
   CodexPhaseAuthorArgs,
   CodexPromotionManifest,
   FeedbackChoice,
@@ -88,12 +89,13 @@ import type { NodeBuildConfig, RealProofConfig } from "./proof-config.js";
 import { commitAuthored, platformShellCommand } from "./build-worktree.js";
 import type { CommitScope } from "./build-worktree.js";
 import {
+  holdingBudget,
   routeTypecheckByFile,
   setAsideImplementation,
   wallClockBudget,
   worktreeScopeFingerprint,
 } from "./repair.js";
-import type { BuildBudget } from "./repair.js";
+import type { BuildBudget, HoldChannel } from "./repair.js";
 
 /**
  * The resolver (drive-machinery Phase B, plan §2): turn a loaded {@link NodeSpec} into the full
@@ -201,12 +203,25 @@ export function realCommitGlobs(
 
 /**
  * Turn the spine's phase declaration into a finite Codex packing list. The named proof target is
- * required; any additional literal scope entries are optional exact targets. Pattern-shaped scope
- * remains a hook wall only and never becomes promotion authority.
+ * required; any additional literal scope entries are optional exact targets.
+ *
+ * **Pattern-shaped scope remains a hook wall only and never becomes promotion authority** — re-decided
+ * and UPHELD by ADR-0595 D3, against ADR-0581 D3's inventory, which asked for glob entries to promote.
+ * Declined on measurement: every `real:` block in the registry declares `real.scope.sourceGlobs` as one
+ * literal path identical to its own `sourceFile`, so no real build has a pattern-shaped IMPLEMENT scope
+ * to expand; and the only pattern-shaped scopes here are node-level and broad, with
+ * `packages/*\/src/**\/*.ts` resolving to 1,320 files. Expanding that would be finite in letter and
+ * unbounded in spirit, and would hand one phase promotion authority over most of the monorepo. Where a
+ * unit genuinely needs a sibling source file promoted, the supported remedy is the one ADR-0590 D2 set
+ * for the test side: the scope NAMES it concretely and it arrives here as a literal.
+ *
+ * `changeSatisfiedBy` is which observed change satisfies the phase (ADR-0595 D2). It defaults to
+ * ADR-0356 D2's original rule, so a caller that says nothing keeps it.
  */
 export function codexPromotionManifest(
   requiredTarget: string,
   phaseScope: string[],
+  changeSatisfiedBy: CodexManifestChangeRule = "required-target",
 ): CodexPromotionManifest {
   return {
     allowedTargets: [
@@ -216,6 +231,36 @@ export function codexPromotionManifest(
       ]),
     ],
     requiredTargets: [requiredTarget],
+    changeSatisfiedBy,
+  };
+}
+
+/**
+ * The real route's two phase manifests, as one named thing (ADR-0595 D2).
+ *
+ * This exists to be ASSERTABLE. The rule each phase resolves with is a one-argument wiring fact, and
+ * the defect it guards against — the two phases resolving with each other's rule — is invisible to a
+ * test of {@link codexPromotionManifest} alone and unreachable through `CodexPhaseAuthor`, which keeps
+ * its args private. `packages/orchestrator` is outside the mutation rung, so the choice was between a
+ * conditional assertion that could silently verify nothing and naming the pairing here; this is the
+ * latter.
+ */
+export function codexRealPromotionManifests(
+  real: {
+    readonly testFile: string;
+    readonly sourceFile: string;
+    readonly scope: { readonly testGlobs: readonly string[]; readonly sourceGlobs: readonly string[] };
+  },
+  existingTestFiles: readonly string[],
+) {
+  return {
+    // AUTHOR_TEST keeps ADR-0356 D2's rule: the named test file is the file the proof command actually
+    // runs, so it is the deliverable itself rather than a guess about where the work lands.
+    AUTHOR_TEST: codexPromotionManifest(real.testFile, [...real.scope.testGlobs, ...existingTestFiles]),
+    // IMPLEMENT resolves with any allowed target: when a unit's scope names sibling source files, a
+    // correct fix belonging in one of them is a real outcome, and the spine's own red-green
+    // observation — not this packing list — is what says whether IMPLEMENT worked.
+    IMPLEMENT: codexPromotionManifest(real.sourceFile, [...real.scope.sourceGlobs], "any-allowed-target"),
   };
 }
 
@@ -490,6 +535,20 @@ export interface RealResolveOptions extends BaseResolveOptions {
    * The orchestrator's peek-and-extend arrives behind this same seam.
    */
   buildBudget?: BuildBudget | undefined;
+  /**
+   * ADR-0592 D4 — how a build that spends its clock announces the hold and learns the orchestrator's
+   * decision. Supplied (every real build, by `node-build.ts`), a spent budget HOLDS here; absent, it
+   * ends the build exactly as ADR-0584 built it. The concrete file channel lives in `packages/drive`,
+   * which depends on this package and not the other way round, so it can only ever arrive injected.
+   */
+  holdChannel?: HoldChannel | undefined;
+  /**
+   * ADR-0592 D3 — how long a held build waits, in milliseconds, as the orchestrator set it with
+   * `--hold-grace`. `undefined` = no override, so the ten-minute default stands and is NOT restated
+   * here. `0` disables the hold, which is why that flag's reader honours a zero where `--time-budget`'s
+   * refuses one.
+   */
+  holdGraceMs?: number | undefined;
 }
 
 /**
@@ -761,7 +820,10 @@ export function resolveProveSpec(
         },
         promotionManifests: {
           AUTHOR_TEST: codexPromotionManifest(DRY_RUN_TEST_REL, [DRY_RUN_TEST_REL]),
-          IMPLEMENT: codexPromotionManifest(DRY_RUN_IMPL_REL, [DRY_RUN_IMPL_REL]),
+          // `any-allowed-target` is a property of the IMPLEMENT PHASE, not of the real route, so it is
+          // declared here too. Provably no behaviour change for the dry run: its allowed and required
+          // sets are the same single path, so both rules accept and refuse exactly the same runs.
+          IMPLEMENT: codexPromotionManifest(DRY_RUN_IMPL_REL, [DRY_RUN_IMPL_REL], "any-allowed-target"),
         },
         isWriteAllowed: (phase, relPath) => scope.isWriteAllowed(phase, relPath),
         feedbackCommands: codexFeedbackCommandsFor(
@@ -980,9 +1042,10 @@ function resolveReal(
   // which ADR-0584 D5 leaves standing for any caller that wires no budget, so no path is left with
   // no brake at all. ADR-0581 names the REAL build, and `--runtime pi` (live-smoke only) keeps its
   // own turn ceiling.
-  const buildBudget: BuildBudget =
-    opts.buildBudget ??
-    wallClockBudget(opts.timeBudgetMs !== undefined ? { budgetMs: opts.timeBudgetMs } : {});
+  // ADR-0592 D1: the SAME object, now able to hold. Which budget is constructed turns on one thing —
+  // whether a channel was wired for it to be held for — and the swap is a change in one place exactly
+  // as ADR-0584 D1's single object promised.
+  const buildBudget: BuildBudget = opts.buildBudget ?? buildTheBudget(opts);
 
   let author: PhaseAuthor;
   let liveAuthor: LiveAuthor | undefined;
@@ -1026,10 +1089,7 @@ function resolveReal(
           AUTHOR_TEST: [...real.scope.testGlobs, ...existingTestFiles],
           IMPLEMENT: real.scope.sourceGlobs,
         },
-        promotionManifests: {
-          AUTHOR_TEST: codexPromotionManifest(real.testFile, [...real.scope.testGlobs, ...existingTestFiles]),
-          IMPLEMENT: codexPromotionManifest(real.sourceFile, real.scope.sourceGlobs),
-        },
+        promotionManifests: codexRealPromotionManifests(real, existingTestFiles),
         isWriteAllowed: (phase, relPath) => scope.isWriteAllowed(phase, relPath),
         feedbackCommands: codexFeedbackCommandsFor(
           realProofCmd,
@@ -2121,4 +2181,29 @@ export function liveSmokePrompts(spec: NodeSpec, runtime: LiveRuntime = "claude"
       "```js\nmodule.exports = { add: (a, b) => a + b };\n```\n\n" +
       `Write that file and stop — the spine observes the official green itself.`,
   };
+}
+
+/**
+ * The build's one budget: holding when a channel was wired for it (ADR-0592 D1), plain wall clock
+ * otherwise.
+ *
+ * Each option is narrowed to a named const by a ternary and then spread UNCONDITIONALLY — an inline
+ * conditional spread of `{}` is what `no-conditional-empty-object-spread` refuses — and the two
+ * defaults (two hours, ten minutes) deliberately stay in ONE place each rather than being copied down
+ * here, so an omitted flag arrives as "no override" and never as a stale number.
+ *
+ * EXPORTED so a test can name and drive it. Unexported, every budget test in this package was evidence
+ * about an INJECTED `buildBudget`, and the one line that decides whether a real build can be held at
+ * all was reached by nothing (`unproven-seam-default`) — the same reason `runGitBuffer` is exported
+ * from `repair.ts`.
+ */
+export function buildTheBudget(opts: {
+  readonly timeBudgetMs?: number | undefined;
+  readonly holdChannel?: HoldChannel | undefined;
+  readonly holdGraceMs?: number | undefined;
+}): BuildBudget {
+  const budget = opts.timeBudgetMs !== undefined ? { budgetMs: opts.timeBudgetMs } : {};
+  if (opts.holdChannel === undefined) return wallClockBudget(budget);
+  const grace = opts.holdGraceMs !== undefined ? { graceMs: opts.holdGraceMs } : {};
+  return holdingBudget({ channel: opts.holdChannel, ...budget, ...grace });
 }
