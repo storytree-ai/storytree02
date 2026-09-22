@@ -13,7 +13,8 @@ import { test } from 'node:test';
 import { SHADE_LEVELS, LEGACY_SHADE_LEVELS } from '../src/shade-ladder.js';
 import { SHADOW_GRES } from '../src/land-shadow.js';
 import { SHIPPED_COAST, clipToCoast } from '../src/coast-clip.js';
-import { DOCK_REACH, bearingFrom, islandDocks, islandPaths, islandRims } from '../src/island-path.js';
+import { DOCK_REACH, bearingFrom, islandDocks, islandPaths, islandRims, rimGrid } from '../src/island-path.js';
+import { nearestOnSegments } from '../src/shore-grid.js';
 import { LAND_SCALE } from '../src/land-per-capability.js';
 import {
   CROWD_ARMS,
@@ -261,9 +262,12 @@ test('the occlusion field hits the SHADOW_TEXTURE_MAX clamp at forest scale, and
 
 test('the landings are the recipe`s two bearings, and every island gets exactly two strips', () => {
   assert.deepEqual([...CROWD_LANDING_BEARINGS], [-160, 25]);
-  // × LAND_SCALE: 40 ground units on the TUNED island; the strip follows the island it lands on.
-  assert.equal(CROWD_STRIP_OFFSHORE, 40 * LAND_SCALE);
-  assert.ok(CROWD_STRIP_OFFSHORE > DOCK_REACH, 'the seaward end must be out of dock reach');
+  assert.equal(CROWD_STRIP_OFFSHORE, 2 * DOCK_REACH);
+  // ⚠ THE REAL INVARIANT, NOT THE PROXY IT REPLACES (ADR-0596). This asserted
+  // `CROWD_STRIP_OFFSHORE > DOCK_REACH` — the distance from the seaward end to its OWN LANDING
+  // against the reach — and that comparison stayed true while 16 of 70 seaward ends started
+  // docking anyway, because the coast curves away from the landing and the reach is measured to
+  // the NEAREST RIM POINT. Asserted where it actually bites, below, over every rim.
   assert.equal(crowdStrips(ONE).length, 2);
   assert.equal(crowdStrips(REAL).length, REAL.islands * 2);
   for (const s of crowdStrips(ONE)) {
@@ -274,7 +278,7 @@ test('the landings are the recipe`s two bearings, and every island gets exactly 
   }
 });
 
-test('each strip ENDS ON its island`s clipped rim and STARTS 40 × LAND_SCALE units offshore of it', () => {
+test('each strip ENDS ON its island`s clipped rim and STARTS two dock-reaches offshore of it', () => {
   const clipped = clipToCoast(crowdCells(REAL), SHIPPED_COAST);
   const strips = crowdStrips(REAL);
   const docks = islandDocks(clipped, strips);
@@ -289,7 +293,7 @@ test('each strip ENDS ON its island`s clipped rim and STARTS 40 × LAND_SCALE un
     const start = pts[0]!;
     assert.ok(
       Math.abs(Math.hypot(start.x - end.x, start.z - end.z) - CROWD_STRIP_OFFSHORE) < 1e-9,
-      'the seaward end is not CROWD_STRIP_OFFSHORE (40 × LAND_SCALE) units from the landing',
+      'the seaward end is not CROWD_STRIP_OFFSHORE (2 × DOCK_REACH) units from the landing',
     );
     // The landing IS a rim vertex, so the dock snap moves it by nothing: it appears verbatim.
     const island = s.segment!.split('/')[0]!;
@@ -297,6 +301,18 @@ test('each strip ENDS ON its island`s clipped rim and STARTS 40 × LAND_SCALE un
       docks.get(island)!.some((d) => Math.abs(d.x - end.x) < 1e-9 && Math.abs(d.z - end.z) < 1e-9),
       `${s.segment}: the landing (${end.x}, ${end.z}) is not one of ${island}'s docks`,
     );
+    // ⚠ AND THE SEAWARD END REACHES NO RIM AT ALL — the invariant `CROWD_STRIP_OFFSHORE`'s own
+    // sentence claims, asserted against EVERY island rather than against the landing it came from.
+    // Measured where it bites: the offshore point sits further from its landing than from the
+    // coast a little way around, so the distance to the nearest rim is the number that decides
+    // whether it docks, and it is the one that silently crossed the reach when ADR-0596 widened it.
+    for (const other of rims.values()) {
+      const g = rimGrid(other);
+      assert.ok(
+        nearestOnSegments(g, start.x, start.z, DOCK_REACH).distance >= DOCK_REACH,
+        `${s.segment}: the seaward end is within dock reach of ${other.island}`,
+      );
+    }
     // And it lands near its bearing — within a rim vertex's spacing of it.
     const rim = rims.get(island)!;
     const degrees = Number(s.segment!.split('landing-')[1]);

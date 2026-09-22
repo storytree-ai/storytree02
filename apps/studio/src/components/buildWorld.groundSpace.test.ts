@@ -301,23 +301,32 @@ describe('the capability ring is a CIRCLE on the ground', () => {
     // coordinate below is therefore in the new tile's units; nothing about the ring rule changed.
     //
     // Re-recorded 2026-09-22 (ADR-0593 D1, 20° → 50°). ESTABLISHED before re-recording, not assumed:
-    // this is NOT a pure depth re-projection (the tree's `x` moved from 0.00 to 9.58, which a camera
-    // that only scales `y` cannot do on its own) — the TILE SET itself changed. `buildWorld` seeds
-    // an island by snapping a SCREEN-space point to the lattice through `pixelToHex`
-    // (`packages/forest-layout/src/pack.ts`, the `seeds` line — a `elevationDeg`-dependent snap, and
-    // its default is the module's own `LAND_CAMERA_ELEVATION_DEG`), so the SAME screen seed lands on
-    // a DIFFERENT hex once that constant moves, and the whole island grows outward from there —
-    // exactly the "the TILE SET is legitimately a function of the camera" this file's own header
-    // warns about. `groundHeroTile` itself is untouched (it is camera-independent by construction,
-    // reading only `PLAN_VIEW_ELEVATION_DEG`) — it picked a different tile only because it was
-    // handed a different tile SET, the same mechanism the `groundHeroTile` CONTROL above shows in
-    // miniature on the four-tile hook. Confirms the failure-3 hypothesis rather than an unexplained
-    // move, so this is safe to re-record.
+    // this was NOT a pure depth re-projection (the tree's `x` moved from 0.00 to 9.58, which a camera
+    // that only scales `y` cannot do on its own) — the TILE SET itself changed, because the seed snap
+    // read the land camera.
+    //
+    // ⚠ Re-recorded again 2026-09-23, and this one UNDOES the mechanism above rather than adding to
+    // it. `the-packer-decides-in-ground-space-not-through-the-camera` found that the snap reading a
+    // camera at all was a DEFECT — `packWorld` places each seed in GROUND units and `pixelToHex` is
+    // a screen-space function, so the camera was deciding which tiles a story grows onto, which
+    // ADR-0527 D1 and ADR-0546 D1 both forbid. The snap now happens at `PLAN_VIEW_ELEVATION_DEG`.
+    // The line the 09-22 note describes — "a `elevationDeg`-dependent snap, and its default is the
+    // module's own `LAND_CAMERA_ELEVATION_DEG`" — no longer exists; do not go looking for it.
+    //
+    // ESTABLISHED, and the cause is legible in one coordinate: the tree's `x` returns to EXACTLY
+    // 0.00. This fixture's story seeds at x = 0 in ground space, and a snap taken in ground space
+    // therefore recovers x = 0; the 9.58 recorded above was the camera skewing the seed's row into
+    // its column (`pixelToHex` computes `q` from `x` MINUS half the recovered row). So the tile set
+    // moved back to what the spacing math asked for, the whole island grew outward from there, and
+    // `groundHeroTile` — camera-independent by construction, reading only `PLAN_VIEW_ELEVATION_DEG`
+    // — picked a different tile only because it was handed a different tile SET, exactly as the
+    // `groundHeroTile` CONTROL above shows in miniature. A confirmed cause, not an unexplained move,
+    // so this is safe to re-record.
     expect(digest).toBe(
-      'tree 9.58,-63.56 | c0 27.02,-68.91 | c1 30.77,-66.88 | c2 29.76,-62.67 | c3 30.90,-60.36' +
-        ' | c4 27.58,-55.84 | c5 26.24,-53.47 | c6 21.94,-51.69 | c7 19.22,-49.84 | c8 14.43,-49.71' +
-        ' | c9 8.49,-47.81 | 10 3.88,-47.92 | 11 0.57,-50.52 | 12 -3.00,-51.04 | 13 -5.03,-53.29' +
-        ' | 14 -10.19,-55.67 | 15 -11.44,-59.38 | 16 -9.08,-63.64 | 17 -11.84,-66.24 | 18 -10.95,-69.73',
+      'tree 0.00,-50.85 | c0 17.44,-56.20 | c1 21.19,-54.17 | c2 20.18,-49.96 | c3 21.32,-47.65' +
+        ' | c4 18.00,-43.13 | c5 16.66,-40.76 | c6 12.36,-38.97 | c7 9.63,-37.12 | c8 4.85,-37.00' +
+        ' | c9 -1.09,-35.10 | 10 -5.71,-35.21 | 11 -9.01,-37.80 | 12 -12.58,-38.33 | 13 -14.61,-40.57' +
+        ' | 14 -19.77,-42.96 | 15 -21.02,-46.67 | 16 -18.66,-50.93 | 17 -21.42,-53.53 | 18 -20.54,-57.01',
     );
   });
 });

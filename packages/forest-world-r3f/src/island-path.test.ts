@@ -2,9 +2,13 @@
 // join them across each island.
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-import type { CoastPoint } from './coast-clip.js';
+import type { SceneG } from '@storytree/forest-world';
+
+import { SHIPPED_COAST, clipToCoast, type CoastPoint, vertexKey } from './coast-clip.js';
 import { LAND_SCALE } from './land-per-capability.js';
 import { SAND_SHIPPED_BEACH_WIDTH } from './land-sand.js';
 import {
@@ -33,6 +37,7 @@ import {
   stripEndpoints,
   waypointToward,
 } from './island-path.js';
+import { landStreamFromDrawing } from './true-ground.js';
 import type { InstanceDescriptor } from './world-to-3d.js';
 
 /** One square island, `size` units on a side, with a ring. */
@@ -86,11 +91,14 @@ const near = (p: CoastPoint, q: CoastPoint, eps = 1e-9): boolean =>
 // The constants
 // ---------------------------------------------------------------------------
 
-test('the dock reach is 1.5x the shipped beach, and the recipe`s shape constants are pinned', () => {
-  assert.equal(DOCK_REACH, 1.5 * SAND_SHIPPED_BEACH_WIDTH);
-  // × LAND_SCALE (`land-per-capability.ts`): 13.5 = 1.5 × the 9-unit beach judged on the TUNED
+// ⚠ RENAMED with its assertion (ADR-0596 D2): this was "the dock reach is 1.5x the shipped beach"
+// until 2026-09-23, when the real map showed 1.5 refusing 12 of 52 genuine landings. A test whose
+// name says 1.5 while it asserts 4 is the stale-prose failure this repo reds a gate for elsewhere.
+test('the dock reach is 4x the shipped beach, and the recipe`s shape constants are pinned', () => {
+  assert.equal(DOCK_REACH, 4 * SAND_SHIPPED_BEACH_WIDTH);
+  // × LAND_SCALE (`land-per-capability.ts`): 36 = 4 × the 9-unit beach judged on the TUNED
   // island; the shipped beach is 9 × LAND_SCALE, and the reach follows it.
-  assert.equal(DOCK_REACH, 13.5 * LAND_SCALE);
+  assert.equal(DOCK_REACH, 36 * LAND_SCALE);
   assert.equal(PATH_CHAIKIN_PASSES, 4);
   assert.equal(PATH_PULL, 0.6);
   // × LAND_SCALE: the 7-unit jitter judged on the tuned island, the same fraction of the shipped one.
@@ -185,6 +193,88 @@ test('islandDocks buckets every strip end to ITS island, snapped, deduplicated, 
   assert.deepEqual(nowhere.get('isle-b'), []);
   // No strips: every island present, every list empty.
   assert.deepEqual([...islandDocks(CELLS, []).values()], [[], []]);
+});
+
+test('fld-a-routed-junction-is-never-a-dock: a shared in-reach end is excluded while a terminal peer docks', () => {
+  const rim = [island('junction-rim', 0, 0, 100)];
+  // The two strips meet at the same end WELL inside the reach. Moving that end outside the reach
+  // would let the current distance-only rule pass, so the third strip is a terminal at the same
+  // three-unit offset and must remain the sole landing.
+  const shared = { x: -3, z: 50 };
+  const docks = islandDocks(rim, [
+    strip({ x: -80, z: 30 }, shared),
+    strip({ x: -80, z: 70 }, shared),
+    strip({ x: 180, z: 50 }, { x: 103, z: 50 }),
+  ]);
+  assert.deepEqual(docks.get('junction-rim'), [{ x: 100, z: 50 }]);
+});
+
+test('fld-a-routed-junction-is-never-a-dock: a GHOST run sharing a landing cannot un-dock it', () => {
+  // ⚠ THE JUNCTION RULE READS DOCKABLE STRIPS ONLY, and that guard is load-bearing rather than
+  // tidy: an under-island ghost run (ADR-0504 D3) legitimately shares its rim crossing with the
+  // visible trail it dives beneath. Counted alongside the visible strips, that coincidence would
+  // read as a junction and silently REMOVE a real landing — a ghost the canvas never draws
+  // deleting a path it has no business touching. `check:mutation-diff` found this span unguarded
+  // by any test; this is the input that separates the two behaviours.
+  const rim = [island('ghosted-rim', 0, 0, 100)];
+  const landing = { x: 103, z: 50 };
+  const visible = strip({ x: 180, z: 50 }, landing);
+  const ghost = strip({ x: 40, z: 50 }, landing, { kind: 'trail-ghost-strip', hidden: true });
+  assert.deepEqual(islandDocks(rim, [visible, ghost]).get('ghosted-rim'), [{ x: 100, z: 50 }]);
+  // A visible peer at the SAME position is a junction, so the fixture is not simply too lenient.
+  const peer = strip({ x: 40, z: 50 }, landing);
+  assert.deepEqual(islandDocks(rim, [visible, peer]).get('ghosted-rim'), []);
+});
+
+test('fld-every-terminal-trail-end-docks-on-the-real-map: every terminal landing in the shipped stream docks on clipped ground', () => {
+  const source = JSON.parse(
+    readFileSync(fileURLToPath(new URL('../../../docs/research/chapter2-real-forest-2026-09-08/scenes/shipped.json', import.meta.url)), 'utf8'),
+  ) as { scene: SceneG };
+  const stream = landStreamFromDrawing(source.scene);
+  const cells = clipToCoast(stream.filter((d): d is InstanceDescriptor => d.kind === 'cell-ground'), SHIPPED_COAST);
+  const strips = stream.filter((d): d is InstanceDescriptor => d.kind === 'trail-strip' && d.hidden !== true);
+  const ends = new Map<string, CoastPoint[]>();
+  for (const strip of strips) {
+    for (const end of stripEndpoints(strip)) {
+      const key = vertexKey(end);
+      ends.set(key, [...(ends.get(key) ?? []), end]);
+    }
+  }
+  const terminals = [...ends.values()].filter((samePosition) => samePosition.length === 1);
+  assert.equal(terminals.length, 52, 'the committed export must retain the measured terminal population');
+
+  // ⚠ THE INVENTORY IS ASSERTED TOO (ADR-0596 D5), because losing a SEGMENT and losing a LANDING
+  // look identical in a dock count: fewer strips means fewer terminal ends, and both sides of the
+  // equality above fall together. These three numbers are what the mapping is supposed to carry
+  // through from the routed network, and the export's own manifest records the same 90/103.
+  assert.equal(strips.length, 103, 'the shipped export routes 103 visible trail segments');
+  assert.equal(
+    strips.filter((s) => s.segment !== undefined && (s.edges ?? []).length > 0).length,
+    103,
+    'every segment keeps its stable id and at least one from->to edge key',
+  );
+  const edgeKeys = new Set(strips.flatMap((s) => s.edges ?? []));
+  assert.equal(edgeKeys.size, 90, 'the 90 routed depends_on edges all survive the mapping');
+
+  const docks = islandDocks(cells, strips);
+  const dockCount = [...docks.values()].reduce((count, found) => count + found.length, 0);
+  assert.equal(dockCount, terminals.length, 'every terminal landing must reach the clipped map rim');
+  // ⚠ AND THE LANDINGS ARE SPREAD, not piled onto a few shores. Before ADR-0596 seven of these
+  // islands formed no dock and therefore wore no path at all — the defect a total count alone
+  // cannot see, since 52 docks on 28 islands satisfies the equality above just as well.
+  assert.equal(docks.size, 35, 'the export carries 35 islands with a rim');
+  // ⚠ ONE ISLAND IS STILL SHORT, AND IT IS A DIFFERENT DEFECT — pinned here rather than asserted
+  // away. `uat-detail-studio`'s only terminal landing sits 5.29 units off its own rim and 4.43 off
+  // `studio-cloud`'s, so the nearest-island rule hands the dock to a shore the trail's edge keys
+  // (`uat-criterion-detail->uat-detail-studio`, `studio->uat-detail-studio`) never name. ADR-0504's
+  // docstring premise — that two islands are never within one reach of the same end — is false on
+  // the real map. Closing it is this lane's next unit; until then the exact shortfall is recorded
+  // so it cannot grow unnoticed.
+  assert.deepEqual(
+    [...docks.entries()].filter(([, found]) => found.length === 0).map(([island]) => island),
+    ['uat-detail-studio'],
+    'exactly one island is left dockless, by the nearest-island rule rather than by the network',
+  );
 });
 
 test('islandDocks assigns an end within reach of TWO islands to the NEARER one, on either axis', () => {

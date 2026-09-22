@@ -117,24 +117,16 @@ export interface PackOptions {
   /** WHICH CAMERA THE SCREEN HALF OF THIS LAYOUT IS PROJECTED AT (ADR-0527 D1 item 1); absent ⇒
    *  the shipped {@link LAND_CAMERA_ELEVATION_DEG}, so every existing caller is byte-unchanged.
    *
-   *  ⚠ IT IS MEANT TO MOVE THE SCREEN HALF ONLY — and TODAY IT DOES NOT, which this comment says
-   *  out loud rather than continuing to promise. The INTENT stands: everything this packer DECIDES
-   *  — which tile a story grows onto, which capability owns which ground, where the coast runs —
-   *  should be taken at {@link PLAN_VIEW_ELEVATION_DEG} and be camera-independent, so that asking
-   *  for another elevation re-projects the drawing without re-deciding the layout. Every ground
-   *  twin (`groundCentroid`, `groundTreeSpot`, `groundSpot`, `groundLabelY`, the coast loops) is
-   *  DERIVED that way and holds.
-   *
-   *  ⚠ THE ONE EXCEPTION IS THE SEED SNAP, AND IT IS LOAD-BEARING. Each island's seed is placed in
-   *  GROUND units and then snapped to the lattice with `pixelToHex`, a SCREEN-space function — so
-   *  the camera does, today, decide which tiles a story grows onto. That was unobservable until
-   *  ADR-0593 D1 moved `LAND_CAMERA_ELEVATION_DEG`, because the offending call read the module
-   *  default while every caller took it too, and the test covering the invariant varied the
-   *  ARGUMENT that call ignored — so it passed vacuously. The faithful repair is to snap at
-   *  {@link PLAN_VIEW_ELEVATION_DEG}; measured, that moves islands by WHOLE TILES on the shipped
-   *  map, which makes it a LAYOUT decision rather than a camera one (ADR-0593 D4) and parks it on
-   *  the open density fork. `pack.test.ts`'s `⚠ KNOWN VIOLATION (ADR-0593)` pins the defect so it
-   *  cannot be rediscovered, and fails the day it is fixed.
+   *  ⚠ IT MOVES THE SCREEN HALF ONLY, AND THAT IS NOW TRUE OF THE WHOLE PACKER rather than a
+   *  promise with one exception. Everything this packer DECIDES — which tile a story grows onto,
+   *  which capability owns which ground, where the coast runs — is taken at
+   *  {@link PLAN_VIEW_ELEVATION_DEG} and is camera-independent, so asking for another elevation
+   *  re-projects the drawing without re-deciding the layout (ADR-0527 D1, ADR-0546 D1). Every
+   *  ground twin (`groundSeed`, `groundCentroid`, `groundTreeSpot`, `groundSpot`, `groundLabelY`,
+   *  the coast loops) is derived that way, and the SEED SNAP — the one site that used to read a
+   *  camera, and so let the camera decide the layout — was repaired by
+   *  `the-packer-decides-in-ground-space-not-through-the-camera`. See that call's own comment for
+   *  why it hid, and `Territory.groundSeed` for the field that makes it checkable.
    *
    *  It exists so `the-two-layers-share-one-elevation` can RENDER both arms. ADR-0593 D1 has since
    *  settled which elevation the two layers share — 50 degrees, both of them. */
@@ -186,6 +178,26 @@ export interface Territory<S extends LayoutStory = LayoutStory> {
   /** `treeSpot` before the camera. Derived from the same tile, never by un-projecting the drawing —
    *  which is the move ADR-0527 D2 exists to delete rather than to spread. */
   groundTreeSpot: Pt;
+  /** WHERE THE SPACING MATH PUT THIS ISLAND, in GROUND units, BEFORE the hex lattice quantised it
+   *  — the raw output of `spacing.ts`'s row/gap arithmetic, which carries no camera term at all.
+   *
+   *  ⚠ IT IS PUBLISHED TO MAKE AN INVARIANT OBSERVABLE, not because a renderer wants it. The seed
+   *  snap let the camera decide which tiles a story grew onto for as long as it did precisely
+   *  because nothing outside this function could see the point being snapped: a test could compare
+   *  two packs at two cameras, but two packs snapped at the SAME wrong constant agree with each
+   *  other, so that comparison cannot separate "camera-independent" from "camera-independent and
+   *  wrong". With the pre-snap point in hand the claim is direct — the seed tile's centre at
+   *  {@link PLAN_VIEW_ELEVATION_DEG} is this point, to within the lattice's own rounding — and it
+   *  fails for EVERY basis but plan view, since `pixelToHex` at elevation θ stretches ground `y` by
+   *  `1 / sin θ` before rounding. `pack.test.ts`'s `the seed snap is taken in GROUND space` is the
+   *  test; `the-packer-decides-in-ground-space-not-through-the-camera` is why it exists.
+   *
+   *  ⚠ NOT THE SAME POINT AS `groundTreeSpot`, and the gap is real: this is the pre-quantisation
+   *  ANCHOR, while `groundTreeSpot` is a TILE CENTRE the island actually owns, chosen near its
+   *  grown centroid. They agree only to within a hex, and on a crowded rank the growth floor nudges
+   *  the snapped seed east, which widens the gap further. Read this one for "what did the layout
+   *  ask for", that one for "where does the tree stand". */
+  groundSeed: Pt;
   caps: CapSpot<S['capabilities'][number]>[];
   decor: DecorSpot[];
   wheatTiles: Set<string>;
@@ -518,30 +530,38 @@ export function packWorld<S extends LayoutStory>(
   // EQUIVALENT — `seedPx` was given an entry for every index by the loop above.
   // Stryker disable next-line ObjectLiteral: EQUIVALENT — see the note above.
   //
-  // ⚠ MUST read the local `elevationDeg`, not `pixelToHex`'s own default (ADR-0593 D1). This call
-  // went unnoticed while `LAND_CAMERA_ELEVATION_DEG` and every caller's (absent) `opts.elevationDeg`
-  // happened to agree — every SHIPPED caller packs bare, so `elevationDeg` here IS
-  // `LAND_CAMERA_ELEVATION_DEG` and this forward is a PROVABLE NO-OP for all of them, byte-identical
-  // to the old default. What it changes is only the case where a caller actually EXERCISES the
-  // reserved override — today the relocation fixture (pinning the golden's 20° capture camera while
-  // the shipped default moved on) and the studio's `?elevation=` flag — where it replaces a
-  // silently MIXED-camera pack (seed jitter at the requested angle, this snap alone at whatever the
-  // module ships) with a coherent one. That is why this reproduces the golden at the pinned 20°
-  // exactly: the golden was captured bare, at a 20° constant with nothing to mix, so a coherent 20°
-  // pack IS what it recorded.
+  // ⚠ THE SNAP IS TAKEN AT PLAN VIEW, AND NOTHING HERE MAY READ A CAMERA — this is the whole point
+  // of the line, so read the reason before touching it (`the-packer-decides-in-ground-space-not-
+  // through-the-camera`). `seedPx` is built above entirely from `spacing.ts`'s row/gap math
+  // (`estRadius`, `rankGapFor`, `islandGapFor`), which carries no camera term at all: it is GROUND
+  // space, the same space `hexCenter` recovers at `PLAN_VIEW_ELEVATION_DEG` everywhere else in this
+  // file (the coast, the garden ring, the trail islands, every `ground*` twin). `pixelToHex` reads
+  // its point as SCREEN and divides `y` by `sin(elevation)` to recover ground, so handing it a
+  // ground point at any elevation below 90° STRETCHES the layout vertically by `1 / sin θ` before
+  // quantising it — 1.31x at the shipped 50°, 2.92x at 20°. That is the camera deciding which tiles
+  // a story grows onto, which ADR-0527 D1 and ADR-0546 D1 both forbid: the layout is re-projected,
+  // never re-decided. At `PLAN_VIEW_ELEVATION_DEG` the factor is exactly 1 and `pixelToHex` is the
+  // true inverse of the `hexCenter` every ground twin below is measured with.
   //
-  // ⚠ A SEPARATE, GENUINE FINDING, RECORDED AND DELIBERATELY NOT TAKEN HERE. `seedPx` is built
-  // above entirely from `spacing.ts`'s row/gap math (`estRadius`, `rankGapFor`, `islandGapFor`),
-  // which carries no camera term at all — it is GROUND space, the same space `hexCenter` recovers
-  // at `PLAN_VIEW_ELEVATION_DEG` everywhere else in this file (the coast, the garden ring, the
-  // trail islands). Read strictly, the LAND camera is therefore the wrong basis for this particular
-  // snap, and `PLAN_VIEW_ELEVATION_DEG` would be the semantically faithful choice — measured, it
-  // moves the SHIPPED arm's tiles by a whole hex (`drawTiles[0].q: 26 vs -3` against today's golden),
-  // i.e. it is a LAYOUT change, not a camera one. ADR-0593 D4 reserves exactly that kind of layout
-  // question for the open density fork (`oq-gaps-derived-forest-still-sparse-tile-or-positions`) and
-  // this landing may not smuggle a layout move in under a camera one — so this stays a `LAND_CAMERA`
-  // read, on purpose, pending that decision.
-  const seeds: Axial[] = stories.map((_, i) => pixelToHex(seedPx.get(i) ?? { x: 0, y: 0 }, { elevationDeg }));
+  // ⚠ WHY IT SURVIVED SO LONG, which is the part worth keeping. This call read `pixelToHex`'s own
+  // module default (`LAND_CAMERA_ELEVATION_DEG`) while every shipped caller packed bare, so the two
+  // were always the same number and no caller could separate them. The test that covered the
+  // invariant — "the GROUND half does NOT move with the camera" — varied the ARGUMENT, which this
+  // call ignored, so it passed VACUOUSLY for as long as it existed. ADR-0593 D1 moving the constant
+  // to 50 is what pulled the two apart and made the defect visible; threading the local
+  // `elevationDeg` here made it observable but not correct, and `pack.test.ts` pinned it as a KNOWN
+  // VIOLATION until this landing took the real fix.
+  //
+  // ⚠ AND IT IS OBSERVABLE NOW, BY CONSTRUCTION. The pre-snap ground point is published as
+  // `Territory.groundSeed`, so "the snap is taken in ground space" is a claim a test can make
+  // directly instead of inferring it from a cross-camera comparison that CANNOT see a wrong
+  // constant (both arms would be wrong the same way). That is the repair for the vacuity, not just
+  // for the defect — see `pack.test.ts`'s `the seed snap is taken in GROUND space`.
+  //
+  // ⚠ IT MOVES THE MAP, AND THAT WAS PAID FOR. Measured on the shipped corpus, islands move by
+  // WHOLE TILES (`drawTiles[0].q: 26 vs -3`), so `relocation.golden.json` was re-captured in its
+  // own commit — see that file's header for what the re-capture cost.
+  const seeds: Axial[] = stories.map((_, i) => pixelToHex(seedPx.get(i) ?? { x: 0, y: 0 }, { elevationDeg: PLAN_VIEW_ELEVATION_DEG }));
   // Each nudge moves one seed one hex EAST, so the passes converge; the bound is a guard against a
   // pathological input, not a budget — at 24 a crowded rank ran out of passes with two seeds still
   // inside each other's floor, and the moat below then had nothing to keep (measured on a 60-island
@@ -664,6 +684,10 @@ export function packWorld<S extends LayoutStory>(
     // EQUIVALENT — `seeds` has an entry per story, so the fallback is unreachable.
     // Stryker disable next-line LogicalOperator,ObjectLiteral: EQUIVALENT — see the note above.
     const seed = seeds[i] ?? { q: 0, r: 0 };
+    // The pre-snap ground anchor, published so the snap's BASIS is checkable from outside — see
+    // `Territory.groundSeed`. EQUIVALENT fallback — `seedPx` was given an entry for every index.
+    // Stryker disable next-line LogicalOperator,ObjectLiteral: EQUIVALENT — see the note above.
+    const groundSeed = seedPx.get(i) ?? { x: 0, y: 0 };
     // NOT `tiles.map(hexCenter)`: `hexCenter(h, elevationDeg = LAND_CAMERA_ELEVATION_DEG)` takes an
     // optional second argument, and `Array.prototype.map` calls its callback with `(element, index,
     // array)` — so a bare `.map(hexCenter)` feeds each tile's ARRAY INDEX into `elevationDeg`,
@@ -868,6 +892,7 @@ export function packWorld<S extends LayoutStory>(
       treeSpot,
       groundCentroid,
       groundTreeSpot,
+      groundSeed,
       caps,
       decor,
       wheatTiles,

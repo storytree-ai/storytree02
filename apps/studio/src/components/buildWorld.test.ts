@@ -226,36 +226,48 @@ describe('buildWorld — ADR-0521: the gaps derive from island size', () => {
     expect(far - near).toBeGreaterThan(15);
   });
 
-  it('the elevation ARGUMENT alone decides the layout — the ambient constant never leaks in', () => {
-    // ⚠ THIS PROPERTY WAS FALSE UNTIL THIS LANDING, AND ITS ABSENCE IS WHY A "50° MAP" COULD BE
-    // REVIEWED THAT WAS NOT ONE. `packWorld` threads a caller's `elevationDeg` through almost
-    // everything, and TWO call sites silently took `LAND_CAMERA_ELEVATION_DEG`'s default instead:
-    // the seed snap (`pixelToHex`, which decides WHICH HEX each island is planted on, so the error
-    // moved islands by whole tiles) and the world's top bound (`storyTreeReach`, so the box was
-    // sized at one camera while the map inside it was drawn at another). Both are fixed here.
+  it('the elevation argument moves the DRAWING and never the LAYOUT — and the ambient constant never leaks in', () => {
+    // ⚠ TWO OF THIS TEST'S THREE CLAUSES WERE INVERTED ON 2026-09-23, AND THE INVERSION IS THE
+    // POINT — read this before "fixing" it back. As written at ADR-0593 D1 this asserted that the
+    // elevation argument moved the island SEPARATION and the TILE SET, on the reasoning that those
+    // move "ONLY if the argument reached the seed snap". The argument did reach the seed snap, and
+    // that was the DEFECT: `packWorld` places each seed in GROUND units and the snap ran it through
+    // `pixelToHex`, a screen-space function, so the camera decided which tiles each story grew
+    // onto. ADR-0527 D1 and ADR-0546 D1 both forbid exactly that — the layout is re-projected,
+    // never re-decided — and `the-packer-decides-in-ground-space-not-through-the-camera` repaired
+    // it by snapping at plan view. So a test demanding that the tiles follow the camera is now a
+    // test demanding the defect back.
     //
-    // ⚠ NOTHING COULD SEE IT BEFORE, and that is the part worth keeping. Every shipped caller packs
-    // BARE, so the module default and the local variable were always the same number and a site
-    // that read the wrong one was indistinguishable from a site that read the right one. The gap
-    // only opens when a caller actually exercises the override — which is exactly what the staging
-    // run for the held question did, and why its "50°" rows came back as today's map
-    // (ADR-0593, Context).
+    // ⚠ THE ORIGINAL FINDING IS UNDAMAGED AND STILL PINNED, which is why this is a correction and
+    // not a deletion. There were TWO sites silently reading `LAND_CAMERA_ELEVATION_DEG`'s default
+    // instead of the caller's argument, and only one of them was the seed snap. The other is the
+    // world's top bound (`storyTreeReach`), a genuinely SCREEN quantity that must follow the
+    // camera — and it is the `height` clause below, unchanged. That is what kept a "50° map" from
+    // being a 50° map, and it is still asserted.
     //
-    // So the claim is a DEPENDENCE claim, not a value one: pack the same corpus at two explicit
-    // cameras and the two layouts must differ; pack it at the shipped camera explicitly and it must
-    // equal the bare call. A site that ignored its argument would satisfy the second and fail the
-    // first; a site that ignored the constant would fail the second.
+    // ⚠ WHY NOTHING COULD SEE ANY OF IT BEFORE, which is the durable part. Every shipped caller
+    // packs BARE, so the module default and the local variable were always the same number and a
+    // site reading the wrong one was indistinguishable from a site reading the right one. The gap
+    // only opens when a caller actually exercises the override — which is what the staging run for
+    // the held question did, and why its "50°" rows came back as today's map (ADR-0593, Context).
+    //
+    // So the claim is a SPLIT dependence claim: across two explicit cameras the drawing must move
+    // and the layout must NOT, and at the shipped camera an explicit call must equal a bare one.
+    // A site that ignored its argument fails the height clause; a site that read a camera where it
+    // should read the ground fails the separation and tiles clauses; a site that ignored the
+    // constant fails the default clause.
     const layout = (elevationDeg?: number) => {
       const opts = elevationDeg === undefined ? {} : { elevationDeg };
       const w = buildWorld(fixture(), { spacing: { ratio: 0.6 }, ...opts });
       const t = (id: string) => w.territories.find((x) => x.story.id === id)!;
       return {
-        // ACROSS-screen separation: x is untouched by the projection itself, so this moves ONLY if
-        // the argument reached the seed snap. It is the `pixelToHex` half.
+        // ACROSS-screen separation. `x` is untouched by the projection itself, so once the seed
+        // snap is camera-free this cannot move with the camera at all — it is the `pixelToHex` half
+        // and it is now a NEGATIVE control.
         separationX: Math.abs(t('left').centroid.x - t('right').centroid.x),
-        // the world's own box, which is the `storyTreeReach` half
+        // the world's own box, which is the `storyTreeReach` half — a screen quantity that MUST move
         height: w.height,
-        // and the tiles each island actually claimed
+        // and the tiles each island actually claimed — decided on the ground, so also unmoved
         tiles: t('left').tiles.map((h) => `${h.q},${h.r}`).join(' '),
       };
     };
@@ -264,10 +276,11 @@ describe('buildWorld — ADR-0521: the gaps derive from island size', () => {
     const at50 = layout(50);
     const bare = layout();
 
-    // the ARGUMENT bites — all three, and each catches a different missed forward
-    expect(at20.separationX).not.toBe(at50.separationX);
+    // the DRAWING follows the argument…
     expect(at20.height).not.toBe(at50.height);
-    expect(at20.tiles).not.toBe(at50.tiles);
+    // …and the LAYOUT does not, at either grain
+    expect(at20.separationX).toBe(at50.separationX);
+    expect(at20.tiles).toBe(at50.tiles);
 
     // …and the DEFAULT is the declared constant and nothing else
     expect(bare).toEqual(layout(LAND_CAMERA_ELEVATION_DEG));
