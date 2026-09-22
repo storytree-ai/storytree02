@@ -54,7 +54,8 @@
     "measure-shipped-status": "node --import ../../scripts/tsx-cache-off.mjs --import tsx harness/shipped-status-measure.mjs",
     "measure-shipped-light": "node --import ../../scripts/tsx-cache-off.mjs --import tsx harness/shipped-light-measure.mjs",
     "measure-land-floor": "node --import ../../scripts/tsx-cache-off.mjs --import tsx harness/land-floor-measure.mjs",
-    "measure-real-forest": "node --import ../../scripts/tsx-cache-off.mjs --import tsx harness/real-forest-measure.mjs"
+    "measure-real-forest": "node --import ../../scripts/tsx-cache-off.mjs --import tsx harness/real-forest-measure.mjs",
+    "measure-shore-cost": "node --import ../../scripts/tsx-cache-off.mjs --import tsx harness/shore-cost.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",
