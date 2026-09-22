@@ -12,6 +12,8 @@ import {
   enumerateTestFiles,
   extractRepoTestUnits,
   extractTestUnits,
+  parseLsFiles,
+  refuseEmptyCensus,
   foldExtractions,
   renderCoverage,
   type FileExtraction,
@@ -128,6 +130,53 @@ test("test-slop-extract: an ordinary test file is not flagged as test-as-data", 
   assert.equal(extraction.testSourceLiterals, 0);
 });
 
+test("test-slop-extract: the test-as-data pattern discriminates a declaration from a mention of one", () => {
+  // The flag is a REGEX over literal text, so every one of its parts is a mutable span that the two
+  // whole-file tests above cannot distinguish — both of those would still pass against a pattern
+  // that matched far too much. These are the cases that pin each part, stated as what the pattern
+  // must and must not accept.
+  const flagged = (literal: string): boolean =>
+    // The literal is the whole file's only statement, so the only thing that can flag it is its text.
+    extractTestUnits(`const src = ${JSON.stringify(literal)};\n`, "packages/x/src/probe.ts").analysesTests;
+
+  // MUST FLAG — a real declaration inside the literal, in each runner spelling and each quote style.
+  for (const yes of [
+    `test("a", () => {});`,
+    `it('b', () => {});`,
+    "describe(`c`, () => {});",
+    `test.skip("d", () => {});`,
+    `  it.each(cases)("e", () => {});`, // a MULTI-character table name — `[^)]*`, not `[^)]`
+    `test ("spaced before the paren", () => {});`, //   whitespace BEFORE `(` — `\s*`, not `\S*`
+    `test( "spaced after the paren", () => {});`, //    whitespace AFTER `(` — the second `\s*`
+    `foo();\n  test("nested on a later line", () => {});`,
+  ]) {
+    assert.equal(flagged(yes), true, `should read as test source: ${yes}`);
+  }
+
+  // MUST NOT FLAG — each of these differs from a real declaration by exactly one of the pattern's
+  // parts, so each one alone would go unnoticed if that part were dropped.
+  for (const no of [
+    `latest("a", 1)`, //            a longer word ENDING in a runner name — the `[^\w.]` boundary
+    `mytest("a", 1)`, //            same, no separator
+    `suite.it("a", () => {})`, //   a method call on an object — the `.` exclusion
+    `runner.test("a", 1)`, //       same, `test` as a member
+    `test(fn, 1)`, //               a call with no string title — the quote requirement
+    `describe the behaviour here`, //  the bare word with no call at all
+  ]) {
+    assert.equal(flagged(no), false, `should NOT read as test source: ${no}`);
+  }
+
+  // ACCEPTED OVER-MATCHES — recorded rather than quietly tolerated, because a suite that asserted
+  // these DIDN'T flag would be asserting something false about the pattern. Prose containing a
+  // runner word applied to a quoted string is not distinguishable from a declaration by any regex,
+  // and the pattern is deliberately loose in this direction: the flag is REPORTED and never acted
+  // on here, so an over-match costs a consumer one extra fact while an under-match costs a whole
+  // measurement. If this ever needs to be tight, the answer is a parse, not a longer pattern.
+  for (const over of [`the test("quoted phrase")`, `see it("the docs") for more`]) {
+    assert.equal(flagged(over), true, `documented over-match no longer fires — the pattern changed: ${over}`);
+  }
+});
+
 test("test-slop-extract: a unit carries file, 1-based line, title path and its own source text", () => {
   const source = readRepo(FIXTURE);
   const { units } = extractTestUnits(source, FIXTURE);
@@ -209,6 +258,74 @@ test("test-slop-extract: context omits declarations that live INSIDE the unit", 
   assert.ok(unit !== undefined);
   assert.match(unit.source, /const INNER = 3/, "the inner declaration belongs to the unit's own text");
   assert.doesNotMatch(unit.context, /INNER/, "quoted a declaration that is already inside the unit");
+});
+
+test("test-slop-extract: context reaches a helper declared AFTER the test, and joins with a blank line", () => {
+  // TWO things at once, both of which a before-only fixture cannot see. A function declaration is
+  // HOISTED, so a test may legitimately call a helper written below it — and a containment check
+  // that asked only "does this start after the unit starts?" would wrongly exclude it, which is
+  // indistinguishable from the correct rule on any fixture where everything is declared first.
+  const source = [
+    `import assert from "node:assert/strict";`,
+    `test("uses a helper declared below", () => {`,
+    `  assert.equal(later(2), 4);`,
+    `});`,
+    `function later(n: number): number { return n * 2; }`,
+  ].join("\n");
+  const units = extractTestUnits(source, "packages/x/src/after.test.ts").units;
+  const [unit] = units;
+  assert.ok(unit !== undefined);
+  assert.match(unit.context, /function later/, "excluded a helper the unit calls because it is declared below it");
+  // And the exact join: two candidates, separated by ONE blank line. A fragment match would not see
+  // the separator at all, so the separator would be free to change without any test noticing.
+  assert.equal(
+    unit.context,
+    `import assert from "node:assert/strict";\n\nfunction later(n: number): number { return n * 2; }`,
+  );
+});
+
+test("test-slop-extract: an import that binds nothing is never offered as context", () => {
+  // `import "./side-effect.js";` is a CONTEXT_KIND node that binds no name, which is the one case
+  // that exercises the empty-names guard. Without it the candidate would be kept with an empty name
+  // list — inert, but the guard would then be a branch nothing distinguishes.
+  const source = [
+    `import "./side-effect.js";`,
+    `import assert from "node:assert/strict";`,
+    `test("t", () => { assert.equal(1, 1); });`,
+  ].join("\n");
+  const units = extractTestUnits(source, "packages/x/src/side.test.ts").units;
+  const [unit] = units;
+  assert.ok(unit !== undefined);
+  assert.doesNotMatch(unit.context, /side-effect/, "a side-effect import binds nothing and can be context for nothing");
+  assert.match(unit.context, /node:assert/, "the binding import is still offered");
+});
+
+test("test-slop-extract: a .tsx unit's references are read with JSX in play", () => {
+  // The unit's own text is re-parsed to read its identifiers, and that re-parse must admit JSX or a
+  // `.tsx` test's references vanish — silently, as an empty context rather than an error.
+  const source = [
+    `import assert from "node:assert/strict";`,
+    `const Widget = () => null;`,
+    `test("renders", () => {`,
+    `  const el = <Widget />;`,
+    `  assert.ok(el);`,
+    `});`,
+  ].join("\n");
+  const units = extractTestUnits(source, "packages/x/src/w.test.tsx").units;
+  const [unit] = units;
+  assert.ok(unit !== undefined);
+  assert.match(unit.context, /const Widget/, "a JSX-only reference was lost — the span re-parse is not reading JSX");
+});
+
+test("test-slop-extract: a backslash path is normalised, and the UAT flag reads the normalised form", () => {
+  // Windows hands paths with backslashes. Both the reported `file` and the `.uat.test.ts` suffix
+  // check must see the normalised form, or a finding is unaddressable on one platform only —
+  // the class of defect that is CI-red and locally green.
+  const source = `test("t", () => {});`;
+  const win = extractTestUnits(source, "packages\\x\\src\\thing.uat.test.ts");
+  assert.equal(win.file, "packages/x/src/thing.uat.test.ts");
+  assert.equal(win.units[0]?.file, "packages/x/src/thing.uat.test.ts");
+  assert.equal(win.units[0]?.uatLeg, true, "the UAT flag must read the normalised path, not the raw one");
 });
 
 test("test-slop-extract: a name occurring only inside the unit's own strings pulls in no context", () => {
@@ -312,6 +429,28 @@ test("test-slop-extract: foldExtractions reports the four coverage states and re
         fileAnalysesTests: false,
         uatLeg: false,
       },
+      // ⚠ A THIRD unit, and it is here because the mutation rung caught this very suite committing
+      // the failure this whole arc exists to detect. With two units, one of them unread, the
+      // `unreadTitles` fold and its exact INVERSE both answer 1 — so `!u.titleFullyStatic` could be
+      // flipped and no assertion would move (`an-assertion-over-pre-arranged-input-cannot-fail`).
+      // Three units with TWO static titles make the fold's answer 1 and the inverse's 2.
+      {
+        file: "a.test.ts",
+        line: 9,
+        name: "third",
+        ancestors: [],
+        call: "test",
+        source: "test('third', () => {})",
+        context: "",
+        titlePath: ["third"],
+        titleFullyStatic: true,
+        skipped: false,
+        conditionallySkipped: false,
+        substantive: true,
+        parameterised: false,
+        fileAnalysesTests: false,
+        uatLeg: false,
+      },
     ],
     analysesTests: false,
     testSourceLiterals: 0,
@@ -328,7 +467,7 @@ test("test-slop-extract: foldExtractions reports the four coverage states and re
   assert.deepEqual(coverage.unreadable, [{ file: "gone.test.ts", reason: "ENOENT" }]);
   assert.deepEqual(coverage.zeroDeclarationFiles, ["b.test.ts", "c.test.ts"]);
   assert.deepEqual(coverage.filesAnalysingTests, ["c.test.ts"]);
-  assert.equal(coverage.units, 2);
+  assert.equal(coverage.units, 3);
   assert.equal(coverage.unreadTitles, 1);
   // THE RECONCILIATION: every enumerated file lands in exactly one of parsed / unreadable.
   assert.equal(coverage.parsed + coverage.unreadable.length, coverage.enumerated);
@@ -336,19 +475,48 @@ test("test-slop-extract: foldExtractions reports the four coverage states and re
 
 test("test-slop-extract: renderCoverage names the files it could not account for", () => {
   const rendered = renderCoverage({
-    enumerated: 2,
-    parsed: 1,
+    enumerated: 4,
+    parsed: 3,
     unreadable: [{ file: "gone.test.ts", reason: "ENOENT" }],
     zeroDeclarationFiles: ["quiet.test.ts"],
-    units: 0,
-    unreadTitles: 0,
+    units: 7,
+    unreadTitles: 2,
     filesAnalysingTests: ["meta.test.ts"],
   });
-  // Named, not counted: a count cannot be eyeballed, and eyeballing is the audit that works.
-  assert.match(rendered, /UNREADABLE {2}gone\.test\.ts — ENOENT/);
-  assert.match(rendered, /NO TEST {5}quiet\.test\.ts/);
-  assert.match(rendered, /TEST-AS-DATA meta\.test\.ts/);
-  assert.match(rendered, /test files enumerated: {2}2/);
+  // ⚠ THE WHOLE OUTPUT, not a handful of `assert.match` probes over it — and that is a deliberate
+  // choice this arc's own subject argues for. A report is prose, every literal in it is a mutable
+  // span, and a fragment assertion leaves each unvisited word free to change without any test
+  // noticing (`mutation-rung-charges-render-prose`). Every distinct count is a DIFFERENT number
+  // here, so a line that reads the wrong field cannot coincide with the right answer — which is the
+  // `an-assertion-over-pre-arranged-input-cannot-fail` discipline applied to a renderer.
+  assert.equal(
+    rendered,
+    [
+      "test files enumerated:  4",
+      "  parsed:               3",
+      "  unreadable:           1",
+      "  declared no test:     1",
+      "test units extracted:   7",
+      "  titles not static:    2",
+      "files with test-as-data: 1",
+      "  UNREADABLE  gone.test.ts — ENOENT",
+      "  NO TEST     quiet.test.ts",
+      "  TEST-AS-DATA meta.test.ts",
+    ].join("\n"),
+  );
+  // Named, not counted: a count cannot be eyeballed, and eyeballing is the audit that works. With
+  // nothing to name, the three list sections vanish entirely rather than printing empty headings.
+  const clean = renderCoverage({
+    enumerated: 1,
+    parsed: 1,
+    unreadable: [],
+    zeroDeclarationFiles: [],
+    units: 9,
+    unreadTitles: 0,
+    filesAnalysingTests: [],
+  });
+  assert.equal(clean.split("\n").length, 7, `expected only the seven summary lines, got:\n${clean}`);
+  for (const marker of ["UNREADABLE", "NO TEST", "TEST-AS-DATA"]) assert.ok(!clean.includes(marker));
 });
 
 /**
@@ -357,6 +525,39 @@ test("test-slop-extract: renderCoverage names the files it could not account for
  * the repo's own index, and it names the concrete slice that was measured last time so the comparison
  * is in the assertion rather than in a memory.
  */
+test("test-slop-extract: parseLsFiles handles git's real output shape", () => {
+  // Proved here rather than through `enumerateTestFiles`, because every test that could reach it
+  // that way must stand down outside a git checkout — which is exactly where `check:mutation-diff`
+  // runs this suite. The trailing newline is not hypothetical: git always emits one, so the last
+  // split element is always empty and a missing filter hands a caller `""` as a filename.
+  assert.deepEqual(parseLsFiles("b.test.ts\na.test.ts\n"), ["a.test.ts", "b.test.ts"], "sorted, trailing newline dropped");
+  assert.deepEqual(parseLsFiles(""), [], "empty output is an empty list, not [\"\"]");
+  assert.deepEqual(parseLsFiles("\n\n\n"), [], "blank lines contribute nothing");
+  assert.deepEqual(parseLsFiles("  x.test.ts  \n"), ["x.test.ts"], "surrounding whitespace is trimmed");
+  assert.deepEqual(parseLsFiles("a.test.ts\na.test.ts\n"), ["a.test.ts"], "a repeated path is counted once");
+  // The order is the FUNCTION's, not the input's — asserted against an input that is already in the
+  // wrong order AND whose reverse differs from the answer, so neither a pass-through nor a reversal
+  // can coincide with it (`an-assertion-over-pre-arranged-input-cannot-fail`).
+  assert.deepEqual(parseLsFiles("m.test.ts\nz.test.ts\na.test.ts\n"), ["a.test.ts", "m.test.ts", "z.test.ts"]);
+});
+
+test("test-slop-extract: refuseEmptyCensus passes a real list through and refuses an empty one", () => {
+  assert.deepEqual(refuseEmptyCensus(["a.test.ts", "b.test.ts"], "/repo"), ["a.test.ts", "b.test.ts"]);
+  // The WORDING is the deliverable here, not just the throw: whoever meets this is standing in the
+  // wrong directory and the message is the only thing that will tell them so. Asserting it whole
+  // keeps every clause of it held, where a `/refusing/` probe would leave the diagnosis free to rot.
+  assert.throws(
+    () => refuseEmptyCensus([], "/repo"),
+    (error: unknown) =>
+      error instanceof Error &&
+      error.message ===
+        "no git-tracked test files under /repo — refusing to report a census over zero files. " +
+          "`git ls-files` returns nothing (exit 0) when run outside a git work tree or inside an " +
+          "ignored directory, so a zero here is a statement about this reader's position and never " +
+          "about the suite. Point it at a git checkout, or pass an explicit file list.",
+  );
+});
+
 test("test-slop-extract: an enumeration that finds nothing REFUSES rather than reporting a clean zero", () => {
   // The defect the mutation sandbox exposed, asserted directly. `git ls-files` succeeds and returns
   // nothing inside an ignored directory, so this is the one failure mode that arrives looking healthy.
@@ -393,7 +594,46 @@ test("test-slop-extract: the enumeration is a census of git-tracked test files, 
   // Both extensions are enumerated; a `.tsx`-blind glob would lose 65 files here.
   assert.ok(files.some((f) => f.endsWith(".test.tsx")), "no .test.tsx file enumerated");
   assert.ok(files.some((f) => f.endsWith(".uat.test.ts")), "no .uat.test.ts leg enumerated");
+});
+
+test("test-slop-extract: the enumerating globs cover both extensions", () => {
+  // Its own test, NOT a line inside the census above: that one stands down outside a git checkout,
+  // which is where the mutation rung runs this suite — so an assertion parked there is unheld
+  // exactly where the tooling looks. An empty or single-extension glob would lose 65 `.test.tsx`
+  // files silently, which is the 83-of-970 defect in miniature.
   assert.deepEqual(TEST_FILE_GLOBS, ["*.test.ts", "*.test.tsx"]);
+});
+
+test("test-slop-extract: extractRepoTestUnits reads an EXPLICIT file list, git or no git", () => {
+  // The IO shell, driven without the enumerator — which is the only way to exercise it where
+  // `check:mutation-diff` runs this suite, since the census tests stand down outside a git checkout
+  // and left this whole function unreached. The explicit-list parameter exists for callers that
+  // already know their files (a diff-scoped run, `-inc-05`); it doubles as the seam that makes the
+  // reader provable anywhere.
+  const present = "packages/cli/src/test-slop-extract.ts";
+  const missing = "packages/cli/src/this-file-does-not-exist.test.ts";
+  const { units, coverage } = extractRepoTestUnits(REPO_ROOT, [FIXTURE, present, missing]);
+
+  assert.equal(coverage.enumerated, 3, "the denominator is the list it was GIVEN, not what it could read");
+  assert.equal(coverage.parsed, 2);
+  assert.equal(coverage.unreadable.length, 1, "a path that is not on disk must be reported, never dropped");
+  assert.equal(coverage.unreadable[0]?.file, missing);
+  assert.match(coverage.unreadable[0]?.reason ?? "", /ENOENT|no such file/i, "the reason must say WHY it could not be read");
+  // The reconciliation, on a list where the three totals are all DIFFERENT numbers — so a fold that
+  // read the wrong one cannot coincide with the right answer.
+  assert.equal(coverage.parsed + coverage.unreadable.length, coverage.enumerated);
+
+  // The real fixture's units come back with their text, from a read this test performed.
+  assert.ok(units.length > 40, `expected the fixture's declarations; got ${units.length}`);
+  assert.ok(units.every((u) => u.source.length > 0));
+  assert.ok(units.every((u) => u.file === FIXTURE), "only the file that declares tests contributes units");
+  // And the source file, which declares none, is the zero-declaration case — named, not lost.
+  assert.deepEqual(coverage.zeroDeclarationFiles, [present]);
+  // Only the FIXTURE is flagged, and the exclusion is the more interesting half: this module's own
+  // source quotes a test declaration too, but in a JSDoc COMMENT rather than a string literal — and
+  // a comment is not a literal, so the walk never reaches it. The guard is about test source held
+  // as DATA, which is the only form that can be mistaken for a test; prose about tests is not.
+  assert.deepEqual(coverage.filesAnalysingTests, [FIXTURE], "a JSDoc example is not test source as data");
 });
 
 test("test-slop-extract: the whole repo extracts with every file accounted for", (t) => {

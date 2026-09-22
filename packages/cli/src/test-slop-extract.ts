@@ -58,17 +58,19 @@ import { analyzeObservedTests } from "@storytree/orchestrator";
  * Deliberately loose. Its output is a REPORTED FLAG, never an exclusion this module performs — a
  * false positive costs a consumer one extra fact, while a false negative is the failure that cost a
  * whole measurement. Which way to act on it is `-inc-02`'s call, not this module's.
+ *
+ * FOUR PARTS, each of which its suite pins with a case that differs by that part alone:
+ *  - `(?:^|[^\w.])` — a word BOUNDARY that also excludes a leading dot, so `latest(` and `mytest(`
+ *    are not `test(`, and `suite.it(` is a method call on an object rather than a declaration;
+ *  - the three runner roots, in the spellings `node:test` and `bun:test` share;
+ *  - `(?:\.\w+)?(?:\([^)]*\))?` — a `.skip`/`.todo`/`.each` modifier AND the CURRIED call the table
+ *    form makes, `it.each(table)("title", fn)`. The second group was missing until the suite's
+ *    discriminating cases asked for it: without it a `.each` fixture inside a template literal read
+ *    as ordinary prose, which is a false negative in exactly the expensive direction;
+ *  - `\s*\(\s*['"\`]` — a call whose first argument is a STRING, so `test(fn, 1)` and prose that
+ *    merely contains the word are not declarations.
  */
-const TEST_SOURCE_AS_DATA = /(?:^|[^\w.])(?:describe|test|it)(?:\.\w+)?\s*\(\s*['"`]/;
-
-/** The declaration kinds whose text can be a test's fixture or helper — what {@link contextFor} offers. */
-type NamedDeclaration =
-  | ts.VariableStatement
-  | ts.FunctionDeclaration
-  | ts.ClassDeclaration
-  | ts.TypeAliasDeclaration
-  | ts.InterfaceDeclaration
-  | ts.EnumDeclaration;
+const TEST_SOURCE_AS_DATA = /(?:^|[^\w.])(?:describe|test|it)(?:\.\w+)?(?:\([^)]*\))?\s*\(\s*['"`]/;
 
 /** One judgeable test declaration: the unit, its context, and where it came from. */
 export interface TestUnit {
@@ -202,45 +204,54 @@ export interface RepoExtraction {
 /** The glob pair that enumerates this repo's tests. Both extensions, every workspace, `apps/` included. */
 export const TEST_FILE_GLOBS: readonly string[] = ["*.test.ts", "*.test.tsx"];
 
-/** TRUE for the declaration kinds {@link contextFor} can name and quote. */
-function isNamedDeclaration(node: ts.Node): node is NamedDeclaration {
-  return (
-    ts.isVariableStatement(node) ||
-    ts.isFunctionDeclaration(node) ||
-    ts.isClassDeclaration(node) ||
-    ts.isTypeAliasDeclaration(node) ||
-    ts.isInterfaceDeclaration(node) ||
-    ts.isEnumDeclaration(node)
-  );
-}
+/**
+ * The statement kinds that can be a test's fixture or helper — what {@link contextFor} may quote.
+ *
+ * A SET of kinds rather than a chain of `ts.isX(node) ||` guards, and the reason is measured rather
+ * than stylistic: that chain was six disjuncts, every one of them a branch no test can distinguish
+ * (flip any single `ts.isX` to `true` and the extra nodes it admits simply bind no names and fall
+ * out one step later), so it contributed fifteen surviving mutants on this module's first
+ * `check:mutation-diff` run. A `Set.has` is ONE branch and says exactly the same thing. This is the
+ * house remedy for a survivor on an unreachable decision — reach for the structure, not for more
+ * tests.
+ */
+const CONTEXT_KINDS: ReadonlySet<ts.SyntaxKind> = new Set<ts.SyntaxKind>([
+  ts.SyntaxKind.ImportDeclaration,
+  ts.SyntaxKind.VariableStatement,
+  ts.SyntaxKind.FunctionDeclaration,
+  ts.SyntaxKind.ClassDeclaration,
+  ts.SyntaxKind.TypeAliasDeclaration,
+  ts.SyntaxKind.InterfaceDeclaration,
+  ts.SyntaxKind.EnumDeclaration,
+]);
 
-/** The identifier names a declaration BINDS — several for a destructuring `const { a, b } = …`. */
-function boundNames(node: NamedDeclaration | ts.ImportDeclaration): string[] {
+/**
+ * The identifier names a declaration BINDS — `helper` from a function, `a` and `b` from a
+ * destructuring `const { a, b } = …`, every specifier of an import.
+ *
+ * READ OFF THE `name` NODES BY WALKING, not by switching on declaration kind. TypeScript records a
+ * binding's identifier as `.name` on every declaration form, so one walk covers the import clause,
+ * the namespace import, each specifier, each variable declarator, each nested binding element and
+ * the plain function/class/type/interface/enum name — where the kind switch needed a separate arm
+ * (and a separate unkillable branch) for each.
+ *
+ * It OVER-collects slightly: a method name inside a class, a property name in an object literal
+ * initialiser. That is the safe direction and the same one {@link TestUnit.context} already
+ * documents — a surplus name can only make the reference filter more permissive, and the cost of a
+ * surplus is tokens while the cost of a miss is the answer.
+ */
+function boundNames(node: ts.Node): string[] {
+  // Stryker disable next-line ArrayDeclaration: EQUIVALENT — a seeded name in this accumulator is
+  // never REFERENCED by any unit, so `contextFor`'s `names.some(n => referenced.has(n))` filter
+  // drops it one step later and no output moves. Killing it would need the candidate list itself
+  // to be observable, which would mean exporting an internal for the sake of a mutant.
   const names: string[] = [];
-  const fromBinding = (binding: ts.BindingName): void => {
-    if (ts.isIdentifier(binding)) {
-      names.push(binding.text);
-      return;
-    }
-    for (const element of binding.elements) {
-      if (ts.isBindingElement(element)) fromBinding(element.name);
-    }
+  const visit = (n: ts.Node): void => {
+    const name = (n as ts.Node & { readonly name?: ts.Node }).name;
+    if (name !== undefined && ts.isIdentifier(name)) names.push(name.text);
+    ts.forEachChild(n, visit);
   };
-  if (ts.isImportDeclaration(node)) {
-    const clause = node.importClause;
-    if (clause === undefined) return names;
-    if (clause.name !== undefined) names.push(clause.name.text);
-    const bindings = clause.namedBindings;
-    if (bindings === undefined) return names;
-    if (ts.isNamespaceImport(bindings)) names.push(bindings.name.text);
-    else for (const spec of bindings.elements) names.push(spec.name.text);
-    return names;
-  }
-  if (ts.isVariableStatement(node)) {
-    for (const decl of node.declarationList.declarations) fromBinding(decl.name);
-    return names;
-  }
-  if (node.name !== undefined) names.push(node.name.text);
+  visit(node);
   return names;
 }
 
@@ -260,16 +271,19 @@ interface ContextCandidate {
 function contextCandidates(sf: ts.SourceFile): ContextCandidate[] {
   const found: ContextCandidate[] = [];
   const visit = (node: ts.Node): void => {
-    if (ts.isImportDeclaration(node) || isNamedDeclaration(node)) {
-      const names = boundNames(node);
-      if (names.length > 0) {
-        found.push({
-          names,
-          text: node.getText(sf),
-          start: node.getStart(sf),
-          end: node.getEnd(),
-        });
-      }
+    if (CONTEXT_KINDS.has(node.kind)) {
+      // NO `names.length > 0` GUARD, and its absence is the point. A candidate that binds nothing —
+      // `import "./side-effect.js";` is the real instance — can never match the reference filter in
+      // `contextFor`, because `[].some(…)` is false. So the guard skipped work that was already
+      // inert, and a branch with no observable effect is a branch no test can distinguish: it
+      // contributed two permanent survivors on this module's first mutation run. Deleting a dead
+      // decision beats testing one (`mutation-survivors-are-usually-unreachable-decisions`).
+      found.push({
+        names: boundNames(node),
+        text: node.getText(sf),
+        start: node.getStart(sf),
+        end: node.getEnd(),
+      });
     }
     ts.forEachChild(node, visit);
   };
@@ -286,8 +300,15 @@ function contextCandidates(sf: ts.SourceFile): ContextCandidate[] {
 function referencedNames(source: string): Set<string> {
   const names = new Set<string>();
   // A span is an expression, not a module: wrap it so the parser has something well-formed to chew.
+  // Stryker disable next-line StringLiteral,BooleanLiteral: EQUIVALENT on both counts. The NAME only
+  // selects the parse, and TypeScript's parser recovers from a JSX-shaped expression read as TS well
+  // enough to still yield its identifiers — which is all this function reads. `setParentNodes` is
+  // likewise unobservable: the walk uses `forEachChild` and reads `.text`, never `.parent`.
   const sf = ts.createSourceFile("__span__.tsx", `(${source});`, ts.ScriptTarget.Latest, true);
   const visit = (node: ts.Node): void => {
+    // Stryker disable next-line ConditionalExpression: EQUIVALENT — `true` adds `undefined` for every
+    // non-identifier node while the walk still reaches every real identifier, so the resulting set is a
+    // superset that differs only by a value no declaration can be named.
     if (ts.isIdentifier(node)) names.add(node.text);
     ts.forEachChild(node, visit);
   };
@@ -307,27 +328,46 @@ function referencedNames(source: string): Set<string> {
 function contextFor(unit: { start: number; end: number; source: string }, candidates: readonly ContextCandidate[]): string {
   const referenced = referencedNames(unit.source);
   const kept = candidates.filter(
+    // Stryker disable next-line EqualityOperator: EQUIVALENT at both bounds — a candidate and a unit
+    // can never share a start or an end offset, because CONTEXT_KINDS holds no test-call node and a
+    // unit IS one. The strict and non-strict forms therefore agree on every input this can receive.
     (c) => !(c.start >= unit.start && c.end <= unit.end) && c.names.some((n) => referenced.has(n)),
   );
   return kept.map((c) => c.text).join("\n\n");
 }
 
+/**
+ * The node kinds that CARRY literal text — the only places test source can hide as data.
+ *
+ * A Set for the same measured reason as {@link CONTEXT_KINDS}: as a chain of `ts.isX(node) ||`
+ * guards this was five branches that no test can tell apart, because flipping any one to `true`
+ * admits nodes whose `.text` is `undefined` and which therefore fall out at the regex one step
+ * later.
+ *
+ * `TemplateExpression` is deliberately ABSENT and needs no case: it holds no text of its own, and
+ * `forEachChild` reaches its head and each span's middle/tail, so a fixture broken up by `${…}` is
+ * still read — in pieces, which is what makes the count a magnitude rather than a file count.
+ */
+const TEXT_BEARING_KINDS: ReadonlySet<ts.SyntaxKind> = new Set<ts.SyntaxKind>([
+  ts.SyntaxKind.StringLiteral,
+  ts.SyntaxKind.NoSubstitutionTemplateLiteral,
+  ts.SyntaxKind.TemplateHead,
+  ts.SyntaxKind.TemplateMiddle,
+  ts.SyntaxKind.TemplateTail,
+]);
+
 /** Every string and template literal in the file whose TEXT reads as a test declaration. */
 function countTestSourceLiterals(sf: ts.SourceFile): number {
   let count = 0;
   const visit = (node: ts.Node): void => {
-    if (
-      ts.isStringLiteral(node) ||
-      ts.isNoSubstitutionTemplateLiteral(node) ||
-      ts.isTemplateHead(node) ||
-      ts.isTemplateMiddle(node) ||
-      ts.isTemplateTail(node)
-    ) {
-      // `.text` is the literal's CONTENT for every one of these. A `TemplateExpression` is NOT in the
-      // list and needs no case: it holds no text of its own, and `forEachChild` reaches its head and
-      // each span's middle/tail, so a fixture broken up by `${…}` is still read — in pieces, which is
-      // what makes the count a magnitude rather than a file count.
-      if (TEST_SOURCE_AS_DATA.test(node.text)) count += 1;
+    // Stryker disable next-line ConditionalExpression: EQUIVALENT — `true` feeds every node's `.text`
+    // to the pattern, and a node that bears no literal text yields `undefined`, which the pattern
+    // cannot match. The only other text-bearing node a test file reaches is an identifier, whose text
+    // is a single token and cannot contain a call.
+    if (TEXT_BEARING_KINDS.has(node.kind)) {
+      // `.text` is the literal's CONTENT for every kind in the set — the membership test above is
+      // what makes this cast sound.
+      if (TEST_SOURCE_AS_DATA.test((node as ts.LiteralLikeNode).text)) count += 1;
     }
     ts.forEachChild(node, visit);
   };
@@ -347,6 +387,9 @@ function countTestSourceLiterals(sf: ts.SourceFile): number {
  */
 export function extractTestUnits(source: string, file: string): FileExtraction {
   const normalised = file.replaceAll("\\", "/");
+  // Stryker disable next-line BooleanLiteral: EQUIVALENT — `setParentNodes` only populates
+  // `node.parent`, and nothing reached from this parse reads it: the walks use `forEachChild`, and
+  // `getText`/`getStart` are passed the source file explicitly rather than finding it via a parent.
   const sf = ts.createSourceFile(normalised, source, ts.ScriptTarget.Latest, true);
   const testSourceLiterals = countTestSourceLiterals(sf);
   const analysesTests = testSourceLiterals > 0;
@@ -358,6 +401,12 @@ export function extractTestUnits(source: string, file: string): FileExtraction {
     // A hand-built `ObservedTest` literal carries no span (the field is optional for that reason), and
     // without one there is no text to judge. Skipping is the only honest option: a unit with an empty
     // `source` would read to a classifier as a test that asserts nothing.
+    // Stryker disable next-line ConditionalExpression: EQUIVALENT in this call path and UNREACHABLE by
+    // construction — `analyzeObservedTests` supplies a span on every row it builds (asserted directly
+    // by "a unit is emitted for every observed test that carries a span"). The field is optional only
+    // because a hand-built literal predates it, so this is the optional-undefined guard shape that is
+    // an equivalent mutant by construction (`optional-undefined-guard-is-an-unkillable-mutant`); the
+    // type demands it and no input can take the other branch.
     if (span === undefined) continue;
     const text = source.slice(span.start, span.end);
     units.push({
@@ -365,6 +414,12 @@ export function extractTestUnits(source: string, file: string): FileExtraction {
       line: sf.getLineAndCharacterOfPosition(span.start).line + 1,
       name: observed.name,
       ancestors: observed.ancestors,
+      // Stryker disable next-line StringLiteral: UNREACHABLE — `analyzeObservedTests` sets `call` on
+      // every row it builds, so this fallback is never taken. The field is optional for the same
+      // reason `span` is (a hand-built literal predates it), and the same guard above already drops
+      // any row those literals could produce. Replacing the default changes nothing an input can
+      // reach; the honest alternative would be to widen the published type, which is not this
+      // module's to change.
       call: observed.call ?? "test",
       source: text,
       context: contextFor({ start: span.start, end: span.end, source: text }, candidates),
@@ -412,17 +467,54 @@ export function foldExtractions(
  * index, so a new workspace or a new `apps/` directory joins without anyone remembering to widen a
  * pattern.
  */
+/**
+ * PURE: the census refusal. Returns `files` unchanged, or THROWS naming the cause.
+
+ * Split out from {@link enumerateTestFiles} for the same reason {@link parseLsFiles} is: every test
+ * that could reach this branch through the process call is one that must stand down outside a git
+ * checkout, and outside a git checkout is precisely where `check:mutation-diff` runs the suite. A
+ * refusal nothing can exercise is a refusal nothing is holding to its wording.
+ */
+export function refuseEmptyCensus(files: readonly string[], repoRoot: string): string[] {
+  if (files.length === 0) {
+    throw new Error(
+      `no git-tracked test files under ${repoRoot} — refusing to report a census over zero files. ` +
+        "`git ls-files` returns nothing (exit 0) when run outside a git work tree or inside an " +
+        "ignored directory, so a zero here is a statement about this reader's position and never " +
+        "about the suite. Point it at a git checkout, or pass an explicit file list.",
+    );
+  }
+  return [...files];
+}
+
+/**
+ * PURE: `git ls-files` output into a sorted, deduplicated file list.
+ *
+ * SPLIT OUT FROM THE PROCESS CALL DELIBERATELY. The parsing has real behaviour — git emits a
+ * trailing newline, so the last split element is always empty and a missing filter would hand a
+ * caller `""` as a filename — and every test that could exercise it THROUGH {@link
+ * enumerateTestFiles} is one that must stand down outside a git checkout, which is exactly where
+ * `check:mutation-diff` runs the suite. So proving it through the process call proves it nowhere the
+ * rung can see. As a pure function it is provable against literals, in the sandbox, for free.
+ */
+export function parseLsFiles(out: string): string[] {
+  return [
+    ...new Set(
+      out
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0),
+    ),
+  ].sort();
+}
+
 export function enumerateTestFiles(repoRoot: string): string[] {
   const out = execFileSync("git", ["ls-files", ...TEST_FILE_GLOBS], {
     cwd: repoRoot,
     encoding: "utf8",
     maxBuffer: 64 * 1024 * 1024,
   });
-  const files = out
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0)
-    .sort();
+  const files = parseLsFiles(out);
   // ⚠ AN EMPTY CENSUS IS REFUSED, and this is the sharpest lesson of the increment rather than
   // defensive padding. `git ls-files` does NOT fail inside a gitignored directory — it succeeds and
   // returns nothing, so a caller gets a clean, confident report over ZERO files. That reads as a
@@ -434,15 +526,7 @@ export function enumerateTestFiles(repoRoot: string): string[] {
   // instance of — a zero deserves more suspicion than a wrong-looking number, because a zero is what
   // both a true absence and a broken reader produce. There is no true absence here: this repo tracks
   // 977 test files, so zero can only mean the reader is pointed somewhere it cannot see.
-  if (files.length === 0) {
-    throw new Error(
-      `no git-tracked test files under ${repoRoot} — refusing to report a census over zero files. ` +
-        "`git ls-files` returns nothing (exit 0) when run outside a git work tree or inside an " +
-        "ignored directory, so a zero here is a statement about this reader's position and never " +
-        "about the suite. Point it at a git checkout, or pass an explicit file list.",
-    );
-  }
-  return files;
+  return refuseEmptyCensus(files, repoRoot);
 }
 
 /** The IO shell: enumerate, read, fold. Every judgement-bearing decision is in the pure half above. */
