@@ -2,9 +2,13 @@
 // join them across each island.
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-import type { CoastPoint } from './coast-clip.js';
+import type { SceneG } from '@storytree/forest-world';
+
+import { SHIPPED_COAST, clipToCoast, type CoastPoint, vertexKey } from './coast-clip.js';
 import { LAND_SCALE } from './land-per-capability.js';
 import { SAND_SHIPPED_BEACH_WIDTH } from './land-sand.js';
 import {
@@ -33,6 +37,7 @@ import {
   stripEndpoints,
   waypointToward,
 } from './island-path.js';
+import { landStreamFromDrawing } from './true-ground.js';
 import type { InstanceDescriptor } from './world-to-3d.js';
 
 /** One square island, `size` units on a side, with a ring. */
@@ -86,11 +91,12 @@ const near = (p: CoastPoint, q: CoastPoint, eps = 1e-9): boolean =>
 // The constants
 // ---------------------------------------------------------------------------
 
+// test-updated (new behaviour): the dock reach is 1.5x the shipped beach, and the recipe`s shape constants are pinned — now pins the four-beach terminal reach required by the real clipped map.
 test('the dock reach is 1.5x the shipped beach, and the recipe`s shape constants are pinned', () => {
-  assert.equal(DOCK_REACH, 1.5 * SAND_SHIPPED_BEACH_WIDTH);
-  // × LAND_SCALE (`land-per-capability.ts`): 13.5 = 1.5 × the 9-unit beach judged on the TUNED
+  assert.equal(DOCK_REACH, 4 * SAND_SHIPPED_BEACH_WIDTH);
+  // × LAND_SCALE (`land-per-capability.ts`): 36 = 4 × the 9-unit beach judged on the TUNED
   // island; the shipped beach is 9 × LAND_SCALE, and the reach follows it.
-  assert.equal(DOCK_REACH, 13.5 * LAND_SCALE);
+  assert.equal(DOCK_REACH, 36 * LAND_SCALE);
   assert.equal(PATH_CHAIKIN_PASSES, 4);
   assert.equal(PATH_PULL, 0.6);
   // × LAND_SCALE: the 7-unit jitter judged on the tuned island, the same fraction of the shipped one.
@@ -185,6 +191,41 @@ test('islandDocks buckets every strip end to ITS island, snapped, deduplicated, 
   assert.deepEqual(nowhere.get('isle-b'), []);
   // No strips: every island present, every list empty.
   assert.deepEqual([...islandDocks(CELLS, []).values()], [[], []]);
+});
+
+test('fld-a-routed-junction-is-never-a-dock: a shared in-reach end is excluded while a terminal peer docks', () => {
+  const rim = [island('junction-rim', 0, 0, 100)];
+  // The two strips meet at the same end WELL inside the reach. Moving that end outside the reach
+  // would let the current distance-only rule pass, so the third strip is a terminal at the same
+  // three-unit offset and must remain the sole landing.
+  const shared = { x: -3, z: 50 };
+  const docks = islandDocks(rim, [
+    strip({ x: -80, z: 30 }, shared),
+    strip({ x: -80, z: 70 }, shared),
+    strip({ x: 180, z: 50 }, { x: 103, z: 50 }),
+  ]);
+  assert.deepEqual(docks.get('junction-rim'), [{ x: 100, z: 50 }]);
+});
+
+test('fld-every-terminal-trail-end-docks-on-the-real-map: every terminal landing in the shipped stream docks on clipped ground', () => {
+  const source = JSON.parse(
+    readFileSync(fileURLToPath(new URL('../../../docs/research/chapter2-real-forest-2026-09-08/scenes/shipped.json', import.meta.url)), 'utf8'),
+  ) as { scene: SceneG };
+  const stream = landStreamFromDrawing(source.scene);
+  const cells = clipToCoast(stream.filter((d): d is InstanceDescriptor => d.kind === 'cell-ground'), SHIPPED_COAST);
+  const strips = stream.filter((d): d is InstanceDescriptor => d.kind === 'trail-strip' && d.hidden !== true);
+  const ends = new Map<string, CoastPoint[]>();
+  for (const strip of strips) {
+    for (const end of stripEndpoints(strip)) {
+      const key = vertexKey(end);
+      ends.set(key, [...(ends.get(key) ?? []), end]);
+    }
+  }
+  const terminals = [...ends.values()].filter((samePosition) => samePosition.length === 1);
+  assert.equal(terminals.length, 52, 'the committed export must retain the measured terminal population');
+
+  const dockCount = [...islandDocks(cells, strips).values()].reduce((count, docks) => count + docks.length, 0);
+  assert.equal(dockCount, terminals.length, 'every terminal landing must reach the clipped map rim');
 });
 
 test('islandDocks assigns an end within reach of TWO islands to the NEARER one, on either axis', () => {

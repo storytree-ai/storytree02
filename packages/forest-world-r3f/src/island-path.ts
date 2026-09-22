@@ -34,18 +34,19 @@ import type { InstanceDescriptor } from './world-to-3d.js';
 
 /**
  * HOW FAR FROM AN ISLAND'S RIM A STRIP ENDPOINT MAY SIT AND STILL COUNT AS THAT ISLAND'S DOCK,
- * in ground units — 1.5x the shipped beach width, and the reason is the geometry of the two maps.
+ * in ground units — four times the shipped beach width, and the reason is the geometry of the two maps.
  *
  * A strip docks on the 2D map's coast. The 3D ground ends on a coast built by the SAME machinery
  * (`coast-clip.ts` imports `smoothCoast` rather than transcribing it), but the clip is CAPPED so
  * no parcel crosses itself — so on a tight bay the mesh's rim can fall short of the 2D coast by
  * up to the beach outset, and the strip's end then sits that far OFF the rim, out to sea. The
  * shipped sand band ({@link SAND_SHIPPED_BEACH_WIDTH}, 9 units) is the widest thing the coast
- * treatment draws, so one and a half of it covers the outset with margin and is still an order
+ * treatment draws, so four times it covers the measured clipped-map offset while remaining
+ * an order
  * of magnitude under the gap between any two islands on the map — a strip's end can never be
  * within reach of two islands' rims at once on a map whose islands do not touch.
  */
-export const DOCK_REACH = 1.5 * SAND_SHIPPED_BEACH_WIDTH;
+export const DOCK_REACH = 4 * SAND_SHIPPED_BEACH_WIDTH;
 
 /** The recipe's own smoothing: four Chaikin passes, endpoints kept (`build_land.py:430-438`). */
 export const PATH_CHAIKIN_PASSES = 4;
@@ -168,9 +169,9 @@ export function dockOnRim(grid: EdgeGrid, end: CoastPoint, reach: number = DOCK_
  * not occur on a map whose islands do not touch (the coast clip's own suite holds that), so this
  * is stated rather than relied on: a dock belongs to one shore.
  *
- * ⚠ DOCKS ARE DEDUPLICATED BY POSITION (`vertexKey`, a tenth of a unit). Two trails arriving at
- * one landing — a junction on the coast — are one dock; two docks a hair apart would otherwise
- * be "joined" by a path of zero length that the smoothing turns into a knot.
+ * ⚠ ONLY TERMINAL ENDS DOCK. A position shared by two or more visible strips is a routed
+ * junction, not a landing, and is excluded before the rim search. Coincidence uses `vertexKey`
+ * (a tenth of a unit), the same quantisation used to deduplicate the remaining docks.
  */
 export function islandDocks(
   cells: readonly InstanceDescriptor[],
@@ -180,9 +181,18 @@ export function islandDocks(
   const grids = rims.map(rimGrid);
   const docks = new Map<string, Map<string, CoastPoint>>();
   for (const rim of rims) docks.set(rim.island, new Map());
+  const ends = new Map<string, CoastPoint[]>();
   for (const strip of strips) {
     if (!isDockableStrip(strip)) continue;
     for (const end of stripEndpoints(strip)) {
+      const key = vertexKey(end);
+      ends.set(key, [...(ends.get(key) ?? []), end]);
+    }
+  }
+  for (const strip of strips) {
+    if (!isDockableStrip(strip)) continue;
+    for (const end of stripEndpoints(strip)) {
+      if (ends.get(vertexKey(end))!.length !== 1) continue;
       // ⚠ ONE `nearest`, NOT A SEPARATE island AND dock. They were two nullables, assigned only
       // ever together, and `check:mutation-diff` reported the second null check as three
       // survivors — `||` to `&&`, and either side to `false` — every one of them EQUIVALENT,
