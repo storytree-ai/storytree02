@@ -12,6 +12,7 @@ import {
 } from "@storytree/agent";
 import type {
   ClaudeAgentAuthorArgs,
+  CodexManifestChangeRule,
   CodexPhaseAuthorArgs,
   CodexPromotionManifest,
   FeedbackChoice,
@@ -201,12 +202,25 @@ export function realCommitGlobs(
 
 /**
  * Turn the spine's phase declaration into a finite Codex packing list. The named proof target is
- * required; any additional literal scope entries are optional exact targets. Pattern-shaped scope
- * remains a hook wall only and never becomes promotion authority.
+ * required; any additional literal scope entries are optional exact targets.
+ *
+ * **Pattern-shaped scope remains a hook wall only and never becomes promotion authority** — re-decided
+ * and UPHELD by ADR-0595 D3, against ADR-0581 D3's inventory, which asked for glob entries to promote.
+ * Declined on measurement: every `real:` block in the registry declares `real.scope.sourceGlobs` as one
+ * literal path identical to its own `sourceFile`, so no real build has a pattern-shaped IMPLEMENT scope
+ * to expand; and the only pattern-shaped scopes here are node-level and broad, with
+ * `packages/*\/src/**\/*.ts` resolving to 1,320 files. Expanding that would be finite in letter and
+ * unbounded in spirit, and would hand one phase promotion authority over most of the monorepo. Where a
+ * unit genuinely needs a sibling source file promoted, the supported remedy is the one ADR-0590 D2 set
+ * for the test side: the scope NAMES it concretely and it arrives here as a literal.
+ *
+ * `changeSatisfiedBy` is which observed change satisfies the phase (ADR-0595 D2). It defaults to
+ * ADR-0356 D2's original rule, so a caller that says nothing keeps it.
  */
 export function codexPromotionManifest(
   requiredTarget: string,
   phaseScope: string[],
+  changeSatisfiedBy: CodexManifestChangeRule = "required-target",
 ): CodexPromotionManifest {
   return {
     allowedTargets: [
@@ -216,6 +230,36 @@ export function codexPromotionManifest(
       ]),
     ],
     requiredTargets: [requiredTarget],
+    changeSatisfiedBy,
+  };
+}
+
+/**
+ * The real route's two phase manifests, as one named thing (ADR-0595 D2).
+ *
+ * This exists to be ASSERTABLE. The rule each phase resolves with is a one-argument wiring fact, and
+ * the defect it guards against — the two phases resolving with each other's rule — is invisible to a
+ * test of {@link codexPromotionManifest} alone and unreachable through `CodexPhaseAuthor`, which keeps
+ * its args private. `packages/orchestrator` is outside the mutation rung, so the choice was between a
+ * conditional assertion that could silently verify nothing and naming the pairing here; this is the
+ * latter.
+ */
+export function codexRealPromotionManifests(
+  real: {
+    readonly testFile: string;
+    readonly sourceFile: string;
+    readonly scope: { readonly testGlobs: readonly string[]; readonly sourceGlobs: readonly string[] };
+  },
+  existingTestFiles: readonly string[],
+) {
+  return {
+    // AUTHOR_TEST keeps ADR-0356 D2's rule: the named test file is the file the proof command actually
+    // runs, so it is the deliverable itself rather than a guess about where the work lands.
+    AUTHOR_TEST: codexPromotionManifest(real.testFile, [...real.scope.testGlobs, ...existingTestFiles]),
+    // IMPLEMENT resolves with any allowed target: when a unit's scope names sibling source files, a
+    // correct fix belonging in one of them is a real outcome, and the spine's own red-green
+    // observation — not this packing list — is what says whether IMPLEMENT worked.
+    IMPLEMENT: codexPromotionManifest(real.sourceFile, [...real.scope.sourceGlobs], "any-allowed-target"),
   };
 }
 
@@ -761,7 +805,10 @@ export function resolveProveSpec(
         },
         promotionManifests: {
           AUTHOR_TEST: codexPromotionManifest(DRY_RUN_TEST_REL, [DRY_RUN_TEST_REL]),
-          IMPLEMENT: codexPromotionManifest(DRY_RUN_IMPL_REL, [DRY_RUN_IMPL_REL]),
+          // `any-allowed-target` is a property of the IMPLEMENT PHASE, not of the real route, so it is
+          // declared here too. Provably no behaviour change for the dry run: its allowed and required
+          // sets are the same single path, so both rules accept and refuse exactly the same runs.
+          IMPLEMENT: codexPromotionManifest(DRY_RUN_IMPL_REL, [DRY_RUN_IMPL_REL], "any-allowed-target"),
         },
         isWriteAllowed: (phase, relPath) => scope.isWriteAllowed(phase, relPath),
         feedbackCommands: codexFeedbackCommandsFor(
@@ -1026,10 +1073,7 @@ function resolveReal(
           AUTHOR_TEST: [...real.scope.testGlobs, ...existingTestFiles],
           IMPLEMENT: real.scope.sourceGlobs,
         },
-        promotionManifests: {
-          AUTHOR_TEST: codexPromotionManifest(real.testFile, [...real.scope.testGlobs, ...existingTestFiles]),
-          IMPLEMENT: codexPromotionManifest(real.sourceFile, real.scope.sourceGlobs),
-        },
+        promotionManifests: codexRealPromotionManifests(real, existingTestFiles),
         isWriteAllowed: (phase, relPath) => scope.isWriteAllowed(phase, relPath),
         feedbackCommands: codexFeedbackCommandsFor(
           realProofCmd,

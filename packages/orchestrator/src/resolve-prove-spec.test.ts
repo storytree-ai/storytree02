@@ -36,6 +36,7 @@ import {
   realPrompts,
   scriptedWriterModel,
   codexPromotionManifest,
+  codexRealPromotionManifests,
 } from "./resolve-prove-spec.js";
 import type { RealProofConfig } from "./proof-config.js";
 import { classifyProofRoute } from "./proof/proof-route.js";
@@ -679,7 +680,69 @@ test("Codex promotion manifests widen only to additional literal phase-scope tar
         "packages/widget/src/helper.ts",
       ],
       requiredTargets: ["packages/widget/src/widget.ts"],
+      // ADR-0595 D3 UPHELD ADR-0356's position after ADR-0581 D3 asked for the opposite: the glob
+      // above is still absent from `allowedTargets`. This assertion is the position's only mechanical
+      // witness, so it is deliberately a whole-object compare rather than a membership check.
+      changeSatisfiedBy: "required-target",
     },
+  );
+});
+
+test("a Codex manifest defaults to ADR-0356 D2's rule and carries an explicit one verbatim", () => {
+  // ADR-0595 D2. The DEFAULT is the load-bearing half: every caller that says nothing — the dry-run
+  // AUTHOR_TEST manifest, the real AUTHOR_TEST manifest — must keep the original rule, because the
+  // named test file there is the deliverable the proof command runs rather than a guess about it.
+  assert.equal(
+    codexPromotionManifest("a.ts", ["a.ts"]).changeSatisfiedBy,
+    "required-target",
+    "an unspecified rule is the strict one, never the permissive one",
+  );
+  assert.equal(
+    codexPromotionManifest("a.ts", ["a.ts", "b.ts"], "any-allowed-target").changeSatisfiedBy,
+    "any-allowed-target",
+    "and an explicit rule reaches the manifest the author validates",
+  );
+});
+
+test("the real route pairs each phase with its own rule, and the pairing is not swappable", () => {
+  // ADR-0595 D2, asserted where the two phases are WIRED. The defect this guards is the two phases
+  // resolving with each other's rule, which a test of `codexPromotionManifest` alone cannot see.
+  const manifests = codexRealPromotionManifests(
+    {
+      testFile: "packages/widget/src/widget.test.ts",
+      sourceFile: "packages/widget/src/widget.ts",
+      scope: {
+        testGlobs: ["packages/widget/src/**/*.test.ts"],
+        sourceGlobs: ["packages/widget/src/widget.ts", "packages/widget/src/helper.ts"],
+      },
+    },
+    ["packages/widget/src/existing.test.ts"],
+  );
+
+  assert.equal(
+    manifests.IMPLEMENT.changeSatisfiedBy,
+    "any-allowed-target",
+    "IMPLEMENT may land the fix in any allowed target",
+  );
+  assert.equal(
+    manifests.AUTHOR_TEST.changeSatisfiedBy,
+    "required-target",
+    "AUTHOR_TEST keeps ADR-0356 D2's rule — swapping these is the defect this test exists for",
+  );
+  // The required target of each phase is its OWN named file, which is what makes the two rules mean
+  // different things in the first place.
+  assert.deepEqual(manifests.IMPLEMENT.requiredTargets, ["packages/widget/src/widget.ts"]);
+  assert.deepEqual(manifests.AUTHOR_TEST.requiredTargets, ["packages/widget/src/widget.test.ts"]);
+  // ADR-0590 D2's concrete existing test file promotes; ADR-0595 D3's upheld position keeps the glob out.
+  assert.deepEqual(
+    manifests.AUTHOR_TEST.allowedTargets,
+    ["packages/widget/src/widget.test.ts", "packages/widget/src/existing.test.ts"],
+    "a literal existing test earns promotion authority and a pattern never does",
+  );
+  assert.deepEqual(
+    manifests.IMPLEMENT.allowedTargets,
+    ["packages/widget/src/widget.ts", "packages/widget/src/helper.ts"],
+    "and a named sibling source file is promotable, which is what makes D2 usable",
   );
 });
 
