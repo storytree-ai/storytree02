@@ -59,6 +59,9 @@ export type {
   CodexPromotionManifest,
   CodexPromotionFaults,
   CodexPhaseAuthorArgs,
+  // ADR-0595: the manifest declares which observed change satisfies its phase, so the rule crosses
+  // the boundary with the manifest the spine authors.
+  CodexManifestChangeRule,
 } from "./codex-author.js";
 export {
   DEFAULT_CODEX_MODEL,
