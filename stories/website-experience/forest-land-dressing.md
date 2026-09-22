@@ -25,11 +25,24 @@ decisions: [123, 562]
 # `cover-dressing` populate the land between props against the surfaced ground. Both edges are real
 # forward value edges in the measured graph; neither is invented to be safe.
 #
-# Node-borne proof config (ADR-0057): NOT armed. `command` is the package suite, which really does
-# run every test named below — all 8 modules carry a `node:test` suite today. There is deliberately
-# NO `real:` arm: this landing draws a boundary and arms no red→green, and naming a net-new
-# test/source pair here would fabricate a build nobody asked for. The first unit taken in this lane
-# adds the arm with the pair it actually authors.
+# Node-borne proof config (ADR-0057). `command` is the package suite, which really does run every
+# test named below — all 8 modules carry a `node:test` suite today.
+#
+# ⚠ THE `real:` ARM WAS ADDED BY THIS LANE'S FIRST UNIT (2026-09-23, `three-d-pathways-arc-inc-01`),
+# exactly as the note it replaces reserved: "the first unit taken in this lane adds the arm with the
+# pair it actually authors." The pair is `island-path.test.ts` -> `island-path.ts`, and the arm is
+# `editsExisting` because the connector EXISTS and its docking rule is WRONG on a real map
+# (ADR-0596): the red is an assertion against current behaviour, never a missing symbol.
+#
+# ⚠ IT DECLARES AN EXPLICIT `proofCommand`, AND THE REASON IS THE RUNTIME rather than the scope.
+# The default proof is `node --import tsx --test <testFile>` at the WORKTREE ROOT, and `tsx` does
+# not resolve from this repo's root — measured 2026-09-23, `ERR_MODULE_NOT_FOUND 'tsx'`, the same
+# trap CLAUDE.md records for a bare CLI invocation. This package moved to Bun as a test RUNTIME in
+# `bun-runtime-migration-arc` increment 2, so the honest single-file oracle is `bun test` over the
+# one file, preloaded the same way the package's own `test` script preloads it. It is ONE oracle
+# serving both the spine's red/green observation and the leaf's `run_proof` feedback tool, and it
+# cannot forge a green: the spine still spawns it out-of-band and CONFIRM_RED must see a real red
+# first.
 proof:
   command:
     file: pnpm
@@ -53,6 +66,20 @@ proof:
       - "packages/forest-world-r3f/src/dressing-ground.ts"
       - "packages/forest-world-r3f/src/map-dressing.ts"
       - "packages/forest-world-r3f/src/island-path.ts"
+  real:
+    testFile: "packages/forest-world-r3f/src/island-path.test.ts"
+    sourceFile: "packages/forest-world-r3f/src/island-path.ts"
+    editsExisting: true
+    scope:
+      testGlobs: ["packages/forest-world-r3f/src/island-path.test.ts"]
+      sourceGlobs: ["packages/forest-world-r3f/src/island-path.ts"]
+    proofCommand:
+      file: bun
+      args: ["test", "--preload", "./scripts/tsx-cache-off.mjs", "packages/forest-world-r3f/src/island-path.test.ts"]
+    install: true
+    typecheck:
+      file: pnpm
+      args: ["--filter", "@storytree/forest-world-r3f", "typecheck"]
 ---
 
 # The land dressing — what stands ON the land once the land itself reads right
@@ -119,6 +146,71 @@ dressed prop belongs to the ground it stands on.
    ground through the surface lane's wear rather than by overwriting the ground material.
 5. Assert ground cover thins where the path and props already occupy the cell — dressing composes
    with itself and does not double-populate.
+
+## Contracts (2)
+
+Both are assertions about `island-path.ts`, the canvas-side connector that decides where a
+dependency trail comes ashore. They are this lane's FIRST contracts — the lane was born of a split
+carrying no proof at all — and they are the pair the `real:` arm above authors.
+
+1. **`fld-a-routed-junction-is-never-a-dock`** — an end position two or more visible strips share is
+   a junction, and a junction is never a landing
+   - **asserts —** given visible `trail-strip` descriptors whose endpoints coincide (the shape a
+     routed trunk makes where several edges funnel together in open water), `islandDocks` forms NO
+     dock at that position however close it lies to a rim — including well inside `DOCK_REACH`. A
+     terminal end at the same distance still docks, so the test separates the RULE from the
+     distance rather than restating the reach.
+   - **covers —** `packages/forest-world-r3f/src/island-path.ts`
+2. **`fld-every-terminal-trail-end-docks-on-the-real-map`** — on storytree's own forest, every place
+   the routed network actually stops is a landing
+   - **asserts —** the committed real-forest export driven through the shipped 3D stream yields 103
+     visible trail segments over 103 distinct end positions, of which 52 are terminal; every one of
+     those 52 becomes a dock, no junction does, and all 35 islands carry at least one dock. It is
+     the fence ADR-0596 D5 asks for: a later change that drops a segment, loses an edge key or
+     re-loses a landing reds here instead of quietly redrawing the map.
+   - **covers —** `packages/forest-world-r3f/src/island-path.ts`
+
+## Proof walkthrough
+
+**THE SUBJECT IS A MEASURED DEFECT, NOT A MISSING FEATURE.** `islandDocks` already exists and
+already works on the harness crowd fixture, whose synthetic strips end exactly on the clipped rim by
+construction. Run against the REAL map it loses landings, and ADR-0596 is the measurement. Today's
+rule is "any visible strip endpoint within `DOCK_REACH` of a rim is a dock". Two things are wrong
+with it, both measured on the committed export:
+
+- **`DOCK_REACH` is 5.09 ground units and the real terminal ends reach 9.56.** 40 of 52 dock; 12 are
+  refused; 7 of 35 islands form no dock and wear no path. The constant is written as a multiple of
+  the beach width and drifted down when the beach was rescaled by `LAND_SCALE` — ADR-0504 recorded
+  it as 13.5.
+- **No pure distance separates a landing from a junction.** The furthest terminal end is 9.56; the
+  nearest junction is 7.60. Simply widening the reach to catch all 52 also admits phantom docks in
+  open water, which ADR-0504 D2 forbids ("the connector invents no dock").
+
+**THE FIX IS A RULE, NOT A NUMBER (ADR-0596 D1/D2).** Only a TERMINAL end — a position exactly one
+visible strip uses — may dock; a position two or more share is a routed junction and is excluded at
+any distance. Coincidence is judged at the same tenth-of-a-unit quantisation `vertexKey` already
+uses to deduplicate docks, so one rule of coincidence serves both. With the discriminator out of the
+distance test, the reach widens to 4x the shipped beach width and becomes a sanity bound.
+
+**THE ACCEPTANCE SETUP, and the doubles it rules out.**
+
+- Contract 1 is a UNIT setup and must stay one: hand-built `trail-strip` descriptors over a small
+  synthetic rim, with two strips deliberately sharing an endpoint placed WELL INSIDE the reach, and
+  a third terminal end at a comparable distance that must still dock. A test that only places the
+  shared endpoint outside the reach proves nothing — it would pass against today's code.
+- Contract 2 must read the REAL committed export and nothing else:
+  `docs/research/chapter2-real-forest-2026-09-08/scenes/shipped.json` (repo-relative; from the
+  package the path is `../../docs/research/...`). Drive it through the SHIPPED stream —
+  `landStreamFromDrawing` from `./true-ground.js` — then `clipToCoast(…, SHIPPED_COAST)` over the
+  descriptors `coastalIsland` accepts, exactly as `dressing-ground.ts` does. **The clipped
+  descriptors are mandatory**: after the clip the boundary of the mesh IS the coast, and handed the
+  pre-clip parcels every dock lands a beach's width inland of the sea. A synthetic or fixture map is
+  explicitly ruled out for this contract — the whole point is that the crowd fixture could not have
+  caught this.
+- Both contracts run under `bun test` over this one file (the `real:` arm's declared
+  `proofCommand`), and the file's existing 23 tests must stay green: several of them assert
+  `DOCK_REACH`'s own value and its derivation, so widening it means updating those assertions in the
+  same test file rather than leaving them red.
 
 ## Guidance
 
