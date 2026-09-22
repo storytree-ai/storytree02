@@ -439,17 +439,17 @@ function validatePromotionManifest(manifest: CodexPromotionManifest | undefined)
   };
   const allowed = collect(manifest.allowedTargets);
   const required = collect(manifest.requiredTargets);
+  // The rule is refused rather than defaulted: an unrecognized one is a malformed packing list, and
+  // quietly falling back would make a typo read as a deliberate choice of the stricter rule. It joins
+  // the existing guard rather than adding a second `return { ok: false }`, which would be an
+  // indistinguishable duplicate exit — the "redundant early-out" mutation shape.
+  const satisfiedBy = manifest.changeSatisfiedBy ?? "required-target";
   if (
     allowed === undefined ||
     required === undefined ||
+    (satisfiedBy !== "required-target" && satisfiedBy !== "any-allowed-target") ||
     [...required.keys()].some((key) => !allowed.has(key))
   ) {
-    return { ok: false };
-  }
-  // Refused rather than defaulted: an unrecognized rule is a malformed packing list, and quietly
-  // falling back would make a typo read as a deliberate choice of the stricter rule.
-  const satisfiedBy = manifest.changeSatisfiedBy ?? "required-target";
-  if (satisfiedBy !== "required-target" && satisfiedBy !== "any-allowed-target") {
     return { ok: false };
   }
   return { ok: true, allowed, required, satisfiedBy };
@@ -551,13 +551,11 @@ export function wrapFeedbackCommandWithBound(
     ...command,
     run: async (replicaRoot: string, choice?: FeedbackChoice) => {
       bound.suspend?.();
-      // Both snapshots run while the bound is still suspended: they are the SPINE's work, and the
-      // leaf's own clock should not be charged for the spine observing its replica.
-      await attribution.beforeRun();
       try {
-        return await command.run(replicaRoot, choice);
+        // Inside the suspended bound: the snapshots are the SPINE's work, and the leaf's own clock
+        // should not be charged for the spine observing its replica.
+        return await attribution.around(() => command.run(replicaRoot, choice));
       } finally {
-        await attribution.afterRun();
         bound.resume?.();
       }
     },
@@ -591,19 +589,21 @@ export function wrapFeedbackCommandWithBound(
  * When a snapshot cannot be taken, nothing is attributed and the pre-existing refusal stands.
  */
 export interface FeedbackWriteAttribution {
-  /** Snapshot the replica immediately before a feedback command runs. */
-  beforeRun(): Promise<void>;
-  /** Snapshot it again afterwards, recording what this run left at each path it touched. */
-  afterRun(): Promise<void>;
+  /**
+   * Run one feedback command, recording what the replica gained while it ran. The baseline is a LOCAL
+   * of this call rather than a field, so two runs that overlap cannot diff against each other's
+   * snapshot — nothing serialises the endpoint's tool calls, and a shared baseline would silently
+   * attribute one run's window to the other.
+   */
+  around<T>(body: () => Promise<T>): Promise<T>;
   /** True when this change is a new file a feedback run left, untouched by the leaf since. */
   causedBySpine(change: ReplicaChange): boolean;
 }
 
-/** The unarmed author's attribution: no phase without feedback commands can have spine-caused writes. */
+/** The default attribution: nothing was ever observed, so nothing is ever excused. */
 export function noFeedbackWriteAttribution(): FeedbackWriteAttribution {
   return {
-    beforeRun: async () => undefined,
-    afterRun: async () => undefined,
+    around: async <T,>(body: () => Promise<T>) => body(),
     causedBySpine: () => false,
   };
 }
@@ -613,29 +613,30 @@ export function feedbackWriteAttribution(
   root: string,
   snapshot: (dir: string) => Promise<Map<string, ReplicaPathState>>,
 ): FeedbackWriteAttribution {
-  /** relPath → the state THIS run left it in; a later run overwrites an earlier one. */
+  /** relPath → the state the LAST run to touch it left it in. */
   const left = new Map<string, ReplicaPathState | undefined>();
-  let pre: Map<string, ReplicaPathState> | undefined;
   return {
-    async beforeRun(): Promise<void> {
-      pre = await snapshot(root).catch(() => undefined);
-    },
-    async afterRun(): Promise<void> {
-      const before = pre;
-      // Cleared unconditionally, so a failed post-snapshot cannot leave a stale pre-state that the
-      // NEXT run would diff against and mis-attribute the leaf's writes in between.
-      pre = undefined;
-      if (before === undefined) return;
-      const after = await snapshot(root).catch(() => undefined);
-      if (after === undefined) return;
-      for (const change of observedReplicaChanges(before, after)) {
-        left.set(change.relPath, change.after);
+    async around<T>(body: () => Promise<T>): Promise<T> {
+      const before = await snapshot(root).catch(() => undefined);
+      try {
+        return await body();
+      } finally {
+        // A snapshot that cannot be taken attributes nothing, and the pre-existing refusal stands.
+        if (before !== undefined) {
+          const after = await snapshot(root).catch(() => undefined);
+          if (after !== undefined) {
+            for (const change of observedReplicaChanges(before, after)) {
+              left.set(change.relPath, change.after);
+            }
+          }
+        }
       }
     },
     causedBySpine(change: ReplicaChange): boolean {
       // Additions only: a path that already existed when the phase started is never spine detritus.
+      // No second `left.has` guard — past this line the path is a pure addition, so its `after` is
+      // always present, and `samePathState` already answers false for an unrecorded path.
       if (change.before !== undefined) return false;
-      if (!left.has(change.relPath)) return false;
       return samePathState(left.get(change.relPath), change.after);
     },
   };
@@ -1119,11 +1120,19 @@ async function snapshotReplica(root: string): Promise<Map<string, ReplicaPathSta
 
 /**
  * One notion of "this path is unchanged", shared by the phase diff and by ADR-0595 D1's attribution.
- * Two absent states count as equal, which is what lets attribution recognize a file a feedback run
- * created and then removed.
+ * Two absent states count as equal; an absent state and a present one never do.
+ *
+ * The absent cases are handled up front rather than with `a?.x === b?.x` chains. Those chains read
+ * more compactly and are strictly worse here: once the first comparison short-circuits, the later
+ * `?.` operands are unreachable whenever either side is undefined, so their mutants cannot be killed
+ * by any input — six unkillable mutants, measured, for a shape whose only merit was brevity.
  */
-function samePathState(a: ReplicaPathState | undefined, b: ReplicaPathState | undefined): boolean {
-  return a?.kind === b?.kind && a?.digest === b?.digest && a?.mode === b?.mode;
+export function samePathState(
+  a: ReplicaPathState | undefined,
+  b: ReplicaPathState | undefined,
+): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return a.kind === b.kind && a.digest === b.digest && a.mode === b.mode;
 }
 
 function observedReplicaChanges(
@@ -1516,13 +1525,15 @@ export class CodexPhaseAuthor implements PhaseAuthor {
     const renderTargets = (targets: string[]): string =>
       targets.map((target) => `- \`${target}\``).join("\n");
     const armed = this.#feedbackCommands.length > 0;
-    // ADR-0595 D1. Only a seeded replica has snapshots to diff, and only an armed phase can have a
-    // spine-caused write at all — every other phase gets the no-op, so the filter below stays one
-    // unconditional expression rather than a branch that could silently stop running.
-    const feedbackWrites: FeedbackWriteAttribution =
-      armed && replica.seeded
-        ? feedbackWriteAttribution(replicaDir, snapshotReplica)
-        : noFeedbackWriteAttribution();
+    // ADR-0595 D1. Built unconditionally, because guarding it on `armed && replica.seeded` would be
+    // two branches that change nothing: an unarmed phase never reaches a wrapper, so its record stays
+    // empty and excuses nothing, and an unseeded replica takes the reported-paths route that never
+    // consults this. Both guards were measured as unkillable mutants, which is what a condition with
+    // no observable false case always is.
+    const feedbackWrites: FeedbackWriteAttribution = feedbackWriteAttribution(
+      replicaDir,
+      snapshotReplica,
+    );
     const fullPrompt =
       `${agentBody.trim()}\n\n## Phase brief\n${prompt.trim()}\n\n` +
       "The spine will run all registered proof commands after you stop; their verdict is not yours.\n\n" +
