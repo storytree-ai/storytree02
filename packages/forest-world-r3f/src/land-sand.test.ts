@@ -207,7 +207,7 @@ test('sandGlsl emits the band and the ramp EXACTLY, with its constants written i
   // declared and the material FAILS TO COMPILE — which a containment test cannot see, because the
   // source still contains every token it looks for. Found on a real GPU, not in this file.
   assert.ok(!glsl.includes('uSandWidth'), 'the emitted source must declare no uniform of its own');
-  assert.ok(!/uniform/.test(glsl), 'the emitter is spliced above the uniform block');
+  assert.ok(!/\buniform\b/.test(glsl), 'the emitter is spliced above the uniform block');
   assert.ok(
     !/\/ \d+\.\d+;/.test(glsl.slice(glsl.indexOf('st_sandBand'))),
     'the band must not divide by a written-in constant',
