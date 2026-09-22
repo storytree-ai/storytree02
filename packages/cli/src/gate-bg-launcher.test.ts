@@ -49,6 +49,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
 import { resolveRepoBash } from "../../../scripts/resolve-bash.mjs";
+import { findBunOnPath } from "../../../scripts/resolve-bun.mjs";
 import { nodeExecutable } from "./node-executable.js";
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
@@ -400,6 +401,29 @@ test("a launch that creates no process FAILS LOUDLY rather than printing a handl
 // reaches the spawned child. That is the "second surface must agree with the first" class, and the
 // three lines that join them are exactly where a regression would sit unseen.
 
+/**
+ * A PATH that resolves the SHELL but no `bun` — and it cannot be the empty string.
+ *
+ * ⚠ AN EMPTY PATH IS A WINDOWS-ONLY FIXTURE, which is how the first version of these tests passed
+ * here and failed on CI. `resolveRepoBash()` returns an ABSOLUTE `bash.exe` on Windows, so an
+ * emptied PATH still launches; on Linux it returns the bare name `bash`, which an emptied PATH
+ * cannot resolve at all. The two DISPATCHING cases below died on the runner for a reason that has
+ * nothing to do with Bun — the local-green / CI-red shape this repo keeps paying for.
+ *
+ * `/usr/bin:/bin` and `System32` hold a shell and no Bun (CI installs Bun to `~/.bun/bin`, which is
+ * exactly what the HOME override below then hides). The guard asserts that rather than trusting it,
+ * so an image that ever did ship a `bun` here would fail loudly instead of passing vacuously.
+ */
+const SHELL_PATH_WITHOUT_BUN = process.platform === "win32" ? "C:\\Windows\\System32" : "/usr/bin:/bin";
+
+test("fixture guard: the shell PATH these Bun cases use really does resolve no bun", () => {
+  assert.equal(
+    findBunOnPath(SHELL_PATH_WITHOUT_BUN, process.platform, existsSync),
+    undefined,
+    `${SHELL_PATH_WITHOUT_BUN} must hold no bun, or the two cases below prove nothing`,
+  );
+});
+
 /** `process.env` with every spelling of PATH replaced — Windows hands back `Path`, not `PATH`. */
 function envWithPath(pathValue: string, extra: Record<string, string>): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, ...extra };
@@ -430,7 +454,7 @@ test("no resolvable bun REFUSES the GATE before anything exists — the cycle is
       encoding: "utf8",
       cwd: repoRoot,
       // `dir` is a fresh temp dir, so it holds no `.bun/bin` under either home variable.
-      env: envWithPath("", { GATE_BG_LOG: log, STORYTREE_BASH: bash, HOME: dir, USERPROFILE: dir }),
+      env: envWithPath(SHELL_PATH_WITHOUT_BUN, { GATE_BG_LOG: log, STORYTREE_BASH: bash, HOME: dir, USERPROFILE: dir }),
     });
     const out = `${res.stdout}${res.stderr}`;
     assert.equal(res.status, 1, `a refusal is a FAILED dispatch (ADR-0397 D2):\n${out}`);
@@ -459,7 +483,7 @@ test("a CUSTOM command with no bun is WARNED and still dispatched — the guard 
     const res = spawnSync(nodeExecutable(), [launcher, "sh", "-c", "exit 0"], {
       encoding: "utf8",
       cwd: repoRoot,
-      env: envWithPath("", { GATE_BG_LOG: log, STORYTREE_BASH: bash, HOME: dir, USERPROFILE: dir }),
+      env: envWithPath(SHELL_PATH_WITHOUT_BUN, { GATE_BG_LOG: log, STORYTREE_BASH: bash, HOME: dir, USERPROFILE: dir }),
     });
     const out = `${res.stdout}${res.stderr}`;
     assert.equal(res.status, 0, `a custom command still LAUNCHES:\n${out}`);
@@ -494,7 +518,9 @@ test("an installed-but-off-PATH bun is PREPENDED into the CHILD's environment, a
       {
         encoding: "utf8",
         cwd: repoRoot,
-        env: envWithPath(decoy, {
+        // The decoy FIRST, then the shell dirs — the shell must still resolve (see
+        // SHELL_PATH_WITHOUT_BUN), and the decoy's position is what the order assertion reads.
+        env: envWithPath(`${decoy}${path.delimiter}${SHELL_PATH_WITHOUT_BUN}`, {
           GATE_BG_LOG: log,
           STORYTREE_BASH: bash,
           HOME: dir,
