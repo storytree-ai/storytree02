@@ -6,6 +6,7 @@ import {
   SCENARIOS,
   SUPPRESSORS,
   composeVerdict,
+  type RefusedScenario,
   type Scenario,
   type Suppressor,
 } from "./test-slop-scenarios.js";
@@ -83,17 +84,23 @@ test("scenario library: a scenario statement asks ONE thing and never reaches fo
   }
 });
 
+/**
+ * A band must be two probabilities the right way round. Shared by all three tiers — a REFUSED entry's
+ * numbers are the whole point of recording it, so they are held to the same shape as an admitted
+ * entry's even though the entry itself is held to none of the admission rules.
+ */
+const assertBands = (x: Scenario | Suppressor | RefusedScenario): void => {
+  const { weak, strong, n, on } = x.measured;
+  assert.ok(n > 0, `${x.id}: n must be positive — an unmeasured entry may not be admitted`);
+  assert.ok(on.trim().length > 40, `${x.id}: 'on' must say what was measured and what it does not establish`);
+  for (const [lo, hi] of [weak, strong]) {
+    assert.ok(lo >= 0 && hi <= 1 && lo <= hi, `${x.id}: band [${lo}, ${hi}] is not a probability range`);
+  }
+};
+
 test("scenario library: measured bands are present, non-degenerate and DO NOT OVERLAP", () => {
-  const bands = (x: Scenario | Suppressor): void => {
-    const { weak, strong, n, on } = x.measured;
-    assert.ok(n > 0, `${x.id}: n must be positive — an unmeasured entry may not be admitted`);
-    assert.ok(on.trim().length > 40, `${x.id}: 'on' must say what was measured and what it does not establish`);
-    for (const [lo, hi] of [weak, strong]) {
-      assert.ok(lo >= 0 && hi <= 1 && lo <= hi, `${x.id}: band [${lo}, ${hi}] is not a probability range`);
-    }
-  };
   for (const s of SCENARIOS) {
-    bands(s);
+    assertBands(s);
     // A scenario fires HIGH on weak examples; its false-accusation side must sit strictly below.
     assert.ok(
       s.measured.weak[0] > s.measured.strong[1],
@@ -107,7 +114,7 @@ test("scenario library: measured bands are present, non-degenerate and DO NOT OV
     );
   }
   for (const s of SUPPRESSORS) {
-    bands(s);
+    assertBands(s);
     // A suppressor's axis is INVERTED — 'strong' means something DOES compensate, and a high answer
     // clears. Asserting the same direction here would silently admit a suppressor that never fires.
     assert.ok(
@@ -132,14 +139,31 @@ test("scenario library: an AUTHORED band is not enough on its own — the transf
   // 0.14-0.58 and fired zero times. So an entry measured on examples written FOR the measurement must
   // also say what happened when it met examples that were not — including, for a new entry, that it
   // has not met any yet. Either sentence is honest; silence is what is refused.
-  for (const s of SCENARIOS) {
-    if (s.measured.population !== "authored") continue;
-    assert.match(
-      s.limits,
-      /\bobserved\b|\breal\b|\btransfer\b/i,
-      `${s.id}: its band comes from examples authored for the measurement, and its limits say nothing ` +
-        `about observed code. Record the transfer result, or record that it has not met observed data yet.`,
-    );
+  //
+  // EXHAUSTIVE ON PURPOSE, with a different obligation per branch and a hard failure on neither. An
+  // `if (population !== "authored") continue` reads the field and then lets every other value —
+  // including one the type forbids but a cast or a JSON round-trip could still produce — skip the
+  // clause silently, which the mutation rung showed by blanking the literal and watching this pass.
+  for (const x of [...SCENARIOS, ...REFUSED]) {
+    if (x.measured.population === "authored") {
+      assert.match(
+        "limits" in x ? x.limits : "",
+        /\bobserved\b|\breal\b|\btransfer\b/i,
+        `${x.id}: its band comes from examples authored for the measurement, and it says nothing about ` +
+          `observed code. Record the transfer result, or record that it has not met observed data yet.`,
+      );
+    } else if (x.measured.population === "observed") {
+      // An observed band's worth is its arithmetic, so it must carry some. A sentence saying "measured
+      // on real pairs" with no figure in it is the shape that let an authored band pass for one.
+      assert.match(
+        x.measured.on,
+        /\d/,
+        `${x.id}: an observed band must say WHAT WAS MEASURED with numbers in it — how many pairs, and ` +
+          `what they scored. Prose alone is what an authored band already had.`,
+      );
+    } else {
+      assert.fail(`${x.id}: population is ${JSON.stringify(x.measured.population)}, which is neither authored nor observed`);
+    }
   }
 });
 
@@ -167,8 +191,10 @@ test("refusals: a declined candidate keeps its wording, its numbers and its reas
     assert.match(r.statement, /\bwould still pass\b|\bcould be wrong\b|\bwould still succeed\b|\bwould still produce\b/, `${r.id}: the recorded wording is not a falsifiable claim`);
     assert.ok(r.evidence.length > 80, `${r.id}: grounding is not what failed — record what made the shape worth proposing`);
     assert.match(r.evidence, CITES_SOMETHING, `${r.id}: evidence cites nothing concrete`);
-    assert.ok(r.measured.n > 0, `${r.id}: an unmeasured candidate was not refused, it was skipped`);
-    assert.ok(r.measured.on.trim().length > 40, `${r.id}: say what it was measured on`);
+    // Its NUMBERS are the whole reason the row exists — a refusal without them is an opinion with a
+    // slug — so they are held to the same shape as an admitted entry's, though the entry itself is
+    // held to none of the admission rules.
+    assertBands(r);
     assert.ok(r.reason.length > 120, `${r.id}: the refusal reason must be in terms of the measurement, not of taste`);
   }
 });
