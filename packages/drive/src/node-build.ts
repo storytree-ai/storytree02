@@ -1416,9 +1416,11 @@ export function renderRepairs(result: Pick<ProveResult, "repairs">): string[] {
 export function renderExtensions(result: Pick<ProveResult, "extensions">): string[] {
   const extensions = result.extensions ?? [];
   if (extensions.length === 0) return [];
+  // Stryker disable next-line OptionalChaining: EQUIVALENT — same reason as the fallback below: the length guard above makes the indexed access always defined.
   const total = extensions[extensions.length - 1]?.toBudgetMs;
   return [
     `extensions:  ${extensions.length} granted by the orchestrator at a hold — the clock now ${
+      // Stryker disable next-line ConditionalExpression,StringLiteral: EQUIVALENT — `extensions.length === 0` returned above and ExtensionRecord.toBudgetMs is a mandatory number, so `total` is never undefined and this fallback is unreachable without a type-unsafe cast the house lint forbids.
       total === undefined ? "(unknown)" : `${Math.floor(total / 60_000)} min`
     }; an extension is NOT an attempt (ADR-0592 D5)`,
     ...extensions.map(

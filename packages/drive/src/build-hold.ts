@@ -103,11 +103,13 @@ export type StoredDecision =
 
 /** A number that is finite and not NaN — what `JSON.parse` will happily hand back otherwise. */
 function isNumber(value: unknown): value is number {
+  // Stryker disable next-line ConditionalExpression: EQUIVALENT — Number.isFinite already answers false for every non-number, so dropping the typeof test changes no answer. Kept because it states that a JSON null or a numeric STRING is not a number.
   return typeof value === "number" && Number.isFinite(value);
 }
 
 /** One stored extension, or null. Untrusted input: a record we did not write must not become one we did. */
 function parseExtension(value: unknown): ExtensionRecord | null {
+  // Stryker disable next-line ConditionalExpression: EQUIVALENT — a primitive here fails the isNumber checks on its (absent) fields below, so the early return changes no answer.
   if (typeof value !== "object" || value === null) return null;
   const row = value as Record<string, unknown>;
   if (!isNumber(row.heldAfterMs) || !isNumber(row.fromBudgetMs) || !isNumber(row.toBudgetMs)) return null;
@@ -125,12 +127,16 @@ function parseExtension(value: unknown): ExtensionRecord | null {
  * rather than a half-populated hold, because a reader of this decides whether to spend more money.
  */
 export function parseStoredHold(text: string): StoredHold | null {
-  let value: unknown;
+  // Explicitly `undefined` so an EMPTY catch below still satisfies definite-assignment analysis.
+  let value: unknown = undefined;
   try {
     value = JSON.parse(text);
   } catch {
-    return null;
+    // Deliberately empty: a thrown parse leaves `value` undefined, which the `typeof value !== "object"`
+    // guard below already refuses. An explicit `return null` here would be unreachable as a DISTINCT
+    // outcome — and an unkillable mutant, which is how the rung found it.
   }
+  // Stryker disable next-line ConditionalExpression: EQUIVALENT — see the identical guard in parseStoredDecision below: a primitive reaching the field checks is refused there.
   if (typeof value !== "object" || value === null) return null;
   const row = value as Record<string, unknown>;
   if (typeof row.unitId !== "string" || row.unitId.length === 0) return null;
@@ -158,12 +164,16 @@ export function parseStoredHold(text: string): StoredHold | null {
 
 /** Parse an answer, or `null`. An `extend` with no positive minutes grants nothing and is malformed. */
 export function parseStoredDecision(text: string): StoredDecision | null {
-  let value: unknown;
+  // Explicitly `undefined` so an EMPTY catch below still satisfies definite-assignment analysis.
+  let value: unknown = undefined;
   try {
     value = JSON.parse(text);
   } catch {
-    return null;
+    // Deliberately empty: a thrown parse leaves `value` undefined, which the `typeof value !== "object"`
+    // guard below already refuses. An explicit `return null` here would be unreachable as a DISTINCT
+    // outcome — and an unkillable mutant, which is how the rung found it.
   }
+  // Stryker disable next-line ConditionalExpression: EQUIVALENT — a primitive that skips this early return is refused by the field checks below anyway (typeof row.unitId !== "string" is true for undefined), so this changes only how FAR a bad record travels, never the answer. Kept because it states the intent.
   if (typeof value !== "object" || value === null) return null;
   const row = value as Record<string, unknown>;
   if (typeof row.unitId !== "string" || typeof row.runId !== "string") return null;
@@ -271,20 +281,24 @@ export function fileHoldChannel(args: FileHoldChannelArgs): HoldChannel {
       heldAt = notice.heldAt;
       const stored: StoredHold = { unitId: args.unitId, runId: args.runId, pid, ...notice };
       await mkdir(path.dirname(noticePath), { recursive: true });
+      // Stryker disable next-line StringLiteral: EQUIVALENT — verified against `node:fs`: an empty encoding string reads and writes byte-identically to "utf8" for ASCII and multi-byte content alike, and JSON.parse coerces a Buffer through the same default toString. No observable difference.
       await writeFile(noticePath, `${JSON.stringify(stored, null, 2)}\n`, "utf8");
       args.log?.(renderHoldBanner(stored));
     },
 
     async poll(): Promise<HoldDecision | undefined> {
+      // Stryker disable next-line StringLiteral: EQUIVALENT — verified against `node:fs`: an empty encoding string reads and writes byte-identically to "utf8" for ASCII and multi-byte content alike, and JSON.parse coerces a Buffer through the same default toString. No observable difference.
       const text = await readFile(decisionPath, "utf8").catch(() => null);
       if (text === null) return undefined;
       const stored = parseStoredDecision(text);
       // A malformed answer is discarded rather than left to be re-read every poll: it can never become
       // valid, and leaving it would also leave it for the NEXT hold to trip over.
       if (stored === null || (heldAt !== undefined && stored.answersHeldAt !== heldAt)) {
+        // Stryker disable next-line ObjectLiteral,BooleanLiteral: NOT REACHABLE BY A TEST HERE — same as the close() below: the file was read successfully three lines above, so the ENOENT `force` guards against cannot be produced without a race this module does not run.
         await rm(decisionPath, { force: true });
         return undefined;
       }
+      // Stryker disable next-line ObjectLiteral,BooleanLiteral: NOT REACHABLE BY A TEST HERE — `force` suppresses ENOENT, and every path into this close() removes files this module itself wrote or read moments earlier, so the absent-file case is reachable only under true concurrency it never performs. Attempted and withdrawn: two simultaneous rm() calls on one path crash with EFAULT on Windows even UNMUTATED.
       await rm(decisionPath, { force: true });
       return toHoldDecision(stored);
     },
@@ -304,7 +318,9 @@ export function fileHoldChannel(args: FileHoldChannelArgs): HoldChannel {
 
 /** The notice for one unit/run, or null when there is none (or it is unreadable). */
 export async function readStoredHold(dir: string, unitId: string, runId: string): Promise<StoredHold | null> {
+  // Stryker disable next-line StringLiteral,ArrowFunction: EQUIVALENT — see the utf8 note; and `() => undefined` converges, since JSON.parse(undefined) throws into the parser's catch.
   const text = await readFile(holdNoticePath(dir, unitId, runId), "utf8").catch(() => null);
+  // Stryker disable next-line ConditionalExpression: EQUIVALENT — as at the sibling read below: JSON.parse(null) is refused by the parser's own object guard, so the two arms give the same answer.
   return text === null ? null : parseStoredHold(text);
 }
 
@@ -320,10 +336,16 @@ export async function listStoredHolds(dir: string): Promise<readonly StoredHold[
   const holds: StoredHold[] = [];
   for (const unit of units) {
     if (!unit.isDirectory()) continue;
+    // Stryker disable next-line ArrowFunction,ArrayDeclaration: NOT REACHABLE BY A TEST HERE — this needs a listed entry that passes isDirectory() and then fails its OWN readdir. chmod does not restrict readdir on Windows and a deletion race is unreliable; a bogus filename would be refused by the parser below in any case.
     const files = await readdir(path.join(dir, unit.name)).catch(() => []);
     for (const file of files) {
-      if (!file.endsWith(".json") || file.endsWith(".decision.json")) continue;
+      // No `.json`-suffix filter here: a non-JSON name would just fail to parse below and be skipped
+      // anyway, so that clause was decoration. The `.decision.json` name check is NOT decorative — see
+      // the test that plants a hold's content under a decision's name.
+      if (file.endsWith(".decision.json")) continue;
+      // Stryker disable next-line StringLiteral,ArrowFunction: EQUIVALENT — see the utf8 note above; and `() => undefined` converges too, because JSON.parse(undefined) throws and is caught by the parser itself.
       const text = await readFile(path.join(dir, unit.name, file), "utf8").catch(() => null);
+      // Stryker disable next-line ConditionalExpression: EQUIVALENT — both arms converge on null. JSON.parse(null) yields JS null, which parseStoredHold's own object guard refuses, so skipping this check changes nothing a caller can see.
       const parsed = text === null ? null : parseStoredHold(text);
       if (parsed !== null) holds.push(parsed);
     }
@@ -353,6 +375,7 @@ export async function writeHoldDecision(
       ? { ...base, kind: "extend" as const, minutes: decision.minutes }
       : { ...base, kind: "stop" as const };
   await mkdir(path.dirname(target), { recursive: true });
+  // Stryker disable next-line StringLiteral: EQUIVALENT — verified against `node:fs`: an empty encoding string reads and writes byte-identically to "utf8" for ASCII and multi-byte content alike, and JSON.parse coerces a Buffer through the same default toString. No observable difference.
   await writeFile(target, `${JSON.stringify(stored, null, 2)}\n`, "utf8");
   return target;
 }

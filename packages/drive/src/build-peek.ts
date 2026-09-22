@@ -637,6 +637,8 @@ function renderHold(
   ];
   if (hold.extensions.length > 0) {
     lines.push(
+      // Stryker disable next-line OptionalChaining: EQUIVALENT — the `extensions.length > 0` guard above
+      // makes this indexed access always defined, so the `?.` can never short-circuit.
       `  granted: ${hold.extensions.length} extension(s) already — now ${formatDurationMs(hold.extensions[hold.extensions.length - 1]?.toBudgetMs ?? hold.budgetMs)} in total`,
     );
   }

@@ -176,11 +176,13 @@ export async function nodeExtendCommand(
   }
 
   // Newest first: a unit with two notices is abnormal (a build removes its own on the way out), and the
-  // one an orchestrator has just been shown is the latest.
-  const hold = [...matching].sort((a, b) => b.heldAt - a.heldAt)[0];
-  if (hold === undefined) {
-    return { ok: false, body: `"${unitId}" is not holding.`, next: [`storytree node peek ${unitId} --pg`] };
-  }
+  // one an orchestrator has just been shown is the latest. `matching` is non-empty here — the
+  // `=== 0` check above already returned — so a seedless `reduce` is the shape that gives TypeScript
+  // a `StoredHold` outright rather than the `StoredHold | undefined` a sorted `[0]` would, with no
+  // unreachable defensive branch kept alive only to satisfy `noUncheckedIndexedAccess`. (Verified
+  // dead: hand-mutating the old `if (hold === undefined)` guard to `if (false)` left every existing
+  // test green.)
+  const hold = matching.reduce((newest, h) => (h.heldAt > newest.heldAt ? h : newest));
 
   const answerable = holdIsAnswerable(hold, nowMs);
   if (!answerable.answerable) {

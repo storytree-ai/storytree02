@@ -63,7 +63,10 @@ export interface NodePeekDeps {
    * instead of a filesystem, and so the fold still reads nothing itself.
    *
    * ⚠ It resolves `undefined` for BOTH "no hold" and "the holds directory could not be read", and the
-   * render says nothing in either case. That is deliberate: a peek is a read that must keep working
+   * render says nothing in either case. That second half is the CALLEE's guarantee, not this seam's own:
+   * `listStoredHolds` catches each `readdir`/`readFile` individually and a corrupt notice in its parser,
+   * so it resolves fewer rows rather than rejecting. `commands.ts` still catches at the call site, so a
+   * future callee that did reject would narrow the peek rather than break it. That is deliberate: a peek is a read that must keep working
    * when things around it are broken, and a build that is not held is the overwhelmingly common case.
    * The hold's own expiry is what bounds the harm — a hold nobody was told about still stops itself.
    */
@@ -91,9 +94,15 @@ export function defaultNodePeekDeps(): NodePeekDeps {
  * abnormal case answer something honest rather than arbitrary.
  */
 async function latestHoldFor(unitId: string): Promise<PeekHold | null> {
-  const holds = await listStoredHolds(resolveHoldsDir(undefined)).catch(() => []);
+  // No `.catch()` here: `listStoredHolds` already swallows every I/O failure it can reach (a missing
+  // directory, an unreadable unit dir, a corrupt notice file all resolve to fewer rows, never a
+  // rejection — see its own doc comment). A second catch here would be pure decoration duplicating a
+  // guarantee the callee already gives, and it was itself an unreachable NoCoverage survivor.
+  const holds = await listStoredHolds(resolveHoldsDir(undefined));
   const mine = holds.filter((h) => h.unitId === unitId);
-  return mine.length === 0 ? null : (mine[mine.length - 1] ?? null);
+  // No empty-array branch: `mine[-1]` is `undefined`, which `?? null` already answers, so a length
+  // test would be a second spelling of the same answer — and an unkillable mutant.
+  return mine[mine.length - 1] ?? null;
 }
 
 /**
@@ -130,6 +139,10 @@ export function nodePeekCommand(
   // Each option is narrowed to a named const and spread UNCONDITIONALLY: an inline conditional spread
   // of `{}` is what `no-conditional-empty-object-spread` refuses, and `exactOptionalPropertyTypes`
   // refuses `hold: undefined` against an optional key.
+  // Stryker disable next-line ConditionalExpression: EQUIVALENT — a plain property read cannot tell an
+  // ABSENT key from one explicitly set to `undefined`, and `input.hold` is the only place this is read,
+  // so both arms behave identically. Not simplifiable either: the two lint rules named above forbid the
+  // alternatives.
   const held = hold === undefined ? {} : { hold };
   const peek = foldBuildPeek({
     unitId,

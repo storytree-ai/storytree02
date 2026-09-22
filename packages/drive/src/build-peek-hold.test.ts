@@ -176,3 +176,37 @@ test("the render names the between-holds under-report as a blind spot rather tha
   assert.match(body, /an EXTENSION granted at a hold, once the build has resumed \(ADR-0592\)/);
   assert.match(body, /between holds this read UNDER-reports the clock a build is actually running on/);
 });
+
+test("the blank line pushed between the HELD block and the wall clock is genuinely blank, not stray text", () => {
+  const body = renderBuildPeek(peekOf(hold()));
+  const lines = body.split("\n");
+  const wallClockIdx = lines.indexOf("Wall clock:");
+  assert.ok(wallClockIdx > 0, "ground truth: the render must reach the wall-clock section");
+  assert.equal(
+    lines[wallClockIdx - 1],
+    "",
+    "the separator line between the HELD block and the wall clock must be empty",
+  );
+});
+
+test("the extensions-granted line reads the LAST extension's own toBudgetMs, never the live hold.budgetMs or an off-by-one index", () => {
+  // budgetMs is deliberately DIFFERENT from every extension's toBudgetMs, and there are two
+  // extensions rather than one: a `??` -> `&&` flip (falls back to hold.budgetMs whenever the real
+  // value is truthy, which every real budget is) and a `- 1` -> `+ 1` flip (indexes past the array,
+  // landing on `undefined`) each land on hold.budgetMs too — so both produce the SAME wrong figure
+  // here rather than coincidentally matching the right one.
+  const body = renderBuildPeek(
+    peekOf(
+      hold({
+        budgetMs: 400 * MIN,
+        elapsedMs: 401 * MIN,
+        extensions: [
+          { reason: "first", toBudgetMs: 150 * MIN },
+          { reason: "second", toBudgetMs: 260 * MIN },
+        ],
+      }),
+    ),
+  );
+  assert.match(body, /granted: 2 extension\(s\) already — now 4h 20m in total/);
+  assert.doesNotMatch(body, /now 6h 40m in total/, "must not fall back to the live hold.budgetMs (400 min)");
+});
