@@ -4,6 +4,7 @@
       "packages/arc/src/arc-rollup.ts": "arc-derived-initiative-view",
       "packages/arc/src/arc.ts": "arc-derived-initiative-view",
       "packages/arc/src/decision.test-helpers.ts": "arc-derived-initiative-view",
+      "packages/arc/src/increment-claims.ts": "arc-derived-initiative-view",
       "packages/arc/src/narrative-staleness.ts": "arc-derived-initiative-view",
       "packages/arc/src/question.ts": "arc-derived-initiative-view",
       "packages/arc/src/unit-arc.ts": "arc-derived-initiative-view"

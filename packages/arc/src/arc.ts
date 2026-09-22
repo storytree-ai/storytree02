@@ -17,7 +17,16 @@ import {
 } from "@storytree/library";
 // The write STAMP (`cli@<branch>`) and the ADR-0023 envelope shape, both in `@storytree/drive` — the
 // package this one and the CLI have in common. A verb here must stamp exactly as its CLI siblings do.
-import { defaultCliActor, type Envelope } from "@storytree/drive";
+import { defaultCliActor, formatAgeMs, type Envelope } from "@storytree/drive";
+import type { ClaimDocT } from "@storytree/notice-board";
+
+import {
+  claimHoldsWork,
+  deriveIncrementClaims,
+  renderIncrementClaimLine,
+  type IncrementClaimRead,
+  type IncrementClaimState,
+} from "./increment-claims.js";
 
 // The arc → children JOIN is its own module in this package, not this one: `arc-rollup.ts` is the
 // shared, surface-agnostic value (ADR-0267's Consequences: the derived join must stop being
@@ -37,6 +46,7 @@ import {
   storyArcStamps,
   type ArcLifecycleDrift,
   type ArcRollup,
+  type ArcRollupIncrement,
 } from "./arc-rollup.js";
 // ADR-0358 Option 2D — the shared staleness-line renderer, so `arc show` and `question check` never
 // say the same thing two different ways.
@@ -67,11 +77,28 @@ export { arcIsClosed, storyArcStamps };
  * (offline OK).
  */
 
+/**
+ * The claim-ledger read this surface needs, and NOTHING more — one method, so a test supplies an
+ * object literal and the live wiring hands over the same `PgClaimStore` the ledger verbs already
+ * drive. Narrowed from `ClaimLedgerStoreLike` on purpose: `arc show` is a READ, and a surface that
+ * accepted the take/release half could grow a write nobody asked a rendering path for.
+ */
+export interface ArcClaimReader {
+  claimsFor(unitId: string): Promise<ClaimDocT[]>;
+}
+
 export interface ArcViewDeps {
   /** The doc store — the live store under --pg (arcs/plans live only there), the seed offline. */
   store: Store;
   /** `stories/` — each `<id>/story.md` frontmatter scanned for an `arc:` stamp. Injectable. */
   storiesDir: string;
+  /**
+   * The claim ledger, when one is attached — what makes `arc show` say whether its open work is HELD
+   * (`active-increment-says-who-holds-it`). ABSENT is the honest offline case and renders as UNKNOWN,
+   * never as free: claims are live-only, so a checkout without the ledger has not learned that
+   * nobody holds the work, it has simply not asked.
+   */
+  claims?: ArcClaimReader;
   /** True when the live store is attached (--pg) — used only for honest offline hints. */
   pg: boolean;
   /**
@@ -376,9 +403,50 @@ async function arcShow(
     events,
   });
 
+  // WHETHER THIS ARC'S OPEN WORK IS HELD (`active-increment-says-who-holds-it`). The second read this
+  // surface makes that the rollup does not, and it is here rather than in `loadArcRollup` for exactly
+  // the reason the staleness read is: one ledger read per OPEN increment is right for `arc show` and
+  // wrong for `loadArcRollups`, which serves every arc at once.
+  //
+  // SCOPED TO THE OPEN ROWS, never the landing log. A closed increment's claims are history and
+  // `verification-integrity-arc` alone carries 85 of them, so folding the log in would turn a
+  // constant-ish cost into one proportional to how much an arc has already delivered — charging the
+  // most successful initiatives the most for a signal that means nothing on a closed row.
+  //
+  // A FAILURE IS PER-INCREMENT AND NEVER FATAL. `arc show` answered before the ledger existed and
+  // must keep answering when it is unreachable; what it may not do is report the silence as freedom,
+  // so each failed read carries its own reason into the UNKNOWN state (`the-board-shows-an-unknown-
+  // as-an-unknown`). Same rule as the staleness read's `undatable` third verdict directly above.
+  const open = rollup.increments.filter((i) => isForwardLooking(i.status));
+  const reads = new Map<string, IncrementClaimRead>();
+  for (const inc of open) {
+    if (deps.claims === undefined) {
+      reads.set(inc.id, {
+        ok: false,
+        reason: "the claim ledger is not attached (claims are live-only — try --pg)",
+      });
+      continue;
+    }
+    try {
+      const rows: ClaimDocT[] = await deps.claims.claimsFor(inc.id);
+      reads.set(inc.id, { ok: true, rows });
+    } catch (err) {
+      reads.set(inc.id, {
+        ok: false,
+        reason: `the ledger read failed (${err instanceof Error ? err.message : String(err)})`,
+      });
+    }
+  }
+  const nowIso = deps.now ?? new Date().toISOString();
+  const claims = deriveIncrementClaims({
+    incrementIds: open.map((i) => i.id),
+    reads,
+    now: new Date(nowIso),
+  });
+
   return {
     ok: true,
-    body: renderArcRollup(rollup, deps.pg, deps.now ?? new Date().toISOString(), opts, staleness).join("\n"),
+    body: renderArcRollup(rollup, deps.pg, nowIso, opts, staleness, claims).join("\n"),
     next: arcShowNext(rollup, deps.pg),
   };
 }
@@ -400,6 +468,7 @@ export function renderArcRollup(
   nowIso: string,
   opts: ArcShowOptions = {},
   staleness?: ArcNarrativeStaleness,
+  claims?: ReadonlyMap<string, IncrementClaimState>,
 ): string[] {
   // `arc show` renders ANY arc regardless of lifecycle (ADR-0239 D3 — only the LIST filters) and
   // states which it is, so a closed initiative is readable without being mistaken for live work.
@@ -478,11 +547,21 @@ export function renderArcRollup(
   // leaves the per-status counts a session reads as takeable and is counted on its own — only when
   // there is any, so the ordinary arc's heading reads exactly as it did.
   const waiting = forward.filter((i) => i.waitingOn !== undefined).length;
+  // WORK A SIBLING IS PROVABLY BUILDING IS NOT TAKEABLE EITHER, so it leaves the takeable counts on
+  // exactly ADR-0574 D4's precedent one line up: still listed (it is still this arc's open work), but
+  // counted on its own, and only when there IS any — an arc nobody is on reads exactly as it did.
+  // ONLY a LIVE hold moves a row. A stale claim is reclaimable in the next take (ADR-0200 D2) and an
+  // UNKNOWN is not evidence of anything; hiding either would under-report an arc's open work and make
+  // a busy initiative read as drained, which is a worse falsehood than the silence this closes.
+  const held = (i: ArcRollupIncrement): boolean =>
+    i.waitingOn === undefined && claimHoldsWork(claims?.get(i.id));
+  const heldCount = forward.filter(held).length;
   const byStatus = (s: string): number =>
-    forward.filter((i) => i.status === s && i.waitingOn === undefined).length;
+    forward.filter((i) => i.status === s && i.waitingOn === undefined && !held(i)).length;
   lines.push(
     "",
     `## Work  (${byStatus("proposal")} proposal · ${byStatus("ready")} ready · ${byStatus("active")} active` +
+      `${heldCount > 0 ? ` · ${heldCount} held by another session` : ""}` +
       `${waiting > 0 ? ` · ${waiting} waiting on the owner` : ""})`,
   );
   if (forward.length === 0) {
@@ -503,6 +582,13 @@ export function renderArcRollup(
         `      waiting on the owner's answer to ${i.waitingOn.join(", ")} — held, not work to take until that is settled (ADR-0574)`,
       );
     }
+    // WHO HOLDS IT, in the same slot and for the same reason as the owner-gate line above: whether
+    // the work may be TAKEN is the first thing a session choosing work needs, and the measured cost
+    // of learning it one command later at `noticeboard declare` is a worktree, a 4,671-file checkout
+    // and an 18.9 s install spent on a unit that was never available
+    // (`fr-arc-show-hides-the-claim-fence-on-its-own-open-work`).
+    const claimLine = renderIncrementClaimLine(claims?.get(i.id), i.status, formatAgeMs);
+    if (claimLine !== null) lines.push(claimLine);
     if (i.objective) lines.push(`      ${i.objective}`);
     // The friction ids are printed because they are what the delivery ceiling joins on (ADR-0298 D3):
     // a reader wondering why an entry went red can follow the edge without querying the store.
