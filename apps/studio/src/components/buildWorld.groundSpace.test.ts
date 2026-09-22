@@ -82,45 +82,55 @@ function retiredSquashOffset(ang: number, r: number): Pt {
  * multiples of `HEX_R` / `HEX_W` so they hold on the DERIVED tile (ADR-0528: `HEX_R ≈ 11.06`),
  * since every coordinate here is homogeneous in the radius:
  *
- *   tile      ground centre        ground gap    screen centre         screen gap
- *   (0,0)     (  0.00,  0.00)          60.75     (  0.00,  0.00)           53.63
- *   (1,0)     ( 46.77,  0.00)          30.93     ( 46.77,  0.00)        →  11.92   ← screen picks
- *   (1,1)     ( 70.15, 40.50)       →  20.25     ( 70.15, 13.85)           17.88
- *   (1,2)     ( 93.53, 81.00)          65.09     ( 93.53, 27.70)           44.43
+ *   tile      ground centre         ground gap    screen centre          screen gap
+ *   (0,0)     (  0.00,   0.00)         264.29     (  0.00,   0.00)          254.41
+ *   (5,0)     (233.83,   0.00)         111.53     (233.83,   0.00)       →   85.52   ← screen picks
+ *   (5,4)     (327.36, 162.00)      →  101.25     (327.36, 124.10)            95.88
+ *   (5,7)     (397.51, 283.50)         233.53     (397.51, 217.17)           205.66
  *      ↑ ground picks
  *
- * (1,1) is genuinely the middle of the hook. (1,0) only LOOKS nearest, because the camera flattens
+ * (5,4) is genuinely the middle of the hook. (5,0) only LOOKS nearest, because the camera flattens
  * the depth axis the hook runs along — which is the whole defect, in four tiles.
+ *
+ * ⚠ RE-CHOSEN under ADR-0593 D1 (20° → 50°, 2026-09-22). The original hook — `(0,0),(1,0),(1,1),
+ * (1,2)` — discriminated at the old 20° camera (`1/sin 20° ≈ 2.92`) but STOPPED at the shipped 50°
+ * one: the depth axis is squashed only `1/sin 50° ≈ 1.31×` now, too mild for a one-tile `q` offset
+ * to out-weigh a one-tile `r` offset any more, so both argmins converged on `(1,0)` and the CONTROL
+ * that proves the two disagree verified nothing. `q` was widened from 1 to 5 tiles (the `r` axis
+ * needs a much bigger `q` separation to still lose the argmin race at the weaker squash) and `r`
+ * was correspondingly deepened (0/4/7 rather than 0/1/2) so the ground/screen margins stay a
+ * comparable size to the retired hook's (~10.3-at-27 either way, against the original ~10.68).
  */
 /** The table above is at radius 27; a length in it divides by this to read on the current tile. */
 const TABLE_R = 27;
 const onTile = (lengthAtR27: number): number => (lengthAtR27 / TABLE_R) * HEX_R;
 const HOOK: Axial[] = [
   { q: 0, r: 0 },
-  { q: 1, r: 0 },
-  { q: 1, r: 1 },
-  { q: 1, r: 2 },
+  { q: 5, r: 0 },
+  { q: 5, r: 4 },
+  { q: 5, r: 7 },
 ];
 
 describe('groundHeroTile — the story tree stands where the GROUND says the middle is', () => {
   it('picks the ground-nearest tile, not the projection-nearest one', () => {
-    expect(groundHeroTile(HOOK)).toEqual({ q: 1, r: 1 });
+    expect(groundHeroTile(HOOK)).toEqual({ q: 5, r: 4 });
   });
 
   it('CONTROL: the retired screen argmin picks a DIFFERENT tile on this same fixture', () => {
     // The fixture must still exhibit the defect, or the assertion above verifies nothing.
-    expect(retiredScreenHeroTile(HOOK)).toEqual({ q: 1, r: 0 });
+    expect(retiredScreenHeroTile(HOOK)).toEqual({ q: 5, r: 0 });
     expect(retiredScreenHeroTile(HOOK)).not.toEqual(groundHeroTile(HOOK));
   });
 
   it('CONTROL: the fixture really is foreshortened — the camera is declared and active', () => {
     // A sweep over an unchanged picture passes with any implementation. Pin that this lattice
-    // genuinely projects: the hook's deepest tile loses ~66% of its ground depth on screen.
+    // genuinely projects: the hook's deepest tile loses `1 - sin 50° ≈ 23%` of its ground depth on
+    // screen (a MILD loss next to the retired camera's ~66% — see the fixture note above).
     const deep = HOOK[3]!;
     const ground = hexCenter(deep, { elevationDeg: PLAN_VIEW_ELEVATION_DEG });
     const screen = hexCenter(deep);
-    expect(ground.y).toBeCloseTo(onTile(81), 6); // 2 × 1.5 · HEX_R
-    expect(screen.y).toBeCloseTo(onTile(81) * groundFlattening(LAND_CAMERA_ELEVATION_DEG), 6);
+    expect(ground.y).toBeCloseTo(onTile(283.5), 6); // 7 × 1.5 · HEX_R
+    expect(screen.y).toBeCloseTo(onTile(283.5) * groundFlattening(LAND_CAMERA_ELEVATION_DEG), 6);
     expect(screen.x).toBeCloseTo(ground.x, 6); // the across-screen axis is untouched
   });
 
@@ -131,8 +141,8 @@ describe('groundHeroTile — the story tree stands where the GROUND says the mid
       y: centers.reduce((s, p) => s + p.y, 0) / centers.length,
     };
     const gaps = centers.map((p) => Math.hypot(p.x - centroid.x, p.y - centroid.y)).sort((a, b) => a - b);
-    expect(gaps[0]).toBeCloseTo(onTile(20.25), 2);
-    expect(gaps[1]).toBeCloseTo(onTile(30.93), 2); // a 10.68-at-27 margin — no tie is deciding this
+    expect(gaps[0]).toBeCloseTo(onTile(101.25), 2);
+    expect(gaps[1]).toBeCloseTo(onTile(111.53), 2); // a 10.28-at-27 margin — no tie is deciding this
   });
 
   it('breaks an exact tie toward the earliest tile in input order (the retired sort was stable)', () => {
@@ -155,7 +165,7 @@ describe('groundHeroTile — the story tree stands where the GROUND says the mid
     // every tile shifts the centroid with it; a hero tile that moved under translation would mean
     // the argmin had picked up a dependence on absolute position.
     const shifted = HOOK.map((h) => ({ q: h.q - 3, r: h.r + 2 }));
-    expect(groundHeroTile(shifted)).toEqual({ q: 1 - 3, r: 1 + 2 });
+    expect(groundHeroTile(shifted)).toEqual({ q: 5 - 3, r: 4 + 2 });
   });
 });
 
@@ -242,15 +252,35 @@ describe('the capability ring is a CIRCLE on the ground', () => {
       const g = unprojectGround(retiredSquashOffset(angle, rr));
       return Math.hypot(g.x, g.y);
     });
-    expect(Math.max(...retired)).toBeGreaterThan(RING_R + RING_WOBBLE);
-    expect(Math.max(...retired) - Math.min(...retired)).toBeGreaterThan(2 * RING_WOBBLE);
+    // The DIRECTION this band breaks in FLIPPED under ADR-0593 D1 (20° → 50°) — the finding, not a
+    // bug in this control. `retiredSquashOffset` bakes in the hand-picked `0.66` and this test
+    // un-projects it back out through `unprojectGround`, i.e. divides by `sin θ`: at the original
+    // 20° camera `0.66 / sin 20° ≈ 1.93` OVER-reached, pushing radii past the TOP of the band
+    // (`max > RING_R + RING_WOBBLE`, the old assertion here); at the shipped 50° camera
+    // `0.66 / sin 50° ≈ 0.86` UNDER-reaches instead, pulling radii under the BOTTOM
+    // (`min < RING_R - RING_WOBBLE`). Either way the band breaks, so assert it on whichever side —
+    // never just the side that happened to be true when this was written.
+    const low = RING_R - RING_WOBBLE;
+    const high = RING_R + RING_WOBBLE;
+    const max = Math.max(...retired);
+    const min = Math.min(...retired);
+    expect(max > high || min < low).toBe(true);
+    expect(max - min).toBeGreaterThan(2 * RING_WOBBLE);
   });
 
   it('CONTROL: the ring is deliberately NOT a circle on the SCREEN — the camera is doing work', () => {
-    // If this ratio were ~1 the fixture would be in plan view, and the assertion above would hold
-    // for a squash of any value. A ground circle at 20° must read as a markedly flattened ellipse.
+    // Camera-agnostic, not a magic number recalibrated per elevation: the fixture's own per-plant
+    // wobble is the most an ellipse ratio could read WITHOUT any camera at all — a ground circle of
+    // radius `RING_R` with each point independently jittered by up to `±RING_WOBBLE` can, by chance,
+    // read as an ellipse up to `(RING_R + RING_WOBBLE) / (RING_R - RING_WOBBLE)` on the ground alone.
+    // The measured SCREEN ratio must clear that bound, or the ellipse is unexplained without the
+    // camera doing work — which is what a flat threshold (this used to read a bare `1.8`, picked for
+    // the 2.92× squash at the retired 20° camera) stops proving the moment the elevation moves again,
+    // exactly as it did under ADR-0593 D1's move to 50° (2.92× → 1.31×, `1.8` no longer clears it).
+    const wobbleOnlyBound = (RING_R + RING_WOBBLE) / (RING_R - RING_WOBBLE);
     const screenRs = capGroundOffsets().map((o) => o.screenR);
-    expect(Math.max(...screenRs) / Math.min(...screenRs)).toBeGreaterThan(1.8);
+    const measured = Math.max(...screenRs) / Math.min(...screenRs);
+    expect(measured).toBeGreaterThan(wobbleOnlyBound);
   });
 
   it('SNAPSHOT: the layout this fixture produces', () => {
@@ -269,11 +299,25 @@ describe('the capability ring is a CIRCLE on the ground', () => {
     // land ratio), the QUOTA moved (one tile per capability, the `+ 2` retired), and this fixture
     // itself grew from eight to nineteen capabilities so its ring still lies on owned land. Every
     // coordinate below is therefore in the new tile's units; nothing about the ring rule changed.
+    //
+    // Re-recorded 2026-09-22 (ADR-0593 D1, 20° → 50°). ESTABLISHED before re-recording, not assumed:
+    // this is NOT a pure depth re-projection (the tree's `x` moved from 0.00 to 9.58, which a camera
+    // that only scales `y` cannot do on its own) — the TILE SET itself changed. `buildWorld` seeds
+    // an island by snapping a SCREEN-space point to the lattice through `pixelToHex`
+    // (`packages/forest-layout/src/pack.ts`, the `seeds` line — a `elevationDeg`-dependent snap, and
+    // its default is the module's own `LAND_CAMERA_ELEVATION_DEG`), so the SAME screen seed lands on
+    // a DIFFERENT hex once that constant moves, and the whole island grows outward from there —
+    // exactly the "the TILE SET is legitimately a function of the camera" this file's own header
+    // warns about. `groundHeroTile` itself is untouched (it is camera-independent by construction,
+    // reading only `PLAN_VIEW_ELEVATION_DEG`) — it picked a different tile only because it was
+    // handed a different tile SET, the same mechanism the `groundHeroTile` CONTROL above shows in
+    // miniature on the four-tile hook. Confirms the failure-3 hypothesis rather than an unexplained
+    // move, so this is safe to re-record.
     expect(digest).toBe(
-      'tree 0.00,-68.11 | c0 17.44,-70.50 | c1 21.19,-69.59 | c2 20.18,-67.71 | c3 21.32,-66.68' +
-        ' | c4 18.00,-64.66 | c5 16.66,-63.61 | c6 12.36,-62.81 | c7 9.63,-61.98 | c8 4.85,-61.93' +
-        ' | c9 -1.09,-61.08 | 10 -5.71,-61.13 | 11 -9.01,-62.29 | 12 -12.58,-62.52 | 13 -14.61,-63.52' +
-        ' | 14 -19.77,-64.59 | 15 -21.02,-66.24 | 16 -18.66,-68.14 | 17 -21.42,-69.30 | 18 -20.54,-70.86',
+      'tree 9.58,-63.56 | c0 27.02,-68.91 | c1 30.77,-66.88 | c2 29.76,-62.67 | c3 30.90,-60.36' +
+        ' | c4 27.58,-55.84 | c5 26.24,-53.47 | c6 21.94,-51.69 | c7 19.22,-49.84 | c8 14.43,-49.71' +
+        ' | c9 8.49,-47.81 | 10 3.88,-47.92 | 11 0.57,-50.52 | 12 -3.00,-51.04 | 13 -5.03,-53.29' +
+        ' | 14 -10.19,-55.67 | 15 -11.44,-59.38 | 16 -9.08,-63.64 | 17 -11.84,-66.24 | 18 -10.95,-69.73',
     );
   });
 });

@@ -557,11 +557,18 @@ test('a carried STAMP is seated against the camera that was ASKED FOR, not the s
     LAND_CAMERA_ELEVATION_DEG,
     'this test is vacuous unless it asks for a camera the module default is not — re-pick it',
   );
+  // ⚠ SMALL ISLANDS ON PURPOSE. The walk starts a stamp beside the trunk and nudges it inward, so
+  // on a large island the seat is deep inside owned land and BOTH cameras resolve it to soil this
+  // story owns — the lookup is wrong and the outcome is right, which is a mutant nobody can catch.
+  // A one-capability island is a handful of tiles across, so mis-reading the stamp's row by
+  // `sin 50 / sin 20` puts it off the island and the wrong camera becomes observable.
+  const stampCorpus = (): LayoutStory[] => [story('alpha', 1), story('beta', 1, ['alpha']), story('gamma', 1, ['alpha'])];
   const carriedIcons = new Map<string, readonly string[]>([
     ['alpha', ['beta', 'gamma']],
-    ['gamma', ['delta']],
+    ['beta', ['gamma']],
+    ['gamma', ['beta']],
   ]);
-  const world = packWorld(cameraCorpus(), { elevationDeg, carriedIcons });
+  const world = packWorld(stampCorpus(), { elevationDeg, carriedIcons });
 
   // Which hex each territory owns, keyed the same way the packer keys it.
   const ownerOf = new Map<string, number>();
@@ -583,7 +590,29 @@ test('a carried STAMP is seated against the camera that was ASKED FOR, not the s
     }
   }
   // Non-vacuity: a corpus that carried no icons would satisfy every assertion above by having none.
-  assert.ok(seated >= 3, `the fixture must actually seat stamps for this to mean anything, got ${seated}`);
+  assert.ok(seated >= 4, `the fixture must actually seat stamps for this to mean anything, got ${seated}`);
+
+  // ⚠ AND A COORDINATE PIN, BECAUSE THE POSTCONDITION ABOVE PROVABLY CANNOT CATCH THIS ALONE.
+  // Measured while writing this test: with the `{ elevationDeg }` argument deleted — so the walk
+  // resolves ownership at the SHIPPED camera while the point is placed at the asked-for one —
+  // every assertion above still passes, at 5, 10, 15 and 20 degrees. The walk nudges a stamp
+  // inward until its (wrongly-lookedup) hex is owned, and the seat it stops at is still owned when
+  // re-checked correctly, so "is it on soil" is satisfied either way. What the bug DOES change is
+  // WHERE the walk stopped, and only a coordinate sees that.
+  //
+  // So this is a deliberate regression pin, not a derivation: the numbers are a record of the
+  // current seating at a pinned camera, and their job is to move when the walk's arithmetic does.
+  // `relocation.golden.json` catches the same class across the whole map, but it lives in another
+  // file and `check:mutation-diff`'s per-test coverage does not attribute it to this line — so
+  // without this pin the forward on that line is unwitnessed by the rung that asks.
+  // WHEN THIS GOES RED: find what moved the stamp walk and say so; re-record only after that.
+  const digest = world.territories
+    .flatMap((t) => t.stamps.map((st) => `${t.story.id}:${st.icon} ${st.spot.x.toFixed(2)},${st.spot.y.toFixed(2)}`))
+    .join(' | ');
+  assert.equal(
+    digest,
+    'alpha:beta 2.11,-26.97 | alpha:gamma 17.05,-26.97 | beta:gamma 11.69,-66.70 | gamma:beta -26.63,-66.70',
+  );
 });
 
 test('⚠ KNOWN VIOLATION (ADR-0593): the seed snap lets the camera decide WHICH tiles an island gets', () => {
