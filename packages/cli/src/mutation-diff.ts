@@ -1570,3 +1570,247 @@ export function formatMutationVerdict(
   lines.push(`${tag} mutants of one mutator, and replacing the wrong one disproves a mutant nobody reported.`);
   return lines.join("\n");
 }
+
+/**
+ * The `Ignored` status, as `mutation-testing-report-schema` spells it.
+ *
+ * Named because this is the one place the rung READS it as a signal rather than folding it away.
+ * {@link classify} maps it to `"excluded"` along with every other status the rung has no opinion
+ * about, which is right for scoring and throws away exactly the fact the audit below needs.
+ */
+const IGNORED_STATUS = "Ignored";
+
+/**
+ * A `Stryker disable next-line <MutatorA,MutatorB>` directive, anchored to a comment OPENER.
+ *
+ * The anchoring is load bearing, not tidiness — see {@link parseSuppressionDirectives}.
+ */
+const SUPPRESSION_PATTERN =
+  /(?:\/\/|\/\*)\s*Stryker\s+disable\s+next-line\s+([A-Za-z][A-Za-z0-9]*(?:\s*,\s*[A-Za-z][A-Za-z0-9]*)*)/;
+
+/**
+ * One `// Stryker disable next-line <mutators>` directive, as WRITTEN in the source.
+ *
+ * The `next-line` form ONLY, and that is a scope decision rather than an oversight. It is what the
+ * measured failure wears (a comment between two links of a chained expression), it is ~88% of this
+ * repo's directives, and it is the only form with ONE unambiguous target line. The block form
+ * (`disable X` … `restore X`) spans a range whose end may sit outside the changed spans entirely, so
+ * "it suppressed nothing HERE" would not be evidence of anything about it.
+ */
+export interface SuppressionDirective {
+  /** Repo-relative, as the `sources` map keys it. */
+  readonly file: string;
+  /** 1-based line the COMMENT itself sits on. */
+  readonly line: number;
+  /**
+   * 1-based line it actually suppresses: the next line carrying CODE, not `line + 1`.
+   *
+   * ⚠ `next-line` does NOT mean the next line of the file, and assuming it does makes this whole
+   * audit a false-positive machine. Stryker attaches a directive to the NODE its comment block
+   * leads, so the rest of a multi-line justification is skipped — and a multi-line justification is
+   * the house style here, because ADR-0478 asks for an adversarial one. MEASURED on this module's
+   * own directives: comments on lines 1672 and 1727 produced `Ignored` mutants on 1675 and 1730,
+   * three lines down in both cases. An earlier draft of this function used `line + 1` and reported
+   * both of them as suppressing nothing.
+   */
+  readonly targetLine: number;
+  /** The mutator names it names; the single entry `"all"` is Stryker's own wildcard. */
+  readonly mutators: readonly string[];
+}
+
+/**
+ * A directive that named a mutator and did NOT suppress it.
+ *
+ * `"inert"` is the friction's own shape: the target line still carries a live mutant of the named
+ * mutator, so the directive generated no `Ignored` and the reader is looking at a survivor they
+ * believe is suppressed. `"unmatched"` is the weaker sibling — the line carries no mutant of that
+ * mutator at all, which is a directive left behind by a refactor or a mis-spelled mutator name.
+ */
+export type SuppressionFindingKind = "inert" | "unmatched";
+
+export interface SuppressionFinding {
+  readonly file: string;
+  readonly line: number;
+  readonly targetLine: number;
+  readonly mutator: string;
+  readonly kind: SuppressionFindingKind;
+  /** The statuses Stryker actually recorded on the target line for this mutator, sorted. */
+  readonly statuses: readonly string[];
+}
+
+export interface SuppressionAudit {
+  /** Directives whose target line this run actually instrumented — the only ones it can judge. */
+  readonly audited: number;
+  /** Directive x mutator pairs judged; a `disable next-line A,B` is two claims, not one. */
+  readonly claims: number;
+  /** Claims for which the target line carries at least one `Ignored` mutant of that mutator. */
+  readonly attached: number;
+  readonly findings: readonly SuppressionFinding[];
+}
+
+/**
+ * Extract the `Stryker disable next-line` directives from one file's source.
+ *
+ * ⚠ `Stryker` MUST BE THE FIRST THING IN THE COMMENT, and that is what keeps PROSE out. This repo
+ * discusses its own directives constantly — six files mention `Stryker disable next-line` inside a
+ * docstring or an explanatory comment, and this module is one of them — so a pattern that merely
+ * searched for the phrase would invent a finding for every paragraph about the mechanism, and teach
+ * the reader to stop reading this rung's output. Anchoring to the OPENER rather than to the start of
+ * the line is what lets it still see the two live directives written after a ternary arm.
+ *
+ * The one shape it cannot judge is prose that OPENS a line comment with the phrase itself, as in
+ * "Stryker disable next-line binds to the NEXT line" written directly after the slashes — which is
+ * indistinguishable from a directive by anything but meaning. It is pinned as a known limit, and it
+ * costs one advisory line. (This paragraph deliberately does not quote the slashes: an earlier draft
+ * did, and the audit correctly reported this very docstring as an unmatched directive on the run
+ * that introduced it.)
+ */
+export function parseSuppressionDirectives(
+  file: string,
+  source: string,
+): readonly SuppressionDirective[] {
+  const found: SuppressionDirective[] = [];
+  const lines = source.split("\n");
+  for (const [index, text] of lines.entries()) {
+    const match = SUPPRESSION_PATTERN.exec(text);
+    if (match === null) continue;
+    // No empty-string filter and no length guard, and their absence is load bearing rather than an
+    // omission: the capture group is `[A-Za-z]…(?:\s*,\s*[A-Za-z]…)*`, so every comma it matched has
+    // an identifier on BOTH sides and no split can yield an empty element. Both guards were written,
+    // both proved unkillable by any input, and deleting them is the honest fix — a branch nothing can
+    // reach is not protection, it is a claim about this regex that the regex already makes.
+    // Stryker disable next-line StringLiteral: EQUIVALENT — group 1 always participates when this
+    // pattern matches (it is not inside an alternation and not optional), so the `??` right side is
+    // unreachable and no input can observe what it holds. It exists only for `noUncheckedIndexedAccess`.
+    const mutators = (match[1] ?? "").split(",").map((m) => m.trim());
+    // Walk past the REST of the comment block to the line Stryker will really bind to. Reusing
+    // `isCodeFreeLine` rather than writing a second comment predicate is deliberate: it already
+    // answers "can this line carry a mutant", and two answers to that question drifting apart is
+    // how the audit would start accusing directives that are fine.
+    //
+    // `findIndex`, never a counting loop — a `while` with its own cursor carries an increment whose
+    // decrement mutant walks backwards forever (negative indices read as blank, which is code-free,
+    // so the guard never stops it) and the rung can only score that as a timeout no test can clear.
+    const at = lines.findIndex((text, i) => i > index && !isCodeFreeLine(text));
+    // A directive with nothing but comment and blank lines after it binds to no node at all; aiming
+    // past the last line is how that becomes an honest "suppressed nothing" instead of line 0.
+    const targetLine = at === -1 ? lines.length + 1 : at + 1;
+    found.push({ file, line: index + 1, targetLine, mutators });
+  }
+  return found;
+}
+
+/**
+ * Did each suppression directive in this branch's changed spans actually suppress anything?
+ *
+ * WHY THIS CANNOT BE A COUNT, which is how the increment that asked for it first sketched the job.
+ * One directive suppresses every mutant of its mutator on the target line, and a line routinely
+ * carries several — the founding measurement saw the run's mutant total fall by 13 for 8 directives
+ * that took. So "N directives should yield N ignored mutants" is false on healthy input, and the
+ * only sound comparison is per directive: does the line it names still carry a LIVE mutant of the
+ * mutator it names?
+ *
+ * SILENT IS THE WHOLE PROBLEM. Stryker emits no diagnostic for a directive that bound to nothing,
+ * and the comment that works is textually identical to the one that does not, so the reader's
+ * visible evidence — a survivor with a disable comment directly above it — points at their own
+ * equivalence argument rather than at the tooling.
+ *
+ * ⚠ IT JUDGES ONLY WHAT THIS RUN INSTRUMENTED, and stays silent otherwise. A directive whose target
+ * line is outside the changed spans has no mutants in this report BECAUSE THE RUNG NEVER ASKED, and
+ * a file that contributed no mutant at all was narrowed away or is not mutable — reporting either
+ * as "suppressed nothing" would be an accusation built from the instrument's own blind spot, which
+ * is the failure class this rung exists to close rather than to commit.
+ */
+export function auditSuppressionDirectives(args: {
+  readonly sources: ReadonlyMap<string, string>;
+  readonly changed: readonly ChangedRanges[];
+  readonly mutants: readonly AdjudicatedMutant[];
+}): SuppressionAudit {
+  // THE RANGES ARE KEPT AS RANGES, never expanded into a set of every line number. Expanding them
+  // reads more simply and costs a counting loop, whose decrement mutant runs forever — so the rung
+  // scores it as a TIMEOUT that no test can ever clear. Asking a range whether it contains a line
+  // is the same answer with no loop at all, and it does not walk a 4,000-line span to find out.
+  // Asked straight off `changed`, with no index built first. An index needs an empty-list fallback
+  // for the first entry of each file AND for a lookup miss, and BOTH are unreachable here — an
+  // unreachable fallback is a branch no input can distinguish, which is the shape that shows up as
+  // an equivalent mutant and cannot be tested away. A diff names a file once per hunk, so `some`
+  // over the entries is also the natural way to merge those hunks rather than a thing to remember.
+  const wasInstrumented = (file: string, line: number): boolean =>
+    args.changed.some(
+      (entry) =>
+        normalise(entry.file) === file && entry.ranges.some((r) => line >= r.start && line <= r.end),
+    );
+
+  const findings: SuppressionFinding[] = [];
+  let audited = 0;
+  let claims = 0;
+  let attached = 0;
+
+  // Stryker disable next-line EqualityOperator: EQUIVALENT — these are Map KEYS, so `a === b` cannot
+  // occur and `<` and `<=` agree on every pair this comparator can ever be handed. A test feeding
+  // duplicate keys would assert behaviour the input type cannot represent.
+  for (const [file, source] of [...args.sources].sort(([a], [b]) => (a < b ? -1 : 1))) {
+    // Suffix matching, for the reason `resolveTestFiles` documents one layer down: Stryker's report
+    // paths come from a sandbox whose directory name changes every run, so equality alone can find
+    // nothing on some runs and everything on others.
+    const mine = args.mutants.filter((m) => m.file === file || m.file.endsWith(`/${file}`));
+    if (mine.length === 0) continue;
+
+    for (const directive of parseSuppressionDirectives(file, source)) {
+      if (!wasInstrumented(file, directive.targetLine)) continue;
+      audited += 1;
+      const onTarget = mine.filter((m) => m.line === directive.targetLine);
+      for (const mutator of directive.mutators) {
+        claims += 1;
+        const scoped = mutator === "all" ? onTarget : onTarget.filter((m) => m.mutator === mutator);
+        const statuses = [...new Set(scoped.map((m) => m.status))].sort();
+        // Built FIELD BY FIELD rather than spread from the directive: a spread would also carry
+        // `mutators`, which the finding type does not declare, so every reader would meet a field
+        // TypeScript says is not there — and the whole point of a per-claim finding is that it
+        // names ONE mutator.
+        const at = { file: directive.file, line: directive.line, targetLine: directive.targetLine, mutator, statuses };
+        if (scoped.length === 0) {
+          findings.push({ ...at, kind: "unmatched" });
+        } else if (scoped.some((m) => m.status === IGNORED_STATUS)) {
+          attached += 1;
+        } else {
+          findings.push({ ...at, kind: "inert" });
+        }
+      }
+    }
+  }
+
+  return { audited, claims, attached, findings };
+}
+
+/**
+ * Report the suppression audit — ADVISORY, and deliberately not a failure.
+ *
+ * WARN RATHER THAN RED, settled on landing. A directive that attached correctly is the common case
+ * (this repo carries ~440 of them), the reader who wrote one is the same reader this line is FOR,
+ * and a false red would charge the honest case for a signal whose whole value is that it removes a
+ * manual ritual. The rung's own verdict is unchanged either way: an inert directive already shows
+ * up as the survivor it always was, and this only says WHY it is still there.
+ */
+export function formatSuppressionAudit(tag: string, audit: SuppressionAudit): readonly string[] {
+  if (audit.audited === 0) return [];
+  const lines = [
+    `${tag} suppression directives in the changed spans: ${audit.audited} directive(s), ` +
+      `${audit.claims} mutator claim(s), ${audit.attached} attached`,
+  ];
+  for (const finding of audit.findings) {
+    lines.push(
+      finding.kind === "inert"
+        ? `${tag}   INERT DIRECTIVE ${finding.file}:${finding.line} disable next-line ${finding.mutator} — ` +
+          `line ${finding.targetLine} still carries a LIVE ${finding.mutator} mutant ` +
+          `(${finding.statuses.join(", ")}), so the directive bound to nothing. A comment between the ` +
+          "links of a chained expression attaches to no statement: extract the expression into a " +
+          "named function and put the directive above its return."
+        : `${tag}   UNMATCHED DIRECTIVE ${finding.file}:${finding.line} disable next-line ${finding.mutator} — ` +
+          `line ${finding.targetLine} carries no ${finding.mutator} mutant at all, so this suppresses ` +
+          "nothing. Either the code moved out from under it, or the mutator name is not one Stryker " +
+          "emits here.",
+    );
+  }
+  return lines;
+}
