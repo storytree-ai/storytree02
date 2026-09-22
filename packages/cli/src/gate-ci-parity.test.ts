@@ -428,6 +428,11 @@ const DECLARED_SHARED_FLOOR = [
   "check:mutation-diff",
   "check:ownership-totality",
   "check:palette-transcription",
+  // `declared-reliability-gate-is-run-by-a-rung` (verification-integrity-arc), added 2026-09-22: on
+  // both the habit and the wall from the start, because the escape it catches is CI-shaped. 3ea9c3cc
+  // retired a rendered pane, updated every unit test it broke — which is exactly what `pnpm -r test`
+  // covers — and left the `studio` UAT journey red, because nothing ran the declared gate at all.
+  "check:reliability-gate-parity",
   "check:web-engine",
   "check:web-experience-closure",
   "check:web-experience-markers",

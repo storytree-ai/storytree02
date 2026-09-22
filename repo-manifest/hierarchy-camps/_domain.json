@@ -249,6 +249,13 @@
           "checkout"
         ]
       },
+      "packages/cli/src/check-reliability-gate-parity.ts": {
+        "because": "the `check:reliability-gate-parity` rung: it judges the reliability gates THIS BRANCH declares against the plan and CI job this branch carries, so its answer has to describe the commit under test. A live projection would judge a story's declaration against a tree the branch is not at, and pass a branch that had just unwired a declared gate.",
+        "camp": "prove",
+        "reads": [
+          "checkout"
+        ]
+      },
       "packages/cli/src/check-uat-revision-continuity.ts": {
         "because": "ADR-0560's merge wall compares the candidate checkout with its merge-base hierarchy. It also reads live signed verdicts, but not the live work-hierarchy projection: the hierarchy question is proof of this candidate and therefore checkout-canonical.",
         "camp": "prove",
