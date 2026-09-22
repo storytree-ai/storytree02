@@ -42,13 +42,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
 import { resolveRepoBash } from "../../../scripts/resolve-bash.mjs";
+import { findBunOnPath } from "../../../scripts/resolve-bun.mjs";
 import { nodeExecutable } from "./node-executable.js";
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
@@ -379,4 +380,170 @@ test("a launch that creates no process FAILS LOUDLY rather than printing a handl
   const pidCheck = code.indexOf("child.pid === undefined");
   const unref = code.indexOf(".unref()");
   assert.ok(pidCheck !== -1 && unref !== -1 && pidCheck < unref, "…and BEFORE the unref");
+});
+
+// ---------- Bun is provisioned for the child, or nothing is dispatched ----------
+//
+// `verification-integrity-arc`, increment `verification-integrity-gate-bg-bun-path`.
+//
+// THE MEASURED FAILURE. `packages/proof-protocol` runs `bun test src/`, so Bun is a test RUNTIME
+// here — but a PATH tool rather than a workspace dependency, so `pnpm install` cannot supply it,
+// and on Windows PATH reaches NEW processes only. A harness process that started before Bun was
+// installed keeps its stale environment for life and hands it to every child it spawns. gate:bg is
+// that child, so the gate reds inside a test step with `'bun' is not recognized` — naming neither
+// the stale PATH nor the repair — after burning the whole cycle to reach the step that needed it.
+// Documentation had already failed across at least three sessions, which is why the remedy is code.
+//
+// The per-case logic is proved in gate-bg-bun-path.test.ts, against an injected env and fs probe.
+// Every test there is a PURE call — none of them starts this launcher. So what that file cannot
+// see, and what these two pin, is the WIRING: that `gate-bg.mjs` actually asks, that a `absent`
+// verdict actually stops the dispatch, and that `withBunOnPath`'s repaired environment actually
+// reaches the spawned child. That is the "second surface must agree with the first" class, and the
+// three lines that join them are exactly where a regression would sit unseen.
+
+/**
+ * A PATH that resolves the SHELL but no `bun` — and it cannot be the empty string.
+ *
+ * ⚠ AN EMPTY PATH IS A WINDOWS-ONLY FIXTURE, which is how the first version of these tests passed
+ * here and failed on CI. `resolveRepoBash()` returns an ABSOLUTE `bash.exe` on Windows, so an
+ * emptied PATH still launches; on Linux it returns the bare name `bash`, which an emptied PATH
+ * cannot resolve at all. The two DISPATCHING cases below died on the runner for a reason that has
+ * nothing to do with Bun — the local-green / CI-red shape this repo keeps paying for.
+ *
+ * `/usr/bin:/bin` and `System32` hold a shell and no Bun (CI installs Bun to `~/.bun/bin`, which is
+ * exactly what the HOME override below then hides). The guard asserts that rather than trusting it,
+ * so an image that ever did ship a `bun` here would fail loudly instead of passing vacuously.
+ */
+const SHELL_PATH_WITHOUT_BUN = process.platform === "win32" ? "C:\\Windows\\System32" : "/usr/bin:/bin";
+
+test("fixture guard: the shell PATH these Bun cases use really does resolve no bun", () => {
+  assert.equal(
+    findBunOnPath(SHELL_PATH_WITHOUT_BUN, process.platform, existsSync),
+    undefined,
+    `${SHELL_PATH_WITHOUT_BUN} must hold no bun, or the two cases below prove nothing`,
+  );
+});
+
+/** `process.env` with every spelling of PATH replaced — Windows hands back `Path`, not `PATH`. */
+function envWithPath(pathValue: string, extra: Record<string, string>): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, ...extra };
+  for (const key of Object.keys(env)) {
+    if (key.toLowerCase() === "path") delete env[key];
+  }
+  env["PATH"] = pathValue;
+  return env;
+}
+
+test("no resolvable bun REFUSES the GATE before anything exists — the cycle is never spent", async () => {
+  // Dispatched with NO ARGUMENTS, which is the `pnpm gate` case and the only one the refusal covers
+  // (`dispatchRunsTheGate`) — a custom command is warned and dispatched anyway, since refusing it
+  // over a runtime it may never invoke is the guard tripping the honest case.
+  //
+  // Running no arguments is SAFE here precisely because of what is being asserted: the refusal comes
+  // before the log directory and the spawn, so the gate this would otherwise start never begins. If
+  // that ordering ever regressed, this test would start a real gate — and the filesystem assertion
+  // below is what would catch it.
+  //
+  // "Nothing was dispatched" is read from the FILESYSTEM, never the clock, exactly as the flag
+  // refusal above does. STORYTREE_BASH is set because bash resolves FIRST and would otherwise refuse
+  // for its own reason on the emptied PATH; the escape hatch is taken verbatim, which is what leaves
+  // Bun as the only thing this case tests.
+  await withTempDir((dir) => {
+    const log = path.join(dir, "never-created", "run.log");
+    const res = spawnSync(nodeExecutable(), [launcher], {
+      encoding: "utf8",
+      cwd: repoRoot,
+      // `dir` is a fresh temp dir, so it holds no `.bun/bin` under either home variable.
+      env: envWithPath(SHELL_PATH_WITHOUT_BUN, { GATE_BG_LOG: log, STORYTREE_BASH: bash, HOME: dir, USERPROFILE: dir }),
+    });
+    const out = `${res.stdout}${res.stderr}`;
+    assert.equal(res.status, 1, `a refusal is a FAILED dispatch (ADR-0397 D2):\n${out}`);
+    assert.doesNotMatch(
+      out,
+      /gate:bg (dispatched|pid|log|exit-file):/,
+      "it prints nothing that reads as a handle",
+    );
+    assert.equal(
+      existsSync(path.dirname(log)),
+      false,
+      "and creates nothing: the launch never reached the spawn, so no gate ran",
+    );
+    assert.match(out, /REFUSED/, "it refuses rather than warning");
+    assert.match(out, /bun/i, "…names the cause");
+  });
+});
+
+test("a CUSTOM command with no bun is WARNED and still dispatched — the guard spares the honest case", async () => {
+  // The other side of `dispatchRunsTheGate`, and the reason the refusal is not simply "no bun, no
+  // launch": `pnpm gate:bg <cmd>` replaces the gate with an arbitrary command, which may never
+  // invoke Bun at all. Refusing it would be the guard tripping the honest case — the same mistake
+  // this launcher's own header records itself avoiding when it chose not to detect pipes.
+  await withTempDir(async (dir) => {
+    const log = path.join(dir, "run.log");
+    const res = spawnSync(nodeExecutable(), [launcher, "sh", "-c", "exit 0"], {
+      encoding: "utf8",
+      cwd: repoRoot,
+      env: envWithPath(SHELL_PATH_WITHOUT_BUN, { GATE_BG_LOG: log, STORYTREE_BASH: bash, HOME: dir, USERPROFILE: dir }),
+    });
+    const out = `${res.stdout}${res.stderr}`;
+    assert.equal(res.status, 0, `a custom command still LAUNCHES:\n${out}`);
+    assert.match(out, /WARNING/, "…but says so");
+    assert.doesNotMatch(out, /REFUSED/, "and does not refuse");
+    assert.equal(await awaitSentinel(`${log}.exit`), "0", "the job really ran");
+  });
+});
+
+test("an installed-but-off-PATH bun is PREPENDED into the CHILD's environment, and the gate runs", async () => {
+  // The prepend is the half resolve-bun.test.ts cannot observe: it returns a directory, and whether
+  // that directory reaches the spawned child is this file's question. So the dispatched job reports
+  // its OWN `$PATH` — the child's, not the launcher's — and the assertion reads that.
+  await withTempDir(async (dir) => {
+    const binDir = path.join(dir, ".bun", "bin");
+    mkdirSync(binDir, { recursive: true });
+    // A file, not a working binary: the launcher's contract is to put the directory on the child's
+    // PATH after finding an executable there, and that is what is being checked.
+    for (const name of ["bun.exe", "bun"]) writeFileSync(path.join(binDir, name), "");
+
+    // A decoy the parent DOES supply, so "the bun dir is ahead of what was already there" can be
+    // asserted as a RELATIVE order. An absolute "is it first?" cannot be: Git Bash prepends its own
+    // `/usr/bin` when it starts, which belongs to the shell rather than to this launcher.
+    const decoy = path.join(dir, "decoy");
+    mkdirSync(decoy, { recursive: true });
+
+    const log = path.join(dir, "run.log");
+    const seen = path.join(dir, "child-path.txt").split(path.sep).join("/");
+    const res = spawnSync(
+      nodeExecutable(),
+      [launcher, "sh", "-c", `printf '%s' "$PATH" > "${seen}"`],
+      {
+        encoding: "utf8",
+        cwd: repoRoot,
+        // The decoy FIRST, then the shell dirs — the shell must still resolve (see
+        // SHELL_PATH_WITHOUT_BUN), and the decoy's position is what the order assertion reads.
+        env: envWithPath(`${decoy}${path.delimiter}${SHELL_PATH_WITHOUT_BUN}`, {
+          GATE_BG_LOG: log,
+          STORYTREE_BASH: bash,
+          HOME: dir,
+          USERPROFILE: dir,
+        }),
+      },
+    );
+    assert.equal(res.status, 0, `an installed bun DISPATCHES:\n${res.stdout}${res.stderr}`);
+    assert.equal(await awaitSentinel(`${log}.exit`), "0", "the job ran and exited 0");
+
+    // Compare on SUBSTRINGS of a separator-normalised string rather than splitting. Git Bash hands
+    // the shell a POSIX PATH (`/tmp/…`) where the launcher supplied a Windows one, so neither an
+    // equality against `binDir` nor a split on `:` survives — a Windows entry's own `C:` is a false
+    // separator. What the spellings agree on is the tail.
+    const norm = (s: string): string => s.replaceAll("\\", "/").toLowerCase();
+    const childPath = norm(readFileSync(path.join(dir, "child-path.txt"), "utf8"));
+    const bunAt = childPath.indexOf("/.bun/bin");
+    const decoyAt = childPath.indexOf("/decoy");
+    assert.notEqual(bunAt, -1, `the child's PATH must carry the bun bin dir: ${childPath}`);
+    assert.notEqual(decoyAt, -1, `guard: the parent's own PATH must reach the child: ${childPath}`);
+    assert.ok(
+      bunAt < decoyAt,
+      `…AHEAD of what the parent already had, so an installed bun wins: ${childPath}`,
+    );
+  });
 });
