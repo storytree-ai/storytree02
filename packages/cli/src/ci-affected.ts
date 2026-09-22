@@ -87,6 +87,30 @@ interface RootPathReaders {
  * wrapped via `NODE_OPTIONS=--import`, `pnpm -r --no-bail test` was run across all 25 projects, and
  * every read resolving inside the real docs tree was logged with its owning process.
  *
+ * ⚠⚠ THAT PROCEDURE NO LONGER WORKS AS WRITTEN, AND IT FAILS IN THE ONE DIRECTION THIS MAP MUST NOT
+ * FAIL (re-measured 2026-09-22, ADR-0394 D5 amended). Re-run literally, it now reports a FALSE ZERO
+ * for 21 of 25 projects, and a false zero reads as "nothing reads this path" — an under-selection
+ * wearing the clothes of a measurement. Three things have to be true of a re-measurement now:
+ *
+ *   1. BUN NEEDS `mock.module`, NOT `NODE_OPTIONS`. 21 of 25 projects run `bun test`, which ignores
+ *      `NODE_OPTIONS=--import` entirely; and even once preloaded, assigning `fs.readFileSync = …`
+ *      on the default export does NOT reach `import { readFileSync } from "node:fs"`, because the
+ *      named binding is native and static. Measured: a patch-the-default probe observed ZERO reads
+ *      from a cli suite that provably reads `.gitignore`. `mock.module("node:fs", …)` from a Bun
+ *      preload does reach it.
+ *   2. GIT IS A SUBPROCESS, so no fs wrapper can see it. `.gitignore`'s primary reader is git
+ *      itself, which means an fs-only zero for it proves nothing at all. Wrap `node:child_process`
+ *      as well and record every `git` invocation whose cwd (or `-C`) is the real repo. Run
+ *      2026-09-22: only `rev-parse`, `show`, `config`, `merge-base` and `worktree` appear, none of
+ *      which consults an ignore file — so the negative is now observed rather than assumed.
+ *   3. THE PROBE MUST NOT PERTURB THE SUITE IT OBSERVES, and verifying that costs a second control.
+ *      Rebuilding a module namespace with `Object.keys` silently drops non-enumerable properties and
+ *      getters (`fs.promises`, `realpath.native`); copying descriptors verbatim then throws on the
+ *      non-configurable ones. Either way the OBSERVED suite reds, and every later zero means "the
+ *      suite died early" rather than "nothing read it". Run TWO controls before trusting any zero:
+ *      a POSITIVE one (a suite known to read the path still logs a hit) and a NON-PERTURBATION one
+ *      (a suite that passes without the probe still passes under it).
+ *
  * ⚠ THE `docs/decisions/` ENTRY IS GONE, and its absence is the decision rather than an omission
  * (ADR-0403 dec 1, whose Consequences named this). The directory no longer exists: decisions are rows,
  * so a decision edit is not a file change and affects no test scope at all. What remains mapped is
@@ -203,10 +227,16 @@ export const ROOT_PATH_READERS: readonly RootPathReaders[] = [
   // never scopes. They are mapped to cli anyway, which is OVER-selection and therefore safe, rather
   // than to an empty project list. That choice is the answer to the "a path with no readers cannot
   // be expressed" gap, and it is deliberate: an empty scope would be a SECOND terminal state that
-  // runs nothing, whose failure mode is a branch gating green having tested nothing, and the measured
-  // payoff for it is nil — every root path with genuinely zero test readers (README.md,
-  // .editorconfig, .env.example, .nvmrc, .gitattributes) changed at most ONCE in 800 commits, and
-  // these three never appear in a commit without `.claude/` or CLAUDE.md beside them anyway.
+  // runs nothing, whose failure mode is a branch gating green having tested nothing. These three
+  // never appear in a commit without `.claude/` or CLAUDE.md beside them anyway.
+  // ⚠ THE "MEASURED PAYOFF IS NIL" HALF WAS RE-MEASURED 2026-09-22, and it now has to be stated per
+  // path instead of as one claim. Touches in the last 800 commits: `.gitattributes` 1,
+  // `.editorconfig` 1, `.nvmrc` 1, `.env.example` 2. The argument holds for those four and they stay
+  // out. It did NOT hold for `README.md`, which is 15 — so "changed at most ONCE in 800 commits" was
+  // simply wrong about it, and README.md stays out for the OTHER reason: it has no measured reader
+  // AND no writer to map up to, which is an open gap rather than a settled one. `.gitignore` was
+  // never in this list, and at 27 touches it is the most-edited root path in the repo; it is no
+  // longer a candidate for the empty scope in any case, because it turned out to HAVE a reader.
   {
     prefix: ".cursor/",
     projects: ["@storytree/cli"],
@@ -230,6 +260,31 @@ export const ROOT_PATH_READERS: readonly RootPathReaders[] = [
     projects: ["@storytree/cli", "@storytree/drive"],
     reason:
       ".claude/settings*.json is read at test time by cli and by drive (the write-authority and noticeboard suites); the agents subtree is narrower and matches first",
+  },
+  // THE IGNORE FILES — MEASURED READERS, AND THE MEASUREMENT REFUTED THE PREMISE THEY WERE PROPOSED
+  // ON. The friction that asked for these (2026-08-27, `gitignore-edit-forces-the-full-gate-scope`)
+  // said `.gitignore` is "read by git, never by a test" and asked for the EMPTY scope. That was TRUE
+  // WHEN WRITTEN and stopped being true on 2026-09-08, when `gcloudignore-mirror.test.ts` landed
+  // (8588e4670) and made cli read BOTH files at test time — non-vacuously, asserting the real
+  // `.gitignore` still hands over a credential block of at least six lines. The premise EXPIRED
+  // between the filing and the build; it was not wrong when filed.
+  //
+  // So the honest entry is cli, and the empty scope is not merely unnecessary here but the wrong
+  // answer: mapping `.gitignore` to a scope that runs nothing would mean a branch adding a
+  // credential-shaped path to it runs no test that the path is mirrored into `.gcloudignore` —
+  // which is the file `gcloud builds submit` actually filters by, before `COPY . .` bakes whatever
+  // survives into a published image. An empty scope is cheapest exactly where it is most dangerous.
+  {
+    prefix: ".gitignore",
+    projects: ["@storytree/cli"],
+    reason:
+      ".gitignore is read at test time by cli alone — gcloudignore-mirror.test.ts holds the REAL file's credential block against .gcloudignore's, so this is the last root path that should ever narrow to nothing (re-measured 2026-09-22)",
+  },
+  {
+    prefix: ".gcloudignore",
+    projects: ["@storytree/cli"],
+    reason:
+      ".gcloudignore is read at test time by cli alone, by the same gcloudignore-mirror.test.ts that reads its twin (re-measured 2026-09-22)",
   },
 ];
 
