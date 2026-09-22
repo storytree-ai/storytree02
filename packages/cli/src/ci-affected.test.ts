@@ -212,6 +212,59 @@ test("THE PRIZE: a guidance-regeneration diff selects ONE project", () => {
   assert.equal(pnpmArgsFor(scope), "--filter ...@storytree/cli");
 });
 
+test("an ignore-rule edit no longer buys the whole monorepo — the friction this entry closes", () => {
+  // `gitignore-edit-forces-the-full-gate-scope`: adding four ignore lines for a measurement
+  // script's scratch dir classified `FULL (every package)` and ran a 5m20s `-r test` leg. Measured
+  // again on this branch before the entry landed, reproducing the friction's own line verbatim:
+  //   scope: FULL (every package) — .gitignore: outside the workspace dependency graph
+  // `.gitignore` is the most-edited root path in the repo (27 touches across 800 commits).
+  const alone = classifyChangedFiles([".gitignore"], PROJECTS);
+  assert.equal(alone.mode, "affected");
+  assert.deepEqual(alone.mode === "affected" ? alone.projects : [], ["@storytree/cli"]);
+  assert.equal(pnpmArgsFor(alone), "--filter ...@storytree/cli");
+
+  // And the shape the friction actually hit: one ignore line beside a narrow package change no
+  // longer drags in everything — it UNIONS, so the package's own suite still runs.
+  const mixed = classifyChangedFiles([".gitignore", "packages/forest-world/src/x.ts"], PROJECTS);
+  assert.deepEqual(mixed.mode === "affected" ? mixed.projects : [], [
+    "@storytree/cli",
+    "@storytree/forest-world",
+  ]);
+});
+
+test("⚠ the ignore files map to the project that OWNS the credential mirror — never to nothing", () => {
+  // This is the entry that was proposed as an EMPTY scope, on the premise that `.gitignore` is read
+  // by git and never by a test. That premise was true when it was written (2026-08-27) and expired
+  // on 2026-09-08, when `gcloudignore-mirror.test.ts` landed and made cli read BOTH files at test
+  // time. The consequence is what this test pins: an empty scope here would mean a branch adding a
+  // credential-shaped path to `.gitignore` runs nothing that checks it is mirrored into
+  // `.gcloudignore` — the file `gcloud builds submit` filters by — before `COPY . .` bakes it into
+  // a published image. So the reader must be the project that owns that control, and the entry's
+  // stated evidence must name the control rather than merely asserting a measurement happened.
+  for (const file of [".gitignore", ".gcloudignore"]) {
+    const scope = classifyChangedFiles([file], PROJECTS);
+    assert.deepEqual(scope.mode === "affected" ? scope.projects : [], ["@storytree/cli"], file);
+    const entry = ROOT_PATH_READERS.find((e) => e.prefix === file);
+    assert.ok(entry, `${file} has no map entry`);
+    assert.match(
+      entry.reason,
+      /gcloudignore-mirror/,
+      `${file}'s reason must name the test that reads it, so a later session re-runs it rather than re-deriving the premise this entry already refuted`,
+    );
+  }
+});
+
+test("the ignore entries are EXACT files — a .gitignore sibling inherits nothing", () => {
+  // `.gitignore` and `.gcloudignore` carry no trailing slash. A `startsWith` would also claim
+  // `.gitignore.bak`, and — the one that matters — would let `.gitignore` itself claim
+  // `.gitignore.d/` or any future sibling whose readers nobody has measured.
+  for (const file of [".gitignore.bak", ".gitignoreX", ".gcloudignore.orig"]) {
+    const scope = classifyChangedFiles([file], PROJECTS);
+    assert.equal(scope.mode, "full", file);
+    assert.match(scope.reason, /outside the workspace dependency graph/);
+  }
+});
+
 test("an EXACT-file entry is not a string prefix — CLAUDE.md.bak inherits nothing", () => {
   // `CLAUDE.md` carries no trailing slash, so it must match that path and no other. A `startsWith`
   // would hand any `CLAUDE.md*` sibling a reader set nobody measured for it.
@@ -308,6 +361,8 @@ test("EVERY map entry fails WIDE when one of its readers is absent, not just the
     [".claude/agents/x.md", "@storytree/cli"],
     [".claude/settings.json", "@storytree/drive"],
     [".codex/agents/x.toml", "@storytree/cli"],
+    [".gitignore", "@storytree/cli"],
+    [".gcloudignore", "@storytree/cli"],
   ];
   for (const [file, missing] of governed) {
     const shrunk = PROJECTS.filter((p) => p.name !== missing);
@@ -334,6 +389,10 @@ test("no entry can render an EMPTY scope — the map only ever selects at least 
     ".cursor/x.md",
     ".gemini/x.md",
     ".opencode/agent/x.md",
+    // The two ignore files were PROPOSED for the empty scope and measured into a real reader set
+    // instead; they belong in this list precisely because they are the case that nearly got it.
+    ".gitignore",
+    ".gcloudignore",
   ]) {
     const scope = classifyChangedFiles([file], PROJECTS);
     assert.equal(scope.mode, "affected", file);
