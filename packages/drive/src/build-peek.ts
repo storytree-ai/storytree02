@@ -247,7 +247,38 @@ export interface BuildPeek {
    * registry half works with no database and is worth having on its own.
    */
   readonly storeRead: boolean;
+  /** Whether this unit is HELD at a spent budget, waiting for a decision (ADR-0592 D6). */
+  readonly hold: PeekHoldState;
 }
+
+/**
+ * A hold this unit has announced (ADR-0592 D6), as the peek reads it.
+ *
+ * Structural and NARROW for the same reason {@link PeekPhaseMark} is: `build-hold.ts`'s `StoredHold`
+ * satisfies it, so the CLI hands one straight in, and nothing here depends on a record shape that is
+ * not spelled out at this boundary. The fold never reads the holds directory itself.
+ */
+export interface PeekHold {
+  readonly runId: string;
+  readonly pid: number;
+  readonly budgetMs: number;
+  readonly elapsedMs: number;
+  readonly graceMs: number;
+  readonly heldAt: number;
+  readonly extensions: readonly { readonly reason: string; readonly toBudgetMs: number }[];
+}
+
+/** What the peek says about a hold: held and answerable, held and too late, or not held at all. */
+export type PeekHoldState =
+  | { readonly held: false }
+  | {
+      readonly held: true;
+      readonly hold: PeekHold;
+      /** Milliseconds left of the grace window, or 0 once it has passed. */
+      readonly leftMs: number;
+      /** False once the grace has passed: the build has already stopped, and an answer reaches nothing. */
+      readonly answerable: boolean;
+    };
 
 export interface BuildPeekInput {
   readonly unitId: string;
@@ -256,6 +287,16 @@ export interface BuildPeekInput {
   /** This unit's work log, or `null` when the store was not read. */
   readonly marks: readonly PeekPhaseMark[] | null;
   readonly nowMs: number;
+  /**
+   * The hold this unit has announced, when it has one (ADR-0592 D6). Absent = no hold found, which the
+   * render says nothing about — a peek of a healthy build is unchanged.
+   *
+   * ⚠ This is why the hold half needed no second read invented for it. ADR-0588 D6 detached the peek
+   * from expiry precisely so the orchestrator answering a hold would be looking at THIS, and without it
+   * a held build reads RUNNING with no mention of the hold — an answer that looks like an answer, which
+   * is the defect ADR-0588 D4 exists to repair one level up.
+   */
+  readonly hold?: PeekHold | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +319,23 @@ export function foldBuildPeek(input: BuildPeekInput): BuildPeek {
     budget,
     elapsed: judgeElapsed(processes, run, input.nowMs),
     storeRead: input.marks !== null,
+    hold: judgeHold(input.hold, input.nowMs),
   };
+}
+
+/**
+ * The hold, joined to the clock (ADR-0592 D6).
+ *
+ * The only thing that can be judged here is whether the grace has passed — there is no liveness join,
+ * so a notice left behind by a build that died while held looks exactly like a live one until its grace
+ * expires. Reported as `answerable: false` rather than as "not held", because the two are different
+ * facts and a reader deciding whether to spend money on an extension needs the difference.
+ */
+function judgeHold(hold: PeekHold | undefined, nowMs: number): PeekHoldState {
+  if (hold === undefined) return { held: false };
+  const expiresAt = hold.heldAt + hold.graceMs;
+  const leftMs = Math.max(0, expiresAt - nowMs);
+  return { held: true, hold, leftMs, answerable: nowMs < expiresAt };
 }
 
 /**
@@ -482,6 +539,7 @@ export const BUILD_PEEK_BLIND_SPOTS: readonly string[] = [
   "any build on ANOTHER machine — the spawn registry is per-user and per-machine (the same cost ADR-0571 D2 accepted), so this is a floor on what is running, never a census",
   "a build launched from the PRIMARY CHECKOUT — it derives no session identity and so registers nothing at all",
   "a `story build --real` chain, which SPLITS across the two halves so that neither id gives a whole answer: the registered argv names the STORY, while each member's phase marks are written under the MEMBER (one `buildNodeReal` walk per member, stamping its own `spec.id`). Peek the member and you get its real phase trail under a liveness of UNKNOWN; peek the story and you get RUNNING with no trail at all. Both are honest halves of one build — read them against this line rather than as a contradiction",
+  "an EXTENSION granted at a hold, once the build has resumed (ADR-0592): the budget above is recovered from the registered argv, which an extension never rewrites, so between holds this read UNDER-reports the clock a build is actually running on. While a build is held its notice carries the live figure and the render says both; after it resumes, only the build itself knows",
 ];
 
 // ---------------------------------------------------------------------------
@@ -545,6 +603,10 @@ export function renderBuildPeek(peek: BuildPeek): string {
     peek.liveness === "running" ? "RUNNING" : peek.liveness === "ended" ? "ENDED" : "UNKNOWN";
   lines.push(`${word} — "${peek.unitId}"`, "", `  ${peek.livenessReason}`, "");
 
+  // ADR-0592 D6: ABOVE the clock and the trail, because it is the only thing in this render that asks
+  // the reader to do something, and it expires.
+  if (peek.hold.held) lines.push(...renderHold(peek.unitId, peek.hold), "");
+
   lines.push(...renderClock(peek), "");
   lines.push(...renderTrail(peek), "");
 
@@ -561,6 +623,38 @@ export function renderBuildPeek(peek: BuildPeek): string {
   lines.push("WHAT THIS READ CANNOT SEE — stated so it is not mistaken for completeness:");
   for (const spot of BUILD_PEEK_BLIND_SPOTS) lines.push(`  · ${spot}`);
   return lines.join("\n");
+}
+
+/** The hold, and the two commands that answer it (ADR-0592 D6). */
+function renderHold(
+  unitId: string,
+  state: Extract<PeekHoldState, { held: true }>,
+): readonly string[] {
+  const { hold } = state;
+  const lines = [
+    `HELD — this build's time budget is SPENT and it is waiting for you (ADR-0592):`,
+    `  budget:  ${formatDurationMs(hold.budgetMs)} spent (${formatDurationMs(hold.elapsedMs)} elapsed)   run ${hold.runId}, pid ${hold.pid}`,
+  ];
+  if (hold.extensions.length > 0) {
+    lines.push(
+      // Stryker disable next-line OptionalChaining: EQUIVALENT — the `extensions.length > 0` guard above
+      // makes this indexed access always defined, so the `?.` can never short-circuit.
+      `  granted: ${hold.extensions.length} extension(s) already — now ${formatDurationMs(hold.extensions[hold.extensions.length - 1]?.toBudgetMs ?? hold.budgetMs)} in total`,
+    );
+  }
+  if (state.answerable) {
+    lines.push(
+      `  left:    ${formatDurationMs(state.leftMs)} of its grace window, then the build STOPS unsigned`,
+      `  answer:  storytree node extend ${unitId} --minutes <n> --reason "<why>"`,
+      `           storytree node extend ${unitId} --stop --reason "<why>"`,
+    );
+  } else {
+    lines.push(
+      `  left:    NONE — the grace window has passed, so the build has already stopped unsigned (or died`,
+      `           while held and left this notice behind). An answer now would be read by nothing.`,
+    );
+  }
+  return lines;
 }
 
 /** Elapsed against the budget, each carrying where it came from. */
@@ -584,6 +678,15 @@ function renderClock(peek: BuildPeek): readonly string[] {
       ? "as launched, from `--time-budget` in the registered argv"
       : "the spine's default — the registered argv carries no `--time-budget`";
   lines.push(`  budget:  ${formatDurationMs(peek.budget.ms)} (${how})`);
+  // ADR-0592 D6: the budget above is recovered from the ARGV (D5), which an extension does not change.
+  // Where a hold names a different one, say so — otherwise this render carries two budgets and explains
+  // neither, which is a contradiction a tired reader resolves by trusting whichever they read first.
+  if (peek.hold.held && peek.hold.hold.budgetMs !== peek.budget.ms) {
+    lines.push(
+      `  extended: now ${formatDurationMs(peek.hold.hold.budgetMs)} — the figure above is what the build was`,
+      `           LAUNCHED with, which is all the argv can say. See the HELD block above for the live one.`,
+    );
+  }
   if (peek.elapsed.known) {
     const left = peek.budget.ms - peek.elapsed.ms;
     lines.push(

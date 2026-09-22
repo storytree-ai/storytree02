@@ -50,7 +50,8 @@ import type {
   PromotionResult,
 } from "@storytree/orchestrator";
 
-import { chooseTimeBudgetMs, effectiveVerdictStore, ensureLiveDb } from "@storytree/drive";
+import { chooseHoldGraceMs,
+  chooseTimeBudgetMs, effectiveVerdictStore, ensureLiveDb } from "@storytree/drive";
 import type { EnsureDbResult } from "@storytree/drive";
 import type { Envelope } from "./envelope.js";
 import {
@@ -127,6 +128,11 @@ export interface GateBuildDriverDeps {
    * REAL build, so this is that build's clock; absent, the spine's two-hour default stands.
    */
   timeBudget?: string | undefined;
+  /**
+   * `--hold-grace <minutes>` — how long a spent build HOLDS for the orchestrator before stopping itself
+   * (ADR-0592 D3). RAW text for the reason `timeBudget` is raw: one parse, in `chooseHoldGraceMs`.
+   */
+  holdGrace?: string | undefined;
   /**
    * ADR-0098 (U4): the candidate design forks the orchestrator session's pre-build pocket analysis
    * surfaced for this `(pocket, gate)`, each tagged with the three d.5 owner-fork-bar signals (+ the
@@ -254,6 +260,10 @@ export async function driveBuildTestsGate(
   // ADR-0581 D2: this drive's REAL build runs on a wall clock. Refused before any spend if the
   // operator's figure cannot bound one. A gate drive is always REAL, so there is no --live branch
   // to narrow to here, unlike `node build`.
+  const holdGrace = chooseHoldGraceMs(deps.holdGrace, { real: true });
+  if (!holdGrace.ok) {
+    return { ok: false, body: holdGrace.reason, next: [retryCmd] };
+  }
   const timeBudget = chooseTimeBudgetMs(deps.timeBudget, { real: true });
   if (!timeBudget.ok) {
     return { ok: false, body: timeBudget.reason, next: [retryCmd] };
@@ -481,6 +491,7 @@ export async function driveBuildTestsGate(
         if (deps.budgetUsd !== undefined) realArgs.budgetUsd = deps.budgetUsd;
         if (deps.maxTurns !== undefined) realArgs.maxTurns = deps.maxTurns;
         realArgs.timeBudgetMs = timeBudget.ms;
+        realArgs.holdGraceMs = holdGrace.ms;
         return resolveStoryRealNodeBuilder(deps.realNodeBuilder)(realArgs);
       },
     );

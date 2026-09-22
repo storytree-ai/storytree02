@@ -46,6 +46,9 @@ function deps(records: readonly SpawnRecord[]): NodePeekDeps {
     probe: () => true,
     now: () => Date.parse("2026-09-21T12:00:00.000Z"),
     machine: () => "test-box",
+    // ADR-0592 D6: no hold in these cases. Injected rather than defaulted so a peek test never
+    // reads the operator's own ~/.storytree/holds.
+    readHold: () => Promise.resolve(undefined),
   };
 }
 
