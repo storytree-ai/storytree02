@@ -559,3 +559,47 @@ test('shore-far-field-is-one-lookup: the padded near mask agrees with the neighb
   assert.equal(empty.far(100, -100), true, 'an empty grid is always far');
   assert.deepEqual(nearestOnSegments(empty, 100, -100, cap), { distance: cap, gx: 0, gz: 0 });
 });
+
+test('shore-walk-short-circuits-through-the-mask', () => {
+  // A four-cell-wide open rectangle leaves a genuine far interior cell, while the probe just
+  // below its bottom edge must still walk the real candidate list.
+  const cap = 2;
+  const edges: CoastEdge[] = [
+    { ax: 0, az: 0, bx: 12, bz: 0 },
+    { ax: 12, az: 0, bx: 12, bz: 12 },
+    { ax: 12, az: 12, bx: 0, bz: 12 },
+    { ax: 0, az: 12, bx: 0, bz: 0 },
+  ];
+  const indexed = buildSegmentGrid(edges, cap);
+  let candidateCalls = 0;
+  const grid: EdgeGrid = {
+    ...indexed,
+    candidates(x, z) {
+      candidateCalls += 1;
+      return indexed.candidates(x, z);
+    },
+  };
+
+  assert.deepEqual(nearestOnSegments(grid, 6, 6, cap), { distance: cap, gx: 0, gz: 0 });
+  assert.equal(candidateCalls, 0, 'a mask-proven far point must not scan candidates');
+
+  candidateCalls = 0;
+  const near = nearestOnSegments(grid, 6, -0.5, cap);
+  assert.ok(candidateCalls > 0, 'a point beside an edge must inspect candidates');
+  assert.equal(near.distance, 0.5, 'the near answer is the edge distance, not the cap');
+
+  let probes = 0;
+  for (let x = -4; x <= 16; x += 0.5) {
+    for (let z = -4; z <= 16; z += 0.5) {
+      const got = nearestOnSegments(grid, x, z, cap);
+      const expected = bruteOpen(edges, x, z, cap);
+      assert.ok(Math.abs(got.distance - expected.distance) < 1e-9, `distance differs at (${x}, ${z})`);
+      assert.ok(
+        Math.abs(got.gx - expected.gx) < 1e-9 && Math.abs(got.gz - expected.gz) < 1e-9,
+        `gradient differs at (${x}, ${z})`,
+      );
+      probes += 1;
+    }
+  }
+  assert.ok(probes > 1600, `only ${probes} lattice probes`);
+});

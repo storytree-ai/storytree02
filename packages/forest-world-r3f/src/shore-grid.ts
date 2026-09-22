@@ -362,11 +362,12 @@ export interface NearestSample {
  * ({@link edgeGridFarField}): `buildSegmentGrid` sets the cell to the width it was built for, so
  * a caller passing a `cap` wider than that width has broken the proof.
  *
- * ⚠ ONE `candidates` CALL SERVES BOTH THE SHORT-CIRCUIT AND THE WALK. Asking "any?" first and
- * `candidates` after runs the neighbourhood scan TWICE per sample, which at 5.4 M texels is half
- * the field's build time spent re-deriving a list it already had.
+ * ⚠ THE PRECOMPUTED MASK SERVES THE SHORT-CIRCUIT WITHOUT A CANDIDATE SCAN. Asking `candidates`
+ * first would rebuild the 3x3 neighbourhood for points the mask already proves are far; the walk
+ * only asks for candidates when that proof says an edge may be nearby.
  */
 export function nearestOnSegments(grid: EdgeGrid, x: number, z: number, cap: number): NearestSample {
+  if (grid.far(x, z)) return { distance: cap, gx: 0, gz: 0 };
   const candidates = grid.candidates(x, z);
   // Stryker disable next-line ConditionalExpression: EQUIVALENT — this is the SHORT-CIRCUIT.
   // Never taking it walks an empty candidate list and returns the same capped distance with the
@@ -377,10 +378,11 @@ export function nearestOnSegments(grid: EdgeGrid, x: number, z: number, cap: num
   let best = cap;
   let nx = 0;
   let nz = 0;
+  let bestIndex = Infinity;
   // ⚠⚠ THE CANDIDATES ARE THE EDGES IN THE POINT'S OWN 3x3 CELL NEIGHBOURHOOD, AND SKIPPING THE
   // REST IS EXACT. Every edge outside that block is at least one cell — one width — away
-  // (`edgeGridFarField`), and `best` starts AT `cap` with a strict `d >= best` reject, so no
-  // omitted edge could have improved the answer.
+  // (`edgeGridFarField`), and `best` starts AT `cap`, so no omitted edge could improve the
+  // capped answer.
   for (const n of candidates) {
     const e = grid.edges[n]!;
     const ex = e.bx - e.ax;
@@ -395,14 +397,15 @@ export function nearestOnSegments(grid: EdgeGrid, x: number, z: number, cap: num
     const qx = x - (e.ax + ex * t);
     const qz = z - (e.az + ez * t);
     const d = Math.hypot(qx, qz);
-    // Stryker disable next-line EqualityOperator: EQUIVALENT for the DISTANCE, which is what
-    // every caller reads: on a tie both branches leave `best` at the same number. They differ
-    // only in which of two equidistant points supplies the gradient — the medial axis, where the
-    // distance field's gradient is genuinely undefined.
-    if (d >= best) continue;
+    // Break an in-cap tie by the source edge order, matching the brute-force walk. The gradient
+    // is undefined on a medial axis, but choosing consistently keeps the indexed and brute-force
+    // fields identical. A distance at the cap remains rejected so capped answers keep zero
+    // gradient.
+    if (d > best || (d === best && (best === cap || n > bestIndex))) continue;
     best = d;
     nx = qx;
     nz = qz;
+    bestIndex = n;
   }
   // Off an edge the gradient is the unit vector away from the nearest point. ON it (`best === 0`)
   // it is undefined — and every consumer's slope term is zero there, so nothing reads it.
