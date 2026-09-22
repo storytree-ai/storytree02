@@ -164,6 +164,19 @@ function topoFixtureStoriesDir(): string {
 }
 
 /**
+ * Close the fixture's three-deep chain into a RING, in place: `beta-mid` gains a dependency on
+ * `delta-tail`, which already depends on it. Kahn drains the two roots and the leaf, then finds an
+ * empty ready queue with `beta-mid` and `delta-tail` still holding each other — the malformed graph
+ * an author produces, not one the corpus can contain.
+ */
+function makeTopoFixtureCyclic(dir: string): void {
+  writeFileSync(
+    path.join(dir, TOPO_FIXTURE_STORY, "beta-mid.md"),
+    fixtureCapabilitySpec(TOPO_FIXTURE_STORY, "beta-mid", ["zulu-root", "delta-tail"]),
+  );
+}
+
+/**
  * Add an UNRELATED story, carrying its own capability, to an EXISTING fixture root — the corpus edit
  * the friction describes, performed in place so the report's `spec:` path is unchanged and the run
  * id is the only line that can differ between the two reports.
@@ -330,6 +343,49 @@ test("a legitimate capability added ELSEWHERE in the stories root does not move 
     // order, the count, or refuse outright.
     assert.equal(stableReport(after.body), stableReport(before.body));
     assert.doesNotMatch(after.body, /unrelated-/, "the extra capability appears nowhere in the report");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a malformed story graph is REFUSED through the build, carrying the reason and driving nothing", async () => {
+  // The topo refusals themselves — cycle, a listed capability with no spec, an unlisted extra, an
+  // out-of-set edge, a non-story root — are proved as PURE function behaviour in
+  // `packages/orchestrator/src/story-build.test.ts`. What had no test at all is the ENVELOPE that
+  // turns one into what an agent actually reads: `cannot be ordered` appeared exactly once in the
+  // repository, at its own source line in `packages/drive/src/story-build.ts`. The three
+  // neighbouring refusals that DO have build-level tests here (`no story spec`, a capability id,
+  // `no proof config`) each take a different branch, so none of them reaches this one — and a
+  // malformed graph is the failure an author meets first, because it is authored rather than
+  // inherited.
+  const dir = topoFixtureStoriesDir();
+  try {
+    makeTopoFixtureCyclic(dir);
+    const rec = recordingProgress();
+    const env = await storyBuild(TOPO_FIXTURE_STORY, {
+      dryRun: true,
+      actor: "tester@example.com",
+      storiesDir: dir,
+      progress: rec.progress,
+    });
+
+    assert.equal(env.ok, false, env.body);
+    assert.match(env.body, /cannot be ordered/, "the refusal says what it could not do");
+    assert.match(
+      env.body,
+      /dependency cycle among capabilities/,
+      `and the pure function's reason survives the wrapper:\n${env.body}`,
+    );
+    assert.match(env.body, /beta-mid, delta-tail/, "naming the capabilities that hold each other");
+    // A refusal is guidance, never a dead end (ADR-0023's envelope).
+    assert.deepEqual(env.next, [`storytree story build ${TOPO_FIXTURE_STORY} --dry-run`]);
+
+    // NOTHING RAN. The refusal is taken before the chain starts, so there is no drive order, no
+    // signed node and no progress leg at all — the three things a wrapper that leaked the refusal
+    // through as a pass would produce.
+    assert.deepEqual(rec.stages, [], "no stage was entered");
+    assert.doesNotMatch(env.body, /^order:/m);
+    assert.doesNotMatch(env.body, /PASS/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
