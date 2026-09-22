@@ -206,8 +206,20 @@ function edgeKey(a: GroundPoint, b: GroundPoint): string {
 }
 
 /** A cell with no `parcel` is its own kind of neighbour: two unparcelled cells share an
- *  interior seam, and an unparcelled cell beside a parcelled one is a real boundary. */
-const NO_PARCEL = ' none';
+ *  interior seam, and an unparcelled cell beside a parcelled one is a real boundary.
+ *
+ *  ⚠ THE NUL IS WRITTEN AS AN ESCAPE, NOT AS A RAW BYTE. It was a raw 0x00 here until 2026-09-22.
+ *  The escape is the SAME string at runtime — both are NUL + "none", verified char code by char
+ *  code — so only the representation changes; nothing about the sentinel's behaviour does.
+ *
+ *  ⚠ THE REASON IS THAT A RAW BYTE IS UNREADABLE, and the near-miss is worth recording rather than
+ *  the scare. A raw NUL in the first 8000 bytes of a blob makes git classify the whole file as
+ *  BINARY and hide every diff of it thereafter; this one sat at byte 11,905, beyond that window,
+ *  so the file escaped that consequence BY POSITION ALONE and diffs kept rendering. What did not
+ *  escape is that no reader showed the byte: `grep` could not even list this file, because it
+ *  treats a NUL-bearing file as binary — which is why `check:control-bytes` scans bytes rather
+ *  than shelling out to grep, and why it refuses the raw form here. */
+const NO_PARCEL = '\u0000none';
 
 /** Twice the signed area of a polygon — sign carries the winding, magnitude the area. */
 export function signedArea2(points: readonly GroundPoint[]): number {
