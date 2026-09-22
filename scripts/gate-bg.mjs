@@ -46,6 +46,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { resolveRepoBash } from "./resolve-bash.mjs";
+import { resolveBunForChild } from "./resolve-bun.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const script = path.join(here, "gate-bg.sh");
@@ -123,6 +124,28 @@ try {
   process.exit(1);
 }
 
+// (4) BUN IS PROVISIONED FOR THE CHILD, OR NOTHING IS DISPATCHED (`verification-integrity-arc`,
+// increment `verification-integrity-gate-bg-bun-path`). Bun is a test RUNTIME here
+// (`packages/proof-protocol` runs `bun test src/`) but a PATH tool rather than a workspace
+// dependency, so `pnpm install` cannot supply it — and on Windows PATH reaches NEW processes only.
+// A harness process that started before Bun was installed keeps its stale environment for life and
+// hands it to every child, so the gate reds inside a test step with `'bun' is not recognized`,
+// naming neither the stale PATH nor the repair, after burning the whole cycle to get there.
+//
+// Same shape as the bash pin above: resolve ONCE here, so the launcher's predicate is the child's.
+// A `prepend` goes on the FRONT of the child's PATH and is only ever a directory an executable was
+// actually found in. Like the flag refusal, `absent` refuses BEFORE the log directory and the spawn,
+// so it leaves nothing behind that reads as a handle.
+const bun = resolveBunForChild(process.env);
+if (bun.status === "absent") {
+  console.error(bun.message);
+  process.exit(1);
+}
+const childPath =
+  bun.status === "prepend"
+    ? `${bun.dir}${path.delimiter}${process.env["PATH"] ?? process.env["Path"] ?? ""}`
+    : undefined;
+
 const log = chooseLogPath();
 try {
   mkdirSync(path.dirname(log), { recursive: true });
@@ -134,11 +157,22 @@ try {
 // `stdio: "ignore"` is what makes the detach independent of the parent's stdout: the child holds no
 // handle the parent owns, so a pipe on the parent cannot keep it (or kill it). Nothing is lost —
 // gate-bg.sh tees every byte into the log itself, which is the transcript a reader wants anyway.
+const childEnv = { ...process.env, GATE_BG_LOG: log };
+if (childPath !== undefined) {
+  // Windows `process.env` is case-insensitive to READ but spreads under the literal key the OS gave,
+  // which is `Path`. Setting `PATH` beside it would hand the child TWO path variables and let the OS
+  // choose, so every spelling goes before exactly one is written back.
+  for (const key of Object.keys(childEnv)) {
+    if (key.toLowerCase() === "path") delete childEnv[key];
+  }
+  childEnv["PATH"] = childPath;
+}
+
 const child = spawn(bash, [script, ...cmd], {
   cwd: repoRoot,
   detached: true,
   stdio: "ignore",
-  env: { ...process.env, GATE_BG_LOG: log },
+  env: childEnv,
 });
 
 // A launch failure has to be caught SYNCHRONOUSLY. Once `unref()` runs there is nothing keeping the
