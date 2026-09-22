@@ -393,9 +393,12 @@ test("a launch that creates no process FAILS LOUDLY rather than printing a handl
 // the stale PATH nor the repair — after burning the whole cycle to reach the step that needed it.
 // Documentation had already failed across at least three sessions, which is why the remedy is code.
 //
-// The per-case logic is proved next door in resolve-bun.test.ts against an injected env and fs
-// probe. What these two pin is the WIRING, which that file cannot see: that the launcher actually
-// refuses, and that a prepend actually reaches the child's environment.
+// The per-case logic is proved in gate-bg-bun-path.test.ts, against an injected env and fs probe.
+// Every test there is a PURE call — none of them starts this launcher. So what that file cannot
+// see, and what these two pin, is the WIRING: that `gate-bg.mjs` actually asks, that a `absent`
+// verdict actually stops the dispatch, and that `withBunOnPath`'s repaired environment actually
+// reaches the spawned child. That is the "second surface must agree with the first" class, and the
+// three lines that join them are exactly where a regression would sit unseen.
 
 /** `process.env` with every spelling of PATH replaced — Windows hands back `Path`, not `PATH`. */
 function envWithPath(pathValue: string, extra: Record<string, string>): NodeJS.ProcessEnv {
@@ -407,17 +410,23 @@ function envWithPath(pathValue: string, extra: Record<string, string>): NodeJS.P
   return env;
 }
 
-test("no resolvable bun REFUSES before anything exists — the gate never starts", async () => {
-  // Read "nothing was dispatched" from the FILESYSTEM, never the clock, exactly as the flag refusal
-  // above does: the launcher creates the log's directory before it spawns, so a directory that does
-  // not exist once it has returned belongs to a launch that never reached the spawn.
+test("no resolvable bun REFUSES the GATE before anything exists — the cycle is never spent", async () => {
+  // Dispatched with NO ARGUMENTS, which is the `pnpm gate` case and the only one the refusal covers
+  // (`dispatchRunsTheGate`) — a custom command is warned and dispatched anyway, since refusing it
+  // over a runtime it may never invoke is the guard tripping the honest case.
   //
-  // STORYTREE_BASH is set because bash resolves FIRST and would otherwise refuse for its own reason
-  // on the emptied PATH — the escape hatch is taken verbatim, which is what makes Bun the only
-  // thing this case is testing.
+  // Running no arguments is SAFE here precisely because of what is being asserted: the refusal comes
+  // before the log directory and the spawn, so the gate this would otherwise start never begins. If
+  // that ordering ever regressed, this test would start a real gate — and the filesystem assertion
+  // below is what would catch it.
+  //
+  // "Nothing was dispatched" is read from the FILESYSTEM, never the clock, exactly as the flag
+  // refusal above does. STORYTREE_BASH is set because bash resolves FIRST and would otherwise refuse
+  // for its own reason on the emptied PATH; the escape hatch is taken verbatim, which is what leaves
+  // Bun as the only thing this case tests.
   await withTempDir((dir) => {
     const log = path.join(dir, "never-created", "run.log");
-    const res = spawnSync(nodeExecutable(), [launcher, "sh", "-c", "exit 0"], {
+    const res = spawnSync(nodeExecutable(), [launcher], {
       encoding: "utf8",
       cwd: repoRoot,
       // `dir` is a fresh temp dir, so it holds no `.bun/bin` under either home variable.
@@ -433,10 +442,30 @@ test("no resolvable bun REFUSES before anything exists — the gate never starts
     assert.equal(
       existsSync(path.dirname(log)),
       false,
-      "and creates nothing: the launch never reached the spawn",
+      "and creates nothing: the launch never reached the spawn, so no gate ran",
     );
-    assert.match(out, /bun` is not resolvable/, "it names the cause");
-    assert.match(out, /NEW shell/, "…and the repair, which for an existing install is the whole fix");
+    assert.match(out, /REFUSED/, "it refuses rather than warning");
+    assert.match(out, /bun/i, "…names the cause");
+  });
+});
+
+test("a CUSTOM command with no bun is WARNED and still dispatched — the guard spares the honest case", async () => {
+  // The other side of `dispatchRunsTheGate`, and the reason the refusal is not simply "no bun, no
+  // launch": `pnpm gate:bg <cmd>` replaces the gate with an arbitrary command, which may never
+  // invoke Bun at all. Refusing it would be the guard tripping the honest case — the same mistake
+  // this launcher's own header records itself avoiding when it chose not to detect pipes.
+  await withTempDir(async (dir) => {
+    const log = path.join(dir, "run.log");
+    const res = spawnSync(nodeExecutable(), [launcher, "sh", "-c", "exit 0"], {
+      encoding: "utf8",
+      cwd: repoRoot,
+      env: envWithPath("", { GATE_BG_LOG: log, STORYTREE_BASH: bash, HOME: dir, USERPROFILE: dir }),
+    });
+    const out = `${res.stdout}${res.stderr}`;
+    assert.equal(res.status, 0, `a custom command still LAUNCHES:\n${out}`);
+    assert.match(out, /WARNING/, "…but says so");
+    assert.doesNotMatch(out, /REFUSED/, "and does not refuse");
+    assert.equal(await awaitSentinel(`${log}.exit`), "0", "the job really ran");
   });
 });
 
