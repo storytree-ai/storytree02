@@ -20,7 +20,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  BUN_BIN_SUBPATH,
+  bunBinSubpath,
   bunExecutableNames,
   findBunOnPath,
   pathVariableName,
@@ -28,16 +28,25 @@ import {
   withBunOnPath,
 } from "../../../scripts/resolve-bun.mjs";
 
-/** A filesystem probe that knows exactly one set of paths. Built per test, never shared. */
+/**
+ * A filesystem probe that knows exactly one set of paths. Built per test, never shared.
+ *
+ * ⚠ COMPARED EXACTLY, with no `path.normalize`. Normalising here would use the HOST's rules, which is
+ * how this suite came to pass on Windows and fail on Linux CI: a `win32` fixture normalised by a
+ * POSIX host is not the string a `win32` join produces. Both sides are now built with the same
+ * explicit `path.win32` / `path.posix`, so exact equality is the correct comparison AND the
+ * host-independent one — and any future drift between the two shows up as a mismatch rather than
+ * being absorbed.
+ */
 function fsWith(...present: string[]): (candidate: string) => boolean {
-  const set = new Set(present.map((p) => path.normalize(p)));
-  return (candidate) => set.has(path.normalize(candidate));
+  const set = new Set(present);
+  return (candidate) => set.has(candidate);
 }
 
 const WIN_HOME = "C:\\Users\\dev";
 const NIX_HOME = "/home/dev";
-const winBun = path.join(WIN_HOME, BUN_BIN_SUBPATH, "bun.exe");
-const nixBun = path.join(NIX_HOME, BUN_BIN_SUBPATH, "bun");
+const winBun = path.win32.join(WIN_HOME, bunBinSubpath("win32"), "bun.exe");
+const nixBun = path.posix.join(NIX_HOME, bunBinSubpath("linux"), "bun");
 
 describe("bunExecutableNames", () => {
   it("looks for bun.exe first on Windows, and only bun elsewhere", () => {
@@ -54,13 +63,13 @@ describe("findBunOnPath", () => {
     const first = "C:\\tools\\bun\\bun.exe";
     const second = "C:\\other\\bun.exe";
     const found = findBunOnPath("C:\\tools\\bun;C:\\other", "win32", fsWith(first, second));
-    assert.equal(path.normalize(found ?? ""), path.normalize(first));
+    assert.equal(found, first);
   });
 
   it("skips empty entries, which a doubled or trailing delimiter produces and which mean nothing", () => {
     // An inherited PATH routinely carries these; reading `""` as a directory would probe the cwd.
     const found = findBunOnPath(";;C:\\tools;", "win32", fsWith("C:\\tools\\bun.exe"));
-    assert.equal(path.normalize(found ?? ""), path.normalize("C:\\tools\\bun.exe"));
+    assert.equal(found, "C:\\tools\\bun.exe");
   });
 
   it("answers undefined for a PATH that resolves nothing, and for no PATH at all", () => {
@@ -92,7 +101,7 @@ describe("pathVariableName", () => {
 describe("resolveBunForChild — the three cases the increment names", () => {
   it("an ALREADY-HEALTHY PATH needs nothing done to it", () => {
     const resolution = resolveBunForChild({
-      env: { Path: `C:\\bin;${path.join(WIN_HOME, BUN_BIN_SUBPATH)}`, USERPROFILE: WIN_HOME },
+      env: { Path: `C:\\bin;${path.win32.join(WIN_HOME, bunBinSubpath("win32"))}`, USERPROFILE: WIN_HOME },
       platform: "win32",
       exists: fsWith(winBun),
     });
@@ -113,8 +122,8 @@ describe("resolveBunForChild — the three cases the increment names", () => {
     });
     assert.equal(resolution.status, "prepend");
     assert.equal(
-      path.normalize(resolution.status === "prepend" ? resolution.dir : ""),
-      path.normalize(path.join(WIN_HOME, BUN_BIN_SUBPATH)),
+      resolution.status === "prepend" ? resolution.dir : "",
+      path.win32.join(WIN_HOME, bunBinSubpath("win32")),
     );
   });
 
@@ -130,7 +139,7 @@ describe("resolveBunForChild — the three cases the increment names", () => {
     // it cannot work: the PATH of a running process never changes.
     assert.match(message, /NEW\s+shell/i);
     assert.match(message, /doctor --dev/);
-    assert.ok(message.includes(path.join(WIN_HOME, BUN_BIN_SUBPATH)), "it must say where it looked");
+    assert.ok(message.includes(path.win32.join(WIN_HOME, bunBinSubpath("win32"))), "it must say where it looked");
     // And it must not send the reader to `bun install`, which would take the lockfile from pnpm.
     assert.match(message, /`bun install` must never be run here/);
   });
@@ -144,7 +153,7 @@ describe("resolveBunForChild — the edges", () => {
       exists: fsWith(nixBun),
     });
     assert.equal(resolution.status, "prepend");
-    assert.equal(resolution.status === "prepend" ? resolution.dir : "", path.join(NIX_HOME, BUN_BIN_SUBPATH));
+    assert.equal(resolution.status === "prepend" ? resolution.dir : "", path.posix.join(NIX_HOME, bunBinSubpath("linux")));
   });
 
   it("reports absence rather than guessing when the environment names no home directory", () => {
@@ -166,7 +175,7 @@ describe("withBunOnPath", () => {
     });
     const env = withBunOnPath({ Path: stale, USERPROFILE: WIN_HOME }, resolution, "win32");
     const value = env["Path"] ?? "";
-    assert.ok(value.startsWith(path.join(WIN_HOME, BUN_BIN_SUBPATH)), "the verified directory must come first");
+    assert.ok(value.startsWith(path.win32.join(WIN_HOME, bunBinSubpath("win32"))), "the verified directory must come first");
     assert.ok(value.includes(stale), "the inherited PATH is kept behind it, never replaced");
   });
 
@@ -180,7 +189,7 @@ describe("withBunOnPath", () => {
     });
     const env = withBunOnPath({ Path: "C:\\bin", USERPROFILE: WIN_HOME }, resolution, "win32");
     assert.equal(Object.keys(env).filter((k) => k.toUpperCase() === "PATH").length, 1);
-    assert.ok((env["Path"] ?? "").includes(BUN_BIN_SUBPATH));
+    assert.ok((env["Path"] ?? "").includes(bunBinSubpath("win32")));
   });
 
   it("never mutates the environment it was handed", () => {

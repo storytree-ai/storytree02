@@ -9,8 +9,13 @@
 // suite against a signature that no longer exists: these declarations were added because
 // `tsc --noEmit` failed on the import while 36 tests passed green.
 
-/** The standard per-user Bun bin directory, relative to a home directory (e.g. `.bun/bin`). */
-export const BUN_BIN_SUBPATH: string;
+/**
+ * The standard per-user Bun bin directory, relative to a home directory, for ONE platform.
+ *
+ * A function rather than a constant because the separator is the TARGET platform's, not the host's —
+ * see `pathFor` in the implementation for why that distinction is load-bearing.
+ */
+export function bunBinSubpath(platform: string): string;
 
 /** The executable names to look for on this platform, most specific first. */
 export function bunExecutableNames(platform: string): string[];

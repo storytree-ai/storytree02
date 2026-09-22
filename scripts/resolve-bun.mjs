@@ -43,8 +43,25 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 
-/** The standard per-user Bun bin directory, relative to a home directory. */
-export const BUN_BIN_SUBPATH = path.join(".bun", "bin");
+/**
+ * The path module for the TARGET platform, not the host's.
+ *
+ * ⚠ THIS IS WHY `platform` IS A REAL PARAMETER AND NOT A HALF ONE. It was honoured for the PATH
+ * delimiter (`;` vs `:`) while every join used the HOST's separator, so `resolveBunForChild` with
+ * `platform: "win32"` joined a Windows directory with a POSIX separator on Linux. In production the
+ * two always agree, so nothing was wrong there — but it made the branch unprovable anywhere except
+ * Windows, and CI is
+ * Linux: two tests passed locally and failed on the runner, which is exactly the local-green /
+ * CI-red shape. A parameter honoured in one place and ignored in another is worse than not having it.
+ */
+function pathFor(platform) {
+  return platform === "win32" ? path.win32 : path.posix;
+}
+
+/** The standard per-user Bun bin directory, relative to a home directory, for one platform. */
+export function bunBinSubpath(platform) {
+  return pathFor(platform).join(".bun", "bin");
+}
 
 /**
  * The executable names to look for, most specific first.
@@ -70,7 +87,7 @@ export function findBunOnPath(pathValue, platform, exists) {
     const dir = entry.trim();
     if (dir === "") continue;
     for (const name of bunExecutableNames(platform)) {
-      const candidate = path.join(dir, name);
+      const candidate = pathFor(platform).join(dir, name);
       if (exists(candidate)) return candidate;
     }
   }
@@ -112,16 +129,16 @@ export function resolveBunForChild({ env, platform, exists = existsSync }) {
 
   const home = homeDirOf(env, platform);
   if (home !== undefined) {
-    const dir = path.join(home, BUN_BIN_SUBPATH);
+    const dir = pathFor(platform).join(home, bunBinSubpath(platform));
     for (const name of bunExecutableNames(platform)) {
-      const candidate = path.join(dir, name);
+      const candidate = pathFor(platform).join(dir, name);
       if (exists(candidate)) return { status: "prepend", dir, executable: candidate, pathKey };
     }
   }
 
   const searched = home === undefined
     ? "this environment reports no home directory, so the standard per-user location could not be checked"
-    : `and it is not in ${path.join(home, BUN_BIN_SUBPATH)} either`;
+    : `and it is not in ${pathFor(platform).join(home, bunBinSubpath(platform))} either`;
   return {
     status: "absent",
     pathKey,
