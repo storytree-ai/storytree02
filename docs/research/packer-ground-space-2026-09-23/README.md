@@ -61,13 +61,27 @@ mattered: the forest was being drawn taller than the box that was measured for i
 
 ## What this sheet does NOT settle
 
-It does not answer the open density question
-(`oq-gaps-derived-forest-still-sparse-tile-or-positions`). The forest does get denser here — same
-land in a smaller box — but that is a SIDE EFFECT of removing a stretch, not a density dial being
-turned, and ADR-0593 D4 is explicit that the forest's density and the camera angle are two separate
-knobs that must not be traded against each other in one judgment. Nothing here touches the camera.
-If the new density is still too sparse, that is the same question it was, now asked of a map whose
-layout is honest.
+The forest does get denser here — same land in a smaller box — but that is a SIDE EFFECT of
+removing a stretch, not a density dial being turned. ADR-0593 D4 says the forest's density and the
+camera angle are two separate knobs that must not be traded against each other in one judgment, and
+this change moved neither: it moved the LAYOUT back to what the layout's own arithmetic had already
+decided.
+
+⚠ **Correction, 2026-09-23, made before this sheet landed.** This section first said the forest's
+sparseness was "a separate question already open… which asks you to choose between four ways of
+packing it tighter". It is not open. `oq-gaps-derived-forest-still-sparse-tile-or-positions` was
+SETTLED on 2026-09-06 — the owner took option 1, *"option 1, we have time dont take shortcuts"* —
+and it was built as ADR-0528: the 2D tile derives from the land ratio at one hex per capability.
+Nothing about sparseness is outstanding.
+
+The error is worth recording because of where it came from. Two pieces of standing prose — the
+increment that scoped this work, and **ADR-0593 itself**, the decision the whole camera programme
+rests on — both describe that question as "the live density question", a fortnight after it settled.
+A reader who trusted either (this sheet's author did) inherits a false premise about what is waiting
+on the owner. ADR-0593's body has been corrected in place and the settled question's own `stakes`
+and `context` now say so plainly. The general shape: a decision record can go stale about the STATE
+of something it merely points at while every word about its own decision stays true, and nothing
+mechanical catches that.
 
 ## How to reproduce
 
