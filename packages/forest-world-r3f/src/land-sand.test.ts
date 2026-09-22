@@ -208,8 +208,17 @@ test('sandGlsl emits the band and the ramp EXACTLY, with its constants written i
   // source still contains every token it looks for. Found on a real GPU, not in this file.
   assert.ok(!glsl.includes('uSandWidth'), 'the emitted source must declare no uniform of its own');
   assert.ok(!/\buniform\b/.test(glsl), 'the emitter is spliced above the uniform block');
+  // ⚠ THE ANCHOR IS ASSERTED BEFORE IT IS SLICED ON — the same discipline the ramp-slope test
+  // above states for its precondition, and for the same reason. `indexOf` returns -1 when the
+  // anchor is gone and `slice(-1)` is the LAST CHARACTER of the source, which this negative regex
+  // can never match: a renamed band function would leave the assertion below permanently green
+  // with nothing able to see it. The golden pins the name too, but a session that renames the
+  // function REGENERATES the golden in the same edit — this line is the one that does not move
+  // with it.
+  const bandAt = glsl.indexOf('st_sandBand');
+  assert.ok(bandAt > 0, 'st_sandBand is missing from the emitted source');
   assert.ok(
-    !/\/ \d+\.\d+;/.test(glsl.slice(glsl.indexOf('st_sandBand'))),
+    !/\/ \d+\.\d+;/.test(glsl.slice(bandAt)),
     'the band must not divide by a written-in constant',
   );
   assert.ok(
