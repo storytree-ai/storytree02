@@ -3,13 +3,16 @@
  * `node-peek-dispatch.test.ts` deliberately do NOT exercise, because both inject `readHold: () =>
  * Promise.resolve(undefined)` to keep every OTHER test off this machine's real `~/.storytree/holds`.
  *
- * This file is the one place that reads the REAL directory — through a fabricated `HOME`/`USERPROFILE`
- * that redirects `os.homedir()` at a throwaway `mkdtemp` directory for the test's duration, so it never
- * touches the operator's own holds. Two things are proved here that no injected-deps test can reach:
+ * This file is the one place that reads a real directory from disk. It passes `latestHoldFor` an
+ * explicit `mkdtemp` directory rather than redirecting `os.homedir()` through `HOME`/`USERPROFILE`:
+ * these suites run under BUN, whose `os.homedir()` does not re-read those variables the way Node's
+ * does, so the fake-home technique passed on Windows and silently found nothing on Linux CI. Two things
+ * are proved here that no injected-deps test can reach:
  *
- * 1. `defaultNodePeekDeps().readHold` — the production wiring from `latestHoldFor` through to the
- *    seam — actually finds a real stored hold, picks the NEWEST one for the asked-about unit, and
- *    ignores a different unit's (even a globally newer one).
+ * 1. `latestHoldFor` — the fold the production `readHold` delegates to — actually finds a real stored
+ *    hold on disk, picks the NEWEST one for the asked-about unit, and ignores a different unit's (even
+ *    a globally newer one). `defaultNodePeekDeps().readHold` itself is covered by the empty case below,
+ *    which needs no fixture: with no hold for the unit it must resolve `undefined`, never `null`.
  * 2. `nodePeekCommand`'s handling of an INJECTED hold: the render and the `next` array, including the
  *    one state no other file constructs — a hold whose grace has already passed.
  */
@@ -22,7 +25,7 @@ import path from "node:path";
 
 import type { PeekHold, SpawnRegistryIo, StoredHold } from "@storytree/drive";
 
-import { defaultNodePeekDeps, nodePeekCommand, type NodePeekDeps } from "./node-peek.js";
+import { defaultNodePeekDeps, latestHoldFor, nodePeekCommand, type NodePeekDeps } from "./node-peek.js";
 
 const MIN = 60_000;
 const NOW = Date.parse("2026-09-21T12:00:00.000Z");
@@ -31,25 +34,9 @@ const NOW = Date.parse("2026-09-21T12:00:00.000Z");
 // `defaultNodePeekDeps().readHold` against a REAL, fabricated home directory
 // ---------------------------------------------------------------------------
 
-/** Points `os.homedir()` at `dir` for the duration of `run`, then restores it exactly. */
-async function withFakeHome<T>(dir: string, run: () => Promise<T>): Promise<T> {
-  const savedHome = process.env.HOME;
-  const savedProfile = process.env.USERPROFILE;
-  process.env.HOME = dir;
-  process.env.USERPROFILE = dir;
-  try {
-    return await run();
-  } finally {
-    if (savedHome === undefined) delete process.env.HOME;
-    else process.env.HOME = savedHome;
-    if (savedProfile === undefined) delete process.env.USERPROFILE;
-    else process.env.USERPROFILE = savedProfile;
-  }
-}
-
-/** A valid on-disk `StoredHold`, written at `<fakeHome>/.storytree/holds/<unitId>/<runId>.json`. */
+/** A valid on-disk `StoredHold`, written at `<holdsDir>/<unitId>/<runId>.json`. */
 async function writeStoredHold(
-  fakeHome: string,
+  holdsDir: string,
   over: Partial<StoredHold> & { readonly unitId: string; readonly runId: string; readonly pid: number; readonly heldAt: number },
 ): Promise<void> {
   const stored: StoredHold = {
@@ -59,58 +46,67 @@ async function writeStoredHold(
     extensions: [],
     ...over,
   };
-  const dir = path.join(fakeHome, ".storytree", "holds", stored.unitId);
+  const dir = path.join(holdsDir, stored.unitId);
   await mkdir(dir, { recursive: true });
   await writeFile(path.join(dir, `${stored.runId}.json`), JSON.stringify(stored), "utf8");
 }
 
 test("defaultNodePeekDeps().readHold resolves undefined — never null — when this machine has no matching hold", async () => {
-  const fakeHome = await mkdtemp(path.join(os.tmpdir(), "storytree-node-peek-hold-empty-"));
+  // Needs NO fixture and NO fake home: the unit id below exists in nobody's holds directory, so the
+  // real wiring answers for the absent case whatever this machine happens to hold. That is what makes
+  // it the one case that can safely drive the PRODUCTION deps bag.
+  //
+  // Strict: `??` must turn the fold's `null` into `undefined`. A build that swapped `??` for `&&` would
+  // leave this `null`, which `assert.equal`'s strict comparison (unlike a loose `==`) catches.
+  const result = await defaultNodePeekDeps().readHold("no-such-unit-anywhere-storytree-test");
+  assert.equal(result, undefined);
+});
+
+test("defaultNodePeekDeps().readHold DELEGATES — it finds a real hold, it does not answer a constant", async () => {
+  // The absent case below proves the `?? undefined` conversion but NOT the delegation: a `readHold`
+  // replaced by `() => undefined` satisfies it exactly. Only a case where a hold genuinely EXISTS can
+  // tell the wired bag from a constant, which is why this one writes a fixture and the other does not.
+  const holds = await mkdtemp(path.join(os.tmpdir(), "storytree-node-peek-hold-wired-"));
   try {
-    await withFakeHome(fakeHome, async () => {
-      const result = await defaultNodePeekDeps().readHold("no-such-unit-anywhere");
-      // Strict: `??` must turn the fold's `null` into `undefined`. A build that swapped `??` for `&&`
-      // would leave this `null`, which `assert.equal`'s strict comparison (unlike a loose `==`) catches.
-      assert.equal(result, undefined);
-    });
+    await writeStoredHold(holds, { unitId: "wired-unit", runId: "run-w", pid: 909, heldAt: 5_000 });
+    const result = await defaultNodePeekDeps(holds).readHold("wired-unit");
+    assert.notEqual(result, undefined, "the production bag must reach the fold, not return a constant");
+    assert.equal(result?.runId, "run-w");
+    assert.equal(result?.pid, 909);
   } finally {
-    await rm(fakeHome, { recursive: true, force: true });
+    await rm(holds, { recursive: true, force: true });
   }
 });
 
-test("defaultNodePeekDeps().readHold reads a REAL hold from disk — proving the seam is wired, not stubbed", async () => {
-  const fakeHome = await mkdtemp(path.join(os.tmpdir(), "storytree-node-peek-hold-one-"));
+test("latestHoldFor reads a REAL hold from disk — proving the fold is wired to the parser, not stubbed", async () => {
+  const holds = await mkdtemp(path.join(os.tmpdir(), "storytree-node-peek-hold-one-"));
   try {
-    await writeStoredHold(fakeHome, { unitId: "solo-unit", runId: "run-1", pid: 555, heldAt: 1_000 });
-    await withFakeHome(fakeHome, async () => {
-      const result = await defaultNodePeekDeps().readHold("solo-unit");
-      assert.notEqual(result, undefined, "a real hold exists on disk and must be found, not defaulted away");
-      assert.equal(result?.runId, "run-1");
-      assert.equal(result?.pid, 555);
-    });
+    await writeStoredHold(holds, { unitId: "solo-unit", runId: "run-1", pid: 555, heldAt: 1_000 });
+    const result = await latestHoldFor("solo-unit", holds);
+    assert.notEqual(result, null, "a real hold exists on disk and must be found, not defaulted away");
+    assert.equal(result?.runId, "run-1");
+    assert.equal(result?.pid, 555);
   } finally {
-    await rm(fakeHome, { recursive: true, force: true });
+    await rm(holds, { recursive: true, force: true });
   }
 });
 
-test("defaultNodePeekDeps().readHold picks the NEWEST hold for the asked unit and ignores another unit's — even a globally newer one", async () => {
-  const fakeHome = await mkdtemp(path.join(os.tmpdir(), "storytree-node-peek-hold-many-"));
+test("latestHoldFor picks the NEWEST hold for the asked unit and ignores another unit's — even a globally newer one", async () => {
+  const holds = await mkdtemp(path.join(os.tmpdir(), "storytree-node-peek-hold-many-"));
   try {
     // unit-a has two holds (older run-old, newer run-new); unit-b's single hold is the GLOBALLY newest
     // of the three. An unfiltered — or wrongly-filtered — read asked about "unit-a" would return
     // unit-b's record instead, which is exactly the shape the `.filter((h) => h.unitId === unitId)`
     // line exists to prevent.
-    await writeStoredHold(fakeHome, { unitId: "unit-a", runId: "run-old", pid: 100, heldAt: 1_000 });
-    await writeStoredHold(fakeHome, { unitId: "unit-a", runId: "run-new", pid: 200, heldAt: 2_000 });
-    await writeStoredHold(fakeHome, { unitId: "unit-b", runId: "run-other", pid: 300, heldAt: 3_000 });
-    await withFakeHome(fakeHome, async () => {
-      const result = await defaultNodePeekDeps().readHold("unit-a");
-      assert.notEqual(result, undefined, "unit-a genuinely has holds and must not read as unheld");
-      assert.equal(result?.runId, "run-new", "the NEWEST of unit-a's own holds, not unit-b's newer one");
-      assert.equal(result?.pid, 200);
-    });
+    await writeStoredHold(holds, { unitId: "unit-a", runId: "run-old", pid: 100, heldAt: 1_000 });
+    await writeStoredHold(holds, { unitId: "unit-a", runId: "run-new", pid: 200, heldAt: 2_000 });
+    await writeStoredHold(holds, { unitId: "unit-b", runId: "run-other", pid: 300, heldAt: 3_000 });
+    const result = await latestHoldFor("unit-a", holds);
+    assert.notEqual(result, null, "unit-a genuinely has holds and must not read as unheld");
+    assert.equal(result?.runId, "run-new", "the NEWEST of unit-a's own holds, not unit-b's newer one");
+    assert.equal(result?.pid, 200);
   } finally {
-    await rm(fakeHome, { recursive: true, force: true });
+    await rm(holds, { recursive: true, force: true });
   }
 });
 

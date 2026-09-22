@@ -73,15 +73,23 @@ export interface NodePeekDeps {
   readonly readHold: (unitId: string) => Promise<PeekHold | undefined>;
 }
 
-/** The live wiring: the real registry, the real probe, the real clock, this box's hostname. */
-export function defaultNodePeekDeps(): NodePeekDeps {
+/**
+ * The live wiring: the real registry, the real probe, the real clock, this box's hostname.
+ *
+ * `holdsDir` defaults to the real per-user directory and production never passes it. It is the seam a
+ * test needs to prove this bag's `readHold` DELEGATES rather than answering a constant — an absent-hold
+ * case cannot, because `() => undefined` satisfies it too. Pointing `os.homedir()` at a fake home is not
+ * an option: these suites run under Bun, whose `os.homedir()` does not re-read `HOME`/`USERPROFILE` the
+ * way Node's does, so that technique passes on Windows and silently finds nothing on Linux.
+ */
+export function defaultNodePeekDeps(holdsDir = resolveHoldsDir(undefined)): NodePeekDeps {
   return {
     io: nodeSpawnRegistryIo(),
     root: defaultRegistryRoot(),
     probe: nodeAliveProbe,
     now: () => Date.now(),
     machine: () => machineName(os.hostname()),
-    readHold: async (unitId) => (await latestHoldFor(unitId)) ?? undefined,
+    readHold: async (unitId) => (await latestHoldFor(unitId, holdsDir)) ?? undefined,
   };
 }
 
@@ -89,16 +97,22 @@ export function defaultNodePeekDeps(): NodePeekDeps {
  * The newest hold this unit has announced on this machine, or null.
  *
  * NEWEST rather than "the one" because the notices are keyed by run: a unit built twice could in
- * principle have two, and the one an orchestrator is being asked about is the latest. A build's own
+ * principle have two, and the one an orchestrator is being asked about is the latest.
+ *
+ * `dir` defaults to the real per-user holds directory and production never passes it. It exists so a
+ * test can drive THIS function against a temp directory: the obvious alternative — pointing
+ * `os.homedir()` at a fake home through `HOME`/`USERPROFILE` — is NOT portable, because these suites
+ * run under Bun, whose `os.homedir()` does not re-read those variables the way Node's does. That
+ * technique passed on Windows and silently found nothing on Linux CI. A build's own
  * `close()` removes its notice, so in practice there is at most one live — the sort is what makes the
  * abnormal case answer something honest rather than arbitrary.
  */
-async function latestHoldFor(unitId: string): Promise<PeekHold | null> {
+export async function latestHoldFor(unitId: string, dir = resolveHoldsDir(undefined)): Promise<PeekHold | null> {
   // No `.catch()` here: `listStoredHolds` already swallows every I/O failure it can reach (a missing
   // directory, an unreadable unit dir, a corrupt notice file all resolve to fewer rows, never a
   // rejection — see its own doc comment). A second catch here would be pure decoration duplicating a
   // guarantee the callee already gives, and it was itself an unreachable NoCoverage survivor.
-  const holds = await listStoredHolds(resolveHoldsDir(undefined));
+  const holds = await listStoredHolds(dir);
   const mine = holds.filter((h) => h.unitId === unitId);
   // No empty-array branch: `mine[-1]` is `undefined`, which `?? null` already answers, so a length
   // test would be a second spelling of the same answer — and an unkillable mutant.
