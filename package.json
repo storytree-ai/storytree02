@@ -16,6 +16,7 @@
     "storytree": "node packages/cli/launch.mjs",
     "uat:drive": "pnpm -C packages/drive exec node --import ../../scripts/tsx-cache-off.mjs --import tsx src/uat-drive.run.ts",
     "uat:witness": "pnpm -C packages/drive exec node --import ../../scripts/tsx-cache-off.mjs --import tsx src/uat-drive-witness.check.ts",
+    "check:control-bytes": "pnpm -C packages/cli exec node --import ../../scripts/tsx-cache-off.mjs --import tsx src/check-control-bytes.ts",
     "check:boundaries": "pnpm -C packages/cli exec node --import ../../scripts/tsx-cache-off.mjs --import tsx src/check-boundaries.ts",
     "check:manifest-fragments": "pnpm -C packages/cli exec node --import ../../scripts/tsx-cache-off.mjs --import tsx src/check-manifest-fragments.ts",
     "check:ownership-totality": "pnpm -C packages/cli exec node --import ../../scripts/tsx-cache-off.mjs --import tsx src/check-ownership-totality.ts",

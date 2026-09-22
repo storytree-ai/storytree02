@@ -157,7 +157,7 @@ test("the REAL gate plan still runs both expensive legs (the wall the axes are m
   }
 });
 
-test("the REAL gate plan is exactly the nine ADR-0311 survivors plus the ADR-0336, ADR-0454, ADR-0223, ADR-0317, ADR-0403, ADR-0445, ADR-0458, ADR-0459, ADR-0556, ground-space, land-art, palette-transcription, desktop-route-coverage, reliability-gate-parity and anti-slop additions, in order", () => {
+test("the REAL gate plan is exactly the nine ADR-0311 survivors plus the ADR-0336, ADR-0454, ADR-0223, ADR-0317, ADR-0403, ADR-0445, ADR-0458, ADR-0459, ADR-0556, ground-space, land-art, palette-transcription, desktop-route-coverage, reliability-gate-parity, control-bytes and anti-slop additions, in order", () => {
   assert.deepEqual(
     GATE_PLAN.map((step) => step.command),
     [
@@ -166,6 +166,12 @@ test("the REAL gate plan is exactly the nine ADR-0311 survivors plus the ADR-033
       // violations of already-adopted rules reached `main` in the two days before it existed
       // (anti-slop-adoption-arc inc-07).
       "pnpm lint",
+      // Added 2026-09-22 alongside `pnpm lint`, and for the same shape of reason: a whole-repo text
+      // property, sub-second, that no reader can enforce by looking. A heredoc-written control byte
+      // is invisible to tsc, oxlint, grep, `git diff` and the Read tool alike — it had already made
+      // one assertion unfalsifiable in `land-sand.test.ts` and put a raw NUL in a harness source
+      // that grep could not even list.
+      "pnpm check:control-bytes",
       // ADR-0556 D4, added 2026-09-15 (`repo-manifest-aggregate-leaves-git`): the fragment tree is the
       // manifest's only bytes once the aggregate left Git. It runs before the three rungs that read the
       // composed manifest, so a refused set is named once, under the manifest's own name.

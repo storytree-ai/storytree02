@@ -280,6 +280,13 @@ export const GATE_PLAN: readonly GatePlanStep[] = [
     why: "reds on a fresh violation of any anti-slop rule this repo has already driven to ZERO; the rules are enforced at the moment each landed and this is what stops the ratchet slipping back (anti-slop-adoption-arc inc-07)",
   },
   {
+    command: "pnpm check:control-bytes",
+    check: "check:control-bytes",
+    subject: "own-work",
+    cost: "seconds",
+    why: "reds when a tracked text file carries an INVISIBLE control byte — any C0 except tab/LF/CR, plus DEL; ESC is exempted by value because three files hold it legitimately in ANSI-stripping regexes and a captured transcript. ⚠ IT EXISTS BECAUSE NO READER CAN ENFORCE THIS ONE. Writing a backslash payload through a quoted shell heredoc strips one level, so a patch emitting `\\\\b` delivers `\\b` and the interpreter writes byte 0x08 — and then tsc passes (0x08 is legal in a regex literal), oxlint passes, `grep -n` prints a clean line because the terminal EXECUTES the backspace, `git diff` shows nothing and the Read tool shows the same clean line. Measured twice in days: `packages/cli/src/test-slop-scenarios.test.ts` (2026-09-22) and `land-sand.test.ts:210`, where it turned `/\\buniform\\b/` into a regex matching a string no GLSL can contain, so the assertion negating it could never fail and sat green proving nothing. It found a THIRD on its first real run — a raw NUL in `forest-world-r3f/harness/land-definition.ts` that `grep` could not even list, because grep treats a NUL-bearing file as binary; that is why this scans BYTES rather than shelling out. Zero false positives across the repo. One `git ls-files` and a byte scan — no store, no network, no toolchain — so it sits beside `pnpm lint` at the cheap end. It never skips: there are always tracked text files, so it does not own the reserved exit code 3. ⚠ A MERGE WALL AS WELL AS A GATE RUNG (ADR-0547 D1's split): the fault is invisible to review, so the gate being the habit is not enough",
+  },
+  {
     command: "pnpm check:manifest-fragments",
     check: "check:manifest-fragments",
     subject: "own-work",

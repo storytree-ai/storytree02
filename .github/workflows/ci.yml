@@ -183,6 +183,19 @@ jobs:
       - name: Lint (the anti-slop ratchet)
         run: pnpm lint
 
+      # Invisible control bytes in tracked text files (2026-09-22). A quoted shell heredoc strips one
+      # level of backslash, so a patch script emitting `\\b` delivers `\b` and the interpreter writes
+      # byte 0x08 into the source. This is a WALL rather than only the local gate's habit because the
+      # fault is invisible to review itself: tsc passes (0x08 is legal in a regex literal), oxlint
+      # passes, `grep -n` prints a clean line because the terminal EXECUTES the backspace, `git diff`
+      # renders nothing and the Read tool shows the same clean line. Measured twice in days, once
+      # turning `/\buniform\b/` into a regex no GLSL source can match — so the assertion negating it
+      # could never fail and sat green proving nothing. It found a third on its first real run: a raw
+      # NUL that `grep` could not even list, because grep treats a NUL-bearing file as binary. Scans
+      # bytes, not grep output. Offline, disk-only, sub-second, whole-repo and un-narrowed.
+      - name: Invisible control bytes
+        run: pnpm check:control-bytes
+
       # The repo manifest's fragment tree (ADR-0556 D4, `repo-manifest-aggregate-leaves-git`). The committed
       # aggregate left Git, so the fragments under `repo-manifest/` are the manifest's only bytes. This step
       # composes them from this clean checkout and reds on a refused or unreadable set, on a fragment not

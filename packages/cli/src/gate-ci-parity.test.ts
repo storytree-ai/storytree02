@@ -409,6 +409,11 @@ const DECLARED_SHARED_FLOOR = [
   "check:agents",
   "check:boundaries",
   "check:contract-grammar",
+  // Added 2026-09-22 on BOTH sides from the start, under the same ADR-0547 D1 split: the gate is
+  // the habit, CI is the wall. This rung's whole subject is a byte no reader renders — tsc, oxlint,
+  // grep, `git diff` and the Read tool all show a clean line — so human review cannot be the
+  // backstop for it, which is exactly the case the wall exists for.
+  "check:control-bytes",
   // Promoted out of DECLARED_LOCAL_ONLY by ADR-0547 D1 (2026-09-08): the gate is the habit, CI is
   // the wall, and a control whose subject is what reaches a PUBLISHED image belongs on both.
   "check:gcloudignore-mirror",

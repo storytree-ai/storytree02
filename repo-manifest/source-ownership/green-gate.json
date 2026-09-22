@@ -2,7 +2,8 @@
   "sourceOwnership": {
     "subtrees": {
       "packages/ci-cd/src/green-gate-audit.ts": "green-gate",
-      "packages/cli/src/*contract-grammar*.ts": "green-gate"
+      "packages/cli/src/*contract-grammar*.ts": "green-gate",
+      "packages/cli/src/*control-bytes*.ts": "green-gate"
     }
   }
 }
