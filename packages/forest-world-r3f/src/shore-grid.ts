@@ -35,6 +35,11 @@ export interface EdgeGrid {
   /** Every edge, in the order the buckets index. */
   readonly edges: readonly CoastEdge[];
   /**
+   * Whether each grid cell, plus its one-cell border, can have a candidate edge in its 3x3
+   * neighbourhood. The border makes a query just outside the edge extent a lookup too.
+   */
+  readonly nearMask: Uint8Array;
+  /**
    * The edges worth testing for this point, as indices into {@link edges}.
    *
    * ⚠ AN EMPTY RESULT IS A PROOF, NOT A HINT: it means every edge is at least `width` away, so a
@@ -44,6 +49,8 @@ export interface EdgeGrid {
    * move on; the alternative is one allocation per texel, and there are 5.4 M of them.
    */
   candidates(x: number, z: number): readonly number[];
+  /** True when the point's candidate neighbourhood is known to be empty. */
+  far(x: number, z: number): boolean;
 }
 
 /**
@@ -179,6 +186,30 @@ export function buildSegmentGrid(edges: readonly CoastEdge[], width: number): Ed
     }
   }
 
+  // Store the answer to the neighbourhood-empty question for every grid cell and its immediate
+  // border. A point further out cannot see a bucket at all, while the padded cells cover the one
+  // outside cell whose 3x3 neighbourhood can still reach the grid.
+  const maskWidth = nx + 2;
+  const nearMask = new Uint8Array(maskWidth * (nz + 2));
+  for (const maskJ of indices(nz + 2)) {
+    const cj = maskJ - 1;
+    for (const maskI of indices(nx + 2)) {
+      const ci = maskI - 1;
+      // Stryker disable next-line ArithmeticOperator: EQUIVALENT BY SYMMETRY. The offsets are
+      // [-1, 0, 1], so `cj - d` visits {cj+1, cj, cj-1} — the SAME three cells in the other
+      // order, and this scan only ORs into one mask entry, so it is order-independent. No input
+      // can separate the two. `collect` below carries the identical note on the identical shape.
+      for (const j of NEIGHBOUR_OFFSETS.map((d) => cj + d)) {
+        if (j < 0 || j >= nz) continue;
+        // Stryker disable next-line ArithmeticOperator: EQUIVALENT BY SYMMETRY, as above.
+        for (const i of NEIGHBOUR_OFFSETS.map((d) => ci + d)) {
+          if (i < 0 || i >= nx) continue;
+          if (buckets[j * nx + i]!.length !== 0) nearMask[maskJ * maskWidth + maskI] = 1;
+        }
+      }
+    }
+  }
+
   // ⚠ ONE REUSED SCRATCH BUFFER AND A QUERY STAMP, rather than a Set per call. This is called once
   // per texel — 5.4 M times for the forest atlas — and allocating there is most of what an index
   // is supposed to save.
@@ -225,12 +256,21 @@ export function buildSegmentGrid(edges: readonly CoastEdge[], width: number): Ed
     return hits;
   };
 
+  const far = (x: number, z: number): boolean => {
+    const ci = cellIndex(x, minX, cell);
+    const cj = cellIndex(z, minZ, cell);
+    if (ci < -1 || ci > nx || cj < -1 || cj > nz) return true;
+    return nearMask[(cj + 1) * maskWidth + ci + 1]! === 0;
+  };
+
   return {
     cell,
     nx,
     nz,
     edges,
+    nearMask,
     candidates: collect,
+    far,
   };
 }
 
@@ -327,11 +367,12 @@ export interface NearestSample {
  * ({@link edgeGridFarField}): `buildSegmentGrid` sets the cell to the width it was built for, so
  * a caller passing a `cap` wider than that width has broken the proof.
  *
- * ⚠ ONE `candidates` CALL SERVES BOTH THE SHORT-CIRCUIT AND THE WALK. Asking "any?" first and
- * `candidates` after runs the neighbourhood scan TWICE per sample, which at 5.4 M texels is half
- * the field's build time spent re-deriving a list it already had.
+ * ⚠ THE PRECOMPUTED MASK SERVES THE SHORT-CIRCUIT WITHOUT A CANDIDATE SCAN. Asking `candidates`
+ * first would rebuild the 3x3 neighbourhood for points the mask already proves are far; the walk
+ * only asks for candidates when that proof says an edge may be nearby.
  */
 export function nearestOnSegments(grid: EdgeGrid, x: number, z: number, cap: number): NearestSample {
+  if (grid.far(x, z)) return { distance: cap, gx: 0, gz: 0 };
   const candidates = grid.candidates(x, z);
   // Stryker disable next-line ConditionalExpression: EQUIVALENT — this is the SHORT-CIRCUIT.
   // Never taking it walks an empty candidate list and returns the same capped distance with the
@@ -342,10 +383,11 @@ export function nearestOnSegments(grid: EdgeGrid, x: number, z: number, cap: num
   let best = cap;
   let nx = 0;
   let nz = 0;
+  let bestIndex = Infinity;
   // ⚠⚠ THE CANDIDATES ARE THE EDGES IN THE POINT'S OWN 3x3 CELL NEIGHBOURHOOD, AND SKIPPING THE
   // REST IS EXACT. Every edge outside that block is at least one cell — one width — away
-  // (`edgeGridFarField`), and `best` starts AT `cap` with a strict `d >= best` reject, so no
-  // omitted edge could have improved the answer.
+  // (`edgeGridFarField`), and `best` starts AT `cap`, so no omitted edge could improve the
+  // capped answer.
   for (const n of candidates) {
     const e = grid.edges[n]!;
     const ex = e.bx - e.ax;
@@ -360,14 +402,24 @@ export function nearestOnSegments(grid: EdgeGrid, x: number, z: number, cap: num
     const qx = x - (e.ax + ex * t);
     const qz = z - (e.az + ez * t);
     const d = Math.hypot(qx, qz);
-    // Stryker disable next-line EqualityOperator: EQUIVALENT for the DISTANCE, which is what
-    // every caller reads: on a tie both branches leave `best` at the same number. They differ
-    // only in which of two equidistant points supplies the gradient — the medial axis, where the
-    // distance field's gradient is genuinely undefined.
-    if (d >= best) continue;
+    // ⚠ THE TIE IS BROKEN BY EDGE ORDER, WHICH IS WHAT MAKES THE INDEXED FIELD AGREE WITH A
+    // BRUTE-FORCE TWIN POINT FOR POINT. Both walks take the same MINIMUM; they can disagree only
+    // about which of two equidistant edges supplies the GRADIENT — the medial axis, where the
+    // distance field's gradient is genuinely undefined. The grid visits candidates in cell-scan
+    // order and a brute-force walk visits them in edge order, so without this the two pick
+    // different undefined values and a twin assertion on the gradient reds on a symmetric
+    // fixture. A distance AT the cap is still rejected, so a capped answer keeps its zero
+    // gradient.
+    //
+    // Stryker disable next-line EqualityOperator: EQUIVALENT — `n === bestIndex` is UNREACHABLE.
+    // `bestIndex` only ever holds the index of a candidate already taken from this same list, and
+    // the stamp above dedupes the list, so no index appears twice in one call. `>` and `>=` are
+    // therefore separated by no input.
+    if (d > best || (d === best && (best === cap || n > bestIndex))) continue;
     best = d;
     nx = qx;
     nz = qz;
+    bestIndex = n;
   }
   // Off an edge the gradient is the unit vector away from the nearest point. ON it (`best === 0`)
   // it is undefined — and every consumer's slope term is zero there, so nothing reads it.

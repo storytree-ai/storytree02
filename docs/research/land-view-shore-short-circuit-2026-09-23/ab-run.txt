@@ -1,0 +1,13 @@
+
+forest        2606 parcels, 35 islands
+atlas         4025 x 532 over 35 tiles, gres 3
+load          0.26 1.03 1.23   <- this box is shared; the ratio below is what survives that
+
+no-op census  867371 of 1292661 shore texels encode to 255 (67.1%) — written with the byte the atlas was already filled with
+short circuit 550297 of 1292661 (42.6%) are proved far by the mask — the share the walk can skip, which is the smaller number and the honest headroom
+
+the walk over every shore texel, 7 interleaved repeats per arm
+  mask  median   357 ms   spread   50 ms   (357, 367, 366, 369, 330, 319, 319)
+  scan  median   417 ms   spread   55 ms   (425, 419, 417, 418, 370, 370, 370)
+
+  the short circuit is worth 60 ms of 417 — 14.4% off the walk
