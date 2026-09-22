@@ -2,9 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  REFUSED,
   SCENARIOS,
   SUPPRESSORS,
   composeVerdict,
+  type RefusedScenario,
   type Scenario,
   type Suppressor,
 } from "./test-slop-scenarios.js";
@@ -82,17 +84,23 @@ test("scenario library: a scenario statement asks ONE thing and never reaches fo
   }
 });
 
+/**
+ * A band must be two probabilities the right way round. Shared by all three tiers — a REFUSED entry's
+ * numbers are the whole point of recording it, so they are held to the same shape as an admitted
+ * entry's even though the entry itself is held to none of the admission rules.
+ */
+const assertBands = (x: Scenario | Suppressor | RefusedScenario): void => {
+  const { weak, strong, n, on } = x.measured;
+  assert.ok(n > 0, `${x.id}: n must be positive — an unmeasured entry may not be admitted`);
+  assert.ok(on.trim().length > 40, `${x.id}: 'on' must say what was measured and what it does not establish`);
+  for (const [lo, hi] of [weak, strong]) {
+    assert.ok(lo >= 0 && hi <= 1 && lo <= hi, `${x.id}: band [${lo}, ${hi}] is not a probability range`);
+  }
+};
+
 test("scenario library: measured bands are present, non-degenerate and DO NOT OVERLAP", () => {
-  const bands = (x: Scenario | Suppressor): void => {
-    const { weak, strong, n, on } = x.measured;
-    assert.ok(n > 0, `${x.id}: n must be positive — an unmeasured entry may not be admitted`);
-    assert.ok(on.trim().length > 40, `${x.id}: 'on' must say what was measured and what it does not establish`);
-    for (const [lo, hi] of [weak, strong]) {
-      assert.ok(lo >= 0 && hi <= 1 && lo <= hi, `${x.id}: band [${lo}, ${hi}] is not a probability range`);
-    }
-  };
   for (const s of SCENARIOS) {
-    bands(s);
+    assertBands(s);
     // A scenario fires HIGH on weak examples; its false-accusation side must sit strictly below.
     assert.ok(
       s.measured.weak[0] > s.measured.strong[1],
@@ -106,7 +114,7 @@ test("scenario library: measured bands are present, non-degenerate and DO NOT OV
     );
   }
   for (const s of SUPPRESSORS) {
-    bands(s);
+    assertBands(s);
     // A suppressor's axis is INVERTED — 'strong' means something DOES compensate, and a high answer
     // clears. Asserting the same direction here would silently admit a suppressor that never fires.
     assert.ok(
@@ -116,6 +124,120 @@ test("scenario library: measured bands are present, non-degenerate and DO NOT OV
     );
     assert.ok(s.clearAt <= s.measured.strong[0], `${s.id}: clearAt is above the band it was measured on`);
     assert.ok(s.clearAt > s.measured.weak[1], `${s.id}: clearAt sits inside the non-compensating band — it would over-clear`);
+  }
+});
+
+test("scenario library: an AUTHORED band is not enough on its own — the transfer result is recorded too", () => {
+  // The clause the 2026-09-22 transfer failure showed was missing, and it is deliberately NOT the
+  // tautology it first looks like. `MeasuredPopulation` is a union, so "population is one of two
+  // values" is a fact the TYPE already guarantees and a test asserting it could never fail — the exact
+  // defect this whole arc exists to find, and it would have shipped here first.
+  //
+  // The rule that types cannot state is this one. `pre-satisfied-input` declared weak [0.91, 0.96]
+  // against strong [0.03, 0.27], passed the separability rule above, and said nothing about real code:
+  // measured against 27 real weak tests the same wording scored weak 0.12-0.58 against strong
+  // 0.14-0.58 and fired zero times. So an entry measured on examples written FOR the measurement must
+  // also say what happened when it met examples that were not — including, for a new entry, that it
+  // has not met any yet. Either sentence is honest; silence is what is refused.
+  //
+  // EXHAUSTIVE ON PURPOSE, with a different obligation per branch and a hard failure on neither. An
+  // `if (population !== "authored") continue` reads the field and then lets every other value —
+  // including one the type forbids but a cast or a JSON round-trip could still produce — skip the
+  // clause silently, which the mutation rung showed by blanking the literal and watching this pass.
+  //
+  // ALL THREE TIERS, because the obligation is about the BAND and every tier has one. Leaving
+  // suppressors out left the rung one live survivor on exactly that literal — and the suppressor is
+  // the entry where it mattered most, since its band is authored while both of its recorded limits
+  // were in fact found on real data, which is a distinction the reader could not previously make.
+  for (const x of [...SCENARIOS, ...SUPPRESSORS, ...REFUSED]) {
+    // A refusal carries no `limits` — its whole body IS the finding — so its `on` answers for it.
+    const recorded = "limits" in x ? x.limits : x.measured.on;
+    if (x.measured.population === "authored") {
+      assert.match(
+        recorded,
+        /\bobserved\b|\breal\b|\btransfer\b/i,
+        `${x.id}: its band comes from examples authored for the measurement, and it says nothing about ` +
+          `observed code. Record the transfer result, or record that it has not met observed data yet.`,
+      );
+    } else if (x.measured.population === "observed") {
+      // An observed band's worth is its arithmetic, so it must carry some. A sentence saying "measured
+      // on real pairs" with no figure in it is the shape that let an authored band pass for one.
+      assert.match(
+        x.measured.on,
+        /\d/,
+        `${x.id}: an observed band must say WHAT WAS MEASURED with numbers in it — how many pairs, and ` +
+          `what they scored. Prose alone is what an authored band already had.`,
+      );
+    } else {
+      assert.fail(`${x.id}: population is ${JSON.stringify(x.measured.population)}, which is neither authored nor observed`);
+    }
+  }
+});
+
+test("scenario library: every SCENARIO records what it is measured to get wrong", () => {
+  // Suppressors have carried this since inc-02 because a suppressor over-clearing looks exactly like it
+  // working. A scenario's misses are invisible in the same way and for the same reason — a battery that
+  // finds nothing is indistinguishable from a clean suite — so the requirement is the same requirement,
+  // and it was simply missing on the tier where it is harder to notice.
+  for (const s of SCENARIOS) {
+    assert.ok(
+      s.limits.length > 120,
+      `${s.id}: a scenario with no recorded limits has not been adjudicated — say what it is measured to MISS`,
+    );
+    assert.notEqual(s.limits.trim(), s.evidence.trim(), `${s.id}: limits restate the evidence rather than recording a limit`);
+  }
+});
+
+test("refusals: a declined candidate keeps its wording, its numbers and its reason", () => {
+  assert.ok(REFUSED.length > 0, "an empty registry would pass every assertion below vacuously");
+  for (const r of REFUSED) {
+    assert.match(r.id, /^[a-z][a-z0-9-]*$/, `${r.id}: a refusal id is a plain slug`);
+    // The statement is kept so a re-proposal can be COMPARED, not merely warned about. A refusal that
+    // paraphrased its own candidate would let the same wording back in under a different sentence.
+    assert.ok(r.statement.length > 60, `${r.id}: the measured wording must be recorded verbatim`);
+    assert.match(r.statement, /\bwould still pass\b|\bcould be wrong\b|\bwould still succeed\b|\bwould still produce\b/, `${r.id}: the recorded wording is not a falsifiable claim`);
+    assert.ok(r.evidence.length > 80, `${r.id}: grounding is not what failed — record what made the shape worth proposing`);
+    assert.match(r.evidence, CITES_SOMETHING, `${r.id}: evidence cites nothing concrete`);
+    // Its NUMBERS are the whole reason the row exists — a refusal without them is an opinion with a
+    // slug — so they are held to the same shape as an admitted entry's, though the entry itself is
+    // held to none of the admission rules.
+    assertBands(r);
+    assert.ok(r.reason.length > 120, `${r.id}: the refusal reason must be in terms of the measurement, not of taste`);
+  }
+});
+
+test("refusals: a candidate that MEETS the admission bar may not simply be listed as refused", () => {
+  // The invariant that keeps this registry from becoming a veto list. A refusal is a measurement that
+  // came out badly, so it must SHOW that: either the bands overlap, or the sample is too small to admit
+  // on. `degenerate-collection` is the live example of the second case — it separated one real pair
+  // 0.75/0.07, the widest margin in the benchmark, and is held out purely because n=1 of its own shape.
+  // If a later session records a refusal that separates cleanly AND has a population, this reds and asks
+  // for the reason to be somewhere a reader will find it.
+  for (const r of REFUSED) {
+    const separates = r.measured.weak[0] > r.measured.strong[1];
+    assert.ok(
+      !(separates && r.measured.n >= 3),
+      `${r.id}: its recorded bands SEPARATE (weak floor ${r.measured.weak[0]} clears strong ceiling ` +
+        `${r.measured.strong[1]}) at n=${r.measured.n}, which is the admission bar. A candidate that meets ` +
+        `the bar and is still declined needs its reason in the library, not a row in the refused list.`,
+    );
+  }
+});
+
+test("refusals: a refused wording is never silently re-admitted", () => {
+  // Ids and statements are both checked, because the two failure modes differ: re-using the id is a
+  // visible collision, while re-pasting the sentence under a fresh id is the one that would actually
+  // happen — a later session finds the shape convincing again and does not read this far.
+  const ids = [...SCENARIOS.map((s) => s.id), ...SUPPRESSORS.map((s) => s.id), ...REFUSED.map((r) => r.id)];
+  assert.equal(new Set(ids).size, ids.length, `an id is reused across the admitted and refused tiers: ${JSON.stringify(ids)}`);
+  const admitted = new Set([...SCENARIOS, ...SUPPRESSORS].map((s) => s.statement.trim()));
+  for (const r of REFUSED) {
+    assert.equal(
+      admitted.has(r.statement.trim()),
+      false,
+      `${r.id}: this exact wording is admitted above AND recorded as refused. One of the two is wrong, ` +
+        `and the measurement that declined it is in REFUSED[${r.id}].reason.`,
+    );
   }
 });
 
