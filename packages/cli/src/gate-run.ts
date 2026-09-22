@@ -64,6 +64,7 @@ import {
   SHARED_ENVIRONMENT_CHECKS,
   evaluateGateOrder,
   isExpensiveStep,
+  readsLiveStore,
 } from "./gate-order.js";
 import {
   gitLines,
@@ -550,6 +551,15 @@ async function main(): Promise<void> {
       results,
       selected: selection.selected,
       treeChanged: treeChangedSince(record, head, digest),
+      // The SCOPED plan, so the lookup is keyed by the command text the results actually carry —
+      // `pnpm -r test` is rewritten to `pnpm --filter ...<name> test` before running, and a lookup
+      // against the declared plan would miss it. A command the plan no longer contains answers TRUE,
+      // the fail-closed direction: an unclassifiable step withholds the flake claim rather than
+      // asserting an acquittal over state nobody established.
+      readsLiveStore: (command) => {
+        const step = steps.find((s) => s.command === command);
+        return step === undefined || readsLiveStore(step);
+      },
     });
     for (const line of renderRerunComparison(comparison, record)) console.log(line);
   }

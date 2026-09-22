@@ -244,6 +244,28 @@ jobs:
       - name: Contract-line grammar
         run: pnpm check:contract-grammar
 
+      # A story's DECLARED reliability gate, held to something that actually RUNS it
+      # (verification-integrity-arc, `declared-reliability-gate-is-run-by-a-rung`). A story's
+      # `## Reliability Gates` block names the command carrying that story's machine proof
+      # obligation, and nothing compared that declared population against the commands anything
+      # executes — so a declared gate could rot with both the gate and CI green on the very change
+      # that broke it.
+      #
+      # ⚠ ON THE WALL AS WELL AS IN THE GATE, and the evidence is inside the current commit range
+      # rather than argued: 3ea9c3cc ("stop rendering the Sources block on every read surface")
+      # retired a pane, updated every unit test it broke, and left `stories/studio`'s UAT journey —
+      # the corpus's only end-to-end acceptance journey — red, because nothing runs it. That is a
+      # CI-shaped escape: the unit tests it did update are exactly what `pnpm -r test` covers.
+      #
+      # Judges only the class whose runnability is mechanically decidable (`pnpm --filter <pkg>
+      # <script>`), states on every run what it did NOT judge, and is a ratchet rather than a
+      # migration: the one pre-existing breach is carried in a declared baseline that FAILS once it
+      # goes stale. Offline and disk-only — no git, no store, no credential. A ROOT step, OUTSIDE the
+      # affected-only narrowing below: any package's change can wire or unwire a declared gate, and
+      # `stories/**` narrows to a scope that does not contain this check.
+      - name: Declared reliability gates are run by something
+        run: pnpm check:reliability-gate-parity
+
       # The IMAGE's credential filter, held to git's (ADR-0547, realising ADR-0544 D5's residual).
       # `.gcloudignore` and `.gitignore` are two INDEPENDENT lists that happen to need to agree: the
       # by-hand image build uploads the working tree as it stands, and the builder never reads the
