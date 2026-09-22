@@ -43,6 +43,8 @@ const SIBLING = "packages/widget/src/helper.ts";
 /** A manifest member that does NOT exist when the phase starts — the "allowed addition" case. */
 const GENERATED = "packages/widget/src/generated.ts";
 const DETRITUS = "coverage/report.json";
+/** A second unlisted path, so the refusal's `", "` join is exercised with more than one entry. */
+const SECOND_DETRITUS = "coverage/summary.json";
 
 /** The snapshot shape `snapshotReplica` returns, built by hand so no filesystem is walked. */
 type State = { kind: "file" | "symlink" | "other"; digest: string; mode: number };
@@ -255,9 +257,12 @@ test(
         // Identical to the arm above — same endpoint, same wrapper, same attribution — so the ONE
         // difference between the two tests is who wrote the unlisted file.
         await callFeedbackTool(execCommand);
-        // The leaf itself writes it, AFTER the run's post-snapshot rather than inside the run.
+        // The leaf itself writes them, AFTER the run's closing snapshot rather than inside the run.
+        // TWO paths, not one: the refusal joins them with ", " and a single-entry list would make
+        // that separator unobservable — the message could lose it and no assertion would notice.
         await fs.mkdir(path.join(execCommand.cwd, "coverage"), { recursive: true });
         await fs.writeFile(path.join(execCommand.cwd, DETRITUS), "leaf wrote this\n");
+        await fs.writeFile(path.join(execCommand.cwd, SECOND_DETRITUS), "and this\n");
         await fs.writeFile(path.join(execCommand.cwd, SOURCE), "after\n");
         return { code: 0, stdout: successJsonl(), stderr: "" };
       };
@@ -282,10 +287,10 @@ test(
       assert.equal(
         result.ok === false ? result.error : "",
         "Codex phase promotion refused in full; observed unlisted or out-of-scope paths: " +
-          "coverage/report.json (new files the spine's own feedback runs left are already excluded," +
-          " so this path was changed by the leaf, pre-existed the phase, or is a manifest member" +
-          " refused by the phase predicate)",
-        "the refusal names the path AND rules a feedback run out, which is the confusion it cost",
+          "coverage/report.json, coverage/summary.json (new files the spine's own feedback runs" +
+          " left are already excluded, so this path was changed by the leaf, pre-existed the phase," +
+          " or is a manifest member refused by the phase predicate)",
+        "the refusal names EVERY path, comma-separated, and rules a feedback run out",
       );
       assert.equal(
         await fs.readFile(path.join(root, SOURCE), "utf8"),
@@ -561,7 +566,7 @@ test("attribution: a write the LEAF makes BETWEEN two runs is never excused by e
   );
 });
 
-test("attribution: a failed snapshot attributes nothing, so the existing refusal stands", async () => {
+test("attribution: a failed OPENING snapshot attributes nothing, so the existing refusal stands", async () => {
   const { snapshot } = scriptedSnapshots([
     new Error("walk failed"),
     snap({ "cache.json": file("c1") }),
@@ -573,6 +578,26 @@ test("attribution: a failed snapshot attributes nothing, so the existing refusal
     attribution.causedBySpine({ relPath: "cache.json", after: file("c1") }),
     false,
     "with no baseline there is nothing to attribute against",
+  );
+});
+
+test("attribution: a failed CLOSING snapshot attributes nothing and leaves the run transparent", async () => {
+  // The other half of the failure pair, and the one that is easy to leave untested: here the baseline
+  // WAS taken, so the code reaches the second snapshot and has to cope with it being unreadable.
+  // Attribution happens in a `finally`, so a mishandled failure here would surface as the feedback
+  // RUN throwing — a spine observation breaking the very run it was only supposed to watch.
+  const { snapshot } = scriptedSnapshots([snap({}), new Error("closing walk failed")]);
+  const attribution = feedbackWriteAttribution("/replica", snapshot);
+
+  assert.equal(
+    await attribution.around(async () => "the run's own answer"),
+    "the run's own answer",
+    "the run is unaffected by the spine failing to observe it",
+  );
+  assert.equal(
+    attribution.causedBySpine({ relPath: "cache.json", after: file("c1") }),
+    false,
+    "and nothing is excused, so the pre-existing refusal stands",
   );
 });
 
