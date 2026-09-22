@@ -263,18 +263,46 @@ test('fld-every-terminal-trail-end-docks-on-the-real-map: every terminal landing
   // islands formed no dock and therefore wore no path at all — the defect a total count alone
   // cannot see, since 52 docks on 28 islands satisfies the equality above just as well.
   assert.equal(docks.size, 35, 'the export carries 35 islands with a rim');
-  // ⚠ ONE ISLAND IS STILL SHORT, AND IT IS A DIFFERENT DEFECT — pinned here rather than asserted
-  // away. `uat-detail-studio`'s only terminal landing sits 5.29 units off its own rim and 4.43 off
-  // `studio-cloud`'s, so the nearest-island rule hands the dock to a shore the trail's edge keys
-  // (`uat-criterion-detail->uat-detail-studio`, `studio->uat-detail-studio`) never name. ADR-0504's
-  // docstring premise — that two islands are never within one reach of the same end — is false on
-  // the real map. Closing it is this lane's next unit; until then the exact shortfall is recorded
-  // so it cannot grow unnoticed.
+  // test-updated (new behaviour): fld-every-terminal-trail-end-docks-on-the-real-map: every terminal landing in the shipped stream docks on clipped ground — contract 3's routed-island rule gives `uat-detail-studio` its real-map landing.
   assert.deepEqual(
     [...docks.entries()].filter(([, found]) => found.length === 0).map(([island]) => island),
-    ['uat-detail-studio'],
-    'exactly one island is left dockless, by the nearest-island rule rather than by the network',
+    [],
+    'every rimmed island receives a terminal landing from an edge that names it',
   );
+});
+
+test('fld-a-dock-lands-on-an-island-the-trail-names: edge-named candidates win, while unnamed and out-of-reach ends keep their deliberate fallbacks', () => {
+  const channel = [island('named-west', 0, 0, 40), island('nearer-east', 44, 0, 40)];
+
+  // This landing is three units from named-west and one from nearer-east. Its routed edge names
+  // only named-west, so global nearest-rim selection is a false dock on nearer-east.
+  const named = strip(
+    { x: 42, z: 200 },
+    { x: 43, z: 20 },
+    { edges: ['upstream->named-west'] },
+  );
+  const namedDocks = islandDocks(channel, [named]);
+  assert.deepEqual(namedDocks.get('named-west'), [{ x: 40, z: 20 }]);
+  assert.deepEqual(namedDocks.get('nearer-east'), []);
+
+  // A strip without routed edge keys preserves the harness fixture's nearest-rim behaviour.
+  const unnamedDocks = islandDocks(channel, [strip({ x: 42, z: 200 }, { x: 43, z: 20 })]);
+  assert.deepEqual(unnamedDocks.get('named-west'), []);
+  assert.deepEqual(unnamedDocks.get('nearer-east'), [{ x: 44, z: 20 }]);
+
+  // Naming an island narrows candidates; it never widens the sanity bound.
+  const beyondReach = islandDocks(channel, [
+    strip({ x: 200, z: 200 }, { x: -DOCK_REACH, z: 20 }, { edges: ['upstream->named-west'] }),
+  ]);
+  assert.deepEqual([...beyondReach.entries()], [['named-west', []], ['nearer-east', []]]);
+
+  // Junction exclusion runs before edge identity: naming a rim cannot promote a shared end.
+  const shared = { x: 43, z: 20 };
+  const junction = islandDocks(channel, [
+    strip({ x: 42, z: 200 }, shared, { edges: ['upstream->named-west'] }),
+    strip({ x: 42, z: -200 }, shared, { edges: ['other->named-west'] }),
+  ]);
+  assert.deepEqual([...junction.entries()], [['named-west', []], ['nearer-east', []]]);
 });
 
 test('islandDocks assigns an end within reach of TWO islands to the NEARER one, on either axis', () => {

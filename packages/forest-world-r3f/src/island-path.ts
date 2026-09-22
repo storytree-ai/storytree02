@@ -209,6 +209,12 @@ export function islandDocks(
   }
   for (const strip of strips) {
     if (!isDockableStrip(strip)) continue;
+    // Routed strips carry the dependency ids they serve. A named landing may only choose among
+    // those islands; legacy/unrouted strips keep the global nearest-rim behaviour.
+    const namedIslands = new Set(
+      (strip.edges ?? []).flatMap((edge) => edge.split('->')),
+    );
+    const restrictToNamedIslands = namedIslands.size > 0;
     for (const end of stripEndpoints(strip)) {
       if (ends.get(vertexKey(end))!.length !== 1) continue;
       // ⚠ ONE `nearest`, NOT A SEPARATE island AND dock. They were two nullables, assigned only
@@ -221,6 +227,7 @@ export function islandDocks(
       let nearest: NearestDock | null = null;
       let best = Infinity;
       for (const i of indices(rims.length)) {
+        if (restrictToNamedIslands && !namedIslands.has(rims[i]!.island)) continue;
         const dock = dockOnRim(grids[i]!, end);
         if (dock === null) continue;
         const d = Math.hypot(dock.x - end.x, dock.z - end.z);
