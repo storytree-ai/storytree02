@@ -21,7 +21,7 @@ export type BuildGuardResult =
   | { ok: false; refusal: BuildGuardRefusal };
 
 export interface AcquireBuildGuardInput {
-  store: PgClaimStore;
+  store: Pick<PgClaimStore, "claim" | "release" | "current" | "stampActivity">;
   runId: string;
   unitIds: readonly string[];
   readActivity?: () => Date | undefined;
@@ -29,6 +29,10 @@ export interface AcquireBuildGuardInput {
 
 function sessionFor(runId: string): string {
   return `build:${runId}`;
+}
+
+function buildKey(unitId: string): string {
+  return `build:${unitId}`;
 }
 
 function holderRunId(sessionId: string): string {
@@ -54,7 +58,7 @@ function refusal(unitId: string, holder: ClaimDocT, now: Date): BuildGuardRefusa
  * unwinds every earlier lease under this run's synthetic session identity.
  */
 export async function acquireBuildGuard(input: AcquireBuildGuardInput): Promise<BuildGuardResult> {
-  const unitIds = [...new Set(input.unitIds)].sort();
+  const unitIds = [...new Set(input.unitIds)].sort().map(buildKey);
   const sessionId = sessionFor(input.runId);
   const held: string[] = [];
 
