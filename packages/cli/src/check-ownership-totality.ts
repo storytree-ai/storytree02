@@ -1,3 +1,19 @@
+/* gate-check
+runs: both
+subject: own-work
+cost: seconds
+why: >-
+  reds when this diff adds a source file under no declared `sourceOwnership` subtree, or un-owns one
+  that WAS declared; a breach already on the merge base is reported and never charged, so a red here
+  can only be this branch's (ADR-0317 D2 charged by ADR-0301)
+
+  Survival audit (gate-machinery-audit-arc): FACTORY BOOKKEEPING (ADR-0317 D2, added 2026-08-14). PR
+  #1326 introduced two `packages/cli/src/typecheck-aperture*.ts` files under no declared subtree and
+  a FULL gate went green with the ownership map already incomplete — `storytree ownership` is
+  report-only and `check:boundaries` is package-grain, so nothing sat between the author and the
+  decay; without it the map silently stops being total and the arc that owns it hand-repairs on
+  every increment.
+*/
 /**
  * `pnpm check:ownership-totality` — the thin I/O SHELL that keeps the ADR-0317 D2 source-ownership
  * map total as landings arrive. The rule lives in the pure judge next door

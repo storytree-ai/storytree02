@@ -1,3 +1,15 @@
+/* gate-check
+runs: both
+subject: shared-environment
+cost: seconds
+ciIdentity: ci-presence
+why: >-
+  the decision-binding gate (ADR-0037 §3–4), reading the decision ROWS since ADR-0403 dec 1. It sits
+  in block C rather than A because its subject is SHARED live state — another session's `adr new` or
+  status flip can red it, exactly like check:guidance. It was a case inside `pnpm -r test` until the
+  log became a database; that suite is credential-free by ADR-0302 D3, and ADR-0307 D4 puts
+  real-corpus assertions on a rung that may hold a connection
+*/
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

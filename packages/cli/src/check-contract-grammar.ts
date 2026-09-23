@@ -1,3 +1,14 @@
+/* gate-check
+runs: both
+subject: own-work
+cost: seconds
+why: >-
+  reds when a contract this diff ADDED or EDITED does not parse as a contract sentence — no `asserts
+  —` bullet at all, or a system named nowhere mechanically (ADR-0459, realising ADR-0447 D4). A
+  ratchet, never a migration: the corpus's 133 standing breaches are not charged to a branch that
+  did not author them. Disk and git only, like its `check:ownership-totality` neighbour, whose
+  `chooseBaseRef` it reuses rather than copying
+*/
 /**
  * `pnpm check:contract-grammar` — the thin I/O SHELL that holds the contract line to a grammar as
  * landings arrive (ADR-0459, realising ADR-0447 D4's one adopted SDD idea). The rule lives in the pure

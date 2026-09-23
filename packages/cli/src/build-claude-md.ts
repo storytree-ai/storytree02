@@ -22,7 +22,7 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { REPO_ROOT_ENV, resolveRepoRoot } from "@storytree/library";
 
@@ -109,8 +109,13 @@ function generatedProjection(
   };
 }
 
-async function main(): Promise<void> {
-  const check = process.argv.includes("--check");
+/**
+ * Regenerate the projections, or with `--check` compare them. `argv` defaults to this process's own
+ * arguments; the gate's `check-guidance.ts` passes `["--check"]`, which is why the auto-run at the
+ * foot of this file is guarded — importing this module must not also run it in write mode.
+ */
+export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
+  const check = argv.includes("--check");
 
   // Everything this command needs from the store is read here, in one open/close: the agent digest
   // and the definition table. The rest of main() is pure file work over that data, so the
@@ -233,7 +238,12 @@ async function main(): Promise<void> {
   );
 }
 
-main().catch((err: unknown) => {
-  console.error(err);
-  process.exit(1);
-});
+// Run only when invoked directly (`pnpm build:guidance`), not when `check-guidance.ts` imports it.
+const invokedDirectly =
+  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (invokedDirectly) {
+  main().catch((err: unknown) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

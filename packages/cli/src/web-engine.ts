@@ -51,9 +51,16 @@ function destDirAbs(pkg: EnginePackage): string {
 const WATCH_TICKS = 40;
 const WATCH_INTERVAL_SECONDS = 20;
 
+/**
+ * The arguments this run was started with — this process's own for a direct run, or what an entry
+ * module hands {@link main} (the gate's `check-web-engine.ts` passes `["--check"]`). Module state so
+ * {@link fail}'s messages name the mode that actually ran.
+ */
+let runArgv: readonly string[] = process.argv.slice(2);
+
 function modeName(): string {
-  if (process.argv.includes("--check")) return "check";
-  if (process.argv.includes("--land")) return "land";
+  if (runArgv.includes("--check")) return "check";
+  if (runArgv.includes("--land")) return "land";
   return "sync";
 }
 
@@ -371,9 +378,10 @@ function runLand(dryRun: boolean): void {
   );
 }
 
-function main(): void {
-  if (process.argv.includes("--check")) runCheck();
-  else if (process.argv.includes("--land")) runLand(process.argv.includes("--dry-run"));
+export function main(argv: readonly string[] = process.argv.slice(2)): void {
+  runArgv = argv;
+  if (argv.includes("--check")) runCheck();
+  else if (argv.includes("--land")) runLand(argv.includes("--dry-run"));
   else runSync();
 }
 

@@ -35,6 +35,8 @@
 // {@link unattributedTestFiles} shows the map cannot be read. See that function for the mechanism,
 // the discriminator, and why the obvious one is wrong.
 
+import { checkNameFor } from "./gate-checks.js";
+
 /** One inclusive 1-based line span on the NEW side of a diff. */
 export interface LineRange {
   readonly start: number;
@@ -380,6 +382,28 @@ export function entryPointsFromShellScripts(scriptContents: readonly string[]): 
     }
   }
   return [...found].sort();
+}
+
+/**
+ * The gate's CHECK files — the FOURTH kind of entry point, and the one ADR-0606 D1 makes true by
+ * construction: `pnpm gate` finds a check by its FILE NAME (`check-<name>.ts` / `<name>-check.ts`)
+ * and runs it as a program, so a file named like a check is invoked whether or not any script names
+ * it, and registering a new check is writing that one file.
+ *
+ * A RETIRED check is the case that forced this, measured 2026-09-24: it keeps its file (ADR-0311 D5)
+ * and still runs its `main()` on import, but no script names it any more — so the first branch to
+ * touch one (by adding its retired declaration) made it a mutation target, the runner LOADED it, its
+ * `main()` dialled the live store from inside the Stryker sandbox, and the whole rung aborted at the
+ * dry run with "Something went wrong in the initial test run". The same shape as
+ * {@link entryPointsFromShellScripts}' measured case, through a fourth door.
+ *
+ * DERIVED from the same predicate the gate discovers checks with ({@link checkNameFor}), so the two
+ * can never disagree about what a check file is.
+ */
+export function entryPointsFromCheckNames(files: readonly string[]): string[] {
+  return files
+    .map(normalise)
+    .filter((file) => checkNameFor(file.slice(file.lastIndexOf("/") + 1)) !== undefined);
 }
 
 export function entryPointsFromMirrorRegistry(
