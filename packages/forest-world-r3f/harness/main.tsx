@@ -155,6 +155,7 @@ const count = (k: string): number => descriptors.filter((d) => d.kind === k).len
 // are no trees". Every row below is a family `world-to-3d.ts` can still produce.
 const summary =
   `cell-ground ${count('cell-ground')} · uat-bloom ${count('uat-bloom')} · ` +
+  `uat-bud ${count('uat-bud')} · uat-wilt ${count('uat-wilt')} · ` +
   `trail-strip ${count('trail-strip')} · trail-ghost-strip ${count('trail-ghost-strip')} · ` +
   `cave-arch ${count('cave-arch')} · wisp-sprite ${count('wisp-sprite')} · ` +
   `skipped ${count('skipped')}`;

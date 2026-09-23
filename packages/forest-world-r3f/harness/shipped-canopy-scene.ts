@@ -37,7 +37,12 @@ import { cellGroundGeometry } from '../src/cell-ground-geometry.js';
 import { cellAt } from '../src/dressing-ground.js';
 import { shippedGroundBuild, type ShippedGroundBuild } from '../src/ForestWorldCanvas.js';
 import { placementCasters } from '../src/ground-casters.js';
-import { KIT_FOOTPRINTS_2026_08_29, KIT_HEIGHTS_2026_08_29, type KitPlacement } from '../src/kit-vocabulary.js';
+import {
+  KIT_FOOTPRINTS_2026_08_29,
+  KIT_HEIGHTS_2026_08_29,
+  isCriterionRole,
+  type KitPlacement,
+} from '../src/kit-vocabulary.js';
 import { LAND_RELIEF_AMPLITUDE } from '../src/land-relief.js';
 import type { ShadowCaster } from '../src/land-shadow.js';
 import { dressMapFromKit } from '../src/map-dressing.js';
@@ -175,7 +180,9 @@ export interface CanopyPlan {
 
 export function canopyPlan(arm: CanopyArm, size: CrowdSize): CanopyPlan {
   const placements = armPlacements(arm, size);
-  const blooms = placements.filter((p) => p.role === 'bloom').length;
+  // ⚠ EVERY CRITERION FORM (ADR-0600): `capabilityTrees` is the remainder, so a bud left out
+  // here is a bud counted as a capability.
+  const blooms = placements.filter((p) => isCriterionRole(p.role)).length;
   const build = canopyGroundBuild(arm, size);
   return {
     groundTriangles: cellGroundGeometry(build.input).triangles,

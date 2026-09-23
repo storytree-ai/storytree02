@@ -70,6 +70,7 @@ import {
   KIT_ROLE_SIZE,
   RENDER_ELEV_DEG,
   isCoverPlacement,
+  isCriterionRole,
   type KitPlacement,
 } from '../src/kit-vocabulary.js';
 import {
@@ -406,7 +407,10 @@ export function dressingCounts(placements: readonly KitPlacement[], stream: read
       if (p.role === 'bush') bushes += 1;
       else if (p.role === 'tuft') tufts += 1;
       else flowerPatches += 1;
-    } else if (p.role === 'bloom') blooms += 1;
+      // ⚠ EVERY CRITERION FORM, not just the signed one (ADR-0600) — `capabilityTrees` below is
+      // this count subtracted from the total, so a bud counted here as a capability would inflate
+      // the ratio this whole page is about.
+    } else if (isCriterionRole(p.role)) blooms += 1;
   }
   const capabilityTrees = placements.length - cover - blooms;
   const byIsland = cellsByIsland(parcelCellsFrom(stream));

@@ -29,6 +29,7 @@ import {
   KIT_ROLES,
   KIT_ROLE_ASSEMBLIES,
   KIT_ROLE_SIZE,
+  KIT_ROLE_TILT,
   kitObjectNames,
 } from './kit-vocabulary.js';
 import type {
@@ -576,8 +577,15 @@ interface MergeBucket {
 /**
  * BUILD THE DRESSING: one merged mesh per (material, tint), however many props there are.
  *
- * The transform is `translate * rotateY * scale`, applied to a CLONE of the kit's geometry, so
+ * The transform is `translate * rotate * scale`, applied to a CLONE of the kit's geometry, so
  * the kit itself is never mutated and two placements of one assembly cannot interfere.
+ *
+ * ⚠ THE ROTATION IS TWO ANGLES, NOT ONE. `yaw` turns the prop about the vertical and is the
+ * placement's own; `KIT_ROLE_TILT` leans it off the vertical and is the ROLE's, which is how a
+ * failing criterion nods over where a signed one stands up (ADR-0600). The order is `YXZ` — yaw
+ * applied first, then the lean — so a wilt's lean is always away from the SAME world direction
+ * however the placement turned it, which is what stops a field of them reading as a windless
+ * scatter of random angles.
  *
  * ⚠ THE TINT IS PART OF THE BUCKET KEY, and it has to be: a merged mesh wears ONE material, so
  * merging a yellow-crowned tree with a green one by material alone would silently paint both
@@ -589,7 +597,7 @@ export function kitMeshes(kit: LoadedKit, placements: readonly KitPlacement[]): 
   const tints = new Map<string, THREE.MeshStandardMaterial>();
   const m = new THREE.Matrix4();
   const q = new THREE.Quaternion();
-  const up = new THREE.Vector3(0, 1, 0);
+  const e = new THREE.Euler(0, 0, 0, 'YXZ');
 
   for (const placement of placements) {
     const assembly = kit.assemblies.get(placement.assembly);
@@ -600,7 +608,8 @@ export function kitMeshes(kit: LoadedKit, placements: readonly KitPlacement[]): 
       throw new Error(`kit-mesh: this dressing names the assembly ${placement.assembly}, which the kit does not hold`);
     }
     const scale = placementScale(kit, placement);
-    q.setFromAxisAngle(up, placement.yaw);
+    e.set(KIT_ROLE_TILT[placement.role], placement.yaw, 0, 'YXZ');
+    q.setFromEuler(e);
     m.compose(
       new THREE.Vector3(placement.at.x, placement.y, placement.at.z),
       q,
