@@ -531,20 +531,26 @@ export function packWorld<S extends LayoutStory>(
     const sequence = display.map((idx) => ({ idx, w: estRadius(quotas[idx] ?? 3) }));
     // ADR-0521: the gap between two neighbours is a fraction of THEIR two radii, so a row of big
     // islands breathes more than a row of small ones and the row's total is the sum of its pairs.
+    // The two ids are what the clearance is looked up by — a plate's width follows its story's
+    // NAME, so the pair's gap is the pair's own, exactly as its water already is.
+    //
+    // ⚠ FIVE STATEMENTS, NOT ONE TERNARY, AND THE REASON IS THE INSTRUMENT rather than taste — the
+    // same trap `baryOf` above documents, met again. Both lookups are type-forced by
+    // `noUncheckedIndexedAccess` and unreachable by construction (`sequence` is built by mapping
+    // `display`, whose entries came from `byRank`, which was built by iterating `stories`), so
+    // neither optional chain can short-circuit and neither `''` fallback can be reached. Written as
+    // one returned ternary, a `Stryker disable next-line` in front of it binds to the `return` and
+    // NOT to the continuation line the mutants are actually on, so four of them stayed alive
+    // through a pass that tried. Splitting gives each lookup a line the directive can name.
     const gapAfter = (k: number): number => {
       const here = sequence[k];
       const next = sequence[k + 1];
-      // The two ids are what the clearance is looked up by — a plate's width follows its story's
-      // NAME, so the pair's gap is the pair's own, exactly as its water already is.
-      //
-      // EQUIVALENT (type-forced) — `noUncheckedIndexedAccess` requires both guards and the
-      // construction above makes them unreachable: `sequence` is built by mapping `display`, whose
-      // entries came from `byRank`, which was built by iterating `stories`. So neither index can
-      // miss and neither `''` fallback can be reached.
+      if (!here || !next) return 0;
       // Stryker disable next-line OptionalChaining,StringLiteral: EQUIVALENT (type-forced) — see the note above.
-      return here && next
-        ? islandGapFor(here.w, next.w, stories[here.idx]?.id ?? '', stories[next.idx]?.id ?? '')
-        : 0;
+      const idLeft = stories[here.idx]?.id ?? '';
+      // Stryker disable next-line OptionalChaining,StringLiteral: EQUIVALENT (type-forced) — see the note above.
+      const idRight = stories[next.idx]?.id ?? '';
+      return islandGapFor(here.w, next.w, idLeft, idRight);
     };
     const total = sequence.reduce((sum, s, k) => sum + 2 * s.w + gapAfter(k), 0);
     // A lone island would otherwise sit directly on top of its dependencies,
