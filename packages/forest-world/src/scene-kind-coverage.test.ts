@@ -34,7 +34,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { resolve } from 'node:path';
+import { resolve, sep } from 'node:path';
 
 import { hexDist, type Axial } from './hex.js';
 import { routeTrails, type TrailIsland } from './routing.js';
@@ -51,8 +51,34 @@ import {
 import { BASE_TRAILS, isle, shippedInput, shippedTerritory, withoutParcels } from './scene-fixture.js';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
-const repoRoot = resolve(here, '..', '..', '..');
-const SCENE_SRC = resolve(here, 'scene.ts');
+
+/**
+ * THE REPO ROOT, RESOLVED BACK OUT OF `check:mutation-diff`'S SANDBOX.
+ *
+ * ⚠⚠ EVERY PATH BELOW IS READ AS SOURCE TEXT, AND THAT MAKES THIS FILE UNRUNNABLE INSIDE THE RUNG
+ * UNLESS IT UN-SANDBOXES ITSELF. `check:mutation-diff` copies the repo to
+ * `<root>/.stryker-tmp/sandbox-XXXX/` and RE-PRINTS every mutated file through babel, wrapping each
+ * literal in a `stryMutAct_…` ternary — so `case 'tall-flower-proven':` becomes something no `case`
+ * scan matches, every assertion below reads FEWER kinds than the real painter names, and the whole
+ * dry run aborts before one mutant is evaluated. The report is the test's TITLE and nothing else.
+ *
+ * ⚠ IT WAS LATENT FOR AS LONG AS THIS FILE HAS EXISTED, and what woke it was not a change here.
+ * The rung only selects a test file as a WITNESS when this branch touched it or its subject, so a
+ * parse that has been safe for years becomes unrunnable the first time its subject enters a mutate
+ * span — which `world-to-3d.ts` did on 2026-09-23 (ADR-0600).
+ *
+ * ⚠ AND READING THE ORIGINAL IS THE CORRECT MUTATION SEMANTICS RATHER THAN A DODGE. The subject of
+ * these scans is the AUTHORED source; holding a mutated painter against the pristine kind union is
+ * exactly the comparison a surviving mutant ought to fail. {@link readPainter} proves the bytes are
+ * not instrumented rather than trusting the path arithmetic.
+ */
+const repoRoot = ((): string => {
+  const marker = `${sep}.stryker-tmp${sep}`;
+  const index = here.indexOf(marker);
+  const base = index === -1 ? here : resolve(here.slice(0, index), 'packages', 'forest-world', 'src');
+  return resolve(base, '..', '..', '..');
+})();
+const SCENE_SRC = resolve(repoRoot, 'packages/forest-world/src/scene.ts');
 const STUDIO_PAINTER = resolve(repoRoot, 'packages/app-surface/src/SceneView.tsx');
 const R3F_PAINTER = resolve(repoRoot, 'packages/forest-world-r3f/src/world-to-3d.ts');
 /** The website's string-SVG painter lives in the `web/` submodule, which is not always checked out
@@ -444,7 +470,26 @@ const ALARM_KINDS: readonly SceneKind[] = ['cave', 'cave-apron', 'cave-arch', 'c
 // the checks
 // ---------------------------------------------------------------------------
 
-const sceneSrc = readFileSync(SCENE_SRC, 'utf8');
+/**
+ * READ ONE SOURCE FILE, AND PROVE IT IS THE AUTHORED ONE.
+ *
+ * ⚠ THE ASSERTION IS THE POINT, not the read. `repoRoot`'s arithmetic could be wrong — a future
+ * sandbox layout, a different marker — and the failure mode of a wrong path is the QUIET one: the
+ * scan finds fewer `case` labels and reports "the painter does not name this kind", which reads as
+ * a real finding. A `stryMutAct_` in the bytes is proof the file was re-printed by the rung, so
+ * this fails LOUDLY and names the cause instead.
+ */
+function readPainter(path: string): string {
+  const src = readFileSync(path, 'utf8');
+  assert.ok(
+    !src.includes('stryMutAct_'),
+    `${path} is a mutation-instrumented copy rather than the authored source — every kind scan ` +
+      'over it would under-report, and under-reporting reads as a finding. Check `repoRoot`.',
+  );
+  return src;
+}
+
+const sceneSrc = readPainter(SCENE_SRC);
 const UNION = declaredSceneKinds(sceneSrc);
 
 test('0. the union parser reads a RE-PRINTED layout identically — the layout is not the vocabulary', () => {
@@ -521,7 +566,7 @@ test('3b. the shipped fixtures are not stale mirrors: each optional input the st
 });
 
 test('4a. the studio painter (SceneView.tsx) names every kind it draws; the kinds it leaves unclassed are the pinned structural set', () => {
-  const src = readFileSync(STUDIO_PAINTER, 'utf8');
+  const src = readPainter(STUDIO_PAINTER);
   const named = namedKinds(src, UNION);
   // Kinds the studio painter deliberately never names: a `<g>` the studio styles through its parent,
   // or a leaf whose class comes from the group. An addition here is a conscious decision.
@@ -540,7 +585,7 @@ test('4a. the studio painter (SceneView.tsx) names every kind it draws; the kind
 });
 
 test('4b. the 3D mapper (world-to-3d.ts) maps exactly the pinned kinds and skips the rest explicitly', () => {
-  const src = readFileSync(R3F_PAINTER, 'utf8');
+  const src = readPainter(R3F_PAINTER);
   const cases = [...caseKinds(src)].filter((k) => UNION.includes(k)).sort();
   // `tile` REFUSES, `tree` SKIPS on purpose, the rest map to descriptors; `cell`/`cell-wheat`/
   // `trail-fill`/`trail-ghost` are matched as leaf `kind ===` tests rather than `case` labels.
@@ -570,7 +615,7 @@ test('4c. the website painter (web/src/lib/worldSvg.ts) names every kind it draw
     console.log('  scene-kind-coverage: web/ is not checked out — the website painter was NOT checked (git submodule update --init web)');
     return;
   }
-  const src = readFileSync(WEB_PAINTER, 'utf8');
+  const src = readPainter(WEB_PAINTER);
   const named = namedKinds(src, UNION);
   const unnamed = setMinus(UNION, named);
   // The website never receives these (the studio-only coordination / parcel / marker / garden / baked

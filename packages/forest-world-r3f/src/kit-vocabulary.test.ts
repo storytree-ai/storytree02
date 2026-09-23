@@ -428,6 +428,11 @@ test('one bloom per SIGNED criterion, and none when there are none', () => {
   // a caller's arithmetic error, and an island that refused to draw at all over one would take
   // the whole map down for a criterion tally.
   assert.equal(dress(ALL_HEALTHY, { blooms: -3 }).filter((p) => p.role === 'bloom').length, 0);
+  // ⚠ AND THE SAME FOR THE OTHER TWO STATES since ADR-0600 — a clamp that covered only the state it
+  // was written for would leave two counts able to do what this one may not.
+  assert.equal(dress(ALL_HEALTHY, { buds: -3 }).filter((p) => isCriterionRole(p.role)).length, 0);
+  assert.equal(dress(ALL_HEALTHY, { wilts: -3 }).filter((p) => isCriterionRole(p.role)).length, 0);
+  assert.equal(dress(ALL_HEALTHY, { blooms: 2, buds: -3, wilts: 1 }).filter((p) => isCriterionRole(p.role)).length, 3);
 });
 
 test('a bloom belongs to the STORY and stands anywhere on the island', () => {

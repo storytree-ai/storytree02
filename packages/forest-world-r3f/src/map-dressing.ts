@@ -266,6 +266,13 @@ function dressMap(
   out.push(
     ...dress(
       cells.filter((c) => c.island === undefined),
+      // Stryker disable next-line ObjectLiteral: EQUIVALENT, and stated precisely rather than
+      // claimed in general. Stryker rewrites this to `{}`, so all three counts arrive `undefined`;
+      // `dressIslandFromKit` clamps each with `Math.max(0, n)`, which is `NaN`, and
+      // `Array.from({ length: NaN })` is EMPTY — so the mutant stands exactly the nothing these
+      // three zeros stand. The literal is kept rather than dropped because it is the only place a
+      // reader learns that an unattributed cell set draws no criterion OF ANY STATE, which is a
+      // different statement from "it happens to draw none".
       { blooms: 0, buds: 0, wilts: 0 },
     ),
   );

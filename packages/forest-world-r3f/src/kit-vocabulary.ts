@@ -1005,7 +1005,12 @@ export interface KitDressingOptions {
    *  first thirty-five went missing. A caller that genuinely draws none says `0` out loud. */
   buds: number;
   /** How many of the island's UAT criteria were witnessed FAILING — one nodding flower each. Same
-   *  placement, same requiredness, same reason. */
+   *  placement, same requiredness, same reason.
+   *
+   *  ⚠ ALL THREE ARE CLAMPED AT ZERO rather than refused, and that is this module's standing call
+   *  rather than a new one: a nonsense count is a caller's arithmetic error, and an island that
+   *  threw over one would take the WHOLE MAP down — every capability unreported, which ADR-0392 D5
+   *  / ADR-0398 D7 rank worse than a degraded island. Same reasoning as `roleDrift`'s two callers. */
   wilts: number;
   /** The relief amplitude the ground is built at, so props sit ON the land rather than through it. */
   relief: number;
