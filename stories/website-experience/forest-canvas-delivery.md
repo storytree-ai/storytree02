@@ -36,12 +36,13 @@ decisions: [123, 562]
 # machine assertion that reaches it today is the source parse named above, which that test's own
 # header calls its weakest claim on purpose. This is recorded rather than papered over.
 #
-# Node-borne real proof (ADR-0057): re-armed for the bounded causal-growth helper. It adds one
-# pure Bun test and one pure source module; CONFIRM_RED catches the absent module through an
-# existsSync-guarded absolute `.ts` import and turns it into an explicit failed export assertion.
-# It proves a content-stable ground cache and the cursor-map handoff, not island layout, physical
-# path clipping, shader attachment, React wiring, visibility policy, or the browser-bound canvas
-# shell.
+# Node-borne real proof (ADR-0057): re-armed for the real canvas-facing regrow geometry helpers.
+# The signed `forestWorldCanvasGrowth` test remains its historical, private seam; it did not have
+# the mounted consumer's `ForestRegrowPresentation` or `InstanceDescriptor` API and proves none of
+# this increment. The new assertions namespace-import the EXISTING regrow module and first assert
+# that each new named export is a function, so CONFIRM_RED is an attributable assertion failure,
+# never a missing-module resolution failure. They prove layout/progress/path geometry only; React
+# wiring and the owner-witnessed visual remain integration work.
 proof:
   command:
     file: pnpm
@@ -64,27 +65,27 @@ proof:
       - "packages/forest-world-r3f/src/ground-dependency.ts"
       - "packages/forest-world-r3f/src/ForestWorldCanvas.regrow.ts"
       - "packages/forest-world-r3f/src/ForestWorldCanvas.growth.ts"
-  # Coverage follows the current real test file by default. The cache pair was signed under the
-  # preceding real arm, so keep its test visible to coverage without widening this adapter's write
-  # scope or changing its red→green proof.
+  # The cursor-map adapter is already signed. This real arm extends its existing test and source
+  # module with the mounted consumer's concrete geometry API; the older growth helper remains
+  # covered as historical evidence without claiming it proves the integration.
   coverage:
     testGlobs:
       - "packages/forest-world-r3f/src/ground-dependency.test.ts"
       - "packages/forest-world-r3f/src/ForestWorldCanvas.regrow.test.ts"
   real:
     editsExisting: true
-    testFile: "packages/forest-world-r3f/src/ForestWorldCanvas.growth.test.ts"
-    sourceFile: "packages/forest-world-r3f/src/ForestWorldCanvas.growth.ts"
+    testFile: "packages/forest-world-r3f/src/ForestWorldCanvas.regrow.test.ts"
+    sourceFile: "packages/forest-world-r3f/src/ForestWorldCanvas.regrow.ts"
     scope:
-      testGlobs: ["packages/forest-world-r3f/src/ForestWorldCanvas.growth.test.ts"]
-      sourceGlobs: ["packages/forest-world-r3f/src/ForestWorldCanvas.growth.ts"]
+      testGlobs: ["packages/forest-world-r3f/src/ForestWorldCanvas.regrow.test.ts"]
+      sourceGlobs: ["packages/forest-world-r3f/src/ForestWorldCanvas.regrow.ts"]
     install: true
     typecheck:
       file: pnpm
       args: ["--filter", "@storytree/forest-world-r3f", "typecheck"]
     proofCommand:
       file: bun
-      args: ["test", "packages/forest-world-r3f/src/ForestWorldCanvas.growth.test.ts"]
+      args: ["test", "packages/forest-world-r3f/src/ForestWorldCanvas.regrow.test.ts"]
 ---
 
 # The canvas delivery — the dressed scene mounted in a real host surface, at a cost the frame can pay
@@ -182,7 +183,7 @@ surface mounts, sizes and registers it correctly.
    settled cursor return `null`, so the canvas can take its static identity path without a hidden
    presentation layer. The package imports no app module and derives no order, timing or geometry.
 
-## Proof walkthrough — project the existing cursor into renderer presentation
+## Signed prior proof walkthrough — project the existing cursor into renderer presentation
 
 This is one new, pure module and one new Bun test. It establishes the delivery seam only: this
 increment's glue wires it into the mounted canvas; later increments apply it to geometry and prove
@@ -205,7 +206,7 @@ quiet/hidden behaviour.
    clock, no schedule calculation, no React state and no descriptor filtering. Run the exact Bun
    file and the package typecheck after the adapter is present.
 
-## Previous proof walkthrough — compare exact ground content without rebuilding the serialized key
+## Signed prior proof walkthrough — compare exact ground content without rebuilding the serialized key
 
 This is ONE brownfield cache journey through `createGroundInputCache`, authored as a two-test
 cluster in the existing Bun file. Neither contract is a guard-rail: both new full titles must be
@@ -245,20 +246,50 @@ absent at baseline and both tests must fail by assertion before production code 
 
 ## Causal-growth proof walkthrough
 
-`ForestWorldCanvas.growth.ts` now exports the signed pure helper
-`forestWorldCanvasGrowth(descriptors, cursor)`. It keeps the ground object independent of cursor
-facts and copies the non-settled island and pathway maps into renderer-facing maps. It neither
-samples time nor derives a schedule. This is a delivery seam only; it does not claim mounted or
-shader-visible growth.
+The earlier `ForestWorldCanvas.growth.ts` proof is retained as history only. Its local
+`RegrowCursor` names `absentIslandIds` and pathways, whereas the mounted canvas receives
+`ForestRegrowPresentation`: `hiddenIslandIds`, `growingIslandProgressById`,
+`hiddenSegmentIds`, and `drawingSegmentProgressById`. Its fabricated ground descriptor union also
+does not describe the canvas's `InstanceDescriptor`. A pass against that seam is not a pass for
+what the canvas mounts.
 
-The original integration design remains work for the following delivery and visual units:
-`islandGrowthLayout(cells)` will derive direct-id stable slots and island-centre anchors;
-`islandGrowthProgress(presentation, islandId)` will select hidden, growing and landed progress;
-and `regrowTrailPoints(segmentId, points, presentation)` will clip a real polyline by Euclidean
-arclength from its declared end. They are not exports of this signed helper and are not claimed by
-this landing.
+This increment extends the existing `ForestWorldCanvas.regrow.ts` module and its existing Bun test.
+The test namespace-imports that already-present module, treats each prospective export as optional,
+and asserts `typeof` is `function` before calling it. The baseline is therefore a named export
+assertion against current code, with the rest of the existing cursor tests green.
 
-## Mutation-repair walkthrough — observed helper gaps
+1. Export `IslandGrowthLayout`, with `islandId`, canonical `slot`, and an `anchor` `{ x, y, z }`,
+   plus `islandGrowthLayout(cells: readonly InstanceDescriptor[])` returning a
+   `ReadonlyMap<string, IslandGrowthLayout>`. It considers only `cell-ground` descriptors carrying
+   `island`; repeated cells for one direct island id produce one entry. Sort direct ids before
+   assigning slots so equivalent input in a different descriptor order keeps the same slot. Derive
+   each anchor from that island's cell-vertex bounding centre (`min/max` x and z, with the ground
+   y), never from an atlas origin, descriptor order, or a generated id.
+2. Export `islandGrowthProgress(layout: IslandGrowthLayout, presentation: ForestRegrowPresentation | null)`.
+   It returns exactly `1` for a null presentation, exactly `0` when the layout's own `islandId` is
+   in `hiddenIslandIds`, the named local value when it is in
+   `growingIslandProgressById`, and exactly `1` otherwise. The hidden rule wins if contradictory
+   facts arrive. No helper accepts a clock, time, schedule, React state, or descriptor filter.
+3. Export `regrowTrailPoints(strip: InstanceDescriptor, presentation: ForestRegrowPresentation | null)`.
+   It reads the real `strip.segment` and `strip.points`, not caller-supplied ids or fabricated
+   point arrays. A null presentation, an unnamed strip, or a segment with no in-flight entry
+   returns the original `strip.points` identity. A segment in `hiddenSegmentIds`, or an in-flight
+   segment with `drawn <= 0`, returns no points. For `0 < drawn < 1`, retain the physical prefix
+   whose Euclidean 3D arclength is `drawn × total`; reverse the traversal only when `fromEnd` is
+   true, with the interpolated front retained at the correct end. A fully drawn segment returns
+   the original point-list identity. The helper never mutates the strip or any source point.
+4. Wire those facts into the real `ForestWorldCanvas`: ground and every vegetation placement on an
+   island use the SAME anchor-based affine growth transform, so a flower cannot precede the land
+   that carries it. Roads call `regrowTrailPoints` before `<Line>` receives their points. This is
+   consumption of the already-derived presentation: it must not filter the descriptor stream,
+   invalidate `createGroundInputCache`, derive a schedule, sample wall time, or introduce a
+   renderer-side animation loop.
+5. The Bun assertions use actual `InstanceDescriptor` fixtures: multiple `cell-ground` rings for
+   two island ids, real `trail-strip` `segment`/`points`, a hidden segment, partial fronts in both
+   directions, a full segment, null presentation, and a source array retained for identity and
+   non-mutation checks. Run the exact regrow test and the package typecheck after the exports exist.
+
+## Historical mutation-repair walkthrough — observed helper gaps
 
 The mutation rung reported 19 live/no-coverage mutants in the already-signed
 `forestWorldCanvasGrowth` helper. This follow-up strengthens only the exact changed-line guards;
@@ -282,15 +313,10 @@ it does not re-arm a paid real build or add an integration API.
 ## Contracts (5)
 
 The cache contracts remain the signed pair in `packages/forest-world-r3f/src/ground-dependency.test.ts`.
-The new cursor contract lives in `packages/forest-world-r3f/src/ForestWorldCanvas.regrow.test.ts`,
-where coverage can identify it independently. The causal-growth pair is in
-`packages/forest-world-r3f/src/ForestWorldCanvas.growth.test.ts`.
-
-The two causal-growth ids below remain authored obligations for the later delivery integration.
-The signed `forestWorldCanvasGrowth` helper currently preserves the named in-flight island and
-pathway maps; it supplies neither island-layout/anchor API nor polyline clipping. Test names keep
-their existing contract ids, so coverage records their presence, but that syntactic join is not a
-claim that the signed helper has already rendered either obligation.
+All regrow contracts live in `packages/forest-world-r3f/src/ForestWorldCanvas.regrow.test.ts` and
+consume the real `ForestRegrowPresentation`/`InstanceDescriptor` seam. The old
+`ForestWorldCanvas.growth.test.ts` remains signed history for its private helper; its test names
+cannot credit these integration contracts.
 
 1. **`fcd-ground-cache-compares-content-without-serializing`** — an equal fresh stream reuses the
    cached ground without rebuilding its delimiter-separated dependency key
@@ -314,20 +340,24 @@ claim that the signed helper has already rendered either obligation.
      `settled: true` returns `null`. The adapter does not accept a clock or plan and imports no
      app-surface module, leaving schedule derivation and wall-clock ownership in the app.
    - **covers —** `packages/forest-world-r3f/src/ForestWorldCanvas.regrow.ts`
-4. **`fcd-regrow-progress-uses-explicit-island-identity`** — later delivery integration makes every
-   3D island sample the existing cursor by its id
-   - **asserts —** the future direct-id layout supplies stable slots and island-centre anchors; it
-     gives an absent island progress 0, a growing island its local cursor progress, and
-     landed/settled islands progress 1. No atlas origin is used as an island key. The signed helper
-     only preserves `growingIslandProgressById` for that later consumer.
-   - **future delivery target —** `packages/forest-world-r3f/src/ForestWorldCanvas.growth.ts`
-5. **`fcd-regrow-pathways-clip-at-physical-fronts`** — later delivery integration makes a pathway
-   appear only where its cursor says it has reached
-   - **asserts —** the future pathway consumer yields no drawable points for a hidden or zero
-     segment, clips a partial polyline at its Euclidean-arclength front from the declared end, and
-     returns the original point-list identity for a full/static segment. The signed helper only
-     preserves `drawingPathwayProgressById` for that later consumer.
-   - **future delivery target —** `packages/forest-world-r3f/src/ForestWorldCanvas.growth.ts`
+4. **`fcd-regrow-progress-uses-explicit-island-identity`** — every 3D island samples the existing
+   cursor by its direct descriptor identity
+   - **asserts —** `islandGrowthLayout` makes one direct-id-stable, canonical-slot layout per
+     `cell-ground` island with an anchor at its cell-vertex bounding centre. Given that layout,
+     `islandGrowthProgress` returns 0 for a hidden island, its exact local map value for a growing
+     island, and 1 for landed/unknown and null-presentation islands. The mounted ground and its
+     vegetation share that layout's anchor-based affine transform; no atlas origin or capability id
+     becomes an island key.
+   - **covers —** `packages/forest-world-r3f/src/ForestWorldCanvas.regrow.ts` and the consuming
+     `ForestWorldCanvas.tsx` composition
+5. **`fcd-regrow-pathways-clip-at-physical-fronts`** — a pathway appears only where its cursor has
+   physically reached
+   - **asserts —** `regrowTrailPoints` reads a real strip's `segment` and `points`; hidden and zero
+     segments yield no points; a partial segment clips its Euclidean 3D arclength from the
+     declared `fromEnd`; full/static segments return the original point-list identity without
+     mutation. The canvas passes those returned points to the road line.
+   - **covers —** `packages/forest-world-r3f/src/ForestWorldCanvas.regrow.ts` and the consuming
+     `ForestWorldCanvas.tsx` composition
 
 ## Guidance
 
