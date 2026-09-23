@@ -263,7 +263,7 @@ import {
   type ParkItem,
 } from "./graduate.js";
 import { emitNodeEnvelope, type Envelope, type NodeEdge } from "./envelope.js";
-import { defaultTestVerbIo, testCommand, testHelp, type TestVerbIo } from "./test-verb.js";
+import { defaultTestVerbIo, operatorCwd, testCommand, testHelp, type TestVerbIo } from "./test-verb.js";
 import { membersCommand, type MembersInvocation, type MemberStoreLike } from "./members.js";
 import {
   libraryHealth,
@@ -5532,7 +5532,7 @@ export async function run(argv: readonly string[], deps: RunDeps): Promise<Envel
     // no store. The runner comes from the worker's own module (`namedSubsetRunner`); vitest's
     // filter semantics are made exact by excludes plus a `vitest list` pre-flight — see test-verb.ts.
     if (help) return testHelp();
-    const io = deps.testVerb ?? defaultTestVerbIo(repoRoot(), process.env["INIT_CWD"] ?? process.cwd());
+    const io = deps.testVerb ?? defaultTestVerbIo(repoRoot(), operatorCwd(process.env, process.cwd()));
     return testCommand(positionals.slice(1), io);
   }
 

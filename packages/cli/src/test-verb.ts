@@ -24,7 +24,7 @@
  * already run anything, and the worker's `run_tests` path still offers no vitest choices.
  */
 import { spawnSync } from "node:child_process";
-import { readFileSync, statSync } from "node:fs";
+import { existsSync } from "node:fs";
 import path from "node:path";
 
 import {
@@ -38,25 +38,20 @@ import {
 import type { Envelope } from "./envelope.js";
 
 /** The workspace roots a package lives under (`pnpm-workspace.yaml`). */
-const WORKSPACE_ROOTS = new Set(["packages", "apps"]);
-
-/** A run's ceiling. Generous: this is a developer's terminal, and the runner's own timeouts still bind. */
-const RUN_TIMEOUT_MS = 30 * 60 * 1000;
+const WORKSPACE_ROOTS: ReadonlySet<string | undefined> = new Set(["packages", "apps"]);
 
 /** One spawn: an executable, its argv, its directory; `shell` only for the `pnpm` suite run. */
 export interface TestSpawn {
   readonly file: string;
   readonly args: readonly string[];
   readonly cwd: string;
-  readonly shell?: boolean;
+  readonly shell: boolean;
 }
 
 /** One package's share of an invocation. */
 export interface PlannedTestRun {
   readonly packageDir: string;
-  /** `suite` runs the package's own `test` script; `files` runs exactly {@link files}. */
-  readonly mode: "suite" | "files";
-  /** Package-relative, POSIX, sorted — empty for a suite run. */
+  /** Package-relative, POSIX, sorted — empty for a whole-suite run. */
   readonly files: readonly string[];
   readonly command: TestSpawn;
   /** A vitest run's pre-flight: `vitest list --filesOnly` with the run's own filter arguments. */
@@ -73,7 +68,7 @@ export interface TestVerbIo {
   readonly workspace: string;
   /** Where relative arguments resolve from — the directory the operator typed the command in. */
   readonly cwd: string;
-  readonly kind: (absPath: string) => "file" | "dir" | undefined;
+  /** The package's `test` script; `undefined` when it has none (or is no package). */
   readonly readTestScript: (packageDir: string) => string | undefined;
   /** The package's test files, package-relative and POSIX (`listTestFiles`). */
   readonly listTestFiles: (packageDir: string) => readonly string[];
@@ -85,30 +80,17 @@ export interface TestVerbIo {
   readonly capture: (spawn: TestSpawn) => { readonly status: number | null; readonly stdout: string };
 }
 
-function toPosix(p: string): string {
-  return p.split(path.sep).join("/").split(path.win32.sep).join("/");
-}
-
 /** A glob metacharacter makes an exact `--exclude` impossible to write, so its presence refuses. */
 const GLOB_META = /[*?[\]{}()!+@]/;
 
 /**
- * The vitest invocation minus its positionals — `["run"]` — or `undefined` when the script is not a
- * plain `vitest run [roots...]`. Any FLAG refuses: which vitest flags consume a value is not something
- * this verb knows, and guessing wrong would turn a flag's value into a filter (or drop a config).
+ * Whether a package's `test` script is a plain `vitest run [roots...]`. Any FLAG disqualifies it:
+ * which vitest flags consume a value is not something this verb knows, and guessing wrong would turn
+ * a flag's value into a filter (or drop a config).
  */
-export function vitestRunArgs(testScript: string | undefined): readonly string[] | undefined {
-  if (testScript === undefined) return undefined;
-  for (const tokens of splitScriptSegments(testScript)) {
-    const head = tokens[0];
-    if (head === undefined) continue;
-    const name = (head.split(/[\\/]/).pop() ?? head).toLowerCase().replace(/\.(exe|cmd|bat|ps1)$/, "");
-    if (name !== "vitest") continue;
-    if (tokens[1] !== "run") return undefined;
-    if (tokens.slice(2).some((t) => t.startsWith("-"))) return undefined;
-    return ["run"];
-  }
-  return undefined;
+export function isPlainVitestRun(testScript: string): boolean {
+  const segment = splitScriptSegments(testScript).find((tokens) => tokens[0] === "vitest");
+  return segment?.[1] === "run" && segment.every((token) => !token.startsWith("-"));
 }
 
 /**
@@ -118,28 +100,24 @@ export function vitestRunArgs(testScript: string | undefined): readonly string[]
  * pre-flight.
  */
 export function vitestExcludes(named: readonly string[], packageFiles: readonly string[]): string[] {
-  const wanted = new Set(named);
   const needles = named.map((n) => n.toLowerCase());
-  return packageFiles
-    .filter((f) => !wanted.has(f))
-    .filter((f) => needles.some((n) => f.toLowerCase().includes(n)))
+  return packageFiles.filter(
+    (f) => !named.includes(f) && needles.some((n) => f.toLowerCase().includes(n)),
+  );
+}
+
+/** Parse `vitest list --filesOnly` output (root-relative paths, one per line), sorted. */
+export function parseVitestList(stdout: string): string[] {
+  return stdout
+    .split("\n")
+    .map((line) => line.trim().replaceAll("\\", "/"))
+    .filter((line) => line !== "")
     .sort();
 }
 
-/** Parse `vitest list --filesOnly` output into package-relative POSIX paths. */
-export function parseVitestList(stdout: string, packageAbs: string): string[] {
-  const out = new Set<string>();
-  const base = toPosix(packageAbs).toLowerCase();
-  for (const raw of stdout.split(/\r?\n/)) {
-    const line = toPosix(raw.trim());
-    if (line === "" || !/\.(test|spec)\.(m|c)?[jt]sx?$/.test(line)) continue;
-    out.add(line.toLowerCase().startsWith(`${base}/`) ? line.slice(base.length + 1) : line);
-  }
-  return [...out].sort();
-}
-
-function refuse(lines: readonly string[]): TestPlan {
-  return { ok: false, refusal: lines.join("\n") };
+/** Relative arguments resolve from where the operator typed the command: pnpm's `INIT_CWD`, else cwd. */
+export function operatorCwd(env: Readonly<Record<string, string | undefined>>, cwd: string): string {
+  return env["INIT_CWD"] ?? cwd;
 }
 
 /**
@@ -148,135 +126,98 @@ function refuse(lines: readonly string[]): TestPlan {
  */
 export function planTestRun(args: readonly string[], io: TestVerbIo): TestPlan {
   if (args.length === 0) {
-    return refuse(["storytree test: name at least one test file or package directory."]);
+    return { ok: false, refusal: "storytree test: name at least one test file or package directory." };
   }
   const problems: string[] = [];
   const suites = new Set<string>();
-  const filesByPackage = new Map<string, Set<string>>();
+  const filesByPackage = new Map<string, { readonly script: string; readonly files: string[] }>();
   for (const arg of args) {
-    const abs = path.resolve(io.cwd, arg);
-    const rel = toPosix(path.relative(io.workspace, abs));
-    if (rel === "" || rel.startsWith("..") || path.isAbsolute(rel)) {
-      problems.push(`  ${arg}: outside the workspace (${io.workspace})`);
-      continue;
-    }
+    const rel = path.relative(io.workspace, path.resolve(io.cwd, arg)).replaceAll("\\", "/");
     const parts = rel.split("/");
-    const [root, name] = parts;
-    if (root === undefined || name === undefined || !WORKSPACE_ROOTS.has(root)) {
-      problems.push(`  ${arg}: not inside a workspace package (packages/* or apps/*)`);
+    const packageDir = parts.slice(0, 2).join("/");
+    const rest = parts.slice(2);
+    const script = WORKSPACE_ROOTS.has(parts[0]) ? io.readTestScript(packageDir) : undefined;
+    if (script === undefined) {
+      problems.push(`  ${arg}: not inside a workspace package that declares a \`test\` script`);
       continue;
     }
-    const packageDir = `${root}/${name}`;
-    if (io.kind(path.join(io.workspace, packageDir, "package.json")) !== "file") {
-      problems.push(`  ${arg}: ${packageDir} is not a workspace package (no package.json)`);
+    if (rest.length === 0) {
+      suites.add(packageDir);
       continue;
     }
-    const kind = io.kind(abs);
-    if (parts.length === 2) {
-      if (kind === "dir") suites.add(packageDir);
-      else problems.push(`  ${arg}: no such package directory`);
+    const file = rest.join("/");
+    if (!io.listTestFiles(packageDir).includes(file)) {
+      problems.push(`  ${arg}: not a test file of ${packageDir} — name test files, or the package directory for its whole suite`);
       continue;
     }
-    if (kind === undefined) {
-      problems.push(`  ${arg}: no such file`);
-      continue;
-    }
-    if (kind === "dir") {
-      problems.push(`  ${arg}: a directory inside a package — name its test files, or the package directory for the whole suite`);
-      continue;
-    }
-    const packageRel = parts.slice(2).join("/");
-    if (!io.listTestFiles(packageDir).includes(packageRel)) {
-      problems.push(`  ${arg}: not a test file of ${packageDir} (expected *.test.{ts,tsx,js,...} outside node_modules)`);
-      continue;
-    }
-    const set = filesByPackage.get(packageDir) ?? new Set<string>();
-    set.add(packageRel);
-    filesByPackage.set(packageDir, set);
+    filesByPackage.set(packageDir, { script, files: [...(filesByPackage.get(packageDir)?.files ?? []), file] });
   }
 
-  const runs: PlannedTestRun[] = [];
-  for (const packageDir of [...suites].sort()) {
-    if (io.readTestScript(packageDir) === undefined) {
-      problems.push(`  ${packageDir}: has no \`test\` script, so CI runs nothing there`);
-      continue;
-    }
-    runs.push({
-      packageDir,
-      mode: "suite",
-      files: [],
-      command: { file: "pnpm", args: ["run", "test"], cwd: path.join(io.workspace, packageDir), shell: true },
-    });
-  }
-  for (const packageDir of [...filesByPackage.keys()].sort()) {
+  const runs: PlannedTestRun[] = [...suites].sort().map((packageDir) => ({
+    packageDir,
+    files: [],
+    command: { file: "pnpm", args: ["run", "test"], cwd: path.join(io.workspace, packageDir), shell: true },
+  }));
+  for (const [packageDir, named] of [...filesByPackage].sort(([a], [b]) => a.localeCompare(b))) {
     // A named file in a package also named whole is already covered by that suite run.
     if (suites.has(packageDir)) continue;
-    const files = [...(filesByPackage.get(packageDir) ?? [])].sort();
-    const planned = planPackageFiles(packageDir, files, io);
-    if ("problem" in planned) problems.push(planned.problem);
-    else runs.push(planned.run);
+    const planned = planPackageFiles(packageDir, named.script, [...new Set(named.files)].sort(), io);
+    if (typeof planned === "string") problems.push(planned);
+    else runs.push(...planned);
   }
 
   if (problems.length > 0) {
-    return refuse([
-      "storytree test REFUSED — nothing was run, because running part of what you asked would read as all of it:",
-      ...problems,
-    ]);
+    return {
+      ok: false,
+      refusal: [
+        "storytree test REFUSED — nothing was run, because running part of what you asked would read as all of it:",
+        ...problems,
+      ].join("\n"),
+    };
   }
   return { ok: true, runs };
 }
 
 function planPackageFiles(
   packageDir: string,
+  script: string,
   files: readonly string[],
   io: TestVerbIo,
-): { readonly run: PlannedTestRun } | { readonly problem: string } {
-  const script = io.readTestScript(packageDir);
-  const packageAbs = path.join(io.workspace, packageDir);
+): PlannedTestRun[] | string {
+  const cwd = path.join(io.workspace, packageDir);
   const runner = namedSubsetRunner(script);
   if (runner !== undefined) {
     // The worker module's own command builder: absolute file arguments, the package as cwd.
-    const [selection] = testSelectionCommands({
-      suites: [{ packageDir, runner, testFiles: files.map((f) => `${packageDir}/${f}`) }],
-      chosen: files.map((f) => `${packageDir}/${f}`),
+    const testFiles = files.map((f) => `${packageDir}/${f}`);
+    return testSelectionCommands({
+      suites: [{ packageDir, runner, testFiles }],
+      chosen: testFiles,
       workspace: io.workspace,
-      timeoutMs: RUN_TIMEOUT_MS,
-    });
-    if (selection === undefined) return { problem: `  ${packageDir}: no command could be built for ${files.join(", ")}` };
-    const { file, args, cwd } = selection.command;
-    return { run: { packageDir, mode: "files", files, command: { file, args, cwd: cwd ?? packageAbs } } };
+      timeoutMs: 0,
+    }).map(({ command }) => ({ packageDir, files, command: { file: command.file, args: command.args, cwd, shell: false } }));
   }
-  const vitestArgs = vitestRunArgs(script);
-  if (vitestArgs === undefined) {
-    return {
-      problem: `  ${packageDir}: its test script (${JSON.stringify(script ?? "")}) names no runner this verb can drive exactly — run the package directory for its whole suite`,
-    };
+  if (!isPlainVitestRun(script)) {
+    return `  ${packageDir}: its test script ${JSON.stringify(script)} names no runner this verb can drive exactly — run the package directory for its whole suite`;
   }
   const entry = io.vitestEntry(packageDir);
-  if (entry === undefined) {
-    return { problem: `  ${packageDir}: vitest is not installed for this package (run \`pnpm install\`)` };
-  }
+  if (entry === undefined) return `  ${packageDir}: vitest is not installed for this package (run \`pnpm install\`)`;
   const excludes = vitestExcludes(files, io.listTestFiles(packageDir));
   const unsafe = [...files, ...excludes].filter((f) => GLOB_META.test(f));
   if (unsafe.length > 0) {
-    return { problem: `  ${packageDir}: cannot write an exact vitest filter for ${unsafe.join(", ")} (glob characters in the path)` };
+    return `  ${packageDir}: cannot write an exact vitest filter for ${unsafe.join(", ")} (glob characters in the path)`;
   }
-  const filterArgs = [
-    ...files.map((f) => path.join(packageAbs, f)),
-    ...excludes.flatMap((f) => ["--exclude", f]),
-  ];
-  return {
-    run: {
+  const filter = [...files.map((f) => path.join(cwd, f)), ...excludes.flatMap((f) => ["--exclude", f])];
+  return [
+    {
       packageDir,
-      mode: "files",
       files,
-      command: { file: "node", args: [entry, ...vitestArgs, ...filterArgs], cwd: packageAbs },
-      preflight: { file: "node", args: [entry, "list", "--filesOnly", ...filterArgs], cwd: packageAbs },
+      command: { file: "node", args: [entry, "run", ...filter], cwd, shell: false },
+      preflight: { file: "node", args: [entry, "list", "--filesOnly", ...filter], cwd, shell: false },
     },
-  };
+  ];
 }
 
-function describe(spawn: TestSpawn): string {
+function commandLine(spawn: TestSpawn): string {
   return [spawn.file, ...spawn.args].join(" ");
 }
 
@@ -290,35 +231,32 @@ export function testCommand(args: readonly string[], io: TestVerbIo): Envelope {
   for (const run of plan.runs) {
     if (run.preflight === undefined) continue;
     const listed = io.capture(run.preflight);
-    const got = parseVitestList(listed.stdout, path.join(io.workspace, run.packageDir));
-    const wanted = [...run.files].sort();
-    if (listed.status !== 0 || got.join("\n") !== wanted.join("\n")) {
-      const extra = got.filter((f) => !wanted.includes(f));
-      const missing = wanted.filter((f) => !got.includes(f));
+    const got = parseVitestList(listed.stdout);
+    const extra = got.filter((f) => !run.files.includes(f));
+    const missing = run.files.filter((f) => !got.includes(f));
+    if (listed.status !== 0 || extra.length + missing.length > 0) {
       return {
         ok: false,
         body: [
           `storytree test REFUSED — vitest would not run exactly the named files in ${run.packageDir}, so nothing was run.`,
-          `  pre-flight: ${describe(run.preflight)} (exit ${String(listed.status)})`,
-          ...(extra.length > 0 ? [`  would ALSO run: ${extra.join(", ")}`] : []),
-          ...(missing.length > 0 ? [`  would NOT run: ${missing.join(", ")} (outside this package's vitest include?)`] : []),
+          `  pre-flight: ${commandLine(run.preflight)} (exit ${String(listed.status)})`,
+          `  would ALSO run: ${extra.join(", ") || "-"}`,
+          `  would NOT run: ${missing.join(", ") || "-"}`,
         ].join("\n"),
         next,
       };
     }
   }
 
-  const lines: string[] = [];
-  let ok = true;
-  for (const run of plan.runs) {
+  const lines = plan.runs.map((run) => {
     const status = io.run(run.command);
-    if (status !== 0) ok = false;
-    const what = run.mode === "suite" ? "whole suite" : `${run.files.length} file(s)`;
-    lines.push(`  ${status === 0 ? "PASS" : "FAIL"}  ${run.packageDir} (${what}) — exit ${String(status)}: ${describe(run.command)}`);
-  }
+    const what = run.files.length === 0 ? "whole suite" : run.files.join(", ");
+    return { status, line: `  ${status === 0 ? "PASS" : "FAIL"}  ${run.packageDir} (${what}) — exit ${String(status)}: ${commandLine(run.command)}` };
+  });
+  const ok = lines.every((l) => l.status === 0);
   return {
     ok,
-    body: [`storytree test — ${ok ? "every run passed" : "a run FAILED"}:`, ...lines].join("\n"),
+    body: [`storytree test — ${ok ? "every run passed" : "a run FAILED"}:`, ...lines.map((l) => l.line)].join("\n"),
     next,
   };
 }
@@ -328,50 +266,32 @@ export function defaultTestVerbIo(workspace: string, cwd: string): TestVerbIo {
   return {
     workspace,
     cwd,
-    kind: (abs) => {
-      try {
-        const st = statSync(abs);
-        return st.isDirectory() ? "dir" : st.isFile() ? "file" : undefined;
-      } catch {
-        return undefined;
-      }
-    },
     readTestScript: (packageDir) => readTestScript(workspace, packageDir),
     listTestFiles: (packageDir) => listTestFiles(path.join(workspace, packageDir)),
     vitestEntry: (packageDir) => {
-      const dir = path.join(workspace, packageDir, "node_modules", "vitest");
-      try {
-        const pkg = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8")) as { bin?: unknown };
-        const bin = typeof pkg.bin === "string" ? pkg.bin : (pkg.bin as Record<string, unknown> | undefined)?.["vitest"];
-        return typeof bin === "string" ? path.join(dir, bin) : undefined;
-      } catch {
-        return undefined;
-      }
+      const entry = path.join(workspace, packageDir, "node_modules", "vitest", "vitest.mjs");
+      return existsSync(entry) ? entry : undefined;
     },
-    run: (s) =>
-      spawnSync(s.file, [...s.args], { cwd: s.cwd, stdio: "inherit", shell: s.shell ?? false, timeout: RUN_TIMEOUT_MS })
-        .status,
+    run: (s) => spawnSync(s.file, [...s.args], { cwd: s.cwd, stdio: "inherit", shell: s.shell }).status,
     capture: (s) => {
-      const r = spawnSync(s.file, [...s.args], { cwd: s.cwd, encoding: "utf8", shell: s.shell ?? false, timeout: RUN_TIMEOUT_MS });
-      return { status: r.status, stdout: r.stdout ?? "" };
+      const r = spawnSync(s.file, [...s.args], { cwd: s.cwd, encoding: "utf8" });
+      return { status: r.status, stdout: r.stdout };
     },
   };
 }
 
+const TEST_HELP_BODY = [
+  "storytree test <file|package-dir> [...]",
+  "",
+  "Run EXACTLY the named test files under each package's own declared runner (derived from its",
+  "package.json `test` script), for every package CI runs — bun, node --test and vitest alike.",
+  "A package directory (packages/agent) runs that package's whole suite via `pnpm run test`.",
+  "",
+  "vitest treats file arguments as filters, so each vitest run is pre-flighted with",
+  "`vitest list --filesOnly`; if vitest would run more (or fewer) files than named, it REFUSES.",
+  "Any argument it cannot make exact refuses the whole invocation — nothing runs partially.",
+].join("\n");
+
 export function testHelp(): Envelope {
-  return {
-    ok: true,
-    body: [
-      "storytree test <file|package-dir> [...]",
-      "",
-      "Run EXACTLY the named test files under each package's own declared runner (derived from its",
-      "package.json `test` script), for every package CI runs — bun, node --test and vitest alike.",
-      "A package directory (packages/agent) runs that package's whole suite via `pnpm run test`.",
-      "",
-      "vitest treats file arguments as filters, so each vitest run is pre-flighted with",
-      "`vitest list --filesOnly`; if vitest would run more (or fewer) files than named, it REFUSES.",
-      "Any argument it cannot make exact refuses the whole invocation — nothing runs partially.",
-    ].join("\n"),
-    next: ["storytree test packages/cli/src/cli-areas.test.ts"],
-  };
+  return { ok: true, body: TEST_HELP_BODY, next: ["storytree test packages/cli/src/test-verb.test.ts"] };
 }
