@@ -571,7 +571,11 @@ describe('semantic-growth studio demo (`?semanticGrowth=demo`) — asa: sgsd-cle
       // reflows which hexes this fixture's parcel is actually assigned, independent of anything a
       // camera/lab-scoping change could fix from this file's side. Re-measured against the current
       // build rather than re-derived; the packer, not this assertion, owns the number.
-      expect(section?.getAttribute('data-svg-island-accretion-cells')).toBe('24');
+      // 24 -> 26 on 2026-09-23 (ADR-0598 D2): the island spacing ratio was re-derived 0.1 -> 1 —
+      // the gaps the old value named had never been seen, because the seed-snap defect PR #2020
+      // repaired was inflating every one of them 1.31x — so the fixture's second island is seeded
+      // further out and grows onto a different tile set again. Re-measured, not re-derived.
+      expect(section?.getAttribute('data-svg-island-accretion-cells')).toBe('26');
       expect(section?.getAttribute('data-svg-island-accretion-duration-ms')).toBe('1600');
       // 50 cells over 8 connected waves. The counts have moved twice before — from 52 /
       // `1,4,8,13,13,9,4` when `islands-sit-too-far-apart-and-the-resting-zoom-is-too-far-out`
@@ -618,7 +622,15 @@ describe('semantic-growth studio demo (`?semanticGrowth=demo`) — asa: sgsd-cle
       // (asserted above) and the waves still sum to it, still one connected wave per ring, still a
       // rise and a taper. Re-measured against the current build, not re-derived; caught here
       // loudly, as this assertion is for.
-      expect(section?.getAttribute('data-svg-island-accretion-waves')).toBe('1,4,5,3,2,3,4,2');
+      //
+      // And once more the same day (ADR-0598 D2): the island spacing ratio was re-derived 0.1 -> 1.
+      // The gaps 0.1 named had never actually been seen — the seed-snap defect above was inflating
+      // every one of them by 1.31x, so removing it exposed a map the owner called squished, with
+      // nameplates sitting on neighbouring islands. The fixture's second island is seeded further
+      // out again, the cell count moves 24 -> 26 (asserted above) and the waves follow it:
+      // `1,4,6,5,5,3,2`. Still one connected wave per ring, still a rise and a taper, still summing
+      // to the cell count. Re-measured, not re-derived.
+      expect(section?.getAttribute('data-svg-island-accretion-waves')).toBe('1,4,6,5,5,3,2');
       const legend = flagged.querySelector('[data-island-accretion-legend="true"]');
       expect(legend).toBeTruthy();
       for (const term of [
@@ -1571,8 +1583,9 @@ describe('Chapter 2 round-3 comparison lab (`?organicGrowth=r3-lab`)', () => {
       // then 50 -> 52 (ADR-0521, the ratio-derived spacing re-seeded the fixture's second island),
       // then 52 -> 26 (ADR-0528, one hex per capability: the island is drawn on fewer hexes), then
       // 26 -> 24 (ADR-0593 D1: the packer's screen-space hex ownership is a function of the land
-      // camera too, so moving it 20 -> 50 reflowed which hexes this fixture's parcel is assigned).
-      expect(section.getAttribute('data-svg-island-accretion-cells')).toBe('24');
+      // camera too, so moving it 20 -> 50 reflowed which hexes this fixture's parcel is assigned),
+      // then 24 -> 26 (ADR-0598 D2: the spacing ratio re-derived 0.1 -> 1 re-seeded it once more).
+      expect(section.getAttribute('data-svg-island-accretion-cells')).toBe('26');
       expect(section.getAttribute('data-svg-island-accretion-duration-ms')).toBe('1600');
 
       // The picker names every candidate, with the incumbent pressed by default.

@@ -16,7 +16,9 @@ import {
   PRE_ADR0521_SPACING,
   SPACING_CONTROL_ARM,
   gapBetween,
+  inRowGapWithChrome,
   loneSwing,
+  rankGapWithChrome,
   spacingArmId,
 } from './spacing.js';
 
@@ -51,4 +53,34 @@ test('arm ids: the control is literally `today` (the harness page reads the same
   const ids = [SPACING_CONTROL_ARM, ...ISLAND_SPACING_RUNGS.map((r) => spacingArmId(r))];
   assert.equal(new Set(ids).size, ids.length);
   assert.equal(spacingArmId(0.2), 'spacing-0.2');
+});
+
+// ---------------------------------------------------------------------------------------------
+// THE CHROME CLEARANCE (ADR-0598 D2) — a fixed-size nameplate needs an absolute floor, because a
+// proportional gap shrinks with the island and the plate does not.
+// ---------------------------------------------------------------------------------------------
+
+test('the rank gap is a FLOOR, not a target — the ratio wins whenever it already asks for more', () => {
+  // Small islands: the ratio's gap is a fraction of a small radius, the band is what stands.
+  assert.equal(rankGapWithChrome(20, 20, 0.1, 50), 50);
+  // Big islands: the ratio asks for 100, which already clears the band, so the band adds nothing.
+  assert.equal(rankGapWithChrome(1000, 1000, 0.1, 50), 100);
+  // Exactly at the crossing the two agree, so neither branch can be told from the other there —
+  // which is why the two assertions above are on either side of it rather than at it.
+  assert.equal(rankGapWithChrome(500, 500, 0.1, 50), 50);
+  // No band ⇒ the pre-ADR-0598 rule, unchanged.
+  assert.equal(rankGapWithChrome(80, 120, 0.5, 0), gapBetween(80, 120, 0.5));
+});
+
+test('the in-row gap is SELF-LIMITING — an island wider than its own plate asks for nothing extra', () => {
+  // Two small islands (radius 10) whose plates are 40 wide each: the centres must be 80 apart, of
+  // which 20 is island, so the gap carries the other 60.
+  assert.equal(inRowGapWithChrome(10, 10, 0, 40, 40), 60);
+  // The same two plates between two BIG islands: the islands already span more than the plates do,
+  // so the shortfall is negative and the ratio's gap is what stands. This is the clause that stops
+  // the clearance inflating a map of large islands it was never about.
+  assert.equal(inRowGapWithChrome(100, 100, 0.1, 40, 40), gapBetween(100, 100, 0.1));
+  assert.ok(inRowGapWithChrome(100, 100, 0, 40, 40) >= 0, 'never negative');
+  // And it is the PAIR's own plates, not a global one — a long id on one side alone widens the gap.
+  assert.ok(inRowGapWithChrome(10, 10, 0, 90, 40) > inRowGapWithChrome(10, 10, 0, 40, 40));
 });
