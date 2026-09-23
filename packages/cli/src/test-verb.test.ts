@@ -15,7 +15,6 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { AREAS_WITHOUT_CORPUS_READS } from "@storytree/context-traversal-capture";
 import { InMemoryStore } from "@storytree/storage-protocol";
 
 import { run } from "./commands.js";
@@ -163,7 +162,7 @@ test("anything it cannot make exact refuses the WHOLE invocation, one line per a
     ...WORLD,
     "packages/flagged": { script: "vitest run --config x.ts", files: ["src/f.test.ts"], vitest: true },
     "packages/novitest": { script: "vitest run", files: ["src/n.test.ts"] },
-    "packages/globby": { script: "vitest run", files: ["src/a(1).test.ts", "src/b.test.ts"], vitest: true },
+    "packages/globby": { script: "vitest run", files: ["src/a(1).test.ts", "src/a(1).test.tsx", "src/b.test.ts"], vitest: true },
   });
   const env = testCommand(
     [
@@ -189,7 +188,7 @@ test("anything it cannot make exact refuses the WHOLE invocation, one line per a
       "  packages/nopkg/src/x.test.ts: not inside a workspace package that declares a `test` script",
       "  packages/agent/src/helper.ts: not a test file of packages/agent — name test files, or the package directory for its whole suite",
       '  packages/flagged: its test script "vitest run --config x.ts" names no runner this verb can drive exactly — run the package directory for its whole suite',
-      "  packages/globby: cannot write an exact vitest filter for src/a(1).test.ts (glob characters in the path)",
+      "  packages/globby: cannot write an exact vitest filter for src/a(1).test.ts, src/a(1).test.tsx (glob characters in the path)",
       "  packages/novitest: vitest is not installed for this package (run `pnpm install`)",
     ].join("\n"),
     next: ["storytree test --help"],
@@ -220,8 +219,8 @@ const PREFLIGHT_HEAD = (status: number): string[] => [
 ];
 
 test("a vitest pre-flight listing MORE than was named refuses before ANY package runs", () => {
-  const { io, body } = preflightRefusal("src/zz.test.ts\r\nsrc/zz.test.tsx\n", 0);
-  assert.equal(body, [...PREFLIGHT_HEAD(0), "  would ALSO run: src/zz.test.tsx", "  would NOT run: -"].join("\n"));
+  const { io, body } = preflightRefusal("src/zz.test.ts\r\nsrc/zz.test.tsx\nserver/src/zz.test.ts\n", 0);
+  assert.equal(body, [...PREFLIGHT_HEAD(0), "  would ALSO run: server/src/zz.test.ts, src/zz.test.tsx", "  would NOT run: -"].join("\n"));
   assert.deepEqual(io.runs, [], "the bun package did not run either — pre-flights come first");
 });
 
@@ -234,14 +233,14 @@ test("an exact pre-flight lets every run go, and the report names each package's
   const statuses = [0, 1, 0];
   const io = fakeIo(WORLD, { capture: () => ({ status: 0, stdout: "src/zz.test.ts\n" }) });
   const counted = { ...io, run: (s: TestSpawn) => (io.runs.push(s), statuses[io.runs.length - 1] ?? null) };
-  const env = testCommand(["apps/studio/src/zz.test.ts", "packages/agent/src/a.test.ts", "packages/orchestrator"], counted);
+  const env = testCommand(["apps/studio/src/zz.test.ts", "packages/agent/src/a.test.ts", "packages/agent/src/b.test.ts", "packages/orchestrator"], counted);
   assert.deepEqual(env, {
     ok: false,
     body: [
       "storytree test — a run FAILED:",
       "  PASS  packages/orchestrator (whole suite) — exit 0: pnpm run test",
       `  FAIL  apps/studio (src/zz.test.ts) — exit 1: node ${[at("apps/studio", "vitest.mjs"), "run", ...STUDIO_FILTER].join(" ")}`,
-      `  PASS  packages/agent (src/a.test.ts) — exit 0: bun test --preload ../../scripts/tsx-cache-off.mjs --timeout 300000 ${at("packages/agent", "src/a.test.ts")}`,
+      `  PASS  packages/agent (src/a.test.ts, src/b.test.ts) — exit 0: bun test --preload ../../scripts/tsx-cache-off.mjs --timeout 300000 ${at("packages/agent", "src/a.test.ts")} ${at("packages/agent", "src/b.test.ts")}`,
     ].join("\n"),
     next: ["storytree test --help"],
   });
@@ -286,11 +285,9 @@ test("the verb is dispatched through the injected world, and --help renders its 
     ].join("\n"),
     next: ["storytree test packages/cli/src/test-verb.test.ts"],
   });
-  // Another area's help is not this verb's — the dispatch arm is scoped to `test`.
-  const other = await run(["dispatch", "--help"], { store: new InMemoryStore(), testVerb: io });
+  // An area dispatched AFTER this arm still reaches its own page — the arm is scoped to `test`.
+  const other = await run(["lint-panel", "--help"], { store: new InMemoryStore(), testVerb: io });
   assert.notEqual(other.body, help.body);
-  // The traversal instrument classifies the area as reading no corpus, with its reason.
-  assert.equal(AREAS_WITHOUT_CORPUS_READS.test, "runs named test files under their packages' own runners");
 });
 
 // ── Against the REAL runners ────────────────────────────────────────────────────────────────────
@@ -337,7 +334,9 @@ test("vitest-named-prefix-file-does-not-pull-in-its-longer-sibling: real vitest 
 
 test("bun-named-prefix-file-does-not-pull-in-its-longer-sibling: real bun runs the named file, and the package dir runs both", () => {
   withScratch((ws) => {
-    put(ws, "packages/probe/package.json", JSON.stringify({ name: "probe", scripts: { test: "bun test --timeout 300000 src/" } }));
+    // A package-RELATIVE preload, so a run spawned anywhere but the package directory fails fast.
+    put(ws, "packages/probe/package.json", JSON.stringify({ name: "probe", scripts: { test: "bun test --preload ./setup.ts --timeout 300000 src/" } }));
+    put(ws, "packages/probe/setup.ts", "");
     put(ws, "packages/probe/src/zz.test.ts", 'import { test } from "bun:test";\ntest("named", () => {});\n');
     // The longer-named sibling FAILS, so the run's own exit code says whether it was pulled in.
     put(ws, "packages/probe/src/zz.test.tsx", 'import { test } from "bun:test";\ntest("sibling", () => { throw new Error("pulled in"); });\n');

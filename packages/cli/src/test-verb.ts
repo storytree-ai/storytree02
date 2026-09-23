@@ -272,6 +272,9 @@ export function defaultTestVerbIo(workspace: string, cwd: string): TestVerbIo {
       const entry = path.join(workspace, packageDir, "node_modules", "vitest", "vitest.mjs");
       return existsSync(entry) ? entry : undefined;
     },
+    // Stryker disable next-line StringLiteral: EQUIVALENT to every assertion a test can make — an
+    // empty `stdio` falls back to pipes, which changes only whether the runner's output reaches the
+    // operator's terminal, never the exit code the verb reports.
     run: (s) => spawnSync(s.file, [...s.args], { cwd: s.cwd, stdio: "inherit", shell: s.shell }).status,
     capture: (s) => {
       const r = spawnSync(s.file, [...s.args], { cwd: s.cwd, encoding: "utf8" });
