@@ -1389,8 +1389,8 @@ export interface UnderlayComposition {
  * convenient one. Nothing on this canvas animates — no `useFrame`, no clock, no asset-owned
  * timeline (ADR-0380 D6 fence 5) — so under a host it redraws only when its camera or its content
  * moved. A surface with no motion has none to reduce, and the honest implementation of that is a
- * render loop that does not run rather than a media query that turns one off. Standalone the canvas
- * keeps R3F's default loop, because `MapControls` drives its own frames there.
+ * render loop that does not run rather than a media query that turns one off. Standalone also uses
+ * demand frames: `MapControls` invalidates when its pan or zoom changes.
  *
  * ⚠ AND EVERY `false` BELOW IS A MARK THE HOST ALREADY DRAWS. Caves and wisps exist in the host's
  * own layer above (`forest-world`'s `buildScene` emits them), so drawing them here would be a

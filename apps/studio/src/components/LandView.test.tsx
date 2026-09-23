@@ -104,6 +104,30 @@ describe('LandView', () => {
     }
   });
 
+  it('forwards activity while retaining the same app-owned regrow presentation', () => {
+    const restore = withMeasuredLayout(640, 900);
+    try {
+      const seen: LandCanvasProps[] = [];
+      const cursor = {
+        progress: 0.5,
+        settled: false,
+        absentStoryIds: new Set<string>(),
+        growing: [],
+        hiddenSegmentIds: new Set<string>(),
+        drawingSegments: [],
+      };
+      const { rerender } = render(<LandView scene={SCENE} active={false} regrowCursor={cursor} renderCanvas={recordingCanvas(seen)} />);
+      const parked = seen.at(-1)!;
+      rerender(<LandView scene={SCENE} active regrowCursor={cursor} renderCanvas={recordingCanvas(seen)} />);
+      const resumed = seen.at(-1)!;
+      expect(parked.active).toBe(false);
+      expect(resumed.active).toBe(true);
+      expect(resumed.regrow).toBe(parked.regrow);
+    } finally {
+      restore();
+    }
+  });
+
   it('shows the REASON when the land cannot be built, and still renders — the map must survive it', () => {
     const restore = withMeasuredLayout(640, 900);
     try {
