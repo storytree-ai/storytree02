@@ -80,7 +80,7 @@ export async function acquireBuildGuard(input: AcquireBuildGuardInput): Promise<
   const guard: BuildGuard = {
     async noteActivity(observedAt: Date): Promise<void> {
       if (lastObservedAt !== undefined && observedAt.getTime() <= lastObservedAt.getTime()) return;
-      await input.store.stampActivity([{ sessionId, observedAt }]);
+      await input.store.stampActivity([{ sessionId, observedAt: observedAt.toISOString() }]);
       lastObservedAt = observedAt;
     },
 
