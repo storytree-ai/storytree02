@@ -54,4 +54,28 @@ At ordinary working zoom, the flat control has the same data and layout as the m
 
 ## Removal record and status check
 
-To be completed with the implementation and matched after pictures. This section will record exactly which old paint was removed and why, the status carriers that remain, and the outcome of each ranked finding. It will not claim an owner visual signature.
+**Fixed: defects 1 and 2.** Only under `landMount`, the empty SVG board and the flat central hero paint are transparent. This removes the opaque board that concealed the coast and the oversized tree that competed with kit vegetation. No 3D art, camera, layout, status value, coverage density or default flag was changed. The flat control remains unchanged.
+
+![One fixed view, removing the hero first and then the board](cleanup-comparison.png)
+
+These are three back-to-back screenshots of **one browser page** with one camera and one snapshot. The first temporarily restores the old board/hero paint, the second removes just the hero, and the third is the shipped cleanup. The driver asserts the effective opacity of all 36 hero images and the board at each step, as well as equal camera, forest, status and identity data. `finishing.json` records these controls. The initial attempt at restoring paint lost to CSS specificity; it was rejected and recaptured with checked effective styles. Its pictures are not used here.
+
+The removal covers the normal growth-track image, the static baked hero, and procedural fallback artwork. The fallback’s human-witness sign remains, as do the enclosing hit regions. Capability coverage plants, UAT flowers, nameplates and session marks remain. The mounted legend now says **story status** and directs the member to the word beneath the island’s name; the default flat legend keeps its trees.
+
+![Zero-capability islands retain their explicit status](status-survives.png)
+
+![The mounted status legend](finishing/mount-status-legend.png)
+
+**Measured on this snapshot:** all 28 baseline views retain the same camera, forest identities, status values, label text and edge-element counts. All nine flat-control screenshots are **pixel-identical** before and after. The forest has 36 story labels (26 healthy, 10 proposed), 212 parcel states (182 healthy, 30 proposed), 342 edge-identity elements and 2,442 coverage-plant marks. Every mounted hero image has effective opacity zero. Storage Protocol and Proof Protocol remain explicitly healthy with zero capabilities; Website remains explicitly proposed with zero capabilities. Mapped and unhealthy remain in the unchanged status vocabulary, but this snapshot contains neither, so they are not claimed as live visual observations.
+
+`verify-and-compose.py` checks the paired data, exact flat-image equality and effective paint controls, and generates the literal crops above. The full PNGs remain beside their ledgers. No new performance claim or owner visual signature is made.
+
+**Defect 3 is a separate engineering continuation on this same initiative:** “Join the mounted roads to their existing shore landings” (`mounted-roads-reach-their-shore-docks`). The repair target is now established: the worn path receives the snapped coast dock, while the visible sea ribbon still receives the original offshore endpoint. Its parked entry carries this crop and the bounded producer/consumer proof. This review does not call the gap fixed.
+
+## The remaining taste choice
+
+![Current versus quieter coverage plants](taste-options.png)
+
+**A** keeps the present coverage emphasis. **B** previews the same plants at 55% opacity: their count, position, status data and interaction are unchanged, and the 3D land/props are identical. B is a browser-only preview and **is not implemented in the product**. It makes the ground a little easier to read but makes the coverage signal less prominent. My preference is B once the road gap is fixed; that is a non-binding taste judgment, not a defect verdict. Keeping A is a valid answer.
+
+The whole map after the clear cleanup is also available at [ordinary opening](after/props-opening.png), [whole-forest fit](after/props-fit.png), and [the dense island](after/props-drive-machinery.png). The land remains behind its existing flags; promotion to the default map is not part of this change.

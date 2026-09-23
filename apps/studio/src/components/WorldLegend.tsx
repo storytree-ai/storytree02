@@ -324,7 +324,7 @@ function Tile({
   onClick,
   pressed,
 }: {
-  icon: React.JSX.Element;
+  icon?: React.JSX.Element | undefined;
   label: string;
   note?: string;
   absent?: boolean;
@@ -337,7 +337,7 @@ function Tile({
   const cls = `legend-tile${absent ? ' is-absent' : ''}${off ? ' is-off' : ''}${wide ? ' is-wide' : ''}`;
   const body = (
     <>
-      <span className="legend-tile-icon">{icon}</span>
+      {icon && <span className="legend-tile-icon">{icon}</span>}
       <span className="legend-tile-label">{label}</span>
       {note && <span className="legend-tile-note">{note}</span>}
     </>
@@ -466,10 +466,10 @@ function legendModel(
 }
 
 /** A row's human label, for the flyout heading / aria. */
-export function legendRowLabel(key: RowKey): string {
+export function legendRowLabel(key: RowKey, storyStatusFromNameplate = false): string {
   return (
     {
-      tree: 'story trees',
+      tree: storyStatusFromNameplate ? 'story status' : 'story trees',
       flora: 'test coverage',
       proof: 'proof',
       claim: 'sessions working',
@@ -489,6 +489,7 @@ export function LegendDrawerBody({
   hidden,
   onToggleStatus,
   spriteSheet = null,
+  storyStatusFromNameplate = false,
 }: {
   rowKey: RowKey;
   model: LegendModel;
@@ -497,6 +498,8 @@ export function LegendDrawerBody({
   /** ADR-0230: the active art sheet (or null in vector mode). Provided to the icon factories so a
    *  drawer rendered STANDALONE by the panel (outside <WorldLegend>) still sprites its fan tiles. */
   spriteSheet?: SpriteStyleSheet | null;
+  /** The mounted land removes the SVG hero tree, so story status is read from nameplate text. */
+  storyStatusFromNameplate?: boolean;
 }): React.JSX.Element {
   const { facts, totals, unknownPresent } = model;
   const region = (label: string, body: React.JSX.Element): React.JSX.Element => (
@@ -508,7 +511,7 @@ export function LegendDrawerBody({
   );
   if (rowKey === 'tree') {
     return region(
-      'story trees',
+      storyStatusFromNameplate ? 'story status' : 'story trees',
       <>
         <div className="legend-fan">
           {STATUS_ORDER.map((st) => {
@@ -518,7 +521,7 @@ export function LegendDrawerBody({
             return (
               <Tile
                 key={st}
-                icon={<TreeIcon status={st} form={treeForm(st)} />}
+                icon={storyStatusFromNameplate ? undefined : <TreeIcon status={st} form={treeForm(st)} />}
                 label={st}
                 note={here ? `${countNote(tot)}${off ? ' — hidden' : ''}` : 'not in world yet'}
                 absent={!here}
@@ -535,7 +538,7 @@ export function LegendDrawerBody({
           })}
           {unknownPresent && (
             <Tile
-              icon={<TreeIcon status="unknown" form="full" />}
+              icon={storyStatusFromNameplate ? undefined : <TreeIcon status="unknown" form="full" />}
               label="unknown"
               note={`${countNote(totals('unknown'))}${hidden.has('unknown') ? ' — hidden' : ''}`}
               off={hidden.has('unknown')}
@@ -546,15 +549,24 @@ export function LegendDrawerBody({
           )}
         </div>
         <p className="legend-cap">
-          An island is a <strong>story</strong>; the big tree is the story itself — growth and
-          colour carry the lifecycle. A young amber tree = <strong>proposed</strong> greenfield work
-          that has never established a proven baseline (a defensive authored “healthy” value with
-          no proof also becomes proposed); a full brown tree = <strong>mapped</strong> inherited brownfield
-          provenance, awaiting or completing adoption. A withered tree = <strong>unhealthy</strong>:
-          the story&apos;s proof failed or its authored health issue remains unresolved. Deep green ={' '}
-          <strong>proven</strong>: signed proof established the story&apos;s delivered baseline, which
-          persists when later scope is merely incomplete. Active work shows as session wisps, not a
-          hue. Retired stories leave the forest. Click a tile to fade that status across the forest.
+          {storyStatusFromNameplate ? <>
+            An island is a <strong>story</strong>. Read its status beneath its name.{' '}
+            <strong>healthy</strong> means signed proof established its baseline.{' '}
+            <strong>proposed</strong> is new work without a proven baseline; <strong>mapped</strong>{' '}
+            is inherited work awaiting or completing adoption; <strong>unhealthy</strong> means proof
+            failed or an authored issue remains. Plants describe individual capabilities. Active work
+            appears as session wisps.
+          </> : <>
+            An island is a <strong>story</strong>; the big tree is the story itself — growth and colour
+            carry the lifecycle. A young amber tree = <strong>proposed</strong> greenfield work that has
+            never established a proven baseline (a defensive authored “healthy” value with no proof
+            also becomes proposed); a full brown tree = <strong>mapped</strong> inherited brownfield
+            provenance, awaiting or completing adoption. A withered tree = <strong>unhealthy</strong>:
+            the story&apos;s proof failed or its authored health issue remains unresolved. Deep green ={' '}
+            <strong>proven</strong>: signed proof established the story&apos;s delivered baseline, which
+            persists when later scope is merely incomplete. Active work shows as session wisps, not a
+            hue. Retired stories leave the forest.
+          </>} Click a tile to fade that status across the forest.
         </p>
       </>,
     );
@@ -726,6 +738,7 @@ export function WorldLegend({
   renderDrawer = true,
   barClassName,
   spriteSheet = null,
+  storyStatusFromNameplate = false,
 }: {
   stories: TreeStory[];
   builds?: BuildActivity[];
@@ -749,6 +762,8 @@ export function WorldLegend({
    *  inline-drawer icons render the sheet's sprites instead of the vector shapes — the legend stays
    *  the world's palette in sprite mode. Default null ⇒ every icon is byte-identical vector. */
   spriteSheet?: SpriteStyleSheet | null;
+  /** Use the nameplate's status word as the mounted-land story-status reading. */
+  storyStatusFromNameplate?: boolean;
 }): React.JSX.Element {
   const controlled = openProp !== undefined && onToggle !== undefined;
   const [openState, setOpenState] = useState<RowKey | null>(null);
@@ -795,8 +810,8 @@ export function WorldLegend({
                 aria-expanded={open === r.key}
                 onClick={() => toggle(r.key)}
               >
-                {r.icons}
-                {r.label}
+                {!(r.key === 'tree' && storyStatusFromNameplate) && r.icons}
+                {r.key === 'tree' && storyStatusFromNameplate ? 'story status' : r.label}
               </button>
             ))}
           {hidden.size > 0 && (
@@ -813,6 +828,7 @@ export function WorldLegend({
             hidden={hidden}
             onToggleStatus={onToggleStatus}
             spriteSheet={spriteSheet}
+            storyStatusFromNameplate={storyStatusFromNameplate}
           />
         )}
       </div>

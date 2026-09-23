@@ -37,6 +37,7 @@ try {
   await settled(page);
   await page.evaluate(()=>document.getAnimations().forEach(a=>a.pause()));
   result.views[name]=await page.evaluate(()=>({camera:document.querySelector('.world-camera').getAttribute('transform'),labels:[...document.querySelectorAll('.world-plate')].map(e=>({text:e.textContent,rect:e.getBoundingClientRect().toJSON()})),scene:window.__storytreeSceneExport,mount:document.querySelector('[data-testid="land-mount"]')?.dataset.state,counts:{stories:document.querySelectorAll('.world-plate').length,parcels:document.querySelectorAll('[data-cap-id]').length,edges:document.querySelectorAll('[data-edges]').length},ground:document.querySelector('.relaxed-land')?.outerHTML.slice(0,400),html:document.querySelector('.world-pan-layer').style.transform}));
+  result.views[name].paint=await page.evaluate(()=>({heroes:[...document.querySelectorAll('.world-scene image.veg-track-tree')].map(e=>({status:e.getAttribute('class'),opacity:getComputedStyle(e).opacity})),board:getComputedStyle(document.querySelector('.hex-coast')).opacity,coverage:document.querySelectorAll('.world-scene .parcel-flora').length}));
   await page.screenshot({path:path.join(out,phase,`${name}.png`)});
   console.log('captured',name,result.views[name].camera);
  }
@@ -49,7 +50,7 @@ try {
    await page.mouse.move(900,550);await page.mouse.down();await page.mouse.move(900+Math.max(-600,Math.min(600,dx)),550+Math.max(-400,Math.min(400,dy)),{steps:8});await page.mouse.up();await page.waitForTimeout(150);
   }
  }
- const arms = phase === 'inspect' ? [['props','&landMount=1&landMountProps=1']] : [['flat',''],['mount','&landMount=1'],['props','&landMount=1&landMountProps=1']];
+ const arms = phase === 'inspect' ? [['props','&landMount=1&landMountProps=1']] : phase === 'finishing' ? [['mount','&landMount=1'],['props','&landMount=1&landMountProps=1']] : [['flat',''],['mount','&landMount=1'],['props','&landMount=1&landMountProps=1']];
  for(const [arm,query] of arms) {
   const page=await context.newPage();page.on('pageerror',e=>result.errors.push(`${arm}: ${e.message}`));
   await page.goto(`${base}/?sceneExport=1${query}#/tree`,{waitUntil:'load',timeout:180000});
@@ -60,13 +61,31 @@ try {
   await capture(page,`${arm}-fit`);
   await center(page,'library');await page.mouse.move(900,510);
   for(let i=0;i<(phase==='inspect'?23:13);i++){await page.mouse.wheel(0,-120);await page.waitForTimeout(100);}
-  for(const id of ['library','drive-machinery','website-experience','storage-protocol','proof-protocol','website']) {
+  for(const id of (phase==='finishing'?['library','drive-machinery']:['library','drive-machinery','website-experience','storage-protocol','proof-protocol','website'])) {
    await center(page,id);await capture(page,`${arm}-${id}`);
+   if(['after','finishing'].includes(phase) && arm==='props' && id==='library') {
+    const beforeStyle=await page.addStyleTag({content:'.has-land-mount .hex-coast, .has-land-mount image.veg-track-tree { opacity:1 !important; }'});
+    await capture(page,'pair-0-original-paint');
+    if(result.views['pair-0-original-paint'].paint.board!=='1'||result.views['pair-0-original-paint'].paint.heroes.some(h=>h.opacity!=='1'))throw Error('Before paint was not restored');
+    await beforeStyle.evaluate(e=>e.textContent='.has-land-mount .hex-coast { opacity:1 !important; }');
+    await capture(page,'pair-1-hero-removed');
+    if(result.views['pair-1-hero-removed'].paint.board!=='1'||result.views['pair-1-hero-removed'].paint.heroes.some(h=>h.opacity!=='0'))throw Error('Hero-only removal control failed');
+    await beforeStyle.evaluate(e=>e.remove());
+    await capture(page,'pair-2-board-removed');
+    if(result.views['pair-2-board-removed'].paint.board!=='0'||result.views['pair-2-board-removed'].paint.heroes.some(h=>h.opacity!=='0'))throw Error('Final paint control failed');
+   }
+   if(phase==='finishing' && arm==='props' && id==='drive-machinery') {
+    const quieter=await page.addStyleTag({content:'.has-land-mount .parcel-flora { opacity:0.55; }'});
+    await capture(page,'taste-quieter-coverage');await quieter.evaluate(e=>e.remove());
+   }
   }
   // Explicit native keyboard pan verifies the retained member camera control.
   await page.locator('.world-viewport').focus();await page.keyboard.press('ArrowRight');
   await capture(page,`${arm}-panned`);
-  if(arm==='mount') {await page.getByText('LEGEND',{exact:false}).first().click().catch(()=>{});await capture(page,`${arm}-legend`);}
+  if(arm==='mount') {
+   await page.getByText('LEGEND',{exact:false}).first().click();await capture(page,`${arm}-legend`);
+   if(['after','finishing'].includes(phase)) {await page.getByRole('button',{name:'story status',exact:true}).click();await capture(page,'mount-status-legend');}
+  }
   if(phase==='inspect') {
    await center(page,'library');await capture(page,'diagnostic-baseline');
    await page.addStyleTag({content:'.has-land-mount .hex-coast { opacity:0; }'});

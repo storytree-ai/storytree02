@@ -8,12 +8,10 @@
 // two are deliberately separate flags rather than one with a mode, because they are different
 // claims: a view is evidence, a mount is the product.
 //
-// ⚠⚠ THE MOUNT IS GROUND-ONLY, AND THAT IS STATED HERE BECAUSE IT IS EASY TO MISREAD AS THE WHOLE
-// OF ROUTE C. ADR-0530 D6 says outright that a mount stopping at ground-only has not delivered D1
-// and the arc does not close on it. What mounts is the LAND; every mark that makes a claim about
-// the work stays in the SVG layer above it (ADR-0380 D6 fences 1 and 3), and the kit props wait for
-// ADR-0530 D3's per-prop status-carrying answer, which is owed in the dressing lane and is
-// explicitly not this lane's to give.
+// ⚠⚠ THE MOUNT ADDS LAND AND, behind its separate `landMountProps` arm, 3D dressing. The SVG stays
+// above it for interaction and semantic marks: nameplates retain the story-status word, while the
+// mounted CSS removes the redundant flat central hero tree. Neither the 3D ground nor its props is
+// presented as a complete replacement for every story-state signal.
 //
 // ⚠ IT SUPPLIES THE TWO ELEVATIONS AND SOLVES NOTHING. `registrationCamera` owns the arithmetic and
 // owns the refusal; this module's only job is to hand it the map's elevation and the canvas's from
@@ -48,11 +46,9 @@ export function readLandMount(search: string): boolean {
 /**
  * `?landMountProps=1` — draw the 3D kit props as well as the ground.
  *
- * ⚠ IT EXISTS TO STAGE A PICTURE, NOT TO SHIP ONE. The props arm is what the owner has to LOOK at
- * before route C can go past ground-only, and a staged comparison needs both arms reachable from
- * one build. It is off by default and stays off until ADR-0530 D3 is answered — with it on, the
- * map draws two canopies (the SVG's crowns and the kit's trees), which is the finding rather than
- * the delivery.
+ * The arm remains default-off so ground-only and dressed-land captures are independently reachable.
+ * Both mounted arms suppress the redundant SVG central hero tree. Nameplates and the remaining
+ * semantic SVG marks stay above the canvas, with or without 3D props.
  */
 export function readLandMountProps(search: string): boolean {
   const v = new URLSearchParams(search).get('landMountProps');
