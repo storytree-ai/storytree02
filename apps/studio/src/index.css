@@ -1557,9 +1557,24 @@ a.stat:hover {
    A sibling of `.world-scene` inside `.world-pan-layer`, placed BEFORE it — so it inherits the same
    compositor pan transform (ADR-0272 D2: both layers move together, neither re-rasterises) and
    paints UNDERNEATH it.
-   ⚠ NO `z-index`, ON PURPOSE. Nothing in this region sets one, so stacking here is pure DOM order —
-   which is what makes "every SVG mark is above the land" a structural fact rather than a number two
-   rules could disagree about. Adding a z-index anywhere in this stack would take that away.
+   ⚠⚠ THE Z-ORDER IS STATED EXPLICITLY, AND "DOM ORDER IS ENOUGH" IS A MEASURED FALSEHOOD. This rule
+   first set no `z-index` at all, on the reasoning that the land layer is the FIRST child of
+   `.world-pan-layer` so the `<svg>` after it must paint on top. It does not. The land layer has to
+   be `position: absolute` to overlay the frame, the `<svg>` is `position: static`, and CSS painting
+   order puts POSITIONED descendants (step 8) above non-positioned in-flow content (steps 4 and 7)
+   regardless of which came first. So the canvas painted OVER the map: measured 2026-09-23 on the
+   real forest, the whole SVG flora layer — 1,996 flora marks, 8,781 grass blades, 78 flower
+   markers, every tree — vanished under the land while remaining perfectly present in the DOM. A
+   jsdom test cannot see it (jsdom paints nothing), and the element counts were identical across
+   both arms, so ONLY the staged picture caught it.
+   ⚠ BOTH SIBLINGS ARE THEREFORE POSITIONED AND NUMBERED, and it is deliberately NOT `z-index: -1`
+   on the land alone. That would work only while `.world-pan-layer` happens to be a stacking context
+   — which it is when it carries a transform and is NOT when the transform is `none` — and a
+   negative index that escapes its parent lands behind `.world-frame`'s own gradient, i.e. the land
+   silently disappears depending on whether a drag is in flight. Two explicit indices in one parent
+   cannot do that.
+   ⚠ AND IT IS SCOPED TO `.has-land-mount`, so the flag-off route keeps a static `<svg>` and no new
+   stacking context — byte-for-byte the map that shipped.
    ⚠ `pointer-events: none` IS A FENCE (ADR-0380 D6 fence 3). The app owns picking, focus and the
    keyboard camera; this layer draws and decides nothing, so it must never intercept a gesture —
    `.world-viewport`'s handlers and the `elementFromPoint` hit-test both have to reach straight
@@ -1568,6 +1583,13 @@ a.stat:hover {
   position: absolute;
   inset: 0;
   pointer-events: none;
+}
+.world-pan-layer.has-land-mount > .land-mount {
+  z-index: 0;
+}
+.world-pan-layer.has-land-mount > .world-scene {
+  position: relative;
+  z-index: 1;
 }
 
 /* ⚠⚠ THE SVG'S OWN GROUND GOES SEE-THROUGH, AND `opacity: 0` IS THE LOAD-BEARING CHOICE — not

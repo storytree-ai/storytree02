@@ -17,7 +17,7 @@
 // recognise.
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { act, render, cleanup } from '@testing-library/react';
 
@@ -89,6 +89,43 @@ async function renderTreeAt(search: string): Promise<HTMLElement> {
   return container;
 }
 
+/**
+ * THE STUDIO STYLESHEET, wherever the runner rooted itself.
+ *
+ * ⚠ TWO CANDIDATES, AND IT THROWS RATHER THAN SKIPS. `vitest` runs with this project as cwd;
+ * Stryker's mutation sandbox runs the same suite with the REPO ROOT as cwd, and a single
+ * `resolve(cwd, 'src/index.css')` therefore ENOENTs the whole dry run inside the sandbox (measured
+ * — it redded `check:mutation-diff` while every other suite passed). Falling back to a silent skip
+ * would be worse than the crash: the assertions below would pass by not running, which is this
+ * repo's most-repeated fault class. So an absent stylesheet is a loud failure naming where it
+ * looked.
+ */
+function readStudioCss(): string {
+  const candidates = ['src/index.css', 'apps/studio/src/index.css'];
+  for (const c of candidates) {
+    const p = resolve(process.cwd(), c);
+    if (existsSync(p)) return readFileSync(p, 'utf8');
+  }
+  throw new Error(
+    `the studio stylesheet is the SUBJECT of these assertions and was not found from ` +
+      `${process.cwd()} — tried ${candidates.join(', ')}`,
+  );
+}
+
+/**
+ * THE GROUND-SUPPRESSION RULE, matched precisely.
+ *
+ * ⚠ A LOOSE `\.world-pan-layer\.has-land-mount[^{]*\{` PATTERN IS WRONG AND WAS MEASURED WRONG:
+ * three rules now share that prefix (this one, and the two that order the z-stack), so the loose
+ * form matched whichever came first in the file and asserted the wrong block's properties. It is
+ * anchored on the two ground-layer classes it is ABOUT.
+ */
+function groundSuppressionRule(css: string): { selector: string; body: string } {
+  const m = /(\.world-pan-layer\.has-land-mount\s+\.hex-coastland[\s\S]*?)\{([^}]*)\}/.exec(css);
+  if (m === null) throw new Error('the ground-suppression rule was not found in the studio stylesheet');
+  return { selector: m[1]!, body: m[2]! };
+}
+
 describe('the land under the working map', () => {
   it('is ABSENT by default — the map route is the one that shipped', async () => {
     const container = await renderTreeAt('');
@@ -134,9 +171,8 @@ describe('the land under the working map', () => {
     // directly: every class the suppression rule names must be a class this map actually renders.
     const container = await renderTreeAt('?landMount=1');
     const svg = container.querySelector('svg.world-scene')!;
-    const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
-    const rule = /\.world-pan-layer\.has-land-mount[^{]*\{[^}]*\}/.exec(css)![0];
-    const named = [...rule.matchAll(/\.has-land-mount\s+\.([a-z-]+)/g)].map((m) => m[1]!);
+    const { selector } = groundSuppressionRule(readStudioCss());
+    const named = [...selector.matchAll(/\.has-land-mount\s+\.([a-z-]+)/g)].map((m) => m[1]!);
     expect(named.length).toBeGreaterThan(0);
     for (const cls of named) {
       expect(svg.querySelector(`.${cls}`), `the rule names .${cls}; the map must draw it`).toBeTruthy();
@@ -195,23 +231,49 @@ describe('the land under the working map', () => {
     // `document.elementFromPoint`. `display: none` or `visibility: hidden` would take them out of
     // hit-testing and cost the map its picking, silently and only in a browser. `opacity: 0` leaves
     // an element fully hit-testable.
-    const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
-    const rule = /\.world-pan-layer\.has-land-mount[^{]*\{([^}]*)\}/.exec(css);
-    expect(rule, 'the ground-suppression rule must exist').toBeTruthy();
-    expect(rule![1]).toMatch(/opacity:\s*0/);
-    expect(rule![1]).not.toMatch(/display\s*:/);
-    expect(rule![1]).not.toMatch(/visibility\s*:/);
+    const { selector, body } = groundSuppressionRule(readStudioCss());
+    expect(body).toMatch(/opacity:\s*0/);
+    expect(body).not.toMatch(/display\s*:/);
+    expect(body).not.toMatch(/visibility\s*:/);
     // And the selector must not reach the territory group, which CONTAINS the marks above.
-    expect(rule![0]).not.toMatch(/\.hex-flora/);
+    expect(selector).not.toMatch(/\.hex-flora/);
   });
 
-  it('adds no z-index to the map stack, so DOM order stays the only rule', async () => {
-    // ⚠ The settlement is "paint order is DOM order". A `z-index` anywhere in this stack would be a
-    // second rule, and two rules about one stacking order is how a wisp ends up under the land.
-    const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
-    for (const sel of ['.land-mount', '.world-pan-layer', '.world-scene', '.world-viewport']) {
-      const block = new RegExp(`\\n\\${sel}\\s*\\{([^}]*)\\}`).exec(css);
-      if (block) expect(block[1], `${sel} must set no z-index`).not.toMatch(/z-index/);
-    }
+  it('states the z-order EXPLICITLY — because DOM order is NOT paint order here', () => {
+    // ⚠⚠ THIS TEST REPLACES ITS OWN OPPOSITE, and the correction is the finding. It first asserted
+    // that NOTHING in this stack sets a `z-index`, on the reasoning that the land layer is the
+    // first child so the `<svg>` after it must paint on top. CSS says otherwise: the land layer is
+    // `position: absolute` (it has to overlay the frame), the `<svg>` is `position: static`, and
+    // positioned descendants paint ABOVE non-positioned in-flow content whatever the DOM order.
+    // Measured on the real forest: the canvas covered the entire SVG flora layer — 1,996 flora
+    // marks, 8,781 grass blades, every tree — with every element still present in the DOM and every
+    // element count identical between the arms. Only the staged picture could catch it, which is
+    // why the assertion now pins the EXPLICIT ordering rather than its absence.
+    const css = readStudioCss();
+    const land = /\.world-pan-layer\.has-land-mount\s*>\s*\.land-mount\s*\{([^}]*)\}/.exec(css);
+    const svg = /\.world-pan-layer\.has-land-mount\s*>\s*\.world-scene\s*\{([^}]*)\}/.exec(css);
+    expect(land, 'the land layer must carry an explicit z-index under the mount').toBeTruthy();
+    expect(svg, 'the SVG layer must carry an explicit z-index under the mount').toBeTruthy();
+    const zOf = (block: string) => Number(/z-index:\s*(-?\d+)/.exec(block)?.[1] ?? NaN);
+    const landZ = zOf(land![1]!);
+    const svgZ = zOf(svg![1]!);
+    expect(Number.isFinite(landZ)).toBe(true);
+    expect(Number.isFinite(svgZ)).toBe(true);
+    // The map is ABOVE the land. That is the whole settlement, in one comparison.
+    expect(svgZ).toBeGreaterThan(landZ);
+    // ⚠ AND THE SVG MUST BE POSITIONED, or its z-index is ignored and we are back to the defect.
+    expect(svg![1]!).toMatch(/position:\s*(relative|absolute)/);
+    // ⚠ NEITHER MAY BE NEGATIVE. A negative index only stays inside `.world-pan-layer` while that
+    // element happens to be a stacking context — true when it carries a transform, false when the
+    // transform is `none` — and an index that escapes lands behind `.world-frame`'s gradient, so
+    // the land would vanish depending on whether a drag was in flight.
+    expect(landZ).toBeGreaterThanOrEqual(0);
+    expect(svgZ).toBeGreaterThanOrEqual(0);
+  });
+
+  it('leaves the flag-off route with a static SVG and no new stacking context', () => {
+    // The ordering above is scoped to `.has-land-mount` precisely so the ordinary map is untouched.
+    const css = readStudioCss();
+    expect(/\n\.world-scene\s*\{([^}]*)\}/.exec(css)![1]!).not.toMatch(/z-index|position/);
   });
 });

@@ -1,0 +1,63 @@
+{
+  "takenAt": "2026-09-23T04:13:25.814Z",
+  "served": {
+    "served": "/home/mickh/code/Storytree/.claude/worktrees/laneF",
+    "branch": "claude/lane-f-the-mount",
+    "head": "5c0632f6a9a23e5630cb8697ee6edc3f7d7892ab",
+    "store": "pg"
+  },
+  "viewport": {
+    "width": 2560,
+    "height": 1600
+  },
+  "arms": [
+    {
+      "name": "1-control-map-as-it-ships",
+      "note": "the working map, no flag",
+      "query": "",
+      "file": "1-control-map-as-it-ships.png",
+      "counts": {
+        "parcels": 212,
+        "caves": 0,
+        "trailFills": 125,
+        "crowns": 0,
+        "flora": 0,
+        "nameplates": 36,
+        "groundLayers": 2,
+        "canvases": 0
+      }
+    },
+    {
+      "name": "2-land-under-the-map",
+      "note": "the 3D ground under the SVG layer",
+      "query": "?landMount=1",
+      "file": "2-land-under-the-map.png",
+      "counts": {
+        "parcels": 212,
+        "caves": 0,
+        "trailFills": 125,
+        "crowns": 0,
+        "flora": 0,
+        "nameplates": 36,
+        "groundLayers": 2,
+        "canvases": 1
+      }
+    },
+    {
+      "name": "3-land-and-props-under-the-map",
+      "note": "the staging arm — land + kit props, so the doubled canopy is visible",
+      "query": "?landMount=1&landMountProps=1",
+      "file": "3-land-and-props-under-the-map.png",
+      "counts": {
+        "parcels": 212,
+        "caves": 0,
+        "trailFills": 125,
+        "crowns": 0,
+        "flora": 0,
+        "nameplates": 36,
+        "groundLayers": 2,
+        "canvases": 1
+      }
+    }
+  ]
+}
