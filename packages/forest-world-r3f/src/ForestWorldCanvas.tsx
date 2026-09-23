@@ -1306,18 +1306,38 @@ export interface UnderlayComposition {
  * render loop that does not run rather than a media query that turns one off. Standalone the canvas
  * keeps R3F's default loop, because `MapControls` drives its own frames there.
  *
- * ⚠ AND EVERY `false` BELOW IS A MARK THE HOST ALREADY DRAWS. Trails, caves and wisps all exist in
- * the host's own layer above (`forest-world`'s `buildScene` emits them), so drawing them here would
- * be a SECOND drawing of one mark — two canopies, two wisps, two trail networks. The props are the
- * one entry a host may ask for, and only to stage a picture.
+ * ⚠ AND EVERY `false` BELOW IS A MARK THE HOST ALREADY DRAWS. Caves and wisps exist in the host's
+ * own layer above (`forest-world`'s `buildScene` emits them), so drawing them here would be a
+ * SECOND drawing of one mark — two wisps, two cave mouths. The props are the one entry a host may
+ * ask for, and only to stage a picture.
+ *
+ * ⚠⚠ `trails` IS THE EXCEPTION, AND IT IS A PRODUCT-STATE RULE RATHER THAN A DEBUG PROP — which is
+ * the change `pathways-keep-selection-focus-and-accessible-edge-identity` asks for. It was `false`
+ * under a host for the same reason as the rest, and that was the honest answer only while the host
+ * still drew its own visible paths. Under a mount the 3D layer is the one that can draw a pathway
+ * ON the ground it actually runs over — routed, docked, following the relief — so the rule is:
+ * **mounted ⇒ the 3D layer owns the paths**, derived from the mount itself and never passed in as a
+ * boolean a caller could get wrong.
+ *
+ * ⚠ IT IS HALF A DECISION ON ITS OWN, AND THE OTHER HALF IS THE HOST'S. Turning this on WITHOUT the
+ * host suppressing its own path strokes is the double-drawing the row exists to remove. The two are
+ * landed together and tied by a test; `showTrails` stays what it always was — the STANDALONE
+ * harness's opt-in — and is ignored under a host, because a host's answer is not a debug choice.
  */
-export function underlayComposition(registered: RegisteredUnderlay | undefined): UnderlayComposition {
+export function underlayComposition(
+  registered: RegisteredUnderlay | undefined,
+  showTrails = false,
+): UnderlayComposition {
   if (!registered) {
     return {
       canvasProps: {},
       backdrop: true,
       props: true,
-      trails: true,
+      // ⚠ THE STANDALONE BRANCH IS THE ONLY PLACE `showTrails` IS READ, and it keeps its old
+      // meaning exactly: trails are HIDDEN BY DEFAULT on a harness page (ADR-0169 §3) and a page
+      // opts in. Threading it through here rather than gating at the call site is what makes
+      // `compose.trails` the ONE gate, so a reader never has to find a second condition.
+      trails: showTrails,
       caves: true,
       wisps: true,
       controls: true,
@@ -1327,7 +1347,9 @@ export function underlayComposition(registered: RegisteredUnderlay | undefined):
     canvasProps: { frameloop: 'demand', gl: { alpha: true } },
     backdrop: false,
     props: registered.props === true,
-    trails: false,
+    // ⚠ NOT `registered.showTrails` AND NOT A FIELD — see the doc comment. Mounted means the 3D
+    // layer owns the paths, so there is nothing for a caller to pass and nothing to get wrong.
+    trails: true,
     caves: false,
     wisps: false,
     controls: false,
@@ -1492,7 +1514,11 @@ export function ForestWorldCanvas({ descriptors, showTrails = false, viewport, r
   // trail-ghost-strip descriptors are deliberately not drawn (the surface's call —
   // the under-island run is told by the cave props, which render unconditionally
   // like the 2D scene's flora-layer props).
-  const trails = showTrails ? byKind(descriptors, 'trail-strip') : [];
+  // ⚠ `showTrails` IS THE STANDALONE HARNESS'S OPT-IN AND IS IGNORED UNDER A HOST. The gate that
+  // decides whether these are DRAWN is `compose.trails` below, which is a product-state rule rather
+  // than this debug prop (see {@link underlayComposition}). Collecting them unconditionally costs
+  // one array filter and keeps the two concerns apart: what the stream CONTAINS, and who draws it.
+  const trails = byKind(descriptors, 'trail-strip');
   const caves = byKind(descriptors, 'cave-arch');
   const wisps = byKind(descriptors, 'wisp-sprite');
   // ⚠ THE TWO FRAMINGS ARE ONE DECISION MADE ONCE, not a flag read at three call sites: `position`,
@@ -1503,7 +1529,7 @@ export function ForestWorldCanvas({ descriptors, showTrails = false, viewport, r
   // ⚠ ONE DECISION, SIX CONSEQUENCES — see {@link underlayComposition}. Reading them from one
   // object is what stops a surface ending up half-registered: a canvas with the host's camera but
   // its own `MapControls`, or a transparent backdrop but a second canopy.
-  const compose = underlayComposition(registered);
+  const compose = underlayComposition(registered, showTrails);
   return (
     /* ⚠ `orthographic` is the fence (ADR-0380 D6 fence 4), and `fov` is GONE rather than merely
        unused: R3F reads the presence of `fov` as a request for a PerspectiveCamera, so leaving it

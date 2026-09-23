@@ -25,6 +25,10 @@ import { AppDataContext, type AppData } from '../lib/appData';
 import { HttpDouble, installHttpDouble } from '../test/httpDouble';
 import { TreeView } from './TreeView';
 
+// Two stories with a declared edge between them — a slightly more honest forest than one story, and
+// more markup for the byte-identity test to compare. ⚠ It does NOT make trails appear in this
+// suite: jsdom lays nothing out, so nothing is routed and `[data-edges]` is 0 in both arms
+// regardless (measured). Edge counts are asserted in the browser capture, not here.
 const TREE_PAYLOAD = {
   stories: [
     {
@@ -41,6 +45,27 @@ const TREE_PAYLOAD = {
           id: 'studio-map',
           title: 'The map',
           outcome: 'the map draws',
+          status: 'healthy',
+          proofMode: 'integration-test',
+          dependsOn: [],
+          contracts: [],
+        },
+      ],
+    },
+    {
+      id: 'forest-world',
+      title: 'Forest world',
+      outcome: 'the forest lays out',
+      status: 'healthy',
+      proofMode: 'integration-test',
+      uatWitness: 'machine',
+      dependsOn: [],
+      consumedBy: ['studio'],
+      capabilities: [
+        {
+          id: 'forest-layout',
+          title: 'The layout',
+          outcome: 'the islands sit somewhere',
           status: 'healthy',
           proofMode: 'integration-test',
           dependsOn: [],
@@ -279,6 +304,45 @@ describe('the land under the working map', () => {
       vp.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
     });
     expect(cameraTransform()).not.toBe(before);
+  });
+
+  it('suppresses BOTH SVG path passes, and keeps every edge identity in the DOM', () => {
+    // ⚠⚠ THE TWO HALVES OF THE PATHWAY RULE ARE ONE DECISION, and this is the half a stylesheet can
+    // be asked about. The other half is `underlayComposition`'s `trails: true` under a host
+    // (`ForestWorldCanvas.underlay.test.ts`). Landing either alone is a defect: the composition
+    // alone double-draws the network, and this rule alone leaves a map with no pathways at all.
+    const css = readStudioCss();
+    const rule = /\.world-pan-layer\.has-land-mount\s+\.trail-net[\s\S]*?\{([^}]*)\}/.exec(css);
+    expect(rule, 'the path-suppression rule must exist').toBeTruthy();
+    // BOTH passes: the network, and the click-revealed one-hop lit lane. Suppressing only the
+    // network would leave the lit lane floating over the 3D paths on every selection.
+    expect(rule![0]).toMatch(/\.trail-net/);
+    expect(rule![0]).toMatch(/\.trail-edges/);
+    // ⚠ `opacity`, not `display` — these elements carry the edge's identity and its hit surface.
+    expect(rule![1]).toMatch(/opacity:\s*0/);
+    expect(rule![1]).not.toMatch(/display\s*:|visibility\s*:/);
+  });
+
+  it('keeps edge identity in the SVG layer, never on the canvas', async () => {
+    // ⚠ THE COUNT-EQUALITY VERSION OF THIS TEST WAS DELETED AS VACUOUS, and saying why matters more
+    // than the assertion that replaced it. jsdom lays nothing out, so `buildWorld` positions no
+    // islands and `buildScene` routes NO trails — `[data-edges]` is 0 in both arms here however
+    // many edges the payload declares (measured: a two-story forest with a real `consumedBy` edge
+    // still yields 0). A test comparing 0 to 0 would have read as proof.
+    //
+    // WHAT ACTUALLY PROVES IT is the byte-identity test below: if the `<svg>`'s markup is the SAME
+    // STRING with the flag on and off, then every `data-id`, `data-edges`, `data-usage` and
+    // `data-spur` survives the mount by construction — on the REAL markup, whatever it contains.
+    // The browser-side count is asserted where the edges are real, in
+    // `apps/studio/scripts/capture-land-mount.mjs`.
+    //
+    // What IS worth asserting here is the placement: identity must live in the layer that paints
+    // above the land, never in the decorative one (ADR-0380 D6 fence 1).
+    const container = await renderTreeAt('?landMount=1');
+    const layer = container.querySelector('[data-testid="land-mount"]')!;
+    expect(layer.querySelector('[data-edges]')).toBeNull();
+    expect(layer.querySelector('[data-id]')).toBeNull();
+    expect(container.querySelector('svg.world-scene')).toBeTruthy();
   });
 
   it('states the z-order EXPLICITLY — because DOM order is NOT paint order here', () => {
