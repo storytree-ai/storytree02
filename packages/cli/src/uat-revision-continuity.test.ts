@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 
 import { SIGNING_EVENT_KIND, type Verdict } from "@storytree/proof-protocol";
 
+import { chooseBaseRef } from "./ownership-totality.js";
 import {
   chooseContinuityBase,
   judgeUatRevisionContinuity,
@@ -624,6 +625,36 @@ describe("the continuity base is the merge base a full clone would find, even on
       chooseContinuityBase(evidence({ eventName: "pull_request", githubRef: "refs/pull/7/merge", mergeBase: null })),
       null,
     );
+  });
+
+  it("the wall's base IS the shared judge's base, in every shape — one judge, never two (ADR-0606)", () => {
+    // Rule 3 (a CI run of main → HEAD) was born in this wall and moved into the shared
+    // `chooseBaseRef` when ADR-0606 D3 put the `main` fetch ahead of every rung. What remains here is
+    // only the report's WORDING — so the two must agree on the ref for every evidence shape, and a
+    // shape the shared judge refuses must stay unreadable here too.
+    const shared = (e: ContinuityBaseEvidence): string | null => {
+      try {
+        return chooseBaseRef(e).ref;
+      } catch {
+        return null;
+      }
+    };
+    const cases: readonly [ContinuityBaseEvidence, { ref: string; label: string } | null][] = [
+      [
+        evidence({ eventName: "pull_request", githubRef: "refs/pull/9/merge", hasSecondParent: true, mergeBase: null }),
+        { ref: "HEAD^1", label: "HEAD^1 (the base tip this pull request's merge ref was cut against)" },
+      ],
+      [evidence(), { ref: SHA, label: "merge-base(origin/main, HEAD) 0cdc1f153" }],
+      [
+        evidence({ eventName: "push", githubRef: "refs/heads/main", mergeBase: null }),
+        { ref: "HEAD", label: "HEAD (a CI run of main itself — its merge base with any later main is HEAD)" },
+      ],
+      [evidence({ eventName: "push", githubRef: "refs/heads/feature", mergeBase: null }), null],
+    ];
+    for (const [input, expected] of cases) {
+      assert.deepEqual(chooseContinuityBase(input), expected, JSON.stringify(input));
+      assert.equal(chooseContinuityBase(input)?.ref ?? null, shared(input), "the wall and the judge disagree");
+    }
   });
 
   it("the evidence is the shared anchor's two git reads, plus the CI event and ref", () => {
