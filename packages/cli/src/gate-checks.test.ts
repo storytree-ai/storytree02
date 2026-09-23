@@ -619,7 +619,7 @@ test("SCAFFOLDING: the DERIVED order keeps both of GATE_PLAN's ordering axes and
   const derived = deriveGatePlan(realDiscovery().live, {
     lead: legs("pnpm lint"),
     wall: legs("pnpm -r --no-bail typecheck", "pnpm -r --no-bail test"),
-    trail: legs("pnpm -r build"),
+    trail: legs("pnpm -r build", "pnpm --filter studio uat"),
   });
   assert.ok(derived.ok, derived.ok ? "" : derived.reasons.join("\n"));
   const order = evaluateGateOrder({

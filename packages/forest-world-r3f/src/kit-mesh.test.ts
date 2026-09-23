@@ -308,6 +308,20 @@ test('a dressing merges to ONE mesh per (material, tint), however many props the
   }
 });
 
+test('the optional transformed-part observer sees each baked clone without changing the merged result', () => {
+  const placements = [placement(), placement({ capId: 'second', at: { x: 20, z: 0 } })];
+  const observed: Array<{ placement: KitPlacement; geometry: THREE.BufferGeometry }> = [];
+  const observedMeshes = kitMeshes(KIT, placements, (placed, geometry) => observed.push({ placement: placed, geometry }));
+  const ordinaryMeshes = kitMeshes(KIT, placements);
+  assert.equal(observed.length, 4, 'two fixture parts are transformed for each placement before merge');
+  assert.ok(observed.every(({ placement }) => placements.includes(placement)), 'the observer receives the original placement identity');
+  assert.deepEqual(
+    observedMeshes.map((mesh) => mesh.geometry.getAttribute('position').count),
+    ordinaryMeshes.map((mesh) => mesh.geometry.getAttribute('position').count),
+    'observing attributes before merge changes neither batching nor the delivered geometry',
+  );
+});
+
 test('the merged SOURCES are disposed — a re-mounted island strands no buffer per prop', () => {
   // ⚠ `mergeGeometries` COPIES its inputs, so the clones this makes are garbage the moment it
   // returns. The canvas re-mounts per navigation; a dressing that left them behind would strand one

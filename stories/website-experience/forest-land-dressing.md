@@ -30,19 +30,27 @@ decisions: [123, 562]
 #
 # ⚠ THE `real:` ARM WAS ADDED BY THIS LANE'S FIRST UNIT (2026-09-23, `three-d-pathways-arc-inc-01`),
 # exactly as the note it replaces reserved: "the first unit taken in this lane adds the arm with the
-# pair it actually authors." The pair is `island-path.test.ts` -> `island-path.ts`, and the arm is
-# `editsExisting` because the connector EXISTS and its docking rule is WRONG on a real map
-# (ADR-0596): the red is an assertion against current behaviour, never a missing symbol.
+# pair it actually authors." That completed `island-path.test.ts` -> `island-path.ts` work remains
+# as coverage. This current arm advances the same capability through
+# `map-dressing.test.ts` -> `map-dressing.ts`, with the merge seam named in its broad source scope.
+# It remains `editsExisting`: the placement and merge algorithms EXIST; the mechanical red is an
+# assertion against their current missing provenance output, never a loader failure.
 #
 # ⚠ IT DECLARES AN EXPLICIT `proofCommand`, AND THE REASON IS THE RUNTIME rather than the scope.
 # The default proof is `node --import tsx --test <testFile>` at the WORKTREE ROOT, and `tsx` does
 # not resolve from this repo's root — measured 2026-09-23, `ERR_MODULE_NOT_FOUND 'tsx'`, the same
 # trap CLAUDE.md records for a bare CLI invocation. This package moved to Bun as a test RUNTIME in
-# `bun-runtime-migration-arc` increment 2, so the honest single-file oracle is `bun test` over the
-# one file, preloaded the same way the package's own `test` script preloads it. It is ONE oracle
-# serving both the spine's red/green observation and the leaf's `run_proof` feedback tool, and it
-# cannot forge a green: the spine still spawns it out-of-band and CONFIRM_RED must see a real red
-# first.
+# `bun-runtime-migration-arc` increment 2, so the honest oracle is `bun test`, preloaded the same
+# way the package's own `test` script preloads it. This arm declares both dressing and merge test
+# files because its source scope crosses that seam. It is ONE oracle serving both the spine's
+# red/green observation and the leaf's `run_proof` feedback tool, and it cannot forge a green: the
+# spine still spawns it out-of-band and CONFIRM_RED must see a real red first.
+#
+# The current real arm is the map-dressing attribution sidecar and its one merge seam. It follows
+# the completed four shoreline contracts while coverage retains their `island-path.test.ts` proof.
+# The sidecar is a semantics-bearing producer output, not canvas glue: it says which island may
+# make each prop appear before the canvas decides whether to draw it; the optional merger callback
+# keeps that identity available after material/tint batching without a dressing-to-canvas import.
 proof:
   command:
     file: pnpm
@@ -66,16 +74,22 @@ proof:
       - "packages/forest-world-r3f/src/dressing-ground.ts"
       - "packages/forest-world-r3f/src/map-dressing.ts"
       - "packages/forest-world-r3f/src/island-path.ts"
+  coverage:
+    testGlobs: ["packages/forest-world-r3f/src/island-path.test.ts"]
   real:
-    testFile: "packages/forest-world-r3f/src/island-path.test.ts"
-    sourceFile: "packages/forest-world-r3f/src/island-path.ts"
+    testFile: "packages/forest-world-r3f/src/map-dressing.test.ts"
+    sourceFile: "packages/forest-world-r3f/src/map-dressing.ts"
     editsExisting: true
     scope:
-      testGlobs: ["packages/forest-world-r3f/src/island-path.test.ts"]
-      sourceGlobs: ["packages/forest-world-r3f/src/island-path.ts"]
+      testGlobs:
+        - "packages/forest-world-r3f/src/map-dressing.test.ts"
+        - "packages/forest-world-r3f/src/kit-mesh.test.ts"
+      sourceGlobs:
+        - "packages/forest-world-r3f/src/map-dressing.ts"
+        - "packages/forest-world-r3f/src/kit-mesh.ts"
     proofCommand:
       file: bun
-      args: ["test", "--preload", "./scripts/tsx-cache-off.mjs", "packages/forest-world-r3f/src/island-path.test.ts"]
+      args: ["test", "--preload", "./scripts/tsx-cache-off.mjs", "packages/forest-world-r3f/src/map-dressing.test.ts", "packages/forest-world-r3f/src/kit-mesh.test.ts"]
     install: true
     typecheck:
       file: pnpm
@@ -105,12 +119,10 @@ is not lit like the ground it stands on reads as a sticker, so the dressing cann
 an unlit ground). **Nothing upstream imports a dressing module**, in value or in type — the
 one-way property that makes this lane claimable alongside the other two.
 
-> **Proof status (honest) — PARTIALLY PROVEN as a capability.** PR #2024 landed the first three
-> shore-selection contracts, with their signed result committed at `8171478a`; the duplicate signed
-> commit `4ca8a787` remains preserved in the integration history. That proof covers the
-> shore-selection connector, not all eight modules in this lane. The fourth contract,
-> `fld-a-visible-trail-strip-ends-on-the-dock-it-wears`, concerns the visible ribbon reaching that
-> connector's snapped shore. Read the current contract coverage and signing state through
+> **Proof status (honest) — PARTIALLY PROVEN as a capability.** The four signed shoreline contracts
+> cover the shore-selection connector and the visible ribbon reaching its snapped shore, not all
+> eight modules in this lane. The placement-attribution contract below is newly armed and has no
+> inherited verdict. Read the current contract coverage and signing state through
 > `storytree coverage forest-land-dressing` rather than this historical note.
 
 ## The lane — 8 modules
@@ -148,11 +160,46 @@ dressed prop belongs to the ground it stands on.
 5. Assert ground cover thins where the path and props already occupy the cell — dressing composes
    with itself and does not double-populate.
 
-## Contracts (4)
+## Proof walkthrough
 
-These are assertions about `island-path.ts`, the canvas-side connector that decides where a
-dependency trail comes ashore. They are this lane's FIRST contracts — the lane was born of a split
-carrying no proof at all — and the `real:` arm above authors their single test/source pair.
+`map-dressing` already knows the owning island while it makes that island's placements. Expose that
+fact as `dressMapWithCoverAttribution(descriptors, options)`, returning
+`{ placements, islandByPlacement }`, where `islandByPlacement` is read-only and its keys are the
+exact returned `KitPlacement` objects. Keep `dressMapWithCover` as the placements-only wrapper: its
+array stays deep-equal in order, count, and transforms to this companion result's `placements`.
+`KitPlacement` stays unchanged, and a placement made from cells with no island stays absent from the
+attribution map.
+
+The canvas must be able to carry that identity through the existing material/tint merge without
+creating per-island draw buckets or rebuilding meshes per frame. Add the optional third argument to
+`kitMeshes(kit, placements, onTransformedPart?)`: for every transformed cloned part, before it enters
+its existing merge bucket, it calls `onTransformedPart(placement, geometry)`. The callback is owned
+by the delivery consumer; it may look up the exact placement in `islandByPlacement` and stamp the
+growth-slot and growth-anchor vertex attributes. `kit-mesh` imports neither map dressing nor canvas
+delivery, and an omitted callback preserves the current merged geometry, material/tint buckets,
+draw-call count, and kit-art hooks.
+
+1. In the existing test, namespace-import the module and assert that the companion export is a
+   function. That gives the real arm a mechanical assertion red against the current module instead
+   of a missing named import that stops the test loader before an assertion can run.
+2. Drive a two-island fixture containing capability trees, criterion flowers in bloom, bud, and wilt
+   states, and healthy ground cover. Assert that every placement from an attributed island maps to
+   exactly its producing island; no map key is a different placement object or an object outside the
+   returned array; and all unattributed placements have no entry.
+3. Compare the companion's placements with the existing wrapper in the same fixture. Counts, order,
+   and every placement transform remain exactly equal. This is attribution only: it freezes the
+   placement algorithms and art.
+4. In the kit-mesh test, pass a callback over placements that share a material/tint bucket. Assert it
+   receives each placement's already-transformed cloned part before merge, can stamp attributes that
+   survive the merged mesh, and does not create a per-island bucket. With no callback, retain the
+   current geometry, material/tint buckets, draw-call count, and kit geometry/material hooks. The
+   declared proof command runs this regression together with the dressing test.
+
+## Contracts (5)
+
+The first four are assertions about `island-path.ts`, the canvas-side connector that decides where a
+dependency trail comes ashore. They are this lane's first contracts — the lane was born of a split
+carrying no proof at all. The placement-attribution contract is the current `real:` arm.
 
 1. **`fld-a-routed-junction-is-never-a-dock`** — an end position two or more visible strips share is
    a junction, and a junction is never a landing
@@ -195,8 +242,27 @@ carrying no proof at all — and the `real:` arm above authors their single test
      103 visible strips and 52 terminal positions are conserved while every accepted terminal end
      visibly terminates at its corresponding dock.
    - **covers —** `packages/forest-world-r3f/src/island-path.ts`
+5. **`fld-every-dressed-placement-keeps-its-island`** — a canvas can carry every island-made kit
+   placement's identity through the existing merged mesh
+   - **asserts —** `dressMapWithCoverAttribution` returns the existing ordered placement result and
+     a sidecar map whose keys are those exact placement objects. In a two-island stream that yields
+     capability trees, bloom/bud/wilt criterion flowers, and cover, every attributed placement maps
+     to its producing island; no map key belongs to another result array; and an unattributed
+     placement has no map entry. `dressMapWithCover` remains deep-equal in count, order, and
+     transforms, so attribution cannot alter placement generation or art. The optional third
+     `kitMeshes` callback then receives each placement with its transformed cloned part before the
+     existing material/tint merge, allowing a delivery consumer to stamp growth-slot and
+     growth-anchor attributes from that sidecar. The callback preserves batching, existing kit
+     geometry/material hooks, and the no-callback result; it introduces neither per-island draw
+     buckets nor per-frame rebuilding.
+   - **covers —** `packages/forest-world-r3f/src/map-dressing.ts`,
+     `packages/forest-world-r3f/src/kit-mesh.ts`
 
-## Proof walkthrough
+## Historical shoreline proof record
+
+The four shoreline contracts above are completed history. This record preserves the acceptance
+setup that proved them; it is not the current `real:` arm and must not be supplied to a new
+placement-attribution build.
 
 **THE SUBJECT IS A MEASURED DEFECT, NOT A MISSING FEATURE.** `islandDocks` already exists and
 already works on the harness crowd fixture, whose synthetic strips end exactly on the clipped rim by
