@@ -334,6 +334,60 @@ test('fld-a-visible-trail-strip-ends-on-the-dock-it-wears: an accepted terminal 
   );
 });
 
+test('fld-a-visible-trail-strip-ends-on-the-dock-it-wears: excluded descriptors pass through without projection', () => {
+  const rim = [island('shore', 0, 0, 100)];
+  const landing = { x: 103, z: 50 };
+  const visible = strip({ x: 180, z: 50 }, landing);
+  const { points: _points, ...withoutPoints } = visible;
+  const unchanged = [
+    strip({ x: 20, z: 50 }, landing, { kind: 'trail-ghost-strip', hidden: true }),
+    strip({ x: 20, z: 50 }, landing, { hidden: true }),
+    withoutPoints,
+    { ...visible, points: [] },
+    strip({ x: 180, z: 150 }, { x: 150, z: 180 }),
+    strip({ x: -80, z: 30 }, { x: -3, z: 50 }),
+    strip({ x: -80, z: 70 }, { x: -3, z: 50 }),
+  ];
+  const projected = dockedTrailStrips(rim, [...unchanged, visible]);
+  assert.equal(projected.length, unchanged.length + 1);
+  unchanged.forEach((descriptor, index) => {
+    assert.equal(projected[index], descriptor, `excluded descriptor ${index} keeps its identity and polyline`);
+  });
+  assert.deepEqual(projected.at(-1)!.points!.at(-1), { x: 100, y: 0, z: 50 },
+    'ghost and hidden copies of a landing must not turn the visible terminal into a junction');
+});
+
+test('fld-a-visible-trail-strip-ends-on-the-dock-it-wears: both terminals move while an interior alias stays routed', () => {
+  const rim = [island('shore', 0, 0, 100)];
+  // The second vertex shares the start's x/z but has its own elevation. Snapping by coordinate
+  // without respecting polyline position would move it too: only the actual ends may change.
+  const points = [
+    Object.freeze({ x: -3, y: 5, z: 20 }),
+    Object.freeze({ x: -3, y: 6, z: 20 }),
+    Object.freeze({ x: 150, y: 7, z: 150 }),
+    Object.freeze({ x: 103, y: 8, z: 70 }),
+  ];
+  Object.freeze(points);
+  const visible = Object.freeze(strip(points[0]!, points[3]!, {
+    points, edges: ['source->shore'], width: 7, usage: 4, segment: 'two-docks',
+  }));
+  const projected = dockedTrailStrips(rim, [visible]);
+  assert.deepEqual(projected[0], {
+    ...visible,
+    points: [
+      { x: 0, y: 5, z: 20 },
+      points[1],
+      points[2],
+      { x: 100, y: 8, z: 70 },
+    ],
+  }, 'only terminal x/z changes; metadata, elevations, and interior vertices survive');
+  assert.equal(projected[0]!.points![1], points[1]);
+  assert.equal(projected[0]!.points![2], points[2]);
+  assert.deepEqual(points[0], { x: -3, y: 5, z: 20 });
+  assert.deepEqual(points[3], { x: 103, y: 8, z: 70 });
+  assert.deepEqual(dockedTrailStrips(rim, [visible]), projected, 'projection is deterministic');
+});
+
 test('islandDocks assigns an end within reach of TWO islands to the NEARER one, on either axis', () => {
   // Two islands one reach apart never occur on the shipped map, which is exactly why this has to
   // be a fixture: the nearest-island search inside `islandDocks` is otherwise never exercised

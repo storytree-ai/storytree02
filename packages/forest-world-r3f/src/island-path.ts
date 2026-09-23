@@ -207,10 +207,7 @@ export function islandDocks(
 function discoverDocks(
   cells: readonly InstanceDescriptor[],
   strips: readonly InstanceDescriptor[],
-): {
-  docks: Map<string, Map<string, CoastPoint>>;
-  assignments: Map<InstanceDescriptor, Map<string, CoastPoint>>;
-} {
+) {
   const rims = islandRims(cells);
   const grids = rims.map(rimGrid);
   const docks = new Map<string, Map<string, CoastPoint>>();
@@ -277,8 +274,10 @@ export function dockedTrailStrips(
   const { assignments } = discoverDocks(cells, strips);
   return strips.map((strip) => {
     const assigned = assignments.get(strip);
-    const points = strip.points;
-    if (assigned === undefined || points === undefined || points.length === 0) return strip;
+    if (assigned === undefined) return strip;
+    // Assignments are created only while visiting stripEndpoints: absent or empty points emit
+    // no endpoint and cannot reach here. Extra points guards were equivalent mutation survivors.
+    const points = strip.points!;
     const last = points.length - 1;
     return {
       ...strip,
