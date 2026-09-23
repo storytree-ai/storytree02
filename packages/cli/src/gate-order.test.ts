@@ -12,6 +12,7 @@ import {
   GATE_VOICE_EXEMPTIONS,
   GATE_VOICE_SCAN_ROOTS,
   type GateStep,
+  LIVE_STORE_READING_CHECKS,
   LOAD_BEARING_MARKER,
   NON_GATE_CHECK_SCRIPTS,
   PRE_EXPENSIVE_CHECKS,
@@ -20,12 +21,15 @@ import {
   SHARED_ENVIRONMENT_CHECKS,
   SKIP_CAPABLE_CHECKS,
   UNWIRED_MARKER,
+  ciIdentityFor,
   companionFileFor,
   evaluateGateOrder,
   findGateVoice,
   firstExpensiveIndex,
   gateVoiceKey,
   lastExpensiveIndex,
+  readsLiveStore,
+  stepsFor,
 } from "./gate-order.js";
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
@@ -157,7 +161,7 @@ test("the REAL gate plan still runs both expensive legs (the wall the axes are m
   }
 });
 
-test("the REAL gate plan is exactly the nine ADR-0311 survivors plus the ADR-0336, ADR-0454, ADR-0223, ADR-0317, ADR-0403, ADR-0445, ADR-0458, ADR-0459, ADR-0556, ground-space, land-art, palette-transcription, desktop-route-coverage, reliability-gate-parity, control-bytes and anti-slop additions, in order", () => {
+test("the REAL gate plan is exactly the nine ADR-0311 survivors plus the ADR-0336, ADR-0454, ADR-0223, ADR-0317, ADR-0403, ADR-0445, ADR-0458, ADR-0459, ADR-0556, ADR-0606, ground-space, land-art, palette-transcription, desktop-route-coverage, reliability-gate-parity, control-bytes and anti-slop additions, in order", () => {
   assert.deepEqual(
     GATE_PLAN.map((step) => step.command),
     [
@@ -235,6 +239,10 @@ test("the REAL gate plan is exactly the nine ADR-0311 survivors plus the ADR-033
       // not the strength of the tests, so running it before the suite is green would produce a
       // confident answer to a question nobody asked.
       "pnpm check:mutation-diff",
+      // ADR-0606, added 2026-09-23: the studio build, which CI ran as its own workflow step and the
+      // local gate never did. It is in the ONE plan now, placed `runs: "ci"`, in the slot it held in
+      // `ci.yml` — after the mutation rung and ahead of the shared environment.
+      "pnpm -r build",
       // Both of these read the DECISION LOG, which is shared live state since ADR-0403 dec 1, so both
       // sit in block C. `check:adr-health` is an ADDITION to the plan and a MOVE overall (it was a
       // case inside `pnpm -r test`); `check:web-grounding` did not move in or out of the plan — its
@@ -352,6 +360,117 @@ test("the plan's subject classification agrees with the two pinned sets", () => 
       assert.equal(step.subject, "own-work", `${step.check} is pinned cheap-first`);
     }
   }
+});
+
+// ── where each step runs, and as whom (ADR-0606 D3/D4) ───────────────────────
+//
+// ONE list drives both runs now: `pnpm gate` walks `both` + `local`, `pnpm gate --ci` (the CI
+// `verify` job) walks `both` + `ci`. There is no second list to hold this one to, so the placements
+// themselves are pinned — a step moving sides is then a visible, reasoned edit here, which is the
+// whole of what ADR-0486's two-list parity check used to buy, at the cost of one literal instead of
+// two lists and a comparator. (ADR-0606 D1's discovery step replaces even this literal.)
+
+test("every step declares where it runs, with no default to fall back on", () => {
+  for (const step of GATE_PLAN) {
+    assert.ok(
+      step.runs === "both" || step.runs === "local" || step.runs === "ci",
+      `\`${step.command}\` declares no recognised placement: ${JSON.stringify(step.runs)}`,
+    );
+  }
+});
+
+test("the local-only and CI-only steps are exactly the ones decided, and everything else runs on both", () => {
+  const placed = (runs: string): string[] =>
+    GATE_PLAN.filter((s) => s.runs === runs).map((s) => s.command);
+  // LOCAL — session discipline, never a merge barrier (ADR-0252 D3 for the decay ceiling; ADR-0486
+  // D2(b)'s class for the other two, which ADR-0606 D8 leaves where they are).
+  assert.deepEqual(placed("local"), [
+    "pnpm check:desktop-route-coverage",
+    "pnpm check:verification-decay",
+    "pnpm check:definition-adjudication",
+  ]);
+  // CI — environmental: only CI's clean checkout is asked to prove the studio build.
+  assert.deepEqual(placed("ci"), ["pnpm -r build"]);
+  assert.equal(placed("both").length, GATE_PLAN.length - 4);
+});
+
+test("a local run walks both + local and a CI run walks both + ci, each in plan order", () => {
+  const local = stepsFor(GATE_PLAN, "local").map((s) => s.command);
+  const ci = stepsFor(GATE_PLAN, "ci").map((s) => s.command);
+  assert.deepEqual(
+    local,
+    GATE_PLAN.filter((s) => s.runs !== "ci").map((s) => s.command),
+    "the local run is the plan minus its CI-only steps, order untouched",
+  );
+  assert.deepEqual(
+    ci,
+    GATE_PLAN.filter((s) => s.runs !== "local").map((s) => s.command),
+    "the CI run is the plan minus its local-only steps, order untouched",
+  );
+  assert.ok(!local.includes("pnpm -r build"));
+  assert.ok(ci.includes("pnpm -r build"));
+  assert.ok(local.includes("pnpm check:verification-decay"));
+  assert.ok(!ci.includes("pnpm check:verification-decay"));
+});
+
+test("stepsFor keeps `both` on both sides and never reorders", () => {
+  const plan = [
+    { id: 1, runs: "ci" },
+    { id: 2, runs: "both" },
+    { id: 3, runs: "local" },
+    { id: 4, runs: "both" },
+  ] as const;
+  assert.deepEqual(stepsFor(plan, "local").map((s) => s.id), [2, 3, 4]);
+  assert.deepEqual(stepsFor(plan, "ci").map((s) => s.id), [1, 2, 4]);
+});
+
+test("the ordering invariant holds on each side's run, not only on the whole plan", () => {
+  // `gate-run.ts` judges the WHOLE plan (the declared sets name steps from both sides) and then
+  // filters it. That is only sound if filtering cannot break the order — checked here by judging
+  // each side's run against the sets narrowed to the steps that side actually runs.
+  for (const mode of ["local", "ci"] as const) {
+    const run = stepsFor(GATE_PLAN, mode);
+    const runs = new Set(run.map((s) => s.check).filter((c) => c !== undefined));
+    const v = evaluateGateOrder({
+      steps: run,
+      earlyChecks: new Set([...PRE_EXPENSIVE_CHECKS].filter((c) => runs.has(c))),
+      lateChecks: new Set([...SHARED_ENVIRONMENT_CHECKS].filter((c) => runs.has(c))),
+    });
+    assert.equal(v.verdict, "ok", `${mode}: ${v.message}`);
+  }
+});
+
+test("every store-reading step signs in in CI, and the verdict-history reader signs in as itself (ADR-0560)", () => {
+  for (const step of stepsFor(GATE_PLAN, "ci")) {
+    const identity = ciIdentityFor(step);
+    if (step.check === "check:uat-revision-continuity") {
+      assert.equal(identity, "ci-webverdict", "ADR-0560's split: presence cannot read verdict history");
+    } else if (readsLiveStore(step)) {
+      assert.equal(identity, "ci-presence", `${step.command} reads the store, so it needs the presence identity`);
+    } else {
+      assert.equal(identity, undefined, `${step.command} reads no store and must run with NO credential`);
+    }
+  }
+});
+
+test("an identity is DECLARED only to override, and only on a step that reads the store", () => {
+  // The derived default already covers every store reader; a declaration on any other step would
+  // hand a credential to a step whose verdict needs none.
+  const declared = GATE_PLAN.filter((s) => s.ciIdentity !== undefined);
+  assert.deepEqual(declared.map((s) => s.check), ["check:uat-revision-continuity"]);
+  for (const step of declared) {
+    assert.ok(step.check !== undefined && LIVE_STORE_READING_CHECKS.has(step.check), `${step.command}`);
+  }
+});
+
+test("ciIdentityFor: an override wins, a store reader defaults to presence, anything else gets none", () => {
+  assert.equal(
+    ciIdentityFor({ command: "pnpm check:adr-health", check: "check:adr-health", ciIdentity: "ci-webverdict" }),
+    "ci-webverdict",
+  );
+  assert.equal(ciIdentityFor({ command: "pnpm check:adr-health", check: "check:adr-health" }), "ci-presence");
+  assert.equal(ciIdentityFor({ command: "pnpm check:boundaries", check: "check:boundaries" }), undefined);
+  assert.equal(ciIdentityFor({ command: "pnpm -r build", check: undefined }), undefined);
 });
 
 // ── the plan vs. the real package.json ───────────────────────────────────────

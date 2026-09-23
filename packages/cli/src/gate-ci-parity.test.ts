@@ -346,6 +346,16 @@ it("localGatePlanTokens keeps a plumbing step out of the set rather than admitti
   );
 });
 
+it("localGatePlanTokens leaves out a step placed runs: \"ci\" — the local gate never runs it (ADR-0606 D3)", () => {
+  const tokens = localGatePlanTokens([
+    { command: "pnpm lint", check: undefined, runs: "both" },
+    { command: "pnpm check:verification-decay", check: "check:verification-decay", runs: "local" },
+    { command: "pnpm -r build", check: undefined, runs: "ci" },
+    { command: "pnpm check:ci-only", check: "check:ci-only", runs: "ci" },
+  ]);
+  assert.deepEqual([...tokens].sort(), ["check:verification-decay", "pnpm lint"]);
+});
+
 it("localGatePlanTokens trims a command before stripping its pnpm prefix", () => {
   const tokens = localGatePlanTokens([{ command: "  pnpm lint  ", check: undefined }]);
   assert.deepEqual([...tokens], ["pnpm lint"]);

@@ -88,6 +88,40 @@ export function scopeGatePlan<T extends GateStep>(steps: readonly T[], pnpmArgs:
   });
 }
 
+/**
+ * `git rev-list --count HEAD..origin/main` → how many commits `main` has that this branch lacks, or
+ * `null` when the answer is not a count (git failed, printed nothing, or printed something else).
+ */
+export function parseBehindCount(stdout: string): number | null {
+  const text = stdout.trim();
+  return /^\d+$/.test(text) ? Number(text) : null;
+}
+
+/**
+ * THE BEHIND-MAIN WARNING (ADR-0606 D5, owner-selected 2026-09-23) — the stale-branch half of "my
+ * local gate was green but CI went red", said to the reader at the moment it matters.
+ *
+ * The local gate proves HEAD; CI proves the branch MERGED onto `main`'s tip. That difference is
+ * permanent (ADR-0486 D2(c), kept), so it is diagnosed rather than removed — and until this function
+ * the diagnosis existed only as `diagnoseStaleBranch`, which nothing ever called. Printed at the start
+ * of a LOCAL run and again beside its verdict, because a ten-minute run scrolls the first one away.
+ *
+ * SILENT at zero, and SILENT when the count is unknown — a missing `origin/main` is already reported
+ * by the scope line, so a second message about it would be noise, and a guessed count would be worse.
+ * The count is against the LAST FETCHED `origin/main`, and the text says so: a stale fetch
+ * undercounts, and the remedy begins with the fetch for exactly that reason.
+ */
+export function renderBehindMainNotice(behind: number | null): string[] {
+  // `=== 0`, not `<= 0`: a count is never negative, and with `<= 0` dropping the `null` test would
+  // still return [] (`null <= 0` is true in JS) — an unkillable mutant hiding a real branch.
+  if (behind === null || behind === 0) return [];
+  return [
+    `⚠ this branch is ${behind} commit(s) behind origin/main (as last fetched). CI proves the branch ` +
+      "MERGED onto main's tip, so a green here does not predict a green CI until main is merged in:",
+    "    git fetch origin && git merge origin/main   — then re-gate.",
+  ];
+}
+
 /** One line for the run log: what the gate is about to test, and why that is the scope. */
 export function renderScopeNotice(scope: AffectedScope): string {
   return scope.mode === "full"

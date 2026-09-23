@@ -22,6 +22,10 @@ const FLAGS: readonly (readonly [flag: string, blurb: string])[] = [
   ["--fail-fast", "stop at the first red instead of running every step"],
   ["--only <pattern>", "run only steps whose command matches (repeatable, comma-separated)"],
   ["--rerun-failed", "run exactly the steps the last WHOLE-plan run reported FAIL or NOT RUN"],
+  [
+    "--ci",
+    "run the plan as CI's `verify` job does: the CI placement, the PR merge commit's scope, a skip counts as a failure, one declared credential per step",
+  ],
   ["--help, -h", "print this and do nothing else"],
 ];
 

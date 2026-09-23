@@ -49,26 +49,41 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { deregisterSpawn, deriveIdentity, registerSpawn } from "@storytree/drive";
 
 import { discoverWorkspaceProjects, pnpmArgsFor, type AffectedScope } from "./ci-affected.js";
+import { ciMergeScope, githubScopeOutput, githubScopeSummary } from "./ci-affected-merge.js";
+import {
+  type CiStepEnvironment,
+  GITHUB_GROUP_END,
+  ciStepEnvironment,
+  ciVerdict,
+  githubErrorAnnotation,
+  githubGroupStart,
+  renderGithubSummary,
+} from "./gate-ci.js";
 import { gateHelpRequested, renderGateHelp } from "./gate-help.js";
 import {
+  type CiIdentity,
   GATE_PLAN,
   type GateStep,
   PRE_EXPENSIVE_CHECKS,
   SHARED_ENVIRONMENT_CHECKS,
+  ciIdentityFor,
   evaluateGateOrder,
   isExpensiveStep,
   readsLiveStore,
+  stepsFor,
 } from "./gate-order.js";
 import {
   gitLines,
   localAffectedScope,
+  parseBehindCount,
+  renderBehindMainNotice,
   renderScopeNotice,
   scopeGatePlan,
   type LocalDiff,
@@ -110,7 +125,7 @@ function rootScriptNames(): Set<string> {
 }
 
 /** Run one read-only git command in the repo root. */
-function git(args: string[]) {
+function git(args: readonly string[]) {
   const res = spawnSync("git", args, { cwd: repoRoot, encoding: "utf8" });
   if (res.error !== undefined || res.status !== 0) {
     const detail = res.error?.message ?? res.stderr?.trim() ?? `exit ${res.status}`;
@@ -245,6 +260,45 @@ function resolveScope(full: boolean): AffectedScope {
   }
 }
 
+/**
+ * The CI scope (ADR-0606 D3): the PR merge commit's `HEAD^1..HEAD`, through the SAME function
+ * `pnpm ci:affected` calls — so there is one answer to "what did this PR change?", never two
+ * (ADR-0304 D2). Every surprise widens to full, exactly as there.
+ */
+function resolveCiScope(full: boolean): AffectedScope {
+  if (full) return { mode: "full", reason: "forced by --full / STORYTREE_GATE_FULL" };
+  try {
+    return ciMergeScope({
+      eventName: process.env["GITHUB_EVENT_NAME"],
+      git,
+      projects: () => discoverWorkspaceProjects(repoRoot),
+    });
+  } catch (err) {
+    return { mode: "full", reason: `unexpected error resolving scope: ${(err as Error).message}` };
+  }
+}
+
+/**
+ * Append to one of the files GitHub hands a step (`$GITHUB_OUTPUT`, `$GITHUB_STEP_SUMMARY`). Silent
+ * outside Actions, where the variable is unset; a write failure warns and never reds the gate — the
+ * verdict is what the steps said, not whether the run page could be decorated.
+ */
+function appendGithubFile(variable: string, text: string): void {
+  const file = process.env[variable];
+  if (file === undefined || file === "") return;
+  try {
+    appendFileSync(file, text, "utf8");
+  } catch (err) {
+    console.log(`${TAG} note: could not write ${variable}: ${(err as Error).message}`);
+  }
+}
+
+/** How far this branch is behind its last-fetched `origin/main`, or `null` when git cannot say. */
+function behindMainCount(): number | null {
+  const res = git(["rev-list", "--count", "HEAD..origin/main"]);
+  return res.ok ? parseBehindCount(res.stdout) : null;
+}
+
 /** How often a running step is sampled for liveness; `0` (or `STORYTREE_GATE_HEARTBEAT_MS=0`) is off. */
 const DEFAULT_HEARTBEAT_MS = 60_000;
 
@@ -312,7 +366,17 @@ function startHeartbeat(rootPid: number, startedAt: number): () => void {
  * the same observation. The step is still awaited one at a time, so the walk's ordering, the shared
  * working tree and the shared DB connection are exactly as before.
  */
-function executeStep(step: GateStep): Promise<GateExecution> {
+/**
+ * WHICH ENVIRONMENT A STEP GETS. Locally: the session's own, with the test leg made credential-free.
+ * In CI (`ci` is set): the job's environment stripped of every credential, with exactly the identity
+ * `ciIdentityFor` names put back (`gate-ci.ts`) — or a refusal naming what the workflow did not provide.
+ */
+interface StepEnvironmentChoice {
+  readonly ci: boolean;
+  readonly identity: CiIdentity | undefined;
+}
+
+function executeStep(step: GateStep, choice: StepEnvironmentChoice): Promise<GateExecution> {
   return new Promise((resolve) => {
     const startedAt = Date.now();
     let settled = false;
@@ -324,11 +388,21 @@ function executeStep(step: GateStep): Promise<GateExecution> {
       resolve(execution);
     };
 
+    const prepared: CiStepEnvironment = choice.ci
+      ? ciStepEnvironment(choice.identity, process.env)
+      : { ok: true, env: process.env };
+    if (!prepared.ok) {
+      // Never spawned: a step that cannot get its declared credential is a FAIL, named, not a run
+      // that dies inside the store connector with a message about application-default credentials.
+      finish({ exitCode: null, note: prepared.reason });
+      return;
+    }
+
     const child = spawn(step.command, {
       cwd: repoRoot,
       stdio: "inherit",
       shell: true,
-      env: credentialFreeTestEnvironment(step.command, process.env),
+      env: credentialFreeTestEnvironment(step.command, prepared.env),
     });
 
     child.on("error", (err) => {
@@ -395,6 +469,10 @@ async function main(): Promise<void> {
   const failFast =
     argv.includes("--fail-fast") || (process.env["STORYTREE_GATE_FAIL_FAST"] ?? "") !== "";
   const forceFull = argv.includes("--full") || (process.env["STORYTREE_GATE_FULL"] ?? "") !== "";
+  // `--ci` is the CI `verify` job's run (ADR-0606 D3): the CI placement, the PR merge commit's scope,
+  // a skip counts as a failure, each step gets only its declared identity, and GitHub gets log
+  // sections, error annotations and a summary table. One plan, two ways of walking it.
+  const ci = argv.includes("--ci");
 
   // --- the plan must match the scripts it names ------------------------------------------------
   const declared = rootScriptNames();
@@ -415,8 +493,12 @@ async function main(): Promise<void> {
   }
 
   // --- affected scope (ADR-0304 D1/D2) ----------------------------------------------------------
-  const scope = resolveScope(forceFull);
-  const steps = scopeGatePlan(GATE_PLAN, pnpmArgsFor(scope));
+  const scope = ci ? resolveCiScope(forceFull) : resolveScope(forceFull);
+  const pnpmArgs = pnpmArgsFor(scope);
+  const scopedPlan = scopeGatePlan(GATE_PLAN, pnpmArgs);
+  // WHERE each step runs (ADR-0606 D3): `both` + `local` here, `both` + `ci` under `--ci`. Narrowed
+  // AFTER the scope rewrite and judged BEFORE it (below), so the ordering invariant sees the whole plan.
+  const steps = stepsFor(scopedPlan, ci ? "ci" : "local");
 
   // `--scope` answers "what will my gate actually test?" without spending the run to find out. The
   // narrowing is only trustworthy if it is inspectable: a session that reads FULL where it expected
@@ -437,8 +519,12 @@ async function main(): Promise<void> {
   // quietly producing a plan nobody is judging any more — the failure mode ADR-0304 names as the
   // accepted risk of this whole change ("an under-computed graph lets a genuine break through, and
   // the failure is silent"). A refusal here is a bug in the scoping, so it says so and runs nothing.
+  //
+  // JUDGED OVER THE WHOLE SCOPED PLAN, NOT THE PLACEMENT-FILTERED ONE. Order survives the filter (a
+  // subsequence keeps relative order), but the declared sets name steps from BOTH sides, so judging
+  // the filtered plan would report every step placed on the other side as "missing".
   const order = evaluateGateOrder({
-    steps,
+    steps: scopedPlan,
     earlyChecks: PRE_EXPENSIVE_CHECKS,
     lateChecks: SHARED_ENVIRONMENT_CHECKS,
   });
@@ -460,6 +546,17 @@ async function main(): Promise<void> {
   const parsed = parseSelectionRequest(argv);
   if (!parsed.ok) {
     console.error(`${TAG} REFUSED — ${parsed.message}`);
+    process.exitCode = 1;
+    return;
+  }
+  // CI NEVER RUNS PART OF THE GATE. A partial run exits GATE_PARTIAL_EXIT_CODE (4) at best, and the
+  // one place that code must never reach is a workflow, which reads any non-zero as red and any zero
+  // as a merge — `gate-runner.ts`'s own note on that code says not to wire `--only` into CI.
+  if (ci && parsed.request.mode !== "all") {
+    console.error(
+      `${TAG} REFUSED — --ci runs the whole CI plan; --only / --rerun-failed select part of it, and a ` +
+        `partial run is never a merge verdict.`,
+    );
     process.exitCode = 1;
     return;
   }
@@ -504,34 +601,52 @@ async function main(): Promise<void> {
 
   const total = steps.length;
   console.log(
-    `${TAG} running ${total} steps${failFast ? " (--fail-fast: stops at the first red)" : ""}. ` +
+    `${TAG} running ${total} steps${ci ? " as CI runs them (--ci: a skip counts as a failure)" : ""}` +
+      `${failFast ? " (--fail-fast: stops at the first red)" : ""}. ` +
       `Every step runs and is reported PASS / FAIL / SKIP / NOT RUN; the gate is green only if ` +
       `every step passed or declared a skip.`,
   );
   if (partial !== undefined) console.log(`${TAG} ${selection.notice}`);
   console.log(`${TAG} ${renderScopeNotice(scope)}`);
-  if (scope.mode === "affected") {
+  if (ci) {
+    // The automerge job's ADR-0195 §5 backstop reads `mode`; the run page reads the scope line.
+    appendGithubFile("GITHUB_OUTPUT", githubScopeOutput(scope, pnpmArgs));
+    appendGithubFile("GITHUB_STEP_SUMMARY", githubScopeSummary(scope, pnpmArgs));
+  } else if (scope.mode === "affected") {
     console.log(
       `${TAG} CI classifies the same diff with the same rules (ADR-0304 D2) and re-proves the merged ` +
         `tree; \`pnpm gate --full\` runs every package here.`,
     );
   }
+  // The stale-branch half of "local green, CI red" (ADR-0606 D5): said at the start, and again at the
+  // verdict below. A CI run proves the merge ref itself, so it has nothing to warn about.
+  const behindNotice = ci ? [] : renderBehindMainNotice(behindMainCount());
+  for (const line of behindNotice) console.log(`${TAG} ${line}`);
+
+  // Each step's CI identity, resolved once against the plan the runner is about to walk.
+  const identities = steps.map((step) => ciIdentityFor(step));
 
   const results = await runGate({
     steps,
-    execute: executeStep,
+    execute: (step, index) => executeStep(step, { ci, identity: identities[index] }),
     failFast,
+    skipIsFailure: ci,
     unselected: selection.unselected,
     shouldStop: () => interrupted,
     onStepStart: (step, index) => {
+      if (ci) console.log(githubGroupStart(`[${index + 1}/${total}] ${step.command}`));
       console.log(`\n${TAG} ─── [${index + 1}/${total}] ${step.command} ───`);
       if (isStandardTestLeg(step.command)) {
         console.log(`${TAG} credential-free test mode — an implicit live Library open is refused.`);
       }
     },
     onStepDone: (result, index) => {
+      // The group closes BEFORE the result line, so on GitHub each step reads as one collapsed
+      // section followed by its verdict — the per-step overview the old one-box-per-check page gave.
+      if (ci) console.log(GITHUB_GROUP_END);
       const suffix = result.note !== undefined ? ` — ${result.note}` : "";
       console.log(`${TAG} [${index + 1}/${total}] ${result.status.toUpperCase()}: ${result.command}${suffix}`);
+      if (ci && result.status === "fail") console.log(githubErrorAnnotation(result));
     },
   });
 
@@ -540,6 +655,13 @@ async function main(): Promise<void> {
   for (const [sig, handler] of handlers) process.off(sig, handler);
 
   for (const line of renderGateSummary(results, partial)) console.log(line);
+  for (const line of behindNotice) console.log(`${TAG} ${line}`);
+  if (ci) {
+    appendGithubFile(
+      "GITHUB_STEP_SUMMARY",
+      renderGithubSummary({ results, verdict: ciVerdict(results), scope: renderScopeNotice(scope) }),
+    );
+  }
 
   // What a step that failed once and passes now is allowed to be CALLED — the friction
   // `full-gate-worker-can-exit-without-test-failure`, where telling an unattributed worker exit from a

@@ -19,19 +19,20 @@ import { appendFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+import { discoverWorkspaceProjects, pnpmArgsFor, type AffectedScope } from "./ci-affected.js";
 import {
-  classifyChangedFiles,
-  discoverWorkspaceProjects,
-  pnpmArgsFor,
-  type AffectedScope,
-} from "./ci-affected.js";
+  type GitAnswer,
+  ciMergeScope,
+  githubScopeOutput,
+  githubScopeSummary,
+} from "./ci-affected-merge.js";
 
 const TAG = "[ci:affected]";
 
 // This file sits at packages/cli/src/ — three levels up is the repo root.
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
 
-function git(args: string[]) {
+function git(args: readonly string[]): GitAnswer {
   const res = spawnSync("git", args, { cwd: repoRoot, encoding: "utf8" });
   if (res.error !== undefined || res.status !== 0) {
     const detail = res.error?.message ?? res.stderr.trim() ?? `exit ${res.status}`;
@@ -40,28 +41,15 @@ function git(args: string[]) {
   return { ok: true, stdout: res.stdout, detail: "" };
 }
 
-function computeScope(): AffectedScope {
-  if (process.env["GITHUB_EVENT_NAME"] !== "pull_request") {
-    return { mode: "full", reason: "not a pull_request event — the full suite is the backstop" };
-  }
-  // The PR checkout is the merge commit refs/pull/N/merge: parent 1 = base tip, parent 2 = PR head.
-  const mergeParent = git(["rev-parse", "--verify", "--quiet", "HEAD^2"]);
-  if (!mergeParent.ok) {
-    return { mode: "full", reason: "HEAD is not a PR merge commit (no HEAD^2)" };
-  }
-  // --no-renames: a rename must list BOTH paths, so the old file's project is selected too.
-  const diff = git(["diff", "--name-only", "--no-renames", "HEAD^1", "HEAD"]);
-  if (!diff.ok) {
-    return { mode: "full", reason: diff.detail };
-  }
-  const changed = diff.stdout.split("\n").map((l) => l.trim()).filter((l) => l !== "");
-  return classifyChangedFiles(changed, discoverWorkspaceProjects(repoRoot));
-}
-
 function main(): void {
   let scope: AffectedScope;
   try {
-    scope = computeScope();
+    // The ONE decision `pnpm gate --ci` makes too (`ci-affected-merge.ts`, ADR-0606 D3).
+    scope = ciMergeScope({
+      eventName: process.env["GITHUB_EVENT_NAME"],
+      git,
+      projects: () => discoverWorkspaceProjects(repoRoot),
+    });
   } catch (err) {
     scope = { mode: "full", reason: `unexpected error: ${(err as Error).message}` };
   }
@@ -73,17 +61,13 @@ function main(): void {
   console.log(`${TAG} pnpm args: ${pnpmArgs}`);
   const outFile = process.env["GITHUB_OUTPUT"];
   if (outFile !== undefined && outFile !== "") {
-    appendFileSync(outFile, `pnpm_args=${pnpmArgs}\nmode=${scope.mode}\n`);
+    appendFileSync(outFile, githubScopeOutput(scope, pnpmArgs));
   }
   // The scope decision on the run page itself ($GITHUB_STEP_SUMMARY), so the ADR-0195 sanity-watch
   // ("did this PR narrow, and to what?") reads off the job summary without opening step logs.
   const summaryFile = process.env["GITHUB_STEP_SUMMARY"];
   if (summaryFile !== undefined && summaryFile !== "") {
-    const projects = scope.mode === "affected" ? ` · projects: ${scope.projects.join(", ")}` : "";
-    appendFileSync(
-      summaryFile,
-      `**Affected scope (ADR-0195):** \`${scope.mode}\`${projects} — ${scope.reason} (\`pnpm ${pnpmArgs}\`)\n`,
-    );
+    appendFileSync(summaryFile, githubScopeSummary(scope, pnpmArgs));
   }
 }
 
