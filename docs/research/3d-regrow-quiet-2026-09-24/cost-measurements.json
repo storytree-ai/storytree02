@@ -1,0 +1,3048 @@
+{
+  "takenAt": "2026-09-23T23:24:54.500Z",
+  "head": "05a1f22d99ea1d8de9de18ae2ec42c538c4ab17c",
+  "health": {
+    "store": "pg",
+    "db": "ok",
+    "schema": {
+      "code": 9,
+      "db": 9
+    },
+    "pid": 1561889,
+    "code": {
+      "startedAt": "05a1f22d99ea1d8de9de18ae2ec42c538c4ab17c",
+      "head": "05a1f22d99ea1d8de9de18ae2ec42c538c4ab17c",
+      "stale": false,
+      "directory": "/home/mickh/code/Storytree/.claude/worktrees/laneK-quiet",
+      "branch": "codex/lane-k-3d-regrow-quiet"
+    }
+  },
+  "sourceSha256": "9a88ed806e2f0e77987d14b6264560aebf3b86b0c3bdbaaf38095a5293d1e786",
+  "viewport": {
+    "width": 1800,
+    "height": 1100
+  },
+  "attempts": 7,
+  "rendersPerBatch": 10,
+  "method": {
+    "clock": "Unmodified native app clock and native renderer animation frames. No clock injection.",
+    "gpu": "EXT_disjoint_timer_query_webgl2 TIME_ELAPSED_EXT around batches of actual renderer.render(scene, camera), divided by 10. No CPU submission-time or gl.finish fallback.",
+    "integrity": "Borrowed from packages/forest-world-r3f/harness/frame-cost.ts: discard disjoint/unavailable samples; require at least 3 accepted AND a majority of attempts; reject software, hidden pages and absent extension.",
+    "load": "Fresh browser context with HTTP cache disabled; actual development-server modules and live or frozen-snapshot API data. Server/process/OS and GPU driver/shader caches are not reset. First observed populated native renderer followed by a native repaint is an observation bound, not an exact first-present hardware timestamp.",
+    "settledCost": "Warmed settled scene at each real consumer's unchanged opening camera. Mounted and standalone are separate product compositions/canvas sizes, not an equivalent-work A/B.",
+    "scope": "GPU render component and descriptive development load observations. Excludes app CPU update/compositor cost from GPU time; does not infer FPS or satisfy the Adreno hardware floor."
+  },
+  "cases": {
+    "mounted": {
+      "query": "?landMount=1&landMountProps=1&act2=intro&sceneExport=1",
+      "testId": "land-mount",
+      "requestedAt": "2026-09-23T23:24:54.606Z",
+      "apiSource": "First GET per path captured from live PostgreSQL-backed dev API, then replayed",
+      "load": {
+        "paint": [
+          {
+            "name": "first-paint",
+            "startTime": 340,
+            "duration": 0
+          },
+          {
+            "name": "first-contentful-paint",
+            "startTime": 360,
+            "duration": 0
+          }
+        ],
+        "longTasks": [
+          {
+            "name": "self",
+            "startTime": 253,
+            "duration": 61
+          },
+          {
+            "name": "self",
+            "startTime": 7712.599999964237,
+            "duration": 2450
+          },
+          {
+            "name": "self",
+            "startTime": 10178.699999988079,
+            "duration": 75
+          },
+          {
+            "name": "self",
+            "startTime": 10406.399999976158,
+            "duration": 2235
+          },
+          {
+            "name": "self",
+            "startTime": 12648.5,
+            "duration": 116
+          },
+          {
+            "name": "self",
+            "startTime": 12767.799999952316,
+            "duration": 173
+          },
+          {
+            "name": "self",
+            "startTime": 12958.799999952316,
+            "duration": 128
+          },
+          {
+            "name": "self",
+            "startTime": 13255.799999952316,
+            "duration": 90
+          },
+          {
+            "name": "self",
+            "startTime": 13346.299999952316,
+            "duration": 331
+          },
+          {
+            "name": "self",
+            "startTime": 13683.299999952316,
+            "duration": 132
+          },
+          {
+            "name": "self",
+            "startTime": 13820.399999976158,
+            "duration": 125
+          },
+          {
+            "name": "self",
+            "startTime": 13990.799999952316,
+            "duration": 202
+          },
+          {
+            "name": "self",
+            "startTime": 14241.799999952316,
+            "duration": 3170
+          },
+          {
+            "name": "self",
+            "startTime": 17412.099999964237,
+            "duration": 74
+          },
+          {
+            "name": "self",
+            "startTime": 17487.19999998808,
+            "duration": 150
+          },
+          {
+            "name": "self",
+            "startTime": 17644.099999964237,
+            "duration": 128
+          },
+          {
+            "name": "self",
+            "startTime": 17777,
+            "duration": 394
+          },
+          {
+            "name": "self",
+            "startTime": 18255.799999952316,
+            "duration": 123
+          },
+          {
+            "name": "self",
+            "startTime": 18454.799999952316,
+            "duration": 116
+          },
+          {
+            "name": "self",
+            "startTime": 18982,
+            "duration": 215
+          },
+          {
+            "name": "self",
+            "startTime": 19197.299999952316,
+            "duration": 180
+          },
+          {
+            "name": "self",
+            "startTime": 19384.399999976158,
+            "duration": 350
+          },
+          {
+            "name": "self",
+            "startTime": 19774.099999964237,
+            "duration": 138
+          },
+          {
+            "name": "self",
+            "startTime": 19964.19999998808,
+            "duration": 144
+          },
+          {
+            "name": "self",
+            "startTime": 20180.599999964237,
+            "duration": 314
+          },
+          {
+            "name": "self",
+            "startTime": 20538.69999998808,
+            "duration": 340
+          },
+          {
+            "name": "self",
+            "startTime": 20924.799999952316,
+            "duration": 126
+          },
+          {
+            "name": "self",
+            "startTime": 21099.69999998808,
+            "duration": 174
+          },
+          {
+            "name": "self",
+            "startTime": 21350.399999976158,
+            "duration": 390
+          },
+          {
+            "name": "self",
+            "startTime": 21803.19999998808,
+            "duration": 418
+          },
+          {
+            "name": "self",
+            "startTime": 22282.599999964237,
+            "duration": 177
+          },
+          {
+            "name": "self",
+            "startTime": 22528.69999998808,
+            "duration": 386
+          },
+          {
+            "name": "self",
+            "startTime": 22977.099999964237,
+            "duration": 373
+          },
+          {
+            "name": "self",
+            "startTime": 23408.5,
+            "duration": 160
+          },
+          {
+            "name": "self",
+            "startTime": 23631.099999964237,
+            "duration": 361
+          },
+          {
+            "name": "self",
+            "startTime": 24057.69999998808,
+            "duration": 402
+          },
+          {
+            "name": "self",
+            "startTime": 24529.19999998808,
+            "duration": 181
+          },
+          {
+            "name": "self",
+            "startTime": 24781.899999976158,
+            "duration": 373
+          },
+          {
+            "name": "self",
+            "startTime": 25220.299999952316,
+            "duration": 388
+          },
+          {
+            "name": "self",
+            "startTime": 25675,
+            "duration": 182
+          },
+          {
+            "name": "self",
+            "startTime": 25939.099999964237,
+            "duration": 355
+          },
+          {
+            "name": "self",
+            "startTime": 26356.5,
+            "duration": 392
+          },
+          {
+            "name": "self",
+            "startTime": 26814.399999976158,
+            "duration": 189
+          },
+          {
+            "name": "self",
+            "startTime": 27086.599999964237,
+            "duration": 390
+          },
+          {
+            "name": "self",
+            "startTime": 27541.899999976158,
+            "duration": 430
+          },
+          {
+            "name": "self",
+            "startTime": 28212.599999964237,
+            "duration": 67
+          },
+          {
+            "name": "self",
+            "startTime": 30905.399999976158,
+            "duration": 217
+          }
+        ],
+        "observerSupported": {
+          "paint": true,
+          "longtask": true
+        },
+        "rootObservedMs": 18221.19999998808,
+        "settledObservedMs": 31607.899999976158,
+        "navigation": [
+          {
+            "domContentLoadedEventEnd": 314.0999999642372,
+            "loadEventEnd": 317.39999997615814,
+            "responseStart": 4.599999964237213,
+            "responseEnd": 5
+          }
+        ],
+        "hostObservedMs": 17486.69999998808,
+        "firstPopulatedPaintObserved": {
+          "observedMs": 18596.399999976158,
+          "state": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 18596.5,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 0.403,
+            "camera": {
+              "zoom": 3.7672307234442393,
+              "position": [
+                475,
+                2479.145617726454,
+                3791.307058326339
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                0,
+                0,
+                0.90630778703665
+              ],
+              "near": 1176.1107851672305,
+              "far": 5296.478736225345
+            },
+            "canvas": {
+              "width": 1800,
+              "height": 1100,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1800,
+                "height": 1100,
+                "top": 0,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 0
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 10,
+            "calls": 16,
+            "triangles": 124184,
+            "geometries": 16,
+            "textures": 6,
+            "sceneObjects": {
+              "meshes": 49,
+              "instances": 49,
+              "meshVertices": 368778
+            }
+          }
+        }
+      },
+      "opening": {
+        "identity": {
+          "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+          "vendor": "Google Inc. (NVIDIA Corporation)",
+          "software": false,
+          "timerQuery": true,
+          "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+          "display": ":0 or inherited DISPLAY"
+        },
+        "nowMs": 31624.19999998808,
+        "hidden": false,
+        "visibility": "visible",
+        "viewport": [
+          1800,
+          1100
+        ],
+        "progress": 1,
+        "camera": {
+          "zoom": 1.9724813357493298,
+          "position": [
+            475,
+            2479.145617726454,
+            3633.0298277615398
+          ],
+          "quaternion": [
+            -0.42261826174069933,
+            0,
+            0,
+            0.90630778703665
+          ],
+          "near": 1176.1107851672305,
+          "far": 5296.478736225345
+        },
+        "canvas": {
+          "width": 1800,
+          "height": 1100,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 1800,
+            "height": 1100,
+            "top": 0,
+            "right": 1800,
+            "bottom": 1100,
+            "left": 0
+          },
+          "dpr": 1
+        },
+        "frameloop": "demand",
+        "frames": 137,
+        "calls": 43,
+        "triangles": 713820,
+        "geometries": 43,
+        "textures": 15,
+        "sceneObjects": {
+          "meshes": 118,
+          "instances": 118,
+          "meshVertices": 839895
+        }
+      },
+      "dataSha256": "77905d87519d28633eafeffe0971d69f2e6a9583365e6e2be4b6744ebd6b1fcd",
+      "samples": [
+        {
+          "repeat": 0,
+          "renders": 10,
+          "available": true,
+          "disjoint": false,
+          "gpuMsPerFrame": 5.962137599999999,
+          "before": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 58174.19999998808,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.9724813357493298,
+              "position": [
+                475,
+                2479.145617726454,
+                3633.0298277615398
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                0,
+                0,
+                0.90630778703665
+              ],
+              "near": 1176.1107851672305,
+              "far": 5296.478736225345
+            },
+            "canvas": {
+              "width": 1800,
+              "height": 1100,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1800,
+                "height": 1100,
+                "top": 0,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 0
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 158,
+            "calls": 43,
+            "triangles": 713820,
+            "geometries": 43,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 118,
+              "instances": 118,
+              "meshVertices": 839895
+            }
+          },
+          "after": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 58241.09999996424,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.9724813357493298,
+              "position": [
+                475,
+                2479.145617726454,
+                3633.0298277615398
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                0,
+                0,
+                0.90630778703665
+              ],
+              "near": 1176.1107851672305,
+              "far": 5296.478736225345
+            },
+            "canvas": {
+              "width": 1800,
+              "height": 1100,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1800,
+                "height": 1100,
+                "top": 0,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 0
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 168,
+            "calls": 43,
+            "triangles": 713820,
+            "geometries": 43,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 118,
+              "instances": 118,
+              "meshVertices": 839895
+            }
+          }
+        },
+        {
+          "repeat": 1,
+          "renders": 10,
+          "available": true,
+          "disjoint": false,
+          "gpuMsPerFrame": 6.335689599999999,
+          "before": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 59741.69999998808,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.9724813357493298,
+              "position": [
+                475,
+                2479.145617726454,
+                3633.0298277615398
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                0,
+                0,
+                0.90630778703665
+              ],
+              "near": 1176.1107851672305,
+              "far": 5296.478736225345
+            },
+            "canvas": {
+              "width": 1800,
+              "height": 1100,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1800,
+                "height": 1100,
+                "top": 0,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 0
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 168,
+            "calls": 43,
+            "triangles": 713820,
+            "geometries": 43,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 118,
+              "instances": 118,
+              "meshVertices": 839895
+            }
+          },
+          "after": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 59809.5,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.9724813357493298,
+              "position": [
+                475,
+                2479.145617726454,
+                3633.0298277615398
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                0,
+                0,
+                0.90630778703665
+              ],
+              "near": 1176.1107851672305,
+              "far": 5296.478736225345
+            },
+            "canvas": {
+              "width": 1800,
+              "height": 1100,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1800,
+                "height": 1100,
+                "top": 0,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 0
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 178,
+            "calls": 43,
+            "triangles": 713820,
+            "geometries": 43,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 118,
+              "instances": 118,
+              "meshVertices": 839895
+            }
+          }
+        },
+        {
+          "repeat": 2,
+          "renders": 10,
+          "available": true,
+          "disjoint": false,
+          "gpuMsPerFrame": 6.502016,
+          "before": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 60290.69999998808,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.9724813357493298,
+              "position": [
+                475,
+                2479.145617726454,
+                3633.0298277615398
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                0,
+                0,
+                0.90630778703665
+              ],
+              "near": 1176.1107851672305,
+              "far": 5296.478736225345
+            },
+            "canvas": {
+              "width": 1800,
+              "height": 1100,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1800,
+                "height": 1100,
+                "top": 0,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 0
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 178,
+            "calls": 43,
+            "triangles": 713820,
+            "geometries": 43,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 118,
+              "instances": 118,
+              "meshVertices": 839895
+            }
+          },
+          "after": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 61025.19999998808,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.9724813357493298,
+              "position": [
+                475,
+                2479.145617726454,
+                3633.0298277615398
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                0,
+                0,
+                0.90630778703665
+              ],
+              "near": 1176.1107851672305,
+              "far": 5296.478736225345
+            },
+            "canvas": {
+              "width": 1800,
+              "height": 1100,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1800,
+                "height": 1100,
+                "top": 0,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 0
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 188,
+            "calls": 43,
+            "triangles": 713820,
+            "geometries": 43,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 118,
+              "instances": 118,
+              "meshVertices": 839895
+            }
+          }
+        },
+        {
+          "repeat": 3,
+          "renders": 10,
+          "available": true,
+          "disjoint": false,
+          "gpuMsPerFrame": 6.510278400000001,
+          "before": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 62540.799999952316,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.9724813357493298,
+              "position": [
+                475,
+                2479.145617726454,
+                3633.0298277615398
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                0,
+                0,
+                0.90630778703665
+              ],
+              "near": 1176.1107851672305,
+              "far": 5296.478736225345
+            },
+            "canvas": {
+              "width": 1800,
+              "height": 1100,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1800,
+                "height": 1100,
+                "top": 0,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 0
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 190,
+            "calls": 43,
+            "triangles": 713820,
+            "geometries": 43,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 118,
+              "instances": 118,
+              "meshVertices": 839895
+            }
+          },
+          "after": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 62624.89999997616,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.9724813357493298,
+              "position": [
+                475,
+                2479.145617726454,
+                3633.0298277615398
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                0,
+                0,
+                0.90630778703665
+              ],
+              "near": 1176.1107851672305,
+              "far": 5296.478736225345
+            },
+            "canvas": {
+              "width": 1800,
+              "height": 1100,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1800,
+                "height": 1100,
+                "top": 0,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 0
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 200,
+            "calls": 43,
+            "triangles": 713820,
+            "geometries": 43,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 118,
+              "instances": 118,
+              "meshVertices": 839895
+            }
+          }
+        },
+        {
+          "repeat": 4,
+          "renders": 10,
+          "available": true,
+          "disjoint": false,
+          "gpuMsPerFrame": 6.386896,
+          "before": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 63095.59999996424,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.9724813357493298,
+              "position": [
+                475,
+                2479.145617726454,
+                3633.0298277615398
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                0,
+                0,
+                0.90630778703665
+              ],
+              "near": 1176.1107851672305,
+              "far": 5296.478736225345
+            },
+            "canvas": {
+              "width": 1800,
+              "height": 1100,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1800,
+                "height": 1100,
+                "top": 0,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 0
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 200,
+            "calls": 43,
+            "triangles": 713820,
+            "geometries": 43,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 118,
+              "instances": 118,
+              "meshVertices": 839895
+            }
+          },
+          "after": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 63178.89999997616,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.9724813357493298,
+              "position": [
+                475,
+                2479.145617726454,
+                3633.0298277615398
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                0,
+                0,
+                0.90630778703665
+              ],
+              "near": 1176.1107851672305,
+              "far": 5296.478736225345
+            },
+            "canvas": {
+              "width": 1800,
+              "height": 1100,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1800,
+                "height": 1100,
+                "top": 0,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 0
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 210,
+            "calls": 43,
+            "triangles": 713820,
+            "geometries": 43,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 118,
+              "instances": 118,
+              "meshVertices": 839895
+            }
+          }
+        },
+        {
+          "repeat": 5,
+          "renders": 10,
+          "available": true,
+          "disjoint": false,
+          "gpuMsPerFrame": 6.429184,
+          "before": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 64723.799999952316,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.9724813357493298,
+              "position": [
+                475,
+                2479.145617726454,
+                3633.0298277615398
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                0,
+                0,
+                0.90630778703665
+              ],
+              "near": 1176.1107851672305,
+              "far": 5296.478736225345
+            },
+            "canvas": {
+              "width": 1800,
+              "height": 1100,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1800,
+                "height": 1100,
+                "top": 0,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 0
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 210,
+            "calls": 43,
+            "triangles": 713820,
+            "geometries": 43,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 118,
+              "instances": 118,
+              "meshVertices": 839895
+            }
+          },
+          "after": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 64807.5,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.9724813357493298,
+              "position": [
+                475,
+                2479.145617726454,
+                3633.0298277615398
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                0,
+                0,
+                0.90630778703665
+              ],
+              "near": 1176.1107851672305,
+              "far": 5296.478736225345
+            },
+            "canvas": {
+              "width": 1800,
+              "height": 1100,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1800,
+                "height": 1100,
+                "top": 0,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 0
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 220,
+            "calls": 43,
+            "triangles": 713820,
+            "geometries": 43,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 118,
+              "instances": 118,
+              "meshVertices": 839895
+            }
+          }
+        },
+        {
+          "repeat": 6,
+          "renders": 10,
+          "available": true,
+          "disjoint": false,
+          "gpuMsPerFrame": 6.507913599999999,
+          "before": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 65296.799999952316,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.9724813357493298,
+              "position": [
+                475,
+                2479.145617726454,
+                3633.0298277615398
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                0,
+                0,
+                0.90630778703665
+              ],
+              "near": 1176.1107851672305,
+              "far": 5296.478736225345
+            },
+            "canvas": {
+              "width": 1800,
+              "height": 1100,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1800,
+                "height": 1100,
+                "top": 0,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 0
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 220,
+            "calls": 43,
+            "triangles": 713820,
+            "geometries": 43,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 118,
+              "instances": 118,
+              "meshVertices": 839895
+            }
+          },
+          "after": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 65371.19999998808,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.9724813357493298,
+              "position": [
+                475,
+                2479.145617726454,
+                3633.0298277615398
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                0,
+                0,
+                0.90630778703665
+              ],
+              "near": 1176.1107851672305,
+              "far": 5296.478736225345
+            },
+            "canvas": {
+              "width": 1800,
+              "height": 1100,
+              "rect": {
+                "x": 0,
+                "y": 0,
+                "width": 1800,
+                "height": 1100,
+                "top": 0,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 0
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 230,
+            "calls": 43,
+            "triangles": 713820,
+            "geometries": 43,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 118,
+              "instances": 118,
+              "meshVertices": 839895
+            }
+          }
+        }
+      ],
+      "summary": {
+        "integrity": "SOUND",
+        "attempted": 7,
+        "accepted": 7,
+        "discardedDisjoint": 0,
+        "discardedUnavailable": 0,
+        "acceptedGpuMsPerFrame": [
+          5.962137599999999,
+          6.335689599999999,
+          6.502016,
+          6.510278400000001,
+          6.386896,
+          6.429184,
+          6.507913599999999
+        ],
+        "medianGpuMsPerFrame": 6.429184,
+        "spreadGpuMs": 0.5481408000000014,
+        "minimumGpuMs": 5.962137599999999,
+        "maximumGpuMs": 6.510278400000001
+      }
+    },
+    "standalone": {
+      "query": "?landView=1&act2=intro&sceneExport=1",
+      "testId": "land-view",
+      "requestedAt": "2026-09-23T23:25:26.969Z",
+      "apiSource": "Same captured API bodies replayed; this is not a second live data load",
+      "load": {
+        "paint": [
+          {
+            "name": "first-paint",
+            "startTime": 304,
+            "duration": 0
+          },
+          {
+            "name": "first-contentful-paint",
+            "startTime": 332,
+            "duration": 0
+          }
+        ],
+        "longTasks": [
+          {
+            "name": "self",
+            "startTime": 241.69999998807907,
+            "duration": 58
+          },
+          {
+            "name": "self",
+            "startTime": 568,
+            "duration": 2045
+          },
+          {
+            "name": "self",
+            "startTime": 2623.100000023842,
+            "duration": 75
+          },
+          {
+            "name": "self",
+            "startTime": 2864.800000011921,
+            "duration": 77
+          },
+          {
+            "name": "self",
+            "startTime": 2943.600000023842,
+            "duration": 88
+          },
+          {
+            "name": "self",
+            "startTime": 3043.699999988079,
+            "duration": 2262
+          },
+          {
+            "name": "self",
+            "startTime": 5320.399999976158,
+            "duration": 86
+          },
+          {
+            "name": "self",
+            "startTime": 5412.600000023842,
+            "duration": 187
+          },
+          {
+            "name": "self",
+            "startTime": 5619.699999988079,
+            "duration": 76
+          },
+          {
+            "name": "self",
+            "startTime": 5770.100000023842,
+            "duration": 82
+          },
+          {
+            "name": "self",
+            "startTime": 5852.399999976158,
+            "duration": 308
+          },
+          {
+            "name": "self",
+            "startTime": 6313.800000011921,
+            "duration": 248
+          },
+          {
+            "name": "self",
+            "startTime": 6569.100000023842,
+            "duration": 137
+          },
+          {
+            "name": "self",
+            "startTime": 6711.300000011921,
+            "duration": 3066
+          },
+          {
+            "name": "self",
+            "startTime": 9778.399999976158,
+            "duration": 57
+          },
+          {
+            "name": "self",
+            "startTime": 9843.300000011921,
+            "duration": 130
+          },
+          {
+            "name": "self",
+            "startTime": 9980.199999988079,
+            "duration": 122
+          },
+          {
+            "name": "self",
+            "startTime": 10106,
+            "duration": 374
+          },
+          {
+            "name": "self",
+            "startTime": 10554.699999988079,
+            "duration": 117
+          },
+          {
+            "name": "self",
+            "startTime": 10711.199999988079,
+            "duration": 102
+          },
+          {
+            "name": "self",
+            "startTime": 10857.300000011921,
+            "duration": 337
+          },
+          {
+            "name": "self",
+            "startTime": 11528.5,
+            "duration": 182
+          },
+          {
+            "name": "self",
+            "startTime": 11711.399999976158,
+            "duration": 148
+          },
+          {
+            "name": "self",
+            "startTime": 11861.800000011921,
+            "duration": 316
+          },
+          {
+            "name": "self",
+            "startTime": 12204.5,
+            "duration": 129
+          },
+          {
+            "name": "self",
+            "startTime": 12375.899999976158,
+            "duration": 135
+          },
+          {
+            "name": "self",
+            "startTime": 12553.800000011921,
+            "duration": 352
+          },
+          {
+            "name": "self",
+            "startTime": 12943.600000023842,
+            "duration": 364
+          },
+          {
+            "name": "self",
+            "startTime": 13404.100000023842,
+            "duration": 141
+          },
+          {
+            "name": "self",
+            "startTime": 13594.699999988079,
+            "duration": 380
+          },
+          {
+            "name": "self",
+            "startTime": 14034.600000023842,
+            "duration": 383
+          },
+          {
+            "name": "self",
+            "startTime": 14473.5,
+            "duration": 152
+          },
+          {
+            "name": "self",
+            "startTime": 14681.699999988079,
+            "duration": 374
+          },
+          {
+            "name": "self",
+            "startTime": 15113.300000011921,
+            "duration": 379
+          },
+          {
+            "name": "self",
+            "startTime": 15543.899999976158,
+            "duration": 155
+          },
+          {
+            "name": "self",
+            "startTime": 15746.800000011921,
+            "duration": 372
+          },
+          {
+            "name": "self",
+            "startTime": 16166.300000011921,
+            "duration": 411
+          },
+          {
+            "name": "self",
+            "startTime": 16646.80000001192,
+            "duration": 187
+          },
+          {
+            "name": "self",
+            "startTime": 16888,
+            "duration": 404
+          },
+          {
+            "name": "self",
+            "startTime": 17345.399999976158,
+            "duration": 403
+          },
+          {
+            "name": "self",
+            "startTime": 17800.600000023842,
+            "duration": 179
+          },
+          {
+            "name": "self",
+            "startTime": 18038.100000023842,
+            "duration": 397
+          },
+          {
+            "name": "self",
+            "startTime": 18494.899999976158,
+            "duration": 410
+          },
+          {
+            "name": "self",
+            "startTime": 18964.80000001192,
+            "duration": 180
+          },
+          {
+            "name": "self",
+            "startTime": 19221.899999976158,
+            "duration": 411
+          },
+          {
+            "name": "self",
+            "startTime": 19691.80000001192,
+            "duration": 400
+          },
+          {
+            "name": "self",
+            "startTime": 20154.19999998808,
+            "duration": 172
+          },
+          {
+            "name": "self",
+            "startTime": 23307.80000001192,
+            "duration": 267
+          }
+        ],
+        "observerSupported": {
+          "paint": true,
+          "longtask": true
+        },
+        "rootObservedMs": 10554.300000011921,
+        "settledObservedMs": 24042.19999998808,
+        "navigation": [
+          {
+            "domContentLoadedEventEnd": 299.30000001192093,
+            "loadEventEnd": 302.19999998807907,
+            "responseStart": 6.600000023841858,
+            "responseEnd": 7
+          }
+        ],
+        "hostObservedMs": 9979.899999976158,
+        "firstPopulatedPaintObserved": {
+          "observedMs": 11860.199999988079,
+          "state": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 11860.199999988079,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 0.4008,
+            "camera": {
+              "zoom": 1.6682497445495552,
+              "position": [
+                484.45206763605535,
+                2479.145617726454,
+                3494.598252673615
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                2.4765114221538637e-17,
+                1.1548162416586731e-17,
+                0.90630778703665
+              ],
+              "near": 336.37205773628057,
+              "far": 6136.217463656294
+            },
+            "canvas": {
+              "width": 719,
+              "height": 1062,
+              "rect": {
+                "x": 1080.40625,
+                "y": 37.796875,
+                "width": 719.59375,
+                "height": 1062.203125,
+                "top": 37.796875,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 1080.40625
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 13,
+            "calls": 5,
+            "triangles": 710328,
+            "geometries": 5,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 5,
+              "instances": 5,
+              "meshVertices": 838991
+            }
+          }
+        }
+      },
+      "opening": {
+        "identity": {
+          "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+          "vendor": "Google Inc. (NVIDIA Corporation)",
+          "software": false,
+          "timerQuery": true,
+          "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+          "display": ":0 or inherited DISPLAY"
+        },
+        "nowMs": 24045.399999976158,
+        "hidden": false,
+        "visibility": "visible",
+        "viewport": [
+          1800,
+          1100
+        ],
+        "progress": 1,
+        "camera": {
+          "zoom": 1.6682497445495552,
+          "position": [
+            484.45206763605535,
+            2479.145617726454,
+            3494.598252673615
+          ],
+          "quaternion": [
+            -0.42261826174069933,
+            2.4765114221538637e-17,
+            1.1548162416586731e-17,
+            0.90630778703665
+          ],
+          "near": 336.37205773628057,
+          "far": 6136.217463656294
+        },
+        "canvas": {
+          "width": 719,
+          "height": 1062,
+          "rect": {
+            "x": 1080.40625,
+            "y": 37.796875,
+            "width": 719.59375,
+            "height": 1062.203125,
+            "top": 37.796875,
+            "right": 1800,
+            "bottom": 1100,
+            "left": 1080.40625
+          },
+          "dpr": 1
+        },
+        "frameloop": "demand",
+        "frames": 138,
+        "calls": 5,
+        "triangles": 710328,
+        "geometries": 5,
+        "textures": 15,
+        "sceneObjects": {
+          "meshes": 5,
+          "instances": 5,
+          "meshVertices": 838991
+        }
+      },
+      "dataSha256": "77905d87519d28633eafeffe0971d69f2e6a9583365e6e2be4b6744ebd6b1fcd",
+      "samples": [
+        {
+          "repeat": 0,
+          "renders": 10,
+          "available": true,
+          "disjoint": false,
+          "gpuMsPerFrame": 5.1839104,
+          "before": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 26327.899999976158,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.6682497445495552,
+              "position": [
+                484.45206763605535,
+                2479.145617726454,
+                3494.598252673615
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                2.4765114221538637e-17,
+                1.1548162416586731e-17,
+                0.90630778703665
+              ],
+              "near": 336.37205773628057,
+              "far": 6136.217463656294
+            },
+            "canvas": {
+              "width": 719,
+              "height": 1062,
+              "rect": {
+                "x": 1080.40625,
+                "y": 37.796875,
+                "width": 719.59375,
+                "height": 1062.203125,
+                "top": 37.796875,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 1080.40625
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 159,
+            "calls": 5,
+            "triangles": 710328,
+            "geometries": 5,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 5,
+              "instances": 5,
+              "meshVertices": 838991
+            }
+          },
+          "after": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 26395.5,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.6682497445495552,
+              "position": [
+                484.45206763605535,
+                2479.145617726454,
+                3494.598252673615
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                2.4765114221538637e-17,
+                1.1548162416586731e-17,
+                0.90630778703665
+              ],
+              "near": 336.37205773628057,
+              "far": 6136.217463656294
+            },
+            "canvas": {
+              "width": 719,
+              "height": 1062,
+              "rect": {
+                "x": 1080.40625,
+                "y": 37.796875,
+                "width": 719.59375,
+                "height": 1062.203125,
+                "top": 37.796875,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 1080.40625
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 169,
+            "calls": 5,
+            "triangles": 710328,
+            "geometries": 5,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 5,
+              "instances": 5,
+              "meshVertices": 838991
+            }
+          }
+        },
+        {
+          "repeat": 1,
+          "renders": 10,
+          "available": true,
+          "disjoint": false,
+          "gpuMsPerFrame": 5.1380512000000005,
+          "before": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 26842,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.6682497445495552,
+              "position": [
+                484.45206763605535,
+                2479.145617726454,
+                3494.598252673615
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                2.4765114221538637e-17,
+                1.1548162416586731e-17,
+                0.90630778703665
+              ],
+              "near": 336.37205773628057,
+              "far": 6136.217463656294
+            },
+            "canvas": {
+              "width": 719,
+              "height": 1062,
+              "rect": {
+                "x": 1080.40625,
+                "y": 37.796875,
+                "width": 719.59375,
+                "height": 1062.203125,
+                "top": 37.796875,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 1080.40625
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 169,
+            "calls": 5,
+            "triangles": 710328,
+            "geometries": 5,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 5,
+              "instances": 5,
+              "meshVertices": 838991
+            }
+          },
+          "after": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 26895.5,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.6682497445495552,
+              "position": [
+                484.45206763605535,
+                2479.145617726454,
+                3494.598252673615
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                2.4765114221538637e-17,
+                1.1548162416586731e-17,
+                0.90630778703665
+              ],
+              "near": 336.37205773628057,
+              "far": 6136.217463656294
+            },
+            "canvas": {
+              "width": 719,
+              "height": 1062,
+              "rect": {
+                "x": 1080.40625,
+                "y": 37.796875,
+                "width": 719.59375,
+                "height": 1062.203125,
+                "top": 37.796875,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 1080.40625
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 179,
+            "calls": 5,
+            "triangles": 710328,
+            "geometries": 5,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 5,
+              "instances": 5,
+              "meshVertices": 838991
+            }
+          }
+        },
+        {
+          "repeat": 2,
+          "renders": 10,
+          "available": true,
+          "disjoint": false,
+          "gpuMsPerFrame": 5.583446400000001,
+          "before": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 29111.399999976158,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.6682497445495552,
+              "position": [
+                484.45206763605535,
+                2479.145617726454,
+                3494.598252673615
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                2.4765114221538637e-17,
+                1.1548162416586731e-17,
+                0.90630778703665
+              ],
+              "near": 336.37205773628057,
+              "far": 6136.217463656294
+            },
+            "canvas": {
+              "width": 719,
+              "height": 1062,
+              "rect": {
+                "x": 1080.40625,
+                "y": 37.796875,
+                "width": 719.59375,
+                "height": 1062.203125,
+                "top": 37.796875,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 1080.40625
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 179,
+            "calls": 5,
+            "triangles": 710328,
+            "geometries": 5,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 5,
+              "instances": 5,
+              "meshVertices": 838991
+            }
+          },
+          "after": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 29178.80000001192,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.6682497445495552,
+              "position": [
+                484.45206763605535,
+                2479.145617726454,
+                3494.598252673615
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                2.4765114221538637e-17,
+                1.1548162416586731e-17,
+                0.90630778703665
+              ],
+              "near": 336.37205773628057,
+              "far": 6136.217463656294
+            },
+            "canvas": {
+              "width": 719,
+              "height": 1062,
+              "rect": {
+                "x": 1080.40625,
+                "y": 37.796875,
+                "width": 719.59375,
+                "height": 1062.203125,
+                "top": 37.796875,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 1080.40625
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 189,
+            "calls": 5,
+            "triangles": 710328,
+            "geometries": 5,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 5,
+              "instances": 5,
+              "meshVertices": 838991
+            }
+          }
+        },
+        {
+          "repeat": 3,
+          "renders": 10,
+          "available": true,
+          "disjoint": false,
+          "gpuMsPerFrame": 5.5769088,
+          "before": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 29625.600000023842,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.6682497445495552,
+              "position": [
+                484.45206763605535,
+                2479.145617726454,
+                3494.598252673615
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                2.4765114221538637e-17,
+                1.1548162416586731e-17,
+                0.90630778703665
+              ],
+              "near": 336.37205773628057,
+              "far": 6136.217463656294
+            },
+            "canvas": {
+              "width": 719,
+              "height": 1062,
+              "rect": {
+                "x": 1080.40625,
+                "y": 37.796875,
+                "width": 719.59375,
+                "height": 1062.203125,
+                "top": 37.796875,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 1080.40625
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 189,
+            "calls": 5,
+            "triangles": 710328,
+            "geometries": 5,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 5,
+              "instances": 5,
+              "meshVertices": 838991
+            }
+          },
+          "after": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 29695.399999976158,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.6682497445495552,
+              "position": [
+                484.45206763605535,
+                2479.145617726454,
+                3494.598252673615
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                2.4765114221538637e-17,
+                1.1548162416586731e-17,
+                0.90630778703665
+              ],
+              "near": 336.37205773628057,
+              "far": 6136.217463656294
+            },
+            "canvas": {
+              "width": 719,
+              "height": 1062,
+              "rect": {
+                "x": 1080.40625,
+                "y": 37.796875,
+                "width": 719.59375,
+                "height": 1062.203125,
+                "top": 37.796875,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 1080.40625
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 199,
+            "calls": 5,
+            "triangles": 710328,
+            "geometries": 5,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 5,
+              "instances": 5,
+              "meshVertices": 838991
+            }
+          }
+        },
+        {
+          "repeat": 4,
+          "renders": 10,
+          "available": true,
+          "disjoint": false,
+          "gpuMsPerFrame": 5.4834656,
+          "before": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 31291.899999976158,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.6682497445495552,
+              "position": [
+                484.45206763605535,
+                2479.145617726454,
+                3494.598252673615
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                2.4765114221538637e-17,
+                1.1548162416586731e-17,
+                0.90630778703665
+              ],
+              "near": 336.37205773628057,
+              "far": 6136.217463656294
+            },
+            "canvas": {
+              "width": 719,
+              "height": 1062,
+              "rect": {
+                "x": 1080.40625,
+                "y": 37.796875,
+                "width": 719.59375,
+                "height": 1062.203125,
+                "top": 37.796875,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 1080.40625
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 199,
+            "calls": 5,
+            "triangles": 710328,
+            "geometries": 5,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 5,
+              "instances": 5,
+              "meshVertices": 838991
+            }
+          },
+          "after": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 31362,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.6682497445495552,
+              "position": [
+                484.45206763605535,
+                2479.145617726454,
+                3494.598252673615
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                2.4765114221538637e-17,
+                1.1548162416586731e-17,
+                0.90630778703665
+              ],
+              "near": 336.37205773628057,
+              "far": 6136.217463656294
+            },
+            "canvas": {
+              "width": 719,
+              "height": 1062,
+              "rect": {
+                "x": 1080.40625,
+                "y": 37.796875,
+                "width": 719.59375,
+                "height": 1062.203125,
+                "top": 37.796875,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 1080.40625
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 209,
+            "calls": 5,
+            "triangles": 710328,
+            "geometries": 5,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 5,
+              "instances": 5,
+              "meshVertices": 838991
+            }
+          }
+        },
+        {
+          "repeat": 5,
+          "renders": 10,
+          "available": true,
+          "disjoint": false,
+          "gpuMsPerFrame": 5.4431616,
+          "before": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 31809.30000001192,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.6682497445495552,
+              "position": [
+                484.45206763605535,
+                2479.145617726454,
+                3494.598252673615
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                2.4765114221538637e-17,
+                1.1548162416586731e-17,
+                0.90630778703665
+              ],
+              "near": 336.37205773628057,
+              "far": 6136.217463656294
+            },
+            "canvas": {
+              "width": 719,
+              "height": 1062,
+              "rect": {
+                "x": 1080.40625,
+                "y": 37.796875,
+                "width": 719.59375,
+                "height": 1062.203125,
+                "top": 37.796875,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 1080.40625
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 209,
+            "calls": 5,
+            "triangles": 710328,
+            "geometries": 5,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 5,
+              "instances": 5,
+              "meshVertices": 838991
+            }
+          },
+          "after": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 31878.600000023842,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.6682497445495552,
+              "position": [
+                484.45206763605535,
+                2479.145617726454,
+                3494.598252673615
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                2.4765114221538637e-17,
+                1.1548162416586731e-17,
+                0.90630778703665
+              ],
+              "near": 336.37205773628057,
+              "far": 6136.217463656294
+            },
+            "canvas": {
+              "width": 719,
+              "height": 1062,
+              "rect": {
+                "x": 1080.40625,
+                "y": 37.796875,
+                "width": 719.59375,
+                "height": 1062.203125,
+                "top": 37.796875,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 1080.40625
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 219,
+            "calls": 5,
+            "triangles": 710328,
+            "geometries": 5,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 5,
+              "instances": 5,
+              "meshVertices": 838991
+            }
+          }
+        },
+        {
+          "repeat": 6,
+          "renders": 10,
+          "available": true,
+          "disjoint": false,
+          "gpuMsPerFrame": 5.5664448,
+          "before": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 33459.60000002384,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.6682497445495552,
+              "position": [
+                484.45206763605535,
+                2479.145617726454,
+                3494.598252673615
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                2.4765114221538637e-17,
+                1.1548162416586731e-17,
+                0.90630778703665
+              ],
+              "near": 336.37205773628057,
+              "far": 6136.217463656294
+            },
+            "canvas": {
+              "width": 719,
+              "height": 1062,
+              "rect": {
+                "x": 1080.40625,
+                "y": 37.796875,
+                "width": 719.59375,
+                "height": 1062.203125,
+                "top": 37.796875,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 1080.40625
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 219,
+            "calls": 5,
+            "triangles": 710328,
+            "geometries": 5,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 5,
+              "instances": 5,
+              "meshVertices": 838991
+            }
+          },
+          "after": {
+            "identity": {
+              "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+              "vendor": "Google Inc. (NVIDIA Corporation)",
+              "software": false,
+              "timerQuery": true,
+              "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+              "display": ":0 or inherited DISPLAY"
+            },
+            "nowMs": 33528.60000002384,
+            "hidden": false,
+            "visibility": "visible",
+            "viewport": [
+              1800,
+              1100
+            ],
+            "progress": 1,
+            "camera": {
+              "zoom": 1.6682497445495552,
+              "position": [
+                484.45206763605535,
+                2479.145617726454,
+                3494.598252673615
+              ],
+              "quaternion": [
+                -0.42261826174069933,
+                2.4765114221538637e-17,
+                1.1548162416586731e-17,
+                0.90630778703665
+              ],
+              "near": 336.37205773628057,
+              "far": 6136.217463656294
+            },
+            "canvas": {
+              "width": 719,
+              "height": 1062,
+              "rect": {
+                "x": 1080.40625,
+                "y": 37.796875,
+                "width": 719.59375,
+                "height": 1062.203125,
+                "top": 37.796875,
+                "right": 1800,
+                "bottom": 1100,
+                "left": 1080.40625
+              },
+              "dpr": 1
+            },
+            "frameloop": "demand",
+            "frames": 229,
+            "calls": 5,
+            "triangles": 710328,
+            "geometries": 5,
+            "textures": 15,
+            "sceneObjects": {
+              "meshes": 5,
+              "instances": 5,
+              "meshVertices": 838991
+            }
+          }
+        }
+      ],
+      "summary": {
+        "integrity": "SOUND",
+        "attempted": 7,
+        "accepted": 7,
+        "discardedDisjoint": 0,
+        "discardedUnavailable": 0,
+        "acceptedGpuMsPerFrame": [
+          5.1839104,
+          5.1380512000000005,
+          5.583446400000001,
+          5.5769088,
+          5.4834656,
+          5.4431616,
+          5.5664448
+        ],
+        "medianGpuMsPerFrame": 5.4834656,
+        "spreadGpuMs": 0.4453952000000001,
+        "minimumGpuMs": 5.1380512000000005,
+        "maximumGpuMs": 5.583446400000001
+      }
+    }
+  },
+  "errors": [],
+  "snapshotSha256": "94ce467784e3130befe67bac46a836c87b4443be4a53acb954c36bd9a20ff1f1",
+  "snapshotPaths": [
+    "/api/activity",
+    "/api/assets",
+    "/api/docs",
+    "/api/floor-health",
+    "/api/health",
+    "/api/me",
+    "/api/tree"
+  ],
+  "sourceSha256After": "9a88ed806e2f0e77987d14b6264560aebf3b86b0c3bdbaaf38095a5293d1e786",
+  "integrity": "SOUND",
+  "forest": {
+    "world": {
+      "width": 950,
+      "height": 1444,
+      "offset": {
+        "x": 609.0362464814657,
+        "y": 1406.0162455986906
+      },
+      "islands": [
+        {
+          "id": "agent",
+          "centroid": {
+            "x": -67.06814405704377,
+            "y": -38.13766478163987
+          },
+          "groundRadius": 30.225701452121886,
+          "capabilities": 3,
+          "tiles": 3
+        },
+        {
+          "id": "app-guide",
+          "centroid": {
+            "x": -522.1734073012693,
+            "y": -1061.4983364223099
+          },
+          "groundRadius": 27.6584364467022,
+          "capabilities": 4,
+          "tiles": 4
+        },
+        {
+          "id": "app-surface",
+          "centroid": {
+            "x": 105.39279780392589,
+            "y": -139.8381041993462
+          },
+          "groundRadius": 30.225701452121907,
+          "capabilities": 7,
+          "tiles": 7
+        },
+        {
+          "id": "arc",
+          "centroid": {
+            "x": -102.1990766583524,
+            "y": -601.7275998880958
+          },
+          "groundRadius": 27.96295839483246,
+          "capabilities": 3,
+          "tiles": 3
+        },
+        {
+          "id": "art-factory",
+          "centroid": {
+            "x": 177.25152357932996,
+            "y": -25.42510985442658
+          },
+          "groundRadius": 33.016577925938364,
+          "capabilities": 4,
+          "tiles": 4
+        },
+        {
+          "id": "binding-staleness",
+          "centroid": {
+            "x": -13.413628811408751,
+            "y": -597.4900815790247
+          },
+          "groundRadius": 34.058166826810094,
+          "capabilities": 5,
+          "tiles": 5
+        },
+        {
+          "id": "ci-cd",
+          "centroid": {
+            "x": 9.581163436720535,
+            "y": -1182.267608230836
+          },
+          "groundRadius": 30.22570145212194,
+          "capabilities": 7,
+          "tiles": 7
+        },
+        {
+          "id": "cli",
+          "centroid": {
+            "x": -164.0774238538392,
+            "y": -42.90487287934485
+          },
+          "groundRadius": 48.70832537049033,
+          "capabilities": 8,
+          "tiles": 8
+        },
+        {
+          "id": "context-traversal-capture",
+          "centroid": {
+            "x": -257.32267515763726,
+            "y": -701.0066002720471
+          },
+          "groundRadius": 41.91315410456396,
+          "capabilities": 7,
+          "tiles": 7
+        },
+        {
+          "id": "context-traversal-spawn",
+          "centroid": {
+            "x": -300.2097876839102,
+            "y": -788.178405487224
+          },
+          "groundRadius": 27.96295839483253,
+          "capabilities": 3,
+          "tiles": 3
+        },
+        {
+          "id": "context-traversal-telemetry",
+          "centroid": {
+            "x": -320.968975130138,
+            "y": -603.8463590426313
+          },
+          "groundRadius": 20.644538015401373,
+          "capabilities": 2,
+          "tiles": 2
+        },
+        {
+          "id": "context-traversal-transcript",
+          "centroid": {
+            "x": -201.2044321711313,
+            "y": -788.178405487224
+          },
+          "groundRadius": 36.41275030290832,
+          "capabilities": 6,
+          "tiles": 6
+        },
+        {
+          "id": "desktop",
+          "centroid": {
+            "x": -118.16768238621997,
+            "y": -1180.1488490763004
+          },
+          "groundRadius": 55.86093503882982,
+          "capabilities": 12,
+          "tiles": 12
+        },
+        {
+          "id": "drive-machinery",
+          "centroid": {
+            "x": -204.79736845990146,
+            "y": -471.95360167279364
+          },
+          "groundRadius": 68.69986645441553,
+          "capabilities": 24,
+          "tiles": 24
+        },
+        {
+          "id": "embedded-terminal",
+          "centroid": {
+            "x": -95.81163436720537,
+            "y": -1258.5429377941157
+          },
+          "groundRadius": 20.644538015401334,
+          "capabilities": 2,
+          "tiles": 2
+        },
+        {
+          "id": "feedback-graduation",
+          "centroid": {
+            "x": -47.905817183602686,
+            "y": -1055.142058958703
+          },
+          "groundRadius": 11.063374578680804,
+          "capabilities": 0,
+          "tiles": 1
+        },
+        {
+          "id": "forest-world",
+          "centroid": {
+            "x": 95.81163436720537,
+            "y": -25.42510985442658
+          },
+          "groundRadius": 11.063374578680804,
+          "capabilities": 1,
+          "tiles": 1
+        },
+        {
+          "id": "library",
+          "centroid": {
+            "x": -79.38678276139873,
+            "y": -248.80286071831728
+          },
+          "groundRadius": 51.45853023636087,
+          "capabilities": 14,
+          "tiles": 14
+        },
+        {
+          "id": "library-review",
+          "centroid": {
+            "x": 54.2932594747497,
+            "y": -1055.1420589587033
+          },
+          "groundRadius": 38.905590033488636,
+          "capabilities": 9,
+          "tiles": 9
+        },
+        {
+          "id": "library-tech-tree-overlay",
+          "centroid": {
+            "x": -171.26329643137964,
+            "y": -1044.0185733973915
+          },
+          "groundRadius": 50.640074743293184,
+          "capabilities": 16,
+          "tiles": 16
+        },
+        {
+          "id": "mintbox-event-driven-orchestration",
+          "centroid": {
+            "x": -130.942566968514,
+            "y": -682.2404477604466
+          },
+          "groundRadius": 27.962958394832487,
+          "capabilities": 3,
+          "tiles": 3
+        },
+        {
+          "id": "notice-board",
+          "centroid": {
+            "x": -131.74099725490737,
+            "y": -352.7733992301688
+          },
+          "groundRadius": 33.01657792593832,
+          "capabilities": 4,
+          "tiles": 4
+        },
+        {
+          "id": "proof-binding-integrity",
+          "centroid": {
+            "x": -191.62326873441074,
+            "y": -593.2525632699536
+          },
+          "groundRadius": 22.126749157361655,
+          "capabilities": 3,
+          "tiles": 3
+        },
+        {
+          "id": "proof-protocol",
+          "centroid": {
+            "x": 28.74349031016161,
+            "y": -38.13766478163987
+          },
+          "groundRadius": 11.063374578680804,
+          "capabilities": 0,
+          "tiles": 1
+        },
+        {
+          "id": "storage-protocol",
+          "centroid": {
+            "x": -86.23047093048484,
+            "y": -139.8381041993462
+          },
+          "groundRadius": 11.063374578680804,
+          "capabilities": 0,
+          "tiles": 1
+        },
+        {
+          "id": "studio",
+          "centroid": {
+            "x": -201.20443217113134,
+            "y": -902.5913998321433
+          },
+          "groundRadius": 68.55035519900417,
+          "capabilities": 20,
+          "tiles": 20
+        },
+        {
+          "id": "studio-cloud",
+          "centroid": {
+            "x": 203.9419074387657,
+            "y": -1051.5099004080707
+          },
+          "groundRadius": 44.70203384116404,
+          "capabilities": 7,
+          "tiles": 7
+        },
+        {
+          "id": "studio-members",
+          "centroid": {
+            "x": -44.07335180891447,
+            "y": -353.4090269765295
+          },
+          "groundRadius": 31.342875158062853,
+          "capabilities": 5,
+          "tiles": 5
+        },
+        {
+          "id": "terminal-repo-picker",
+          "centroid": {
+            "x": -105.39279780392592,
+            "y": -1334.8182673573956
+          },
+          "groundRadius": 30.225701452121942,
+          "capabilities": 3,
+          "tiles": 3
+        },
+        {
+          "id": "terminal-tabs",
+          "centroid": {
+            "x": -177.25152357932996,
+            "y": -1341.1745448210022
+          },
+          "groundRadius": 20.644538015401373,
+          "capabilities": 2,
+          "tiles": 2
+        },
+        {
+          "id": "uat-attestation",
+          "centroid": {
+            "x": -316.17839341177773,
+            "y": -1055.1420589587033
+          },
+          "groundRadius": 30.225701452121942,
+          "capabilities": 3,
+          "tiles": 3
+        },
+        {
+          "id": "uat-criterion-detail",
+          "centroid": {
+            "x": 2.3952908591801343,
+            "y": -123.9474105403296
+          },
+          "groundRadius": 33.01657792593833,
+          "capabilities": 4,
+          "tiles": 4
+        },
+        {
+          "id": "uat-detail-studio",
+          "centroid": {
+            "x": 282.64432138325583,
+            "y": -1036.0732265678832
+          },
+          "groundRadius": 20.644538015401373,
+          "capabilities": 2,
+          "tiles": 2
+        },
+        {
+          "id": "website",
+          "centroid": {
+            "x": 201.2044321711313,
+            "y": -139.8381041993462
+          },
+          "groundRadius": 11.063374578680804,
+          "capabilities": 0,
+          "tiles": 1
+        },
+        {
+          "id": "website-experience",
+          "centroid": {
+            "x": 91.0210526488451,
+            "y": -239.41978446251696
+          },
+          "groundRadius": 47.3370739141933,
+          "capabilities": 12,
+          "tiles": 12
+        },
+        {
+          "id": "wisp-as-story-claim",
+          "centroid": {
+            "x": -421.57119121570355,
+            "y": -1042.4295040314898
+          },
+          "groundRadius": 30.22570145212197,
+          "capabilities": 7,
+          "tiles": 7
+        }
+      ]
+    },
+    "trails": {
+      "edges": 95,
+      "segments": 113,
+      "caves": 0,
+      "dropped": []
+    }
+  },
+  "artifactCompaction": "Repeated world/trails payloads moved to one top-level forest. Each case keeps its original SHA-256 over the source world/trails; no timing, camera, dimensions or integrity samples removed."
+}

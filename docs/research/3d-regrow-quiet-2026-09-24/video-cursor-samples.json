@@ -1,0 +1,612 @@
+[
+  {
+    "msFromNavigation": 2649.899999976158,
+    "progress": 0.0006,
+    "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 0%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 2738.099999964237,
+    "progress": 0,
+    "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 0%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 2989,
+    "progress": 0.01,
+    "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 1%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 5245.399999976158,
+    "progress": 0.0172,
+    "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 2%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 5337.299999952316,
+    "progress": 0.026,
+    "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 3%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 5516.699999988079,
+    "progress": 0.1301,
+    "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 13%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 5610.5,
+    "progress": 0.135,
+    "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 13%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 5644.599999964237,
+    "progress": 0.1438,
+    "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 14%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 5691.599999964237,
+    "progress": 0.1478,
+    "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 15%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 6104.299999952316,
+    "progress": 0.1502,
+    "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 15%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 6139.199999988079,
+    "progress": 0.1518,
+    "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 15%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 6179.599999964237,
+    "progress": 0.1718,
+    "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 17%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 6218.899999976158,
+    "progress": 0.1734,
+    "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 17%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 6256.699999988079,
+    "progress": 0.175,
+    "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 18%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 6519.299999952316,
+    "progress": 0.1774,
+    "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 18%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 6641.899999976158,
+    "progress": 0.179,
+    "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 18%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 10059,
+    "progress": 0.1975,
+    "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 20%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 10627.199999988079,
+    "progress": 0.3617,
+    "readout": "depth 10 of 13 · 4/36 islands · 3 pathways growing · 36%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 10846.199999988079,
+    "progress": 0.3922,
+    "readout": "depth 10 of 13 · 7/36 islands · 1 pathway growing · 39%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 11304.899999976158,
+    "progress": 0.4026,
+    "readout": "depth 10 of 13 · 7/36 islands · 1 pathway growing · 40%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 12439.599999964237,
+    "progress": 0.4394,
+    "readout": "depth 10 of 13 · 9/36 islands · 3 pathways growing · 44%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 12907.199999988079,
+    "progress": 0.4771,
+    "readout": "depth 11 of 13 · 11/36 islands · 1 pathway growing · 48%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 13152.199999988079,
+    "progress": 0.5019,
+    "readout": "depth 11 of 13 · 12/36 islands · 0 pathways growing · 50%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 13720.199999988079,
+    "progress": 0.5115,
+    "readout": "depth 11 of 13 · 12/36 islands · 4 pathways growing · 51%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 14354.5,
+    "progress": 0.5412,
+    "readout": "depth 13 of 13 · 15/36 islands · 1 pathway growing · 54%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 15015.899999976158,
+    "progress": 0.574,
+    "readout": "depth 13 of 13 · 15/36 islands · 0 pathways growing · 57%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 15603,
+    "progress": 0.6045,
+    "readout": "depth 13 of 13 · 21/36 islands · 2 pathways growing · 60%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 16197.399999976158,
+    "progress": 0.6333,
+    "readout": "depth 13 of 13 · 22/36 islands · 5 pathways growing · 63%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 16693.69999998808,
+    "progress": 0.659,
+    "readout": "depth 13 of 13 · 22/36 islands · 0 pathways growing · 66%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 17245.69999998808,
+    "progress": 0.6846,
+    "readout": "depth 13 of 13 · 30/36 islands · 2 pathways growing · 68%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 17714.299999952316,
+    "progress": 0.7086,
+    "readout": "depth 13 of 13 · 30/36 islands · 1 pathway growing · 71%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 18034.19999998808,
+    "progress": 0.7319,
+    "readout": "depth 13 of 13 · 30/36 islands · 0 pathways growing · 73%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 18558.299999952316,
+    "progress": 0.7471,
+    "readout": "depth 13 of 13 · 31/36 islands · 0 pathways growing · 75%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 19029.899999976158,
+    "progress": 0.7719,
+    "readout": "depth 13 of 13 · 31/36 islands · 0 pathways growing · 77%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 19606.799999952316,
+    "progress": 0.7968,
+    "readout": "depth 13 of 13 · 34/36 islands · 3 pathways growing · 80%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 20086.19999998808,
+    "progress": 0.8224,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 82%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 20732.299999952316,
+    "progress": 0.8481,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 85%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 20828.099999964237,
+    "progress": 0.8761,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 88%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 20935.899999976158,
+    "progress": 0.8809,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 88%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 21046.899999976158,
+    "progress": 0.8873,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 89%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 21127.399999976158,
+    "progress": 0.8905,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 89%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 21198.299999952316,
+    "progress": 0.8945,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 89%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 21273.19999998808,
+    "progress": 0.8977,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 90%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 21357.69999998808,
+    "progress": 0.9018,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 90%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 21474.69999998808,
+    "progress": 0.9082,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 91%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 21568.099999964237,
+    "progress": 0.9114,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 91%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 21666.399999976158,
+    "progress": 0.9162,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 92%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 21754.5,
+    "progress": 0.921,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 92%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 21847.599999964237,
+    "progress": 0.925,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 92%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 21947.399999976158,
+    "progress": 0.9298,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 93%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 22047.599999964237,
+    "progress": 0.9346,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 93%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 22145.599999964237,
+    "progress": 0.9394,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 94%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 22231.899999976158,
+    "progress": 0.9442,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 94%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 22327.099999964237,
+    "progress": 0.9482,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 95%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 22432,
+    "progress": 0.953,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 95%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 22544.399999976158,
+    "progress": 0.9578,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 96%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 22634.69999998808,
+    "progress": 0.9626,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 96%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 22722,
+    "progress": 0.9675,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 97%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 22812.5,
+    "progress": 0.9715,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 97%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 22895.5,
+    "progress": 0.9755,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 98%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  {
+    "msFromNavigation": 22982.899999976158,
+    "progress": 0.9795,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 98%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  }
+]
