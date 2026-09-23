@@ -34,6 +34,23 @@
 apps/studio/data/users.json
 apps/studio/data/attestations.json
 apps/studio/data/assets.runtime.json
+# Terraform operator material, kept out of git by a NESTED ignore file — infra/.gitignore, whose own
+# comment says terraform.tfvars "Holds operator_email — local only", and which also ignores local
+# state (single operator, no remote backend) and run logs. Found 2026-09-24: none of these was
+# excluded here, and the main checkout holds an infra/terraform.tfvars, so a by-hand build from it
+# would have baked the operator's email into the image.
+#
+# ⚠ THESE LINES ARE HELD BY HAND, NOT BY `pnpm check:gcloudignore-mirror`: that rung reads only the
+# top-level .gitignore, so it never saw infra/.gitignore. Whether this file should keep copying
+# ignore lines at all — or read .gitignore directly, or a by-hand build should upload committed
+# files only — is the owner's open question `oq-image-filter-stops-copying-gitignore`
+# (`two-copies-held-by-a-checker-arc`). Until it is answered, a new line in infra/.gitignore needs
+# its twin here.
+infra/terraform.tfvars
+infra/*.tfstate
+infra/*.tfstate.*
+infra/.terraform-tmp/
+infra/apply.log
 
 # -- Heavy / irrelevant --
 .git

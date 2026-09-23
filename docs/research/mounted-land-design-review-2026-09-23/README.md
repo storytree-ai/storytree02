@@ -1,6 +1,6 @@
 # Mounted land: design review, 23 September 2026
 
-The biggest problem is the old map painted over the new land. Its opaque empty hexagons cut the smooth shoreline back into a board; the oversized painted tree then competes with the 3D pines. Removing those two layers makes a substantial improvement without changing the land art. A smaller gap where roads approach shore remains a separate defect.
+The biggest problem is the old map painted over the new land. Its opaque empty hexagons cut the smooth shoreline back into a board; the oversized painted tree then competes with the 3D pines. Removing those two layers makes a substantial improvement without changing the land art. The separate offshore road gap is now repaired as well; the controlled pictures below show each change.
 
 This ranked review was written **before product changes**. The same-page diagnostic pictures change browser styling only; they are not a shipped fix or an owner verdict. The owner’s look remains the verdict on the whole.
 
@@ -30,9 +30,9 @@ This ranked review was written **before product changes**. The same-page diagnos
 
 ![Library roads end before the shore](03-roads-stop-short.png)
 
-**Class:** COMPOSITION. **Confidence:** high for the visible gap; the mechanism still needs tracing. This crop is the **same-page diagnostic with empty board and hero paint hidden**, so it isolates the residual gap from defect 1. Both the north and south approach to Library are visible. No renderer geometry was changed to produce it.
+**Class:** COMPOSITION. **Confidence:** high for the visible gap. The later trace found that the road ribbon still used its original offshore endpoint while the worn path already used a dock snapped to the coast. This crop is the **same-page diagnostic with empty board and hero paint hidden**, so it isolates the residual gap from defect 1. Both the north and south approach to Library are visible. No renderer geometry was changed to produce it.
 
-**Next:** check the connection between the sea ribbon and the shore landing. Repair the actual integration if the endpoint is simply not consumed. Preserve which stories the roads connect, shared routing and status colours.
+**Fix:** make the visible ribbon consume the same coast dock as the worn path. Preserve which stories the roads connect, shared routing and status colours. This is now implemented and pictured below.
 
 ## 4. Dense islands have two competing vegetation styles
 
@@ -70,12 +70,24 @@ The removal covers the normal growth-track image, the static baked hero, and pro
 
 `verify-and-compose.py` checks the paired data, exact flat-image equality and effective paint controls, and generates the literal crops above. The full PNGs remain beside their ledgers. No new performance claim or owner visual signature is made.
 
-**Defect 3 is a separate engineering continuation on this same initiative:** “Join the mounted roads to their existing shore landings” (`mounted-roads-reach-their-shore-docks`). The repair target is now established: the worn path receives the snapped coast dock, while the visible sea ribbon still receives the original offshore endpoint. Its parked entry carries this crop and the bounded producer/consumer proof. This review does not call the gap fixed.
+## Road connection repair
+
+**Fixed: defect 3.** The visible sea ribbon now consumes the same clipped-coast dock calculation as the on-island worn path. The helper landed in [PR #2036](https://github.com/storytree-ai/Storytree/pull/2036); the renderer now passes its returned descriptors to the actual road mesh. Routing, road width, palette and vegetation are unchanged.
+
+![Library: both offshore gaps close](roads-library-comparison.png)
+
+![Drive Machinery: the lower approach reaches the coast](roads-drive-machinery-comparison.png)
+
+These literal crops compare the same frozen live snapshot and camera before and after the renderer wiring. The original empty board and hero are already absent in both arms. `roads-before.json` and `roads-after.json` have the identical snapshot hash and matching camera, world, labels, status values and paint counts in all 28 views; both captures report zero page errors. The full PNGs remain in `roads-before/` and `roads-after/`.
+
+`verify-roads.py` records eight pixel-identical full flat screenshots. The ninth, whole-forest fit, has 2,686 changed pixels only at the top toolbar and bottom-right control blur edges (maximum channel difference 6/255); its entire forest region is pixel-identical. This is reported explicitly in `roads-verification.json`, not counted as a ninth identical full screenshot. The earlier cleanup comparison above independently had nine identical flat controls.
+
+The original ranked review was committed as `8d381733` before product changes and before reading the later owner-spotted road follow-up. It already separated covering hex paint (1) from the residual endpoint gap (3). The lane brief itself suggested the hex ring, so this is a confirmed diagnosis, not a claim of an unprompted discovery. The owner’s final look remains the overall appearance verdict.
 
 ## The remaining taste choice
 
 ![Current versus quieter coverage plants](taste-options.png)
 
-**A** keeps the present coverage emphasis. **B** previews the same plants at 55% opacity: their count, position, status data and interaction are unchanged, and the 3D land/props are identical. B is a browser-only preview and **is not implemented in the product**. It makes the ground a little easier to read but makes the coverage signal less prominent. My preference is B once the road gap is fixed; that is a non-binding taste judgment, not a defect verdict. Keeping A is a valid answer.
+**A** keeps the present coverage emphasis. **B** previews the same plants at 55% opacity: their count, position, status data and interaction are unchanged, and the 3D land/props are identical. B is a browser-only preview and **is not implemented in the product**. It makes the ground a little easier to read but makes the coverage signal less prominent. My preference is B; that is a non-binding taste judgment, not a defect verdict. Keeping A is a valid answer. The choice is saved on the mounting initiative as **OWNER: Keep or quiet the mounted coverage plants** (`oq-owner-keep-or-quiet-the-mounted-coverage-plants`).
 
-The whole map after the clear cleanup is also available at [ordinary opening](after/props-opening.png), [whole-forest fit](after/props-fit.png), and [the dense island](after/props-drive-machinery.png). The land remains behind its existing flags; promotion to the default map is not part of this change.
+The whole map after the clear cleanup is also available at [ordinary opening](roads-after/props-opening.png), [whole-forest fit](roads-after/props-fit.png), and [the dense island](roads-after/props-drive-machinery.png). The land remains behind its existing flags; promotion to the default map is not part of this change.

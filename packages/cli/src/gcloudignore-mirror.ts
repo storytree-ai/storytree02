@@ -16,13 +16,20 @@
  * The exposure is the BY-HAND build, which uploads a working tree as it actually is. CI checks out
  * clean, so only committed files exist there.
  *
- * ⚠ THIS RUNG IS LOCAL-ONLY TODAY, AND THAT IS A CREDENTIAL LIMIT RATHER THAN A DECISION. It was
- * written for CI's `verify` job as well — a control over what reaches a published image belongs at
- * the merge, not only on the branch of whoever remembered to gate — and the push was REFUSED:
- * this repo's OAuth credential carries `repo` but not `workflow`, so GitHub declines any push that
- * edits `.github/workflows/ci.yml`. The step is parked on `prove-unproven-capabilities-arc` and is
- * two lines the day a workflow-scoped credential exists. Until then, `pnpm gate` is what catches
- * the drift, which is where every session already meets it.
+ * ⚠ IT IS A MERGE WALL AS WELL AS A GATE RUNG (ADR-0547 D1, 2026-09-08). It was written for CI's
+ * `verify` job from the start — a control over what reaches a published image belongs at the
+ * merge, not only on the branch of whoever remembered to gate — and was local-only at first for a
+ * CREDENTIAL reason, never a judgement one: this repo's OAuth credential carried `repo` but not
+ * `workflow`, so GitHub refused the push that added the step. The owner directed the promotion and
+ * authorised the SSH push that landed it. (This paragraph said "LOCAL-ONLY TODAY" until 2026-09-24,
+ * sixteen days after that stopped being true.)
+ *
+ * ⚠ AND IT READS ONLY THE TOP-LEVEL `.gitignore`. A NESTED ignore file is invisible to it: on
+ * 2026-09-24 `infra/.gitignore`'s Terraform lines (`terraform.tfvars` — the operator's email — and
+ * local state) were found missing from `.gcloudignore`, with this rung green. They are held by hand
+ * there now; whether the image filter should keep copying ignore lines at all is the owner's open
+ * question `oq-image-filter-stops-copying-gitignore`, so this rung was deliberately NOT widened to
+ * walk nested files meanwhile — that would deepen the copy it may yet replace.
  *
  * ── WHAT IT IS NOT ─────────────────────────────────────────────────────────────────────────────
  *

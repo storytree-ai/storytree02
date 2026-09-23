@@ -85,7 +85,7 @@ import { WHEAT_STATUS_GATE, wheatAnchor, wheatLift } from './land-wheat.js';
 import { BLIGHT_STATUS_GATE, blightRung } from './land-blight.js';
 import { ROCK_SLOPE_RAMP } from './land-rock.js';
 import { SAND_FIELD_WIDTH, buildAtlasShore } from './shore-atlas.js';
-import { islandPaths } from './island-path.js';
+import { dockedTrailStrips, islandPaths } from './island-path.js';
 import { WEAR_FIELD_WIDTH, buildAtlasWear } from './wear-atlas.js';
 import { DETAIL_TILE_UNITS, detailNormalTexture } from './detail-normal-texture.js';
 import { EXACT_COLOUR_CANVAS_PROPS } from './exact-colour.js';
@@ -1528,9 +1528,13 @@ export function ForestWorldCanvas({
   // like the 2D scene's flora-layer props).
   // ⚠ `showTrails` IS THE STANDALONE HARNESS'S OPT-IN AND IS IGNORED UNDER A HOST. The gate that
   // decides whether these are DRAWN is `compose.trails` below, which is a product-state rule rather
-  // than this debug prop (see {@link underlayComposition}). Collecting them unconditionally costs
-  // one array filter and keeps the two concerns apart: what the stream CONTAINS, and who draws it.
-  const trails = byKind(descriptors, 'trail-strip');
+  // than this debug prop (see {@link underlayComposition}). Projecting their eligible terminal
+  // points to the same clipped coast that the worn paths use keeps the rendered road and its wear
+  // registered, while the composition decision remains separate.
+  const trails = useMemo(
+    () => dockedTrailStrips(clipToCoast(ground.cells, SHIPPED_COAST), ground.strips),
+    [ground],
+  );
   const caves = byKind(descriptors, 'cave-arch');
   const wisps = byKind(descriptors, 'wisp-sprite');
   // ⚠ THE TWO FRAMINGS ARE ONE DECISION MADE ONCE, not a flag read at three call sites: `position`,
