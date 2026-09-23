@@ -39,8 +39,9 @@ decisions: [123, 562]
 # Node-borne real proof (ADR-0057): re-armed for the bounded causal-growth helper. It adds one
 # pure Bun test and one pure source module; CONFIRM_RED catches the absent module through an
 # existsSync-guarded absolute `.ts` import and turns it into an explicit failed export assertion.
-# It proves progress selection and physical path clipping, not shader attachment, React wiring,
-# visibility policy, or the browser-bound canvas shell.
+# It proves a content-stable ground cache and the cursor-map handoff, not island layout, physical
+# path clipping, shader attachment, React wiring, visibility policy, or the browser-bound canvas
+# shell.
 proof:
   command:
     file: pnpm
@@ -285,6 +286,12 @@ The new cursor contract lives in `packages/forest-world-r3f/src/ForestWorldCanva
 where coverage can identify it independently. The causal-growth pair is in
 `packages/forest-world-r3f/src/ForestWorldCanvas.growth.test.ts`.
 
+The two causal-growth ids below remain authored obligations for the later delivery integration.
+The signed `forestWorldCanvasGrowth` helper currently preserves the named in-flight island and
+pathway maps; it supplies neither island-layout/anchor API nor polyline clipping. Test names keep
+their existing contract ids, so coverage records their presence, but that syntactic join is not a
+claim that the signed helper has already rendered either obligation.
+
 1. **`fcd-ground-cache-compares-content-without-serializing`** — an equal fresh stream reuses the
    cached ground without rebuilding its delimiter-separated dependency key
    - **asserts —** after the cache is warmed and all fixtures already exist, a separately
@@ -307,18 +314,20 @@ where coverage can identify it independently. The causal-growth pair is in
      `settled: true` returns `null`. The adapter does not accept a clock or plan and imports no
      app-surface module, leaving schedule derivation and wall-clock ownership in the app.
    - **covers —** `packages/forest-world-r3f/src/ForestWorldCanvas.regrow.ts`
-4. **`fcd-regrow-progress-uses-explicit-island-identity`** — every 3D island samples the existing
-   cursor by its id
-   - **asserts —** a deterministic layout built from direct ground ids supplies stable slots and
-     island-centre anchors; it gives an absent island progress 0, a growing island its local cursor
-     progress, and landed/settled islands progress 1. No atlas origin is used as an island key.
-   - **covers —** `packages/forest-world-r3f/src/ForestWorldCanvas.growth.ts`
-5. **`fcd-regrow-pathways-clip-at-physical-fronts`** — a pathway appears only where its cursor says
-   it has reached
-   - **asserts —** a hidden or zero-progress segment yields no drawable points; a partial segment
-     is clipped at its Euclidean arclength front from the declared start or end; a full/static
-     segment returns the original point-list identity.
-   - **covers —** `packages/forest-world-r3f/src/ForestWorldCanvas.growth.ts`
+4. **`fcd-regrow-progress-uses-explicit-island-identity`** — later delivery integration makes every
+   3D island sample the existing cursor by its id
+   - **asserts —** the future direct-id layout supplies stable slots and island-centre anchors; it
+     gives an absent island progress 0, a growing island its local cursor progress, and
+     landed/settled islands progress 1. No atlas origin is used as an island key. The signed helper
+     only preserves `growingIslandProgressById` for that later consumer.
+   - **future delivery target —** `packages/forest-world-r3f/src/ForestWorldCanvas.growth.ts`
+5. **`fcd-regrow-pathways-clip-at-physical-fronts`** — later delivery integration makes a pathway
+   appear only where its cursor says it has reached
+   - **asserts —** the future pathway consumer yields no drawable points for a hidden or zero
+     segment, clips a partial polyline at its Euclidean-arclength front from the declared end, and
+     returns the original point-list identity for a full/static segment. The signed helper only
+     preserves `drawingPathwayProgressById` for that later consumer.
+   - **future delivery target —** `packages/forest-world-r3f/src/ForestWorldCanvas.growth.ts`
 
 ## Guidance
 

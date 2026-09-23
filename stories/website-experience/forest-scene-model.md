@@ -206,8 +206,8 @@ address and may be shared by different islands, so it is not identity. Extend on
 1. Add optional `CellGroundGeometryInput.islandSlot`, a resolver from the source cell's `island` id
    to one numeric slot, and `CellGroundGeometry.islandSlots`, one float per emitted vertex. Before
    the implementation, cast the result in the existing test to an optional `islandSlots` field and
-   assert a two-island resolver produces the expected per-vertex slot run. The current result lacks
-   that buffer, making this an assertion red against existing code.
+   assert a two-island resolver produces the expected per-vertex slot run. At the recorded
+   baseline, the result lacked that buffer, making this an assertion red against existing code.
 2. With the resolver present, every top face and skirt vertex emitted from an island receives that
    island's resolver value. With it omitted, `islandSlots` is zero-length exactly like the existing
    optional atlas/status buffers, preserving the old geometry shape rather than silently declaring
@@ -223,7 +223,7 @@ address and may be shared by different islands, so it is not identity. Extend on
 
 Each one isolated automated test (`node:test`, the package suite), cited at real `file:line`. Per
 ADR-0122 each contract id leads a distinctly-named test; `storytree coverage forest-scene-model`
-will report 4/4 once the newly armed geometry proof lands.
+reports 4/4, including the signed explicit-slot proof (`5e06fd51`).
 
 ⚠ **The three ids below are BYTE-IDENTICAL to the ones the pre-split `forest-rendering-engine`
 carried, deliberately.** A contract id is proof-bearing identity and ADR-0253 makes criterion
