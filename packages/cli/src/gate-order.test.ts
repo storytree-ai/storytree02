@@ -27,6 +27,7 @@ import {
   findGateVoice,
   firstExpensiveIndex,
   gateVoiceKey,
+  isExpensiveStep,
   lastExpensiveIndex,
   readsLiveStore,
   stepsFor,
@@ -934,4 +935,16 @@ test("the manifest's own rung runs before every rung that reads the manifest —
     step.why,
     /does not compose, when a fragment is not written exactly as the composer writes it .*when a `repo-manifest\.json` sits beside the tree \(ADR-0556 D4\)/,
   );
+});
+
+test("the studio UAT leg's scoped form is recognised exactly — anchored at both ends, any run of whitespace between tokens", () => {
+  // The rewrite emits `pnpm <--filter ...x>+ --if-present uat`; that form must stay on the expensive
+  // side of the wall, or the ordering invariant judges a plan whose last leg it cannot see.
+  assert.ok(isExpensiveStep("pnpm --filter ...studio --if-present uat"));
+  assert.ok(isExpensiveStep("pnpm --filter ...a --filter ...b --if-present uat"));
+  // Whitespace runs are tolerated at every separator, as the `-r` legs' matcher tolerates them.
+  assert.ok(isExpensiveStep("pnpm  --filter  ...studio  --if-present  uat"));
+  // Anchored: a longer script, or a command that merely CONTAINS the form, is not the leg.
+  assert.ok(!isExpensiveStep("pnpm --filter ...studio --if-present uat:smoke"));
+  assert.ok(!isExpensiveStep("npx pnpm --filter ...studio --if-present uat"));
 });
