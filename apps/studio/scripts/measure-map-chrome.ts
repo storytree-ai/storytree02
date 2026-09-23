@@ -117,7 +117,7 @@ for (let i = 0; i < plates.length; i += 1) {
   }
 }
 
-console.log(JSON.stringify({
+const report = {
   ratio: ratio ?? 'shipped',
   chromeScale: chromeScale ?? 1,
   islands: world.territories.length,
@@ -127,5 +127,7 @@ console.log(JSON.stringify({
   plateOnIsland: onIsland.length,
   plateOnPlate: onPlate.length,
   rowBandGround: Number(chrome.rowBand.toFixed(2)),
-  ...(process.env['ARM_VERBOSE'] ? { onIsland, onPlate } : {}),
-}, null, 2));
+};
+// Two whole shapes rather than a conditional key: the verbose arm lists every offending pair, which
+// is what you want when a rung is non-zero and pure noise when it is not.
+console.log(JSON.stringify(process.env['ARM_VERBOSE'] ? { ...report, onIsland, onPlate } : report, null, 2));

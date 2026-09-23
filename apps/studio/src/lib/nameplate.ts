@@ -103,9 +103,13 @@ export function nameplateHalfWidths(storyIds: readonly string[]): ReadonlyMap<st
   return new Map(storyIds.map((id) => [id, (nameplateLayout(id.length, false).w * PLATE_SCALE) / 2]));
 }
 
+/** {@link ChromeClearance} while it is still being built — the packer's own type is `readonly`, and
+ *  `scale` has to be assigned conditionally rather than spread (see the note in the function). */
+type DraftClearance = { rowBand: number; plateHalfWidth: ReadonlyMap<string, number>; scale?: number };
+
 /** The whole clearance the map hands `packWorld`, at an optional scale-back rung (ADR-0503). */
 export function mapChromeClearance(storyIds: readonly string[], scale?: number): ChromeClearance {
-  const clearance: { rowBand: number; plateHalfWidth: ReadonlyMap<string, number>; scale?: number } = {
+  const clearance: DraftClearance = {
     rowBand: nameplateRowBand(),
     plateHalfWidth: nameplateHalfWidths(storyIds),
   };

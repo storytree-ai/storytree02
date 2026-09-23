@@ -67,7 +67,6 @@ import {
 } from '@storytree/forest-world';
 import {
   ISLAND_SPACING_RATIO,
-  gapBetween,
   inRowGapWithChrome,
   loneSwing,
   rankGapWithChrome,
@@ -537,6 +536,12 @@ export function packWorld<S extends LayoutStory>(
       const next = sequence[k + 1];
       // The two ids are what the clearance is looked up by — a plate's width follows its story's
       // NAME, so the pair's gap is the pair's own, exactly as its water already is.
+      //
+      // EQUIVALENT (type-forced) — `noUncheckedIndexedAccess` requires both guards and the
+      // construction above makes them unreachable: `sequence` is built by mapping `display`, whose
+      // entries came from `byRank`, which was built by iterating `stories`. So neither index can
+      // miss and neither `''` fallback can be reached.
+      // Stryker disable next-line OptionalChaining,StringLiteral: EQUIVALENT (type-forced) — see the note above.
       return here && next
         ? islandGapFor(here.w, next.w, stories[here.idx]?.id ?? '', stories[next.idx]?.id ?? '')
         : 0;

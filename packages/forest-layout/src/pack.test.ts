@@ -26,6 +26,7 @@ import {
   hash,
   hexCenter,
   pixelToHex,
+  rand01,
   storyTreeReach,
   tileQuota,
   tileUnits,
@@ -826,19 +827,66 @@ const chromeOf = (rowBand: number, halfWidth: number, ids: readonly string[]) =>
   plateHalfWidth: new Map(ids.map((id) => [id, halfWidth])),
 });
 
+/** A corpus with TWO islands sharing a rank, so the IN-ROW half of the clearance is reachable at
+ *  all. `chainCorpus` above puts every story on its own rank, where `gapAfter` has no next island
+ *  and the in-row rule is never called — which the mutation rung caught: a mutant that inverted the
+ *  in-row scale survived every assertion written against the chain. */
+const rowCorpus = (): LayoutStory[] => [
+  story('below', 1),
+  story('left', 1, ['below']),
+  story('right', 1, ['below']),
+];
+
 test('NO chrome and a chrome scaled to ZERO are the same map — the control arm is composable', () => {
-  const ids = chainCorpus().map((s) => s.id);
-  const none = packWorld(chainCorpus());
-  const zeroed = packWorld(chainCorpus(), { chrome: { ...chromeOf(500, 500, ids), scale: 0 } });
+  const ids = rowCorpus().map((s) => s.id);
+  const none = packWorld(rowCorpus());
+  const zeroed = packWorld(rowCorpus(), { chrome: { ...chromeOf(500, 500, ids), scale: 0 } });
   assert.deepEqual(
     JSON.parse(JSON.stringify(zeroed)),
     JSON.parse(JSON.stringify(none)),
     'a clearance scaled to 0 must reproduce the map that was never given one — otherwise a ' +
       'comparison page cannot stand its control arm from inside a single run',
   );
-  // Non-vacuity: the same clearance at full scale HAS to move the map, or the line above is free.
-  const full = packWorld(chainCorpus(), { chrome: chromeOf(500, 500, ids) });
+  // Non-vacuity: the same clearance at full scale HAS to move the map, or the line above is free —
+  // and it must move BOTH ways, since this corpus has a row to widen as well as ranks to separate.
+  const full = packWorld(rowCorpus(), { chrome: chromeOf(500, 500, ids) });
   assert.notDeepEqual(JSON.parse(JSON.stringify(full)), JSON.parse(JSON.stringify(none)));
+  const xOf = (w: typeof full, id: string) => w.territories.find((t) => t.story.id === id)?.groundSeed.x ?? NaN;
+  assert.ok(
+    Math.abs(xOf(full, 'left') - xOf(full, 'right')) > Math.abs(xOf(none, 'left') - xOf(none, 'right')),
+    'the in-row half of the clearance must actually widen a row — without a corpus that HAS a row, ' +
+      'every assertion here is about the rank gap and the in-row rule is unwitnessed',
+  );
+});
+
+test('with NO clearance the rank pitch is EXACTLY the ratio\'s gap — a zero band reserves nothing', () => {
+  // ⚠ THE MUTATION RUNG IS WHY THIS IS ARITHMETIC RATHER THAN A COMPARISON. `reserve` adds the seed
+  // jitter to the band, guarded by `band > 0` so that a zero clearance stays exactly zero. Relaxing
+  // that guard to `true` survived every comparison test here, and had to: a map with no chrome and a
+  // map with a zeroed chrome both take the same wrong branch, so they still agree with each other.
+  // Only the row pitch itself can tell, so this recomputes it.
+  const r = estRadius(tileQuota(1));
+  // The jitter is deterministic per story id — the same `hash`/`rand01` stream the packer uses — so
+  // the pitch can be recovered exactly rather than bounded.
+  const jitterY = (id: string) => (rand01(hash(id) + 1) - 0.5) * tileUnits(30);
+  // ⚠ RATIO 0 IS THE ARM THAT SEPARATES THE BRANCH, and the shipped rung alone CANNOT. Re-seeded to
+  // establish it: at the shipped ratio the gap the fraction asks for (≈23) already exceeds the
+  // jitter a broken guard would add (≈12), so `Math.max` picks the fraction either way and the
+  // mutant is invisible. At ratio 0 the fraction asks for nothing, and a reserve that fires on a
+  // zero band is the whole pitch.
+  for (const ratio of [0, ISLAND_SPACING_RATIO]) {
+    const world = packWorld(chainCorpus(), { spacing: { ratio } });
+    const seedOf = new Map(world.territories.map((t) => [t.story.id, t.groundSeed]));
+    for (const [below, above] of [['root', 'mid'], ['mid', 'leaf']] as const) {
+      const pitch =
+        Math.abs((seedOf.get(above)?.y ?? 0) - (seedOf.get(below)?.y ?? 0)) - jitterY(below) + jitterY(above);
+      const asked = 2 * r + gapBetween(r, r, ratio);
+      assert.ok(
+        Math.abs(pitch - asked) < 1e-9,
+        `at ratio ${ratio} the rank pitch was ${pitch}, and the ratio alone asks for ${asked}`,
+      );
+    }
+  }
 });
 
 test('the declared row band survives the seed jitter — a reserved gap that the wobble eats is not a gap', () => {
