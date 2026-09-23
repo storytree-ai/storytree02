@@ -243,6 +243,10 @@ test("the REAL gate plan is exactly the nine ADR-0311 survivors plus the ADR-033
       // local gate never did. It is in the ONE plan now, placed `runs: "ci"`, in the slot it held in
       // `ci.yml` — after the mutation rung and ahead of the shared environment.
       "pnpm -r build",
+      // Added 2026-09-24 (`studio-uat-journey-is-green-then-wired`): the studio's whole-journey UAT,
+      // its story's declared reliability gate, which nothing ran before. CI-only beside the build it
+      // shares a package with; the fourth minutes-cost leg, so the shared environment stays after it.
+      "pnpm --filter studio uat",
       // Both of these read the DECISION LOG, which is shared live state since ADR-0403 dec 1, so both
       // sit in block C. `check:adr-health` is an ADDITION to the plan and a MOVE overall (it was a
       // case inside `pnpm -r test`); `check:web-grounding` did not move in or out of the plan — its
@@ -390,8 +394,8 @@ test("placement-selects-each-run: the local-only and CI-only steps are exactly t
     "pnpm check:definition-adjudication",
   ]);
   // CI — environmental: only CI's clean checkout is asked to prove the studio build.
-  assert.deepEqual(placed("ci"), ["pnpm -r build"]);
-  assert.equal(placed("both").length, GATE_PLAN.length - 4);
+  assert.deepEqual(placed("ci"), ["pnpm -r build", "pnpm --filter studio uat"]);
+  assert.equal(placed("both").length, GATE_PLAN.length - 5);
 });
 
 test("placement-selects-each-run: a local run walks both + local and a CI run walks both + ci, each in plan order", () => {

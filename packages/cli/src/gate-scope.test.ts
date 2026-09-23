@@ -22,6 +22,7 @@ import {
   type GatePlanStep,
   PRE_EXPENSIVE_CHECKS,
   SHARED_ENVIRONMENT_CHECKS,
+  STUDIO_UAT_STEP,
   evaluateGateOrder,
   firstExpensiveIndex,
   isExpensiveStep,
@@ -152,7 +153,9 @@ test("scopeGatePlan rewrites ONLY the expensive legs, and keeps every other comm
   for (const [i, step] of scoped.entries()) {
     const original = GATE_PLAN[i] as GatePlanStep;
     assert.equal(step.check, original.check, "a step's check name is not the scope's business");
-    if (isExpensiveStep(original.command)) {
+    if (original.command === STUDIO_UAT_STEP) {
+      assert.equal(step.command, "pnpm --filter ...@storytree/cli --if-present uat");
+    } else if (isExpensiveStep(original.command)) {
       assert.equal(step.command, original.command.replace("pnpm -r ", "pnpm --filter ...@storytree/cli "));
     } else {
       assert.equal(step.command, original.command, `${original.command} must not be rewritten`);
@@ -224,7 +227,23 @@ test("the rewrite consumes pnpmArgsFor's output verbatim — no second arg forma
     "pnpm --filter ...studio --no-bail typecheck",
     "pnpm --filter ...studio --no-bail test",
     "pnpm check:mutation-diff",
+    "pnpm --filter ...studio --if-present uat",
   ]);
+});
+
+test("the studio UAT leg is keyed on the studio's affected scope: narrowed it runs `uat` over the affected set, full it runs as declared", () => {
+  // Narrowed: `--if-present` is what makes a branch that cannot reach the studio pay nothing — pnpm
+  // expands the dependents-inclusive set and runs `uat` only where a package declares it. Without it
+  // a scope holding no `uat` script would error rather than run nothing.
+  const narrowed = scopeGatePlan(GATE_PLAN, "--filter ...@storytree/cli --filter ...@storytree/library");
+  const leg = narrowed.find((_, i) => GATE_PLAN[i]?.command === STUDIO_UAT_STEP);
+  assert.equal(leg?.command, "pnpm --filter ...@storytree/cli --filter ...@storytree/library --if-present uat");
+  assert.ok(isExpensiveStep(leg?.command ?? ""), "the narrowed form must still sit on the expensive side of the wall");
+  // Full: declared verbatim, so the journey is never silently dropped from a full run.
+  assert.equal(scopeGatePlan(GATE_PLAN, "-r").find((s) => s.command === STUDIO_UAT_STEP)?.command, STUDIO_UAT_STEP);
+  // The matcher enumerates the emitted form and nothing looser.
+  assert.ok(!isExpensiveStep("pnpm --filter ...studio uat"));
+  assert.ok(!isExpensiveStep("pnpm check:uat-revision-continuity"));
 });
 
 test("a name pnpmArgsFor refuses to splice falls back to the full run, and the plan follows", () => {
