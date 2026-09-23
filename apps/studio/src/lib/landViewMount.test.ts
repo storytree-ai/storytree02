@@ -48,6 +48,20 @@ describe('the mount reader', () => {
     expect(readLandMountProps('?landMount=1')).toBe(false);
     expect(readLandMountProps('?landMount=1&landMountProps=1')).toBe(true);
   });
+
+  it('reads the props arm with the SAME three spellings, and no others', () => {
+    // ⚠ EVERY SPELLING IS ASSERTED SEPARATELY BECAUSE THE MUTATION RUNG PROVED THE LOOSE VERSION
+    // EMPTY. With only the `1` case covered, four mutants survived on this one line
+    // (`check:mutation-diff`, 2026-09-23): `v === 'on'` → `false`, `'on'` → `""`,
+    // `v === 'true'` → `false`, `'true'` → `""`. Nothing noticed, because nothing asked. A reader
+    // who copies the mount's own reader and tests one spelling has the same hole.
+    for (const on of ['on', '1', 'true']) {
+      expect(readLandMountProps(`?landMountProps=${on}`)).toBe(true);
+    }
+    for (const off of ['', '?landMountProps=0', '?landMountProps=', '?landmountprops=1', '?landMountProps=yes', '?landMountProps=On', '?landMountProps=TRUE', '?landMount=1']) {
+      expect(readLandMountProps(off)).toBe(false);
+    }
+  });
 });
 
 describe('the mounted land camera', () => {
