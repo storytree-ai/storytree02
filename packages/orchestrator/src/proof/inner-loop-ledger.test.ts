@@ -376,20 +376,112 @@ test("fold collapses exact replay and refuses conflicting or noncanonical identi
   );
 });
 
+// test-updated (new behaviour): "pass and adjudication require their own recorded predecessor" now permits a signed pass to settle its own recorded run after a later attempt starts.
 test("pass and adjudication require their own recorded predecessor", () => {
   assert.throws(() => foldInnerLoopLedger([stored(pass("r1", INC), 1)], unitId), /no recorded attempt/);
-  assert.throws(
-    () => foldInnerLoopLedger([
+  const passAAfterB = [
       stored(attempt("r1", INC), 1),
       stored(attempt("r2", INC), 2),
       stored(pass("r1", INC), 3),
-    ], unitId),
-    /signed pass must bind the latest attempt/,
+  ];
+  assert.doesNotThrow(() => foldInnerLoopLedger(passAAfterB, unitId));
+  assert.deepEqual(foldInnerLoopLedger(passAAfterB, unitId).attempts, [
+    { runId: "r1", incrementId: INC, signed: true },
+    { runId: "r2", incrementId: INC, signed: false },
+  ]);
+  assert.deepEqual(
+    foldInnerLoopLedger([...passAAfterB, stored(pass("r2", INC), 4)], unitId).attempts,
+    [
+      { runId: "r1", incrementId: INC, signed: true },
+      { runId: "r2", incrementId: INC, signed: true },
+    ],
+  );
+  assert.deepEqual(
+    foldInnerLoopLedger([
+      stored(attempt("r1", INC), 1),
+      stored(attempt("r2", INC), 2),
+      stored(pass("r2", INC), 3),
+      stored(pass("r1", INC), 4),
+    ], unitId).attempts,
+    [
+      { runId: "r1", incrementId: INC, signed: true },
+      { runId: "r2", incrementId: INC, signed: true },
+    ],
   );
   assert.throws(
     () => foldInnerLoopLedger([stored(attempt("r1", INC), 1), stored(adjudication("r1", "land", INC), 2)], unitId),
     /signed pass/,
   );
+});
+
+test("overlapping-passes-keep-their-attempts: a late pass preserves the later unsigned failure and start-ordered landing boundary", () => {
+  const overlap = [
+    stored(attempt("a", INC), 1),
+    stored(attempt("b", INC), 2),
+    stored(pass("a", INC), 3),
+  ];
+  assert.doesNotThrow(() => foldInnerLoopLedger(overlap, unitId));
+  const pending = foldInnerLoopLedger(overlap, unitId);
+  assert.equal(pending.consecutiveFailures, 1);
+  assert.equal(pending.policy.disposition, "proceed");
+  assert.deepEqual(pending.attempts, [
+    { runId: "a", incrementId: INC, signed: true },
+    { runId: "b", incrementId: INC, signed: false },
+  ]);
+
+  const settledInReverseCompletionOrder = [
+    ...overlap,
+    stored(pass("b", INC), 4),
+    stored(adjudication("b", "land", INC), 5),
+    stored(adjudication("a", "land", INC), 6),
+    stored(attempt("c", INC), 7),
+  ];
+  const reopened = foldInnerLoopLedger(settledInReverseCompletionOrder, unitId);
+  assert.equal(reopened.consecutiveFailures, 1);
+  assert.equal(reopened.policy.disposition, "proceed");
+  assert.deepEqual(reopened.attempts.at(-1), { runId: "c", incrementId: INC, signed: false });
+});
+
+test("overlapping-passes-keep-their-attempts: a late pass cannot relax the six-failure owner ceiling", () => {
+  const events = [
+    stored(attempt("a", INC), 1),
+    ...["b", "c", "d", "e", "f", "g"].map((runId, index) => stored(attempt(runId, INC), index + 2)),
+    stored(pass("a", INC), 8),
+  ];
+  assert.doesNotThrow(() => foldInnerLoopLedger(events, unitId));
+  const ledger = foldInnerLoopLedger(events, unitId);
+  assert.equal(ledger.consecutiveFailures, 6);
+  assert.equal(ledger.policy.disposition, "escalate");
+  assert.deepEqual(ledger.attempts, [
+    { runId: "a", incrementId: INC, signed: true },
+    { runId: "b", incrementId: INC, signed: false },
+    { runId: "c", incrementId: INC, signed: false },
+    { runId: "d", incrementId: INC, signed: false },
+    { runId: "e", incrementId: INC, signed: false },
+    { runId: "f", incrementId: INC, signed: false },
+    { runId: "g", incrementId: INC, signed: false },
+  ]);
+  assert.throws(
+    () => foldInnerLoopLedger([...events, stored(grant("g", INC), 9)], unitId),
+    /ceiling/,
+  );
+});
+
+test("overlapping-passes-keep-their-attempts: folding and stored replay preserve canonical overlap records", async () => {
+  const docs = [attempt("a", INC), attempt("b", INC), pass("a", INC), pass("b", INC)];
+  const overlap = docs.map((doc, index) => stored(doc, index + 1));
+  const beforeFold = structuredClone(overlap);
+  assert.doesNotThrow(() => foldInnerLoopLedger(overlap, unitId));
+  assert.deepEqual(overlap, beforeFold);
+
+  const store = new InMemoryStore();
+  for (const doc of docs) await appendInnerLoopEvent(store, doc);
+  const persisted = await store.readEvents();
+  assert.deepEqual(
+    persisted.map(({ id, doc }) => ({ id, doc })),
+    overlap.map(({ id, doc }) => ({ id, doc })),
+  );
+  assert.deepEqual(await readInnerLoopLedger(store, unitId), foldInnerLoopLedger(overlap, unitId));
 });
 
 test("generic Store helper is idempotent and a fresh reader folds persisted history", async () => {
