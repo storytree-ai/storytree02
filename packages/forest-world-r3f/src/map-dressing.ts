@@ -198,10 +198,29 @@ export function dressMapWithCover(
   return dressMap(descriptors, opts, true);
 }
 
+/**
+ * EVERYTHING THE SHIPPED MAP STANDS, together with the island that produced each placement.
+ *
+ * The map owns this identity while it dresses one island at a time. Keeping it in a side map
+ * leaves {@link KitPlacement} as the vocabulary's placement-only value, while delivery can carry
+ * the exact placement object through its mesh merge without inventing a second placement stream.
+ * Placements from cells with no island deliberately have no entry: they can name a capability,
+ * but no story whose growth data they could carry.
+ */
+export function dressMapWithCoverAttribution(
+  descriptors: readonly Descriptor3D[],
+  opts: MapDressingOptions,
+): { placements: KitPlacement[]; islandByPlacement: ReadonlyMap<KitPlacement, string> } {
+  const islandByPlacement = new Map<KitPlacement, string>();
+  const placements = dressMap(descriptors, opts, true, islandByPlacement);
+  return { placements, islandByPlacement };
+}
+
 function dressMap(
   descriptors: readonly Descriptor3D[],
   opts: MapDressingOptions,
   cover: boolean,
+  islandByPlacement?: Map<KitPlacement, string>,
 ): KitPlacement[] {
   const cells = parcelCellsFrom(descriptors);
   // ⚠⚠ ALL THREE STATES, COUNTED SEPARATELY AND SPENT SEPARATELY (ADR-0600 D1). An island's flower
@@ -232,16 +251,15 @@ function dressMap(
     });
 
   for (const [island, group] of cellsByIsland(cells)) {
-    out.push(
-      ...dress(group, {
+    const vocabulary = dress(group, {
         blooms: signed.get(island) ?? 0,
         buds: unsigned.get(island) ?? 0,
         wilts: failing.get(island) ?? 0,
-      }),
-    );
+      });
+    out.push(...vocabulary);
+    for (const placement of vocabulary) islandByPlacement?.set(placement, island);
     if (!cover) continue;
-    out.push(
-      ...dressCover({
+    const covered = dressCover({
         island,
         cells: group,
         relief: opts.relief,
@@ -253,8 +271,9 @@ function dressMap(
         density: opts.coverDensity ?? COVER_DENSITY,
         size: opts.coverSize ?? COVER_SIZE,
         recipeIslandArea: opts.recipeIslandArea ?? RECIPE_ISLAND_AREA,
-      }),
-    );
+      });
+    out.push(...covered);
+    for (const placement of covered) islandByPlacement?.set(placement, island);
   }
 
   // ⚠ CALLED UNCONDITIONALLY, EVEN WHEN THERE IS NOTHING TO DRESS. An `if (unattributed.length)`
