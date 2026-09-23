@@ -35,8 +35,9 @@ independent of where the islands happen to sit.
 
 ## What the numbers say
 
-Element counts are **identical in all three arms** — 212 parcels, 125 trail fills, 36 nameplates, 2
-ground layers. The mount takes nothing from the map: the SVG's ground layers are hidden with
+Element counts are **identical in all three arms** — 212 parcels, 114 trail fills, 36 nameplates, 2
+ground layers (this run; `measurements.json` is the authority, and the absolute values move with the
+corpus and the layout — what this evidence claims is that the three arms AGREE). The mount takes nothing from the map: the SVG's ground layers are hidden with
 `opacity: 0`, so every element (and every hit target) is still present and still hit-testable.
 
 ## What the pictures say
