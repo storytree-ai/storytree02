@@ -67,7 +67,11 @@ in `packages/orchestrator/src/store/` — once split across the since-dissolved 
   retry filed under a new increment neither resets the consecutive-failure count nor hides a pending
   landing obligation; each attempt keeps its own increment id, which is what lets `decideAttempt`
   report a relabelled retry. A landing adjudication closes the loop, and later work on the unit starts
-  a fresh count. Contract: [`attempt-count-follows-the-unit`](attempt-count-follows-the-unit.md).
+  a fresh count. A valid pass is credited to its named recorded run even when another run started in
+  between; the reader counts the later unsigned start-ordered suffix, so late completion cannot relax
+  the decision point or owner ceiling (ADR-0602). Contracts:
+  [`attempt-count-follows-the-unit`](attempt-count-follows-the-unit.md) and
+  [`overlapping-passes-keep-their-attempts`](overlapping-passes-keep-their-attempts.md).
   **Paid builds now write and read it (ADR-0576).** Every paid REAL entry reads the ledger through
   `preflightPaidBuild` (`packages/drive/src/node-build.ts`) before any spend and refuses on its policy.
   A REAL build appends the attempt immediately before its gate walk and the signed pass after a signed
