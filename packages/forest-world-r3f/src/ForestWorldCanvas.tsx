@@ -1292,6 +1292,9 @@ export interface ForestWorldCanvasProps {
    *  no focus concept on this canvas yet, the honest minimal reveal is all-or-nothing —
    *  a future focus feature filters strips by their `edges` metadata instead. */
   showTrails?: boolean;
+  /** Whether this surface is currently active in its owning application. Parked canvases retain
+   * their current app-owned presentation, but do not ask WebGL to paint it. */
+  active?: boolean;
   /**
    * THE FRAME THIS CANVAS IS DELIVERED INTO, CSS px — present ⇒ open on the DESIGNED RESTING VIEW
    * (ADR-0471), absent ⇒ open on the fit.
@@ -1354,8 +1357,12 @@ export interface RegisteredUnderlay {
 
 /** WHAT REGISTERED MODE CHANGES — every one of the canvas's delivery decisions, as one object. */
 export interface UnderlayComposition {
-  /** Extra `<Canvas>` props. `frameloop: 'demand'` + a transparent drawing buffer under a host. */
-  readonly canvasProps: { readonly frameloop?: 'demand'; readonly gl?: { readonly alpha: boolean } };
+  /** Extra `<Canvas>` props. Presentable canvases render on demand; parked or hidden ones never
+   * paint. Registered canvases also use a transparent drawing buffer. */
+  readonly canvasProps: {
+    readonly frameloop: 'demand' | 'never';
+    readonly gl?: { readonly alpha: boolean };
+  };
   /** Paint this canvas's own dark board behind the world. */
   readonly backdrop: boolean;
   /** Draw the kit props. */
@@ -1406,10 +1413,15 @@ export interface UnderlayComposition {
 export function underlayComposition(
   registered: RegisteredUnderlay | undefined,
   showTrails = false,
+  presentable: { readonly active: boolean; readonly documentVisible: boolean } = {
+    active: true,
+    documentVisible: true,
+  },
 ): UnderlayComposition {
+  const frameloop = presentable.active && presentable.documentVisible ? 'demand' : 'never';
   if (!registered) {
     return {
-      canvasProps: {},
+      canvasProps: { frameloop },
       backdrop: true,
       props: true,
       // ⚠ THE STANDALONE BRANCH IS THE ONLY PLACE `showTrails` IS READ, and it keeps its old
@@ -1423,7 +1435,7 @@ export function underlayComposition(
     };
   }
   return {
-    canvasProps: { frameloop: 'demand', gl: { alpha: true } },
+    canvasProps: { frameloop, gl: { alpha: true } },
     backdrop: false,
     props: registered.props === true,
     // ⚠ NOT `registered.showTrails` AND NOT A FIELD — see the doc comment. Mounted means the 3D
@@ -1571,10 +1583,23 @@ function GrowthTextureUpload({ growth, values }: { growth: GrowthTexture; values
 export function ForestWorldCanvas({
   descriptors,
   showTrails = false,
+  active = true,
   viewport,
   registered,
   regrow,
 }: ForestWorldCanvasProps) {
+  const [documentVisible, setDocumentVisible] = useState(
+    () => typeof document === 'undefined' || document.visibilityState === 'visible',
+  );
+  useEffect(() => {
+    const updateDocumentVisibility = () => {
+      setDocumentVisible(document.visibilityState === 'visible');
+    };
+    document.addEventListener('visibilitychange', updateDocumentVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', updateDocumentVisibility);
+    };
+  }, []);
   // The relaxed-mesh parcels — the ONE ground substrate this canvas draws. A second, classic
   // extruded-hex ground component used to be mounted unconditionally beside this one, filtered
   // off the descriptor stream by its own retired mesh family; both the component and the family
@@ -1637,7 +1662,7 @@ export function ForestWorldCanvas({
   // ⚠ ONE DECISION, SIX CONSEQUENCES — see {@link underlayComposition}. Reading them from one
   // object is what stops a surface ending up half-registered: a canvas with the host's camera but
   // its own `MapControls`, or a transparent backdrop but a second canopy.
-  const compose = underlayComposition(registered, showTrails);
+  const compose = underlayComposition(registered, showTrails, { active, documentVisible });
   // This read is intentional: the app-owned presentation drives ground, pathways and vegetation
   // without a renderer-owned clock or schedule.
   const hasRegrowPresentation = regrow !== null && regrow !== undefined;
