@@ -62,6 +62,19 @@ export function ciIdentityEnvNames(identity: CiIdentity): CiIdentityEnvNames {
   return { credentials: `${stem}_CREDENTIALS`, dbUser: `${stem}_DB_USER` };
 }
 
+/**
+ * Why a CI run refuses a selection request, or `null` when it may proceed. A CI run is the WHOLE CI
+ * placement or nothing: `--only` / `--rerun-failed` run part of the plan and exit
+ * `GATE_PARTIAL_EXIT_CODE` (4) at best, and a workflow reads any non-zero as red and any zero as a
+ * merge — so a partial run must never reach one (`gate-runner.ts`'s own note on that code).
+ */
+export function ciSelectionRefusal(mode: "all" | "only" | "rerun-failed"): string | null {
+  return mode === "all"
+    ? null
+    : "--ci runs the whole CI plan; --only / --rerun-failed select part of it, and a partial run is " +
+        "never a merge verdict.";
+}
+
 export type CiStepEnvironment =
   | { readonly ok: true; readonly env: NodeJS.ProcessEnv }
   | { readonly ok: false; readonly reason: string };

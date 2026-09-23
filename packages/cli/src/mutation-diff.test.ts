@@ -1366,8 +1366,8 @@ test("mutation-diff: a location with no start reads as an unknown line, not a cr
 //
 // The rung's SKIP is the commonest outcome it has (a corpus, docs or config landing changes no
 // mutable TypeScript), and the two runners that read it disagree about what a non-zero code means.
-// `gate-run.ts` reads 3 as a declared SKIP and prints GATE GREEN, NARROWED; `.github/workflows/ci.yml`
-// runs the same script as a plain step where ANY non-zero code is a hard failure. So the fact is
+// `gate-run.ts` reads 3 as a declared SKIP and prints GATE GREEN, NARROWED; its CI mode (`pnpm gate
+// --ci`, ADR-0606 D3) counts the same 3 as a hard failure. So the fact is
 // stated either way and only the code differs — see `gate-skip-exit-3-is-local-only` in
 // `check-web-experience-closure.ts`, whose bootstrap branch established this shape.
 

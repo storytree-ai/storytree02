@@ -52,16 +52,19 @@
 //
 // ── HOW "IS IT RUN?" IS ANSWERED, WITHOUT A HARDCODED LIST ────────────────────────────────────────
 //
-// Two tiers, and neither enumerates a script name in this file:
+// Two tiers, and neither enumerates a script name in this file. Both read ONE source — `GATE_PLAN`,
+// every placement — because since ADR-0606 D3 CI runs that same plan through `pnpm gate --ci` and
+// keeps no step list of its own. (Until then this module also parsed CI's `verify` job out of
+// `ci.yml`, borrowing the `gate-ci-parity` capability's workflow reader, and unioned the two sides.)
 //
-//   TIER 1 — AN EXACT INVOCATION. Some `GATE_PLAN` step or some `run:` step of CI's `verify` job
-//     issues a command that parses to the same package script. This is what would cover a gate wired
-//     for ONE package's ONE script, and it is the tier `pnpm --filter studio uat` will satisfy once
-//     it is wired.
+//   TIER 1 — AN EXACT INVOCATION. Some `GATE_PLAN` step issues a command that parses to the same
+//     package script. This is what would cover a gate wired for ONE package's ONE script, and it is
+//     the tier `pnpm --filter studio uat` will satisfy once it is wired. A step placed `local`,
+//     `ci` or `both` counts alike: the question is whether ANYTHING runs it, not where.
 //   TIER 2 — A REPO-WIDE SCRIPT LEG. The declared script is one the gate runs across EVERY
-//     workspace. Those legs are `pnpm -r <script>`, and the set is DERIVED from the same two
-//     declarations via {@link normalizeContentStep} — never listed here, so a leg added to or
-//     removed from the gate moves this check's answer with it.
+//     workspace. Those legs are the plan's `pnpm -r <script>` steps, and the set is DERIVED from
+//     them ({@link repoWideScripts}) — never listed here, so a leg added to or removed from the plan
+//     moves this check's answer with it.
 //
 // ⚠ THE ONE BREACH IT FOUND IS NOT WIRED YET, AND IT IS CARRIED RATHER THAN HIDDEN. Wiring
 // `pnpm --filter studio uat` is mechanically easy and was deliberately NOT done in the landing that
@@ -73,10 +76,9 @@
 // declaration — which is the objective's own purpose clause — rather than that one instance being
 // executed. Read the baseline entry for the evidence and the unit that clears it.
 //
-// Pure: every function takes text/data and returns data. The caller supplies the real story files,
-// the real plan and the real workflow text; nothing here touches disk.
+// Pure: every function takes text/data and returns data. The caller supplies the real story files
+// and the real plan; nothing here touches disk.
 
-import { ciContentChecks, extractPnpmInvocations, localGatePlanTokens } from "./gate-ci-parity.js";
 import type { GateStep } from "./gate-order.js";
 
 /** The heading whose section carries a story's declared gates. */
@@ -222,7 +224,7 @@ export function declaredGatesIn(story: string, storyText: string): DeclaredGate[
   for (const match of block.matchAll(COMMAND_SPAN)) {
     // Stryker disable next-line StringLiteral: EQUIVALENT — `?? ""` on group 1 of a regex that has
     // already matched. `COMMAND_SPAN`'s group is not optional, so it always participates and the
-    // fallback is unreachable; the same reasoning `gate-ci-parity.ts` records for its own groups.
+    // fallback is unreachable.
     const command = (match[1] ?? "").trim();
     const parsed = parsePackageScriptCommand(command);
     if (parsed === null) continue;
@@ -232,28 +234,27 @@ export function declaredGatesIn(story: string, storyText: string): DeclaredGate[
 }
 
 /**
- * The scripts the gate runs across EVERY workspace, derived from the two declarations.
- *
- * Both sides normalise to the token `pnpm -r <script>` — {@link normalizeContentStep} collapses every
- * scoping prefix (`-r`, `-r --no-bail`, an affected-scope `--filter ...<name>`, CI's templated
- * `${{ steps.affected.outputs.pnpm_args || '-r' }}`) onto that one form, which is exactly why the set
- * can be read off it rather than listed here.
- *
- * ⚠ THE LOCAL LEGS ARE NARROWED BY AFFECTED SCOPE (ADR-0304 D1), and that does not weaken this. A
- * declared `pnpm --filter studio test` is run by the `test` leg WHEN studio is affected — and when it
- * is not affected there is nothing of studio's to prove on that branch. CI re-runs the same
- * classifier against the merge ref, so the obligation is discharged where it exists.
+ * A plan step that runs ONE script across every workspace, as `GATE_PLAN` declares it: `pnpm -r`,
+ * optionally `--no-bail`, then the script. Anchored at both ends, so a command that merely CONTAINS
+ * the shape (`echo pnpm -r test`, `pnpm -r test --reporter=x`) grants no coverage.
  */
-export function repoWideScripts(steps: readonly GateStep[], workflowText: string, jobName: string): Set<string> {
+const REPO_WIDE_LEG = /^pnpm\s+-r(?:\s+--no-bail)?\s+(\S+)$/;
+
+/**
+ * The scripts the gate runs across EVERY workspace, derived from the plan's `pnpm -r` steps — every
+ * placement, since the question is whether anything runs them.
+ *
+ * READ AS DECLARED, never as the runner rewrites them. `gate-run.ts` narrows the two expensive legs
+ * to an affected `--filter ...<name>` scope just before running them (ADR-0304 D1), and that does not
+ * weaken this: a declared `pnpm --filter studio test` is run by the `test` leg WHEN studio is affected
+ * — and when it is not affected there is nothing of studio's to prove on that branch. CI runs the same
+ * plan with the same classifier against the merge ref, so the obligation is discharged where it
+ * exists.
+ */
+export function repoWideScripts(steps: readonly GateStep[]): Set<string> {
   const scripts = new Set<string>();
-  const tokens = new Set([...localGatePlanTokens(steps), ...ciContentChecks(workflowText, jobName)]);
-  for (const token of tokens) {
-    // Stryker disable next-line Regex: EQUIVALENT over a CLOSED input vocabulary. These tokens come
-    // only from `normalizeContentStep`, which emits exactly `check:<name>`, `pnpm lint`,
-    // `pnpm ci:affected` or `pnpm -r <script>` — so no token can carry text before or after the leg
-    // shape, and neither anchor can change a verdict. It is kept because the vocabulary is the
-    // NORMALISER'S to widen, not this reader's, and a future token could carry a suffix.
-    const leg = /^pnpm -r (\S+)$/.exec(token);
+  for (const step of steps) {
+    const leg = REPO_WIDE_LEG.exec(step.command.trim());
     // Stryker disable next-line StringLiteral: UNREACHABLE — group 1 of a regex that has already
     // matched, and it is not optional, so it always participates.
     if (leg !== null) scripts.add(leg[1] ?? "");
@@ -276,28 +277,16 @@ export function targetKey(pkg: string, script: string): string {
 }
 
 /**
- * Every package script some `GATE_PLAN` step or some `run:` step of the named CI job invokes for a
- * NAMED package — tier 1's evidence.
+ * Every package script some `GATE_PLAN` step invokes for a NAMED package — tier 1's evidence, parsed
+ * through the same {@link parsePackageScriptCommand} a story's declaration is.
  *
  * Keyed by {@link targetKey}, so a step running one package's `uat` never satisfies a different
  * package's declaration of the same script name.
  */
-export function targetedInvocations(
-  steps: readonly GateStep[],
-  workflowText: string,
-  jobName: string,
-): Set<string> {
+export function targetedInvocations(steps: readonly GateStep[]): Set<string> {
   const out = new Set<string>();
-  const commands = [
-    ...steps.map((s) => s.command),
-    // The raw invocations are re-read rather than the tokens reused: `ciContentChecks` discards
-    // everything that is not a tracked content check, and a per-package script step — tier 1's whole
-    // subject — is exactly what it discards. The `pnpm ` prefix is restored so a CI step parses
-    // through the same `parsePackageScriptCommand` a story command does.
-    ...extractPnpmInvocations(workflowText, jobName).map((invocation) => `pnpm ${invocation}`),
-  ];
-  for (const command of commands) {
-    const parsed = parsePackageScriptCommand(command);
+  for (const step of steps) {
+    const parsed = parsePackageScriptCommand(step.command);
     if (parsed === null) continue;
     for (const pkg of parsed.packages) out.add(targetKey(pkg, parsed.script));
   }
@@ -386,8 +375,8 @@ export type GateCoverage =
 /**
  * Is this declared gate run by anything?
  *
- * Tier 1 before tier 2 so the REASON printed is the specific one where both hold: "CI runs this exact
- * command" is more useful to a reader than "the `test` leg covers it".
+ * Tier 1 before tier 2 so the REASON printed is the specific one where both hold: "a plan step runs
+ * this exact command" is more useful to a reader than "the `test` leg covers it".
  */
 export function judgeCoverage(
   gate: DeclaredGate,
@@ -404,7 +393,7 @@ export function judgeCoverage(
     return {
       covered: true,
       by: "targeted-invocation",
-      detail: `a gate step or CI \`run:\` step invokes \`${script}\` for ${packages.join(", ")}`,
+      detail: `a gate-plan step invokes \`${script}\` for ${packages.join(", ")}`,
     };
   }
   if (repoWide.has(script)) {
@@ -422,8 +411,8 @@ export function judgeCoverage(
     covered: false,
     detail:
       `nothing runs the \`${script}\` script of ${packages.join(", ")}: it is not one of the ` +
-      `repo-wide legs (${[...repoWide].sort().join(", ") || "none"}) and no gate step or CI \`run:\` ` +
-      `step names it.${partial}`,
+      `repo-wide legs (${[...repoWide].sort().join(", ") || "none"}) and no gate-plan step names ` +
+      `it.${partial}`,
   };
 }
 
@@ -474,7 +463,7 @@ export interface ReliabilityGateParity {
  * cleaner corpus than the one on disk.
  *
  * The `VacuousOwnershipSweep` posture, for the same reason: a check that cannot be consulted THROWS
- * rather than answering "nothing to report". A corpus walk that found no story, or a plan/workflow
+ * rather than answering "nothing to report". A corpus walk that found no story, or a plan
  * that yielded no repo-wide leg, is a broken read — and "every declared gate is run" is exactly what
  * a broken read looks like from the outside.
  */
@@ -487,9 +476,8 @@ export class VacuousReliabilitySweep extends Error {}
  */
 export function judgeReliabilityGateParity(input: {
   readonly stories: readonly { readonly path: string; readonly text: string }[];
+  /** The WHOLE plan, every placement — local, CI and both runs all count as "run by something". */
   readonly steps: readonly GateStep[];
-  readonly workflowText: string;
-  readonly jobName: string;
   /**
    * The declared pre-existing breaches — a PARAMETER, not the module constant (ADR-0246's posture
    * for the repo root, and `judgeSourceOwnership`'s for its declaration map).
@@ -500,20 +488,20 @@ export function judgeReliabilityGateParity(input: {
    */
   readonly baseline: readonly BaselinedGate[];
 }): ReliabilityGateParity {
-  const { stories, steps, workflowText, jobName, baseline } = input;
+  const { stories, steps, baseline } = input;
   if (stories.length === 0) {
     throw new VacuousReliabilitySweep(
       "the story walk found no files, so no declaration could be judged — every gate would read as run",
     );
   }
-  const repoWide = repoWideScripts(steps, workflowText, jobName);
+  const repoWide = repoWideScripts(steps);
   if (repoWide.size === 0) {
     throw new VacuousReliabilitySweep(
-      `no repo-wide \`pnpm -r <script>\` leg could be derived from the plan (${steps.length} step(s)) ` +
-        `or from the \`${jobName}\` job, so every declared gate would look uncovered`,
+      `no repo-wide \`pnpm -r <script>\` leg could be derived from the plan (${steps.length} step(s)), ` +
+        `so every declared gate would look uncovered`,
     );
   }
-  const targeted = targetedInvocations(steps, workflowText, jobName);
+  const targeted = targetedInvocations(steps);
 
   const judged: JudgedGate[] = [];
   let storiesWithBlock = 0;
@@ -619,9 +607,9 @@ export function formatReliabilityGateParity(parity: ReliabilityGateParity): stri
     lines.push(
       "",
       `${TAG}   Fix it at whichever end is true. If the command carries a real proof obligation, WIRE`,
-      `${TAG}   it — a step in \`packages/cli/src/gate-order.ts\`, or a step in the \`verify\` job of`,
-      `${TAG}   \`.github/workflows/ci.yml\` (the split ADR-0547 D1 uses: the gate is the habit, CI is`,
-      `${TAG}   the wall). If it does not, stop DECLARING it as one — edit the story's`,
+      `${TAG}   it — a step in \`GATE_PLAN\` (\`packages/cli/src/gate-order.ts\`), placed \`both\` to make`,
+      `${TAG}   it a merge wall as well as the habit, or \`local\` to keep it the habit only: CI runs that`,
+      `${TAG}   same plan (ADR-0606). If it does not, stop DECLARING it as one — edit the story's`,
       `${TAG}   \`${RELIABILITY_GATES_HEADING}\` block, which is \`story-author\`'s call and not this`,
       `${TAG}   rung's. What is not an option is leaving it declared and unrun, which is the state this`,
       `${TAG}   rung exists to refuse.`,
@@ -632,7 +620,7 @@ export function formatReliabilityGateParity(parity: ReliabilityGateParity): stri
     lines.push(
       "",
       `${TAG} PASS — every declared gate whose runnability is mechanically decidable is executed by a`,
-      `${TAG} gate step, a CI step, or a repo-wide leg, except the baselined one(s) named above.`,
+      `${TAG} gate-plan step (local, CI or both) or a repo-wide leg, except the baselined one(s) named above.`,
       `${TAG} NOT JUDGED HERE: declarations naming no package script — \`exec\`-form witness checks,`,
       `${TAG} \`storytree gate run\` / \`adopt\` signing ceremonies, and inline \`node -e\` assertions.`,
       `${TAG} They are steps of a ceremony a session performs, not per-branch rungs; whether any of`,

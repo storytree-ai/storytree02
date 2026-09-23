@@ -60,6 +60,7 @@ import { ciMergeScope, githubScopeOutput, githubScopeSummary } from "./ci-affect
 import {
   type CiStepEnvironment,
   GITHUB_GROUP_END,
+  ciSelectionRefusal,
   ciStepEnvironment,
   ciVerdict,
   githubErrorAnnotation,
@@ -82,8 +83,8 @@ import {
 import {
   gitLines,
   localAffectedScope,
+  behindMainLines,
   parseBehindCount,
-  renderBehindMainNotice,
   renderScopeNotice,
   scopeGatePlan,
   type LocalDiff,
@@ -552,11 +553,9 @@ async function main(): Promise<void> {
   // CI NEVER RUNS PART OF THE GATE. A partial run exits GATE_PARTIAL_EXIT_CODE (4) at best, and the
   // one place that code must never reach is a workflow, which reads any non-zero as red and any zero
   // as a merge — `gate-runner.ts`'s own note on that code says not to wire `--only` into CI.
-  if (ci && parsed.request.mode !== "all") {
-    console.error(
-      `${TAG} REFUSED — --ci runs the whole CI plan; --only / --rerun-failed select part of it, and a ` +
-        `partial run is never a merge verdict.`,
-    );
+  const ciRefusal = ci ? ciSelectionRefusal(parsed.request.mode) : null;
+  if (ciRefusal !== null) {
+    console.error(`${TAG} REFUSED — ${ciRefusal}`);
     process.exitCode = 1;
     return;
   }
@@ -620,7 +619,7 @@ async function main(): Promise<void> {
   }
   // The stale-branch half of "local green, CI red" (ADR-0606 D5): said at the start, and again at the
   // verdict below. A CI run proves the merge ref itself, so it has nothing to warn about.
-  const behindNotice = ci ? [] : renderBehindMainNotice(behindMainCount());
+  const behindNotice = behindMainLines(ci, behindMainCount);
   for (const line of behindNotice) console.log(`${TAG} ${line}`);
 
   // Each step's CI identity, resolved once against the plan the runner is about to walk.

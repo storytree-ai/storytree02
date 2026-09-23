@@ -35,7 +35,7 @@ function scriptedGit(answers: Record<string, GitAnswer>) {
 const HAS_SECOND_PARENT = "rev-parse --verify --quiet HEAD^2";
 const MERGE_DIFF = "diff --name-only --no-renames HEAD^1 HEAD";
 
-test("a run that is not a pull request never narrows, and never reads git to decide so", () => {
+test("both-runs-scope-through-one-classifier: a run that is not a pull request never narrows, and never reads git to decide so", () => {
   const { git, calls } = scriptedGit({});
   let projectReads = 0;
   for (const eventName of ["push", "workflow_dispatch", "merge_group", undefined]) {
@@ -48,7 +48,7 @@ test("a run that is not a pull request never narrows, and never reads git to dec
   assert.equal(projectReads, 0);
 });
 
-test("a pull_request checkout that is not a merge commit runs the full suite", () => {
+test("both-runs-scope-through-one-classifier: a pull_request checkout that is not a merge commit runs the full suite", () => {
   const { git, calls } = scriptedGit({});
   assert.deepEqual(ciMergeScope({ eventName: "pull_request", git, projects: () => PROJECTS }), {
     mode: "full",
@@ -57,7 +57,7 @@ test("a pull_request checkout that is not a merge commit runs the full suite", (
   assert.deepEqual(calls, [HAS_SECOND_PARENT]);
 });
 
-test("a diff that cannot be read widens to full, carrying git's own reason", () => {
+test("both-runs-scope-through-one-classifier: a diff that cannot be read widens to full, carrying git's own reason", () => {
   const { git, calls } = scriptedGit({
     [HAS_SECOND_PARENT]: { ok: true, stdout: "abc\n", detail: "" },
     [MERGE_DIFF]: { ok: false, stdout: "", detail: "git diff failed: shallow" },
@@ -69,7 +69,7 @@ test("a diff that cannot be read widens to full, carrying git's own reason", () 
   assert.deepEqual(calls, [HAS_SECOND_PARENT, MERGE_DIFF]);
 });
 
-test("a readable merge diff is classified — blank lines and padding dropped — and narrows to its owners", () => {
+test("both-runs-scope-through-one-classifier: a readable merge diff is classified — blank lines and padding dropped — and narrows to its owners", () => {
   const { git } = scriptedGit({
     [HAS_SECOND_PARENT]: { ok: true, stdout: "abc\n", detail: "" },
     [MERGE_DIFF]: { ok: true, stdout: "\n  packages/cli/src/gate-run.ts  \n\npackages/cli/src/gate-ci.ts\n", detail: "" },
@@ -80,7 +80,7 @@ test("a readable merge diff is classified — blank lines and padding dropped �
   assert.deepEqual(scope.projects, ["@storytree/cli"]);
 });
 
-test("the classifier sees exactly the files the diff named — a root file still widens to full", () => {
+test("both-runs-scope-through-one-classifier: the classifier sees exactly the files the diff named — a root file still widens to full", () => {
   const { git } = scriptedGit({
     [HAS_SECOND_PARENT]: { ok: true, stdout: "abc\n", detail: "" },
     [MERGE_DIFF]: { ok: true, stdout: "packages/cli/src/a.ts\npackage.json\n", detail: "" },
@@ -90,7 +90,7 @@ test("the classifier sees exactly the files the diff named — a root file still
   assert.match(scope.reason, /^package\.json: a package manifest/);
 });
 
-test("the GitHub output carries pnpm_args and mode, one per line, as the backstop reads them", () => {
+test("both-runs-scope-through-one-classifier: the GitHub output carries pnpm_args and mode, one per line, as the backstop reads them", () => {
   assert.equal(githubScopeOutput({ mode: "full", reason: "x" }, "-r"), "pnpm_args=-r\nmode=full\n");
   assert.equal(
     githubScopeOutput({ mode: "affected", projects: ["@storytree/cli"], reason: "y" }, "--filter ...@storytree/cli"),
@@ -98,7 +98,7 @@ test("the GitHub output carries pnpm_args and mode, one per line, as the backsto
   );
 });
 
-test("the summary line names the mode, the projects when narrowed, the reason and the args", () => {
+test("both-runs-scope-through-one-classifier: the summary line names the mode, the projects when narrowed, the reason and the args", () => {
   assert.equal(
     githubScopeSummary({ mode: "full", reason: "not a pull_request event" }, "-r"),
     "**Affected scope (ADR-0195):** `full` — not a pull_request event (`pnpm -r`)\n",

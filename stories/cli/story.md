@@ -30,22 +30,27 @@ arc: story-green-monotonicity-arc
 #     `hostedStories.register`. It is also a REFINEMENT of `arcNew`, so `stories/arc` is where it
 #     belongs on the merits and not merely to satisfy a rule.
 # ONE capability ARRIVED on 2026-08-31, and it is the mirror of that departure: `gate-ci-parity`, from
-# `stories/ci-cd`, with its code already resident at `packages/cli/src/gate-ci-parity.ts`. Same rule,
-# same standard, opposite direction — `ci-cd` owns no workspace package, so its first `real:` arm
-# created a hosting relationship ADR-0192 refuses on sight. It was NOT moved to satisfy that rule.
-# It enters on the `organism-boundary-tooling` GROUND, which is NOT the ground `guided-setup-repair`
-# and `verification-decay-instruments` entered on, and the difference matters: those two entered
-# because no story owns their subject, whereas `ci-cd` demonstrably DOES own the pipeline. The
-# operative line is a SPLIT, not an absence — **`ci-cd` owns the PIPELINE (that a step runs, that it
-# blocks, that it sits on the merge ref); `cli` owns the JUDGE a `check:*` rung invokes** — and
-# `check:boundaries` is that split already instantiated: a `verify` step `ci-cd`'s `green-gate`
-# enumerates, whose analyser has always been a `cli` capability. `gate-ci-parity` is the fourth judge
-# of that shape here. It is also SOURCE-COUPLED to this building: its judge must read the `GATE_PLAN`
-# literal out of `packages/cli/src/gate-order.ts`, so half its subject is this package's own code, and
-# `repo-manifest.json`'s report-only `sourceOwnership` had already assigned `packages/cli/src/gate*.ts`
-# to it. It arrives with `depends_on: []` — its old `[green-gate]` edge was dropped as FALSE under the
-# `cross-story-dependency` test, not converted into a cross-story edge, so `cli` stays a pure source
-# and `consumed_by` stays empty. Its sibling `green-gate` did NOT follow it and stays in `ci-cd`.
+# `stories/ci-cd`, with its code already resident here (then `packages/cli/src/gate-ci-parity.ts`).
+# Same rule, same standard, opposite direction — `ci-cd` owns no workspace package, so its first
+# `real:` arm created a hosting relationship ADR-0192 refuses on sight. It was NOT moved to satisfy
+# that rule. It entered on the `organism-boundary-tooling` GROUND, which is NOT the ground
+# `guided-setup-repair` and `verification-decay-instruments` entered on, and the difference matters:
+# those two entered because no story owns their subject, whereas `ci-cd` demonstrably DOES own the
+# pipeline. The operative line is a SPLIT, not an absence — **`ci-cd` owns the PIPELINE (that a step
+# runs, that it blocks, that it sits on the merge ref); `cli` owns the PROGRAM a pipeline step
+# invokes** — and `check:boundaries` is that split already instantiated: a check CI runs, whose
+# analyser has always been a `cli` capability. On arrival `gate-ci-parity` was a fourth pure judge of
+# that shape, whose comparison had to read the `GATE_PLAN` literal out of
+# `packages/cli/src/gate-order.ts`. ADR-0606 (2026-09-23) deleted that judge with the second list it
+# compared: CI's `verify` now runs `pnpm gate --ci`, and the capability is the gate program's CI mode
+# and its local stale-branch warning — `packages/cli/src/gate*.ts` itself, all of it this building's
+# own code, which the report-only `sourceOwnership` map (now
+# `repo-manifest/source-ownership/gate-ci-parity.json`) had already assigned to it. The split holds
+# unchanged; only the side this capability sits on got plainer. It arrived with `depends_on: []` —
+# its old `[green-gate]` edge was dropped as FALSE under the `cross-story-dependency` test, not
+# converted into a cross-story edge, and the test re-run after ADR-0606 is still false both ways — so
+# `cli` stays a pure source and `consumed_by` stays empty. Its sibling `green-gate` did NOT follow it
+# and stays in `ci-cd`.
 capabilities: [unified-command-dispatch, cli-resident-corpus-tools, organism-boundary-tooling, work-hierarchy-camp-fence, guided-setup-repair, verification-decay-instruments, gate-ci-parity, uat-revision-continuity-gate]
 # The CLI is the wiring HUB: it imports every organism to surface it. Those outbound edges
 # (cli → drive-machinery / library / notice-board / store / arc) are declared PROVIDER-SIDE on each
@@ -139,22 +144,29 @@ the subject of its sixth chartered instrument — and no story in the tree owns 
 easy mistake.** The no-owning-organism ground above cannot carry it: `ci-cd` exists, owns the delivery
 pipeline, and had authored this capability itself. What moved it here is a SPLIT rather than an
 absence — **`ci-cd` owns the PIPELINE (that a step runs, that it blocks, that it sits on the merge
-ref, that `automerge` needs it); `cli` owns the JUDGE a `check:*` rung invokes** — and that split is
-not new prose, it is `organism-boundary-tooling` restated. `check:boundaries` is a `verify` step,
-enumerated in `ci-cd`'s own [`green-gate`](../ci-cd/green-gate.md); its ANALYSER has always been a
-capability of this story, and nobody has ever thought otherwise. `work-hierarchy-camp-fence`
-(`check:hierarchy-camps`) sits on the same footing. `gate-ci-parity` is the fourth pure judge of that
-shape, and it is additionally SOURCE-COUPLED here in a way the others are not: its judge must read the
-`GATE_PLAN` literal out of `packages/cli/src/gate-order.ts`, so half of its subject is this package's
-own code. The story it LEFT keeps the pipeline half — `ci-cd`'s UAT leg 3 and Reliability Gate 3 still
-assert the local/CI relationship as repository-owned evidence on that story's own journey.
+ref, that `automerge` needs it); `cli` owns the PROGRAM a pipeline step invokes** — and that split is
+not new prose, it is `organism-boundary-tooling` restated. `check:boundaries` is a check CI runs; its
+ANALYSER has always been a capability of this story, and nobody has ever thought otherwise.
+`work-hierarchy-camp-fence` (`check:hierarchy-camps`) sits on the same footing. On arrival
+`gate-ci-parity` was the fourth pure judge of that shape, whose comparison had to read the
+`GATE_PLAN` literal out of `packages/cli/src/gate-order.ts`. ADR-0606 (2026-09-23) deleted that judge
+along with the second list it compared, and made the capability the gate program itself: CI's
+`verify` runs `pnpm gate --ci` and names no check, so what `gate-ci-parity` now contracts is how that
+one program walks the one plan in each run — which steps, over which packages, as whom, and what
+counts as green. That sits on the same side of the split as before, and more squarely: all of its
+subject is this package's own code. The story it LEFT keeps the pipeline half — `ci-cd`'s
+[`green-gate`](../ci-cd/green-gate.md) asserts that `verify` runs the gate as a required step on the
+merge ref, and its UAT leg 3 and Reliability Gate 3 still assert the local/CI relationship as
+repository-owned evidence on that story's own journey.
 
 So the tree now shows THREE distinct admission grounds here, and only the first is the original
-shim-vs-journey rule: wiring/authoring competence (rows 1–2), no-owning-organism (rows 5–6),
-judge-not-pipeline (rows 3, 4, 7). **None of this resolves open modeling call 1 below, and
-`gate-ci-parity` does not lean on it being resolved** — that call asks whether the no-owning-organism
-ground is right, and this capability does not stand on it. If anything the arrival WIDENS what the
-call has to weigh, from one alternative ground to two.
+shim-vs-journey rule: wiring/authoring competence (rows 1–2), no-owning-organism (rows 5–6), and
+program-not-pipeline (rows 3, 4, 7) — the program a pipeline step invokes, which for rows 3 and 4 is a
+judge. *(It read "judge-not-pipeline" until 2026-09-24; ADR-0606 turned row 7 from a judge into the
+gate program itself, and the wider name covers both without moving any row.)* **None of this
+resolves open modeling call 1 below, and `gate-ci-parity` does not lean on it being resolved** — that
+call asks whether the no-owning-organism ground is right, and this capability does not stand on it.
+If anything the arrival WIDENS what the call has to weigh, from one alternative ground to two.
 
 | # | capability | outcome | status | depends on |
 |---|---|---|---|---|
@@ -164,7 +176,7 @@ call has to weigh, from one alternative ground to two.
 | 4 | [`work-hierarchy-camp-fence`](work-hierarchy-camp-fence.md) | A pure judge computes, from each module's own code, whether it reads the work hierarchy off the checkout or out of the live store, and a gate rung holds that against a declared camp in `repo-manifest/hierarchy-camps/_domain.json`. | proposed | — |
 | 5 | [`guided-setup-repair`](guided-setup-repair.md) | A dev's failing setup probe is driven to a re-verified repair, or to a secrets-redacted owner escalation naming why no installer step can fix it. | proposed | — |
 | 6 | [`verification-decay-instruments`](verification-decay-instruments.md) | Every chartered verification instrument reports the decay it locates as a finding charged to the branch that authored it. | proposed | — |
-| 7 | [`gate-ci-parity`](gate-ci-parity.md) | The local `pnpm gate` and the CI `verify` invariant sets stand in one declared, checkable two-way relationship — every step outside the shared floor belonging to a declared class, asserted both ways, plus HEAD vs merge-ref; a stale-behind-main branch is surfaced. | proposed | — |
+| 7 | [`gate-ci-parity`](gate-ci-parity.md) | A green local `pnpm gate` predicts a green CI `verify`, because both walk the one gate plan — split only by each step's declared placement — and the one difference that remains, the merge ref, is warned about whenever the branch is behind `origin/main`. | proposed | — |
 | 8 | [`uat-revision-continuity-gate`](uat-revision-continuity-gate.md) | A changed existing UAT criterion revision blocks until its candidate binding has an exact signed pass; a new criterion remains additive expansion. | proposed | — |
 
 *(Renumbered 1–5 on 2026-08-14 when three rows left. Safe, and different from the open modeling calls
@@ -182,8 +194,11 @@ prose beside it, and only the frontmatter is checked. Read the tree, not this co
 
 *(`uat-revision-continuity-gate` joined under ADR-0560 after PR #1892 changed an already-proven
 criterion revision without replacement proof and the Agent story silently rendered proposed. It is
-another CLI-resident pure judge, but not part of `gate-ci-parity`: one decides whether a candidate
-proof binding is admissible; the other decides whether the local and CI step sets correspond.)*
+another CLI-resident pure judge, and not part of `gate-ci-parity`: it decides whether a candidate
+proof binding is admissible, while `gate-ci-parity` is the gate program that RUNS it — one of the
+checks the plan places on both sides, declaring the verdict-history identity it signs in with in CI.
+Until 2026-09-24 this said `gate-ci-parity` "decides whether the local and CI step sets
+correspond"; ADR-0606 deleted that comparison, since both runs now walk one plan.)*
 
 *(`gate-ci-parity` also carries one contract-grain unit,
 [`gate-real-build-names-its-increment`](gate-real-build-names-its-increment.md) — spec-borne,

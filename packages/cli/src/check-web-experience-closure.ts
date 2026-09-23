@@ -163,8 +163,8 @@ function main(): void {
     // LOCAL ONLY, and deliberately unlike that branch. This is the bootstrap allowance, not an
     // environment fault, so it stays legitimate in CI — and it is reachable there, where the
     // absent-checkout branch is not (the workflow clones web/ first, or fails). `GATE_SKIP_EXIT_CODE`
-    // is a protocol with `gate-run.ts`; ci.yml runs this script as a plain step where any non-zero
-    // code is a failure, so emitting 3 there would turn a declared skip into a hard red. The line
+    // is a protocol with `gate-run.ts`, whose CI mode (`pnpm gate --ci`, ADR-0606 D3) counts a
+    // skip as a failure, so emitting 3 there would turn a declared skip into a hard red. The line
     // below says what it did not do either way; only the code differs, per the runner reading it.
     console.log(`check:web-experience-closure — ${inCi ? "NOTHING TO CHECK" : "SKIP"}: ${result.reason}`);
     if (!inCi) process.exit(GATE_SKIP_EXIT_CODE);

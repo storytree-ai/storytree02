@@ -171,7 +171,8 @@ interface RootPathReaders {
  * story-only branch, and a narrowing makes a verdict MEAN more as well as cost less.
  *
  * WHAT THIS DOES NOT COVER, deliberately. The `check:*` rungs are not scoped by this classifier at
- * all — they run unconditionally in both `gate-order.ts` and `ci.yml` — so `check:web-grounding`,
+ * all — they run unconditionally in both runs of the one plan, `pnpm gate` and CI's `pnpm gate --ci`
+ * (ADR-0606 D3) — so `check:web-grounding`,
  * which also reads the decision log, is unaffected by the map and needs no entry in it. That is also
  * why `.cursor/`, `.gemini/` and `.opencode/` measured ZERO readers: `check:agents` covers them.
  *

@@ -129,9 +129,10 @@ export interface SkipDisposition {
  * script and disagree about what a non-zero code means.
  *
  * `gate-run.ts` reads {@link SkipDisposition.exitCode} 3 as a DECLARED skip: it prints the step as
- * SKIP, names it in `GATE GREEN, NARROWED`, and does not red the gate. `.github/workflows/ci.yml`
- * runs the very same `pnpm check:mutation-diff` as an ordinary step with no `continue-on-error`,
- * where ANY non-zero code is a hard failure. Emitting the declared 3 into CI would therefore turn
+ * SKIP, names it in `GATE GREEN, NARROWED`, and does not red the gate. CI runs the very same
+ * `pnpm check:mutation-diff` through `pnpm gate --ci` (ADR-0606 D3), which counts exit 3 as a
+ * FAILURE — CI supplies every input a skip-capable check needs, so it accepts no skip. Emitting the
+ * declared 3 into CI would therefore turn
  * this rung's COMMONEST outcome — a branch that changes no mutable TypeScript, i.e. every corpus,
  * docs and config landing — into a red on a PR that did nothing wrong. That is the same dishonesty
  * the skip protocol exists to remove, with the sign flipped.

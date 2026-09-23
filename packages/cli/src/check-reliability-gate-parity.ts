@@ -6,10 +6,11 @@
  * The same gatherer/judge split `check-ownership-totality.ts` / `ownership-totality.ts` uses, and for
  * the same reason: the rule stays exhaustively unit-testable offline while the I/O glue stays dumb.
  *
- * THREE ENUMERATIONS, ALL FATAL WHEN EMPTY — the story walk, the gate plan, and the `verify` job's
- * steps. Every one of them can fail in a way that makes this check report a healthier corpus than it
- * is: no stories means no declaration to judge, and no derivable repo-wide leg means every declared
- * gate looks uncovered. Both surface as a BLIND CHECK failure rather than a verdict
+ * TWO ENUMERATIONS, BOTH FATAL WHEN EMPTY — the story walk and the gate plan. (There was a third, the
+ * `verify` job's steps, until ADR-0606 D3 made CI run the plan itself; the workflow now names no
+ * check.) Either can fail in a way that makes this check report a healthier corpus than it is: no
+ * stories means no declaration to judge, and no derivable repo-wide leg means every declared gate
+ * looks uncovered. Both surface as a BLIND CHECK failure rather than a verdict
  * ({@link VacuousReliabilitySweep}) — the `check:ownership-totality` posture, where a probe that
  * cannot be consulted THROWS and never answers false.
  *
@@ -32,10 +33,6 @@ import {
 } from "./reliability-gate-parity.js";
 
 const TAG = "[check:reliability-gate-parity]";
-
-/** The workflow whose `verify` job is the other half of the parity question. */
-const WORKFLOW = ".github/workflows/ci.yml";
-const VERIFY_JOB = "verify";
 
 /** The disk-canonical work hierarchy (ADR-0445 D1) — this is a PROVING reader, so it reads the tree. */
 const STORIES_ROOT = "stories";
@@ -76,20 +73,11 @@ function gatherStories(root: string): StoryFile[] {
 function main(): void {
   const stories = gatherStories(repoRoot);
 
-  const workflowPath = join(repoRoot, WORKFLOW);
-  if (!existsSync(workflowPath)) {
-    // Loud, and NOT a verdict: an unreadable workflow would otherwise present as "CI runs nothing",
-    // which reads as a corpus full of unrun gates and sends the reader to wire steps that exist.
-    console.error(`${TAG} BLIND CHECK — ${WORKFLOW} is unreadable, so CI's half cannot be consulted.`);
-    process.exit(1);
-  }
-  const workflowText = readFileSync(workflowPath, "utf8");
-
+  // The WHOLE plan, every placement. CI runs this same list through `pnpm gate --ci` (ADR-0606 D3), so
+  // there is no second source to read — the workflow names no check any more.
   const parity = judgeReliabilityGateParity({
     stories,
     steps: GATE_PLAN,
-    workflowText,
-    jobName: VERIFY_JOB,
     baseline: UNRUN_GATE_BASELINE,
   });
 

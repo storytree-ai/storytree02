@@ -23,7 +23,7 @@ import {
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
 
 /**
- * A minimal plan and workflow, built per test rather than memoised.
+ * A minimal plan, built per test rather than memoised.
  *
  * DELIBERATELY NOT A SHARED FIXTURE. A memoised object shared across tests turns a mutation-rung
  * attribution timeout into false SURVIVORS, because every test then depends on one lazily-built
@@ -34,28 +34,6 @@ function plan(...commands: string[]): GateStep[] {
     const check = /^pnpm (check:[\w-]+)/.exec(command)?.[1];
     return check === undefined ? { command, check: undefined } : { command, check };
   });
-}
-
-/**
- * A `verify` job whose steps are the given pnpm invocations, written the way `ci.yml` writes them.
- *
- * Each argument is the text AFTER `pnpm `, matching what `extractPnpmInvocations` yields — so the
- * prefix is added here rather than repeated at every call site.
- */
-function workflow(...invocations: string[]): string {
-  return ["jobs:", "  verify:", "    steps:", ...invocations.flatMap(runStep)].join("\n");
-}
-
-/**
- * One step in the form `ci.yml` actually writes — a `- name:` line with `run:` on its OWN line.
- *
- * The shape is load-bearing, not cosmetic: `extractPnpmInvocations` anchors on `^run:` against a
- * TRIMMED line, so a `- run: pnpm …` one-liner parses to NOTHING. A fixture in that shape makes
- * every "CI runs it" assertion fail, and — worse — makes every "CI does NOT run it" assertion pass
- * for the wrong reason, which is a green check that verified nothing.
- */
-function runStep(invocation: string): string[] {
-  return [`      - name: step`, `        run: pnpm ${invocation}`];
 }
 
 /** The two repo-wide legs the real gate declares, as the smallest plan that derives them. */
@@ -114,7 +92,7 @@ const GOLDEN_PASS = [
   "[check:reliability-gate-parity] 1 declared package-script gate(s) across 1 story file(s) with a `## Reliability Gates` block — 1 run, 0 carried by the baseline, 0 charged here.",
   "",
   "[check:reliability-gate-parity] PASS — every declared gate whose runnability is mechanically decidable is executed by a",
-  "[check:reliability-gate-parity] gate step, a CI step, or a repo-wide leg, except the baselined one(s) named above.",
+  "[check:reliability-gate-parity] gate-plan step (local, CI or both) or a repo-wide leg, except the baselined one(s) named above.",
   "[check:reliability-gate-parity] NOT JUDGED HERE: declarations naming no package script — `exec`-form witness checks,",
   "[check:reliability-gate-parity] `storytree gate run` / `adopt` signing ceremonies, and inline `node -e` assertions.",
   "[check:reliability-gate-parity] They are steps of a ceremony a session performs, not per-branch rungs; whether any of",
@@ -127,12 +105,12 @@ const GOLDEN_FAIL = [
   "[check:reliability-gate-parity] FAIL — a DECLARED gate nobody runs reads as coverage while checking nothing:",
   "[check:reliability-gate-parity]   stories/s/story.md",
   "[check:reliability-gate-parity]     `pnpm --filter studio uat`",
-  "[check:reliability-gate-parity]     nothing runs the `uat` script of studio: it is not one of the repo-wide legs (test, typecheck) and no gate step or CI `run:` step names it.",
+  "[check:reliability-gate-parity]     nothing runs the `uat` script of studio: it is not one of the repo-wide legs (test, typecheck) and no gate-plan step names it.",
   "",
   "[check:reliability-gate-parity]   Fix it at whichever end is true. If the command carries a real proof obligation, WIRE",
-  "[check:reliability-gate-parity]   it — a step in `packages/cli/src/gate-order.ts`, or a step in the `verify` job of",
-  "[check:reliability-gate-parity]   `.github/workflows/ci.yml` (the split ADR-0547 D1 uses: the gate is the habit, CI is",
-  "[check:reliability-gate-parity]   the wall). If it does not, stop DECLARING it as one — edit the story's",
+  "[check:reliability-gate-parity]   it — a step in `GATE_PLAN` (`packages/cli/src/gate-order.ts`), placed `both` to make",
+  "[check:reliability-gate-parity]   it a merge wall as well as the habit, or `local` to keep it the habit only: CI runs that",
+  "[check:reliability-gate-parity]   same plan (ADR-0606). If it does not, stop DECLARING it as one — edit the story's",
   "[check:reliability-gate-parity]   `## Reliability Gates` block, which is `story-author`'s call and not this",
   "[check:reliability-gate-parity]   rung's. What is not an option is leaving it declared and unrun, which is the state this",
   "[check:reliability-gate-parity]   rung exists to refuse.",
@@ -147,7 +125,7 @@ const GOLDEN_CARRIED = [
   "[check:reliability-gate-parity]     held: a red journey",
   "",
   "[check:reliability-gate-parity] PASS — every declared gate whose runnability is mechanically decidable is executed by a",
-  "[check:reliability-gate-parity] gate step, a CI step, or a repo-wide leg, except the baselined one(s) named above.",
+  "[check:reliability-gate-parity] gate-plan step (local, CI or both) or a repo-wide leg, except the baselined one(s) named above.",
   "[check:reliability-gate-parity] NOT JUDGED HERE: declarations naming no package script — `exec`-form witness checks,",
   "[check:reliability-gate-parity] `storytree gate run` / `adopt` signing ceremonies, and inline `node -e` assertions.",
   "[check:reliability-gate-parity] They are steps of a ceremony a session performs, not per-branch rungs; whether any of",
@@ -160,7 +138,7 @@ const GOLDEN_STALE_RUN = [
   "[check:reliability-gate-parity] STALE BASELINE ENTRY — it no longer describes the corpus:",
   "[check:reliability-gate-parity]   stories/s/story.md",
   "[check:reliability-gate-parity]     `pnpm --filter studio uat`",
-  "[check:reliability-gate-parity]     this gate IS now run (a gate step or CI `run:` step invokes `uat` for studio) — the blocker cleared. Delete the entry.",
+  "[check:reliability-gate-parity]     this gate IS now run (a gate-plan step invokes `uat` for studio) — the blocker cleared. Delete the entry.",
   "[check:reliability-gate-parity]   Edit UNRUN_GATE_BASELINE in packages/cli/src/reliability-gate-parity.ts.",
 ].join(LF);
 
@@ -405,14 +383,12 @@ describe("formatReliabilityGateParity — WHOLE-STRING goldens", () => {
    * defeats it — the golden's whole value is that it was not written by the same judgement that
    * wrote the code.
    */
-  const judge = (declared: string, runLines: string[], baseline: BaselinedGate[]) =>
+  const judge = (declared: string, extraSteps: string[], baseline: BaselinedGate[]) =>
     judgeReliabilityGateParity({
       stories: [
         { path: "stories/s/story.md", text: `# S${LF}${LF}## Reliability Gates${LF}${LF}1. _(gate: observe)_ \`${declared}\`.${LF}` },
       ],
-      steps: legPlan(),
-      workflowText: workflow(...runLines),
-      jobName: "verify",
+      steps: [...legPlan(), ...plan(...extraSteps)],
       baseline,
     });
 
@@ -423,30 +399,30 @@ describe("formatReliabilityGateParity — WHOLE-STRING goldens", () => {
   };
 
   it("the PASS body, whole", () => {
-    assert.equal(formatReliabilityGateParity(judge("pnpm --filter studio test", ["-r test"], [])), GOLDEN_PASS);
+    assert.equal(formatReliabilityGateParity(judge("pnpm --filter studio test", [], [])), GOLDEN_PASS);
   });
 
   it("the FAIL body, whole — a declared gate nothing runs", () => {
-    assert.equal(formatReliabilityGateParity(judge("pnpm --filter studio uat", ["-r test"], [])), GOLDEN_FAIL);
+    assert.equal(formatReliabilityGateParity(judge("pnpm --filter studio uat", [], [])), GOLDEN_FAIL);
   });
 
   it("the CARRIED body, whole — a baselined breach on an otherwise passing run", () => {
     assert.equal(
-      formatReliabilityGateParity(judge("pnpm --filter studio uat", ["-r test"], [CARRIED_ENTRY])),
+      formatReliabilityGateParity(judge("pnpm --filter studio uat", [], [CARRIED_ENTRY])),
       GOLDEN_CARRIED,
     );
   });
 
   it("the STALE body, whole — the baselined gate is now run", () => {
     assert.equal(
-      formatReliabilityGateParity(judge("pnpm --filter studio uat", ["-r test", "--filter studio uat"], [CARRIED_ENTRY])),
+      formatReliabilityGateParity(judge("pnpm --filter studio uat", ["pnpm --filter studio uat"], [CARRIED_ENTRY])),
       GOLDEN_STALE_RUN,
     );
   });
 
   it("the STALE body, whole — the baselined declaration no longer exists", () => {
     assert.equal(
-      formatReliabilityGateParity(judge("pnpm --filter studio test", ["-r test"], [CARRIED_ENTRY])),
+      formatReliabilityGateParity(judge("pnpm --filter studio test", [], [CARRIED_ENTRY])),
       GOLDEN_STALE_GHOST,
     );
   });
@@ -471,8 +447,6 @@ describe("formatReliabilityGateParity — WHOLE-STRING goldens", () => {
         },
       ],
       steps: legPlan(),
-      workflowText: workflow("-r test"),
-      jobName: "verify",
       baseline: [CARRIED_ENTRY],
     });
     assert.equal(parity.judged.length, 3);
@@ -495,8 +469,6 @@ describe("the judge's partitions, which the rung found unproven", () => {
     const parity = judgeReliabilityGateParity({
       stories: [story("pnpm --filter studio uat")],
       steps: legPlan(),
-      workflowText: workflow("-r test"),
-      jobName: "verify",
       baseline: [
         { story: "stories/OTHER/story.md", command: "pnpm --filter studio uat", blocker: "x".repeat(90) },
         { story: "stories/s/story.md", command: "pnpm --filter studio other-script", blocker: "y".repeat(90) },
@@ -513,9 +485,7 @@ describe("the judge's partitions, which the rung found unproven", () => {
     // would be reported as CARRIED — a run that is actually fine described as carrying debt.
     const parity = judgeReliabilityGateParity({
       stories: [story("pnpm --filter studio uat")],
-      steps: legPlan(),
-      workflowText: workflow("-r test", "--filter studio uat"),
-      jobName: "verify",
+      steps: [...legPlan(), ...plan("pnpm --filter studio uat")],
       baseline: [{ story: "stories/s/story.md", command: "pnpm --filter studio uat", blocker: "z".repeat(90) }],
     });
     assert.equal(parity.baselined.length, 0, "it is RUN, so it carries nothing");
@@ -543,19 +513,23 @@ describe("the judge's partitions, which the rung found unproven", () => {
     );
   });
 
-  it("repoWideScripts reads a leg only when the WHOLE token is one, not a token containing one", () => {
-    // Both anchors of the leg pattern survived. A token that merely contains the shape must not
-    // register as a repo-wide leg, or any step whose text embeds `pnpm -r x` grants coverage.
-    assert.deepEqual([...repoWideScripts(plan("pnpm -r --no-bail test"), workflow(), "verify")], ["test"]);
-    // TRAILING noise disqualifies it: the shared normaliser only recognises an invocation ENDING in
-    // the script word, so `-r test --reporter=x` is not a leg and grants no coverage.
-    assert.equal(repoWideScripts(plan(), workflow("-r test --reporter=x"), "verify").size, 0);
-    // ⚠ LEADING noise does NOT disqualify it, and that is the normaliser's documented contract
-    // rather than a gap here: `normalizeContentStep` collapses EVERY scoping prefix — `-r`,
-    // `-r --no-bail`, an affected-scope `--filter ...<name>`, CI's templated `pnpm_args` — onto the
-    // one `pnpm -r <script>` token, which is exactly why this set is derivable at all. Asserting
-    // otherwise would be this test disagreeing with the seam it depends on.
-    assert.equal(repoWideScripts(plan(), workflow("--filter ...@storytree/cli test"), "verify").has("test"), true);
+  it("repoWideScripts reads a leg only when the WHOLE command is one, not a command containing one", () => {
+    // Both anchors of the leg pattern are load-bearing. A command that merely contains the shape
+    // must not register as a repo-wide leg, or any step whose text embeds `pnpm -r x` grants coverage.
+    assert.deepEqual([...repoWideScripts(plan("pnpm -r --no-bail test"))], ["test"]);
+    // TRAILING noise disqualifies it.
+    assert.equal(repoWideScripts(plan("pnpm -r test --reporter=x")).size, 0);
+    // LEADING noise disqualifies it too.
+    assert.equal(repoWideScripts(plan("echo pnpm -r test")).size, 0);
+    // An affected-scoped leg is not a repo-wide one: the plan DECLARES `-r` (the runner narrows it
+    // only at run time, ADR-0304 D1), so a `--filter` step here names packages and is tier 1's.
+    assert.equal(repoWideScripts(plan("pnpm --filter ...@storytree/cli test")).size, 0);
+  });
+
+  it("repoWideScripts: --no-bail is optional, whitespace may run, and the command is trimmed", () => {
+    assert.deepEqual([...repoWideScripts(plan("pnpm -r build"))], ["build"]);
+    assert.deepEqual([...repoWideScripts(plan("pnpm  -r   --no-bail  typecheck"))], ["typecheck"]);
+    assert.deepEqual([...repoWideScripts(plan("  pnpm -r test  "))], ["test"]);
   });
 
   it("a filter token is matched WHOLE, so a lookalike token is not read as a filter", () => {
@@ -566,55 +540,32 @@ describe("the judge's partitions, which the rung found unproven", () => {
 });
 
 describe("repoWideScripts", () => {
-  it("derives the script words from the plan and the workflow together, never from a literal", () => {
-    const scripts = repoWideScripts(legPlan(), workflow("-r build"), "verify");
+  it("derives the script words from the plan's -r steps, never from a literal", () => {
+    // Every placement counts: the studio build is a CI-only step in the real plan (ADR-0606 D4).
+    const scripts = repoWideScripts([...legPlan(), ...plan("pnpm -r build")]);
     assert.deepEqual([...scripts].sort(), ["build", "test", "typecheck"]);
   });
 
-  it("derives a leg through CI's affected-scope templated form", () => {
-    // CI writes the leg as `pnpm ${{ steps.affected.outputs.pnpm_args || '-r' }} test`; the shared
-    // normaliser collapses every scoping prefix onto `pnpm -r test`, which is why this is derivable.
-    const scripts = repoWideScripts(plan(), workflow("${{ steps.affected.outputs.pnpm_args || '-r' }} test"), "verify");
-    assert.deepEqual([...scripts], ["test"]);
-  });
-
-  it("derives nothing when neither side declares a repo-wide leg", () => {
-    assert.equal(repoWideScripts(plan("pnpm check:boundaries"), workflow("check:boundaries"), "verify").size, 0);
+  it("derives nothing when the plan declares no repo-wide leg", () => {
+    assert.equal(repoWideScripts(plan("pnpm check:boundaries", "pnpm lint")).size, 0);
   });
 });
 
 describe("targetedInvocations", () => {
-  it("records a CI step that runs one package's script", () => {
-    const targeted = targetedInvocations(plan(), workflow("--filter studio uat"), "verify");
-    assert.equal(targeted.has(targetKey("studio", "uat")), true);
-  });
-
   it("records a gate-plan step that runs one package's script", () => {
-    const targeted = targetedInvocations(plan("pnpm --filter studio uat"), workflow(), "verify");
+    const targeted = targetedInvocations(plan("pnpm --filter studio uat"));
     assert.equal(targeted.has(targetKey("studio", "uat")), true);
   });
 
   it("keys on package AND script, so one package's script never satisfies another's", () => {
-    const targeted = targetedInvocations(plan(), workflow("--filter desktop uat"), "verify");
+    const targeted = targetedInvocations(plan("pnpm --filter desktop uat"));
     assert.equal(targeted.has(targetKey("desktop", "uat")), true);
     assert.equal(targeted.has(targetKey("studio", "uat")), false);
   });
 
-  it("reads only the named job, so a sibling job's steps cannot satisfy a declaration", () => {
-    const text = [
-      "jobs:",
-      "  verify:",
-      "    steps:",
-      ...runStep("check:boundaries"),
-      "  other:",
-      "    steps:",
-      ...runStep("--filter studio uat"),
-    ].join("\n");
-    // POSITIVE CONTROL FIRST: the same step IS read when `other` is the job asked about. Without it
-    // the negative below passes whenever the fixture parses to nothing at all, which is how a
-    // scoping test comes to prove only that its own fixture was malformed.
-    assert.equal(targetedInvocations(plan(), text, "other").has(targetKey("studio", "uat")), true);
-    assert.equal(targetedInvocations(plan(), text, "verify").has(targetKey("studio", "uat")), false);
+  it("records EVERY filtered package of one step, and nothing for a step naming no package script", () => {
+    const targeted = targetedInvocations(plan("pnpm --filter alpha --filter beta uat", "pnpm check:boundaries"));
+    assert.deepEqual([...targeted].sort(), [targetKey("alpha", "uat"), targetKey("beta", "uat")]);
   });
 });
 
@@ -672,8 +623,6 @@ describe("judgeReliabilityGateParity", () => {
     const parity = judgeReliabilityGateParity({
       stories: [story("pnpm --filter studio test")],
       steps: legPlan(),
-      workflowText: workflow("-r test"),
-      jobName: "verify",
       baseline: [],
     });
     assert.equal(parity.verdict, "pass");
@@ -685,8 +634,6 @@ describe("judgeReliabilityGateParity", () => {
     const parity = judgeReliabilityGateParity({
       stories: [story("pnpm --filter studio uat")],
       steps: legPlan(),
-      workflowText: workflow("-r test"),
-      jobName: "verify",
       baseline: [],
     });
     assert.equal(parity.verdict, "fail");
@@ -694,14 +641,12 @@ describe("judgeReliabilityGateParity", () => {
     assert.equal(parity.unrun[0]?.command, "pnpm --filter studio uat");
   });
 
-  it("passes the SAME declaration once CI is wired to run it", () => {
+  it("passes the SAME declaration once the plan is wired to run it", () => {
     // The two tests above and this one are the whole rung: the declaration did not change, only
     // whether anything runs it.
     const parity = judgeReliabilityGateParity({
       stories: [story("pnpm --filter studio uat")],
-      steps: legPlan(),
-      workflowText: workflow("-r test", "--filter studio uat"),
-      jobName: "verify",
+      steps: [...legPlan(), ...plan("pnpm --filter studio uat")],
       baseline: [],
     });
     assert.equal(parity.verdict, "pass");
@@ -719,8 +664,6 @@ describe("judgeReliabilityGateParity", () => {
         },
       ],
       steps: legPlan(),
-      workflowText: workflow("-r test"),
-      jobName: "verify",
       baseline: [],
     });
     assert.equal(parity.verdict, "pass");
@@ -738,8 +681,6 @@ describe("judgeReliabilityGateParity", () => {
         },
       ],
       steps: legPlan(),
-      workflowText: workflow("-r test"),
-      jobName: "verify",
       baseline: [],
     });
     assert.equal(parity.verdict, "fail");
@@ -751,8 +692,6 @@ describe("judgeReliabilityGateParity", () => {
         judgeReliabilityGateParity({
           stories: [],
           steps: legPlan(),
-          workflowText: workflow("-r test"),
-          jobName: "verify",
           baseline: [],
         }),
       VacuousReliabilitySweep,
@@ -767,8 +706,6 @@ describe("judgeReliabilityGateParity", () => {
         judgeReliabilityGateParity({
           stories: [story("pnpm --filter studio test")],
           steps: plan("pnpm check:boundaries"),
-          workflowText: workflow("check:boundaries"),
-          jobName: "verify",
           baseline: [],
         }),
       VacuousReliabilitySweep,
@@ -792,8 +729,6 @@ describe("UNRUN_GATE_BASELINE", () => {
     const parity = judgeReliabilityGateParity({
       stories: [story("pnpm --filter studio uat")],
       steps: legPlan(),
-      workflowText: workflow("-r test"),
-      jobName: "verify",
       baseline: [entry],
     });
     assert.equal(parity.verdict, "pass");
@@ -807,8 +742,6 @@ describe("UNRUN_GATE_BASELINE", () => {
       judgeReliabilityGateParity({
         stories: [story("pnpm --filter studio uat")],
         steps: legPlan(),
-        workflowText: workflow("-r test"),
-        jobName: "verify",
         baseline: [entry],
       }),
     );
@@ -819,10 +752,8 @@ describe("UNRUN_GATE_BASELINE", () => {
   it("FAILS on an entry whose gate is now run — the blocker cleared, so the entry is a lie", () => {
     const parity = judgeReliabilityGateParity({
       stories: [story("pnpm --filter studio uat")],
-      steps: legPlan(),
-      // CI now runs it, so the baseline entry must go.
-      workflowText: workflow("-r test", "--filter studio uat"),
-      jobName: "verify",
+      // The plan now runs it, so the baseline entry must go.
+      steps: [...legPlan(), ...plan("pnpm --filter studio uat")],
       baseline: [entry],
     });
     assert.equal(parity.verdict, "fail");
@@ -836,8 +767,6 @@ describe("UNRUN_GATE_BASELINE", () => {
     const parity = judgeReliabilityGateParity({
       stories: [story("pnpm --filter studio test")],
       steps: legPlan(),
-      workflowText: workflow("-r test"),
-      jobName: "verify",
       baseline: [entry],
     });
     assert.equal(parity.verdict, "fail");
@@ -849,8 +778,6 @@ describe("UNRUN_GATE_BASELINE", () => {
       judgeReliabilityGateParity({
         stories: [story("pnpm --filter studio test")],
         steps: legPlan(),
-        workflowText: workflow("-r test"),
-        jobName: "verify",
         baseline: [entry],
       }),
     );
@@ -871,29 +798,27 @@ describe("UNRUN_GATE_BASELINE", () => {
 });
 
 describe("formatReliabilityGateParity", () => {
-  const judge = (declared: string, runLines: string[]) =>
+  const judge = (declared: string) =>
     judgeReliabilityGateParity({
       stories: [
         { path: "stories/s/story.md", text: `# S\n\n## Reliability Gates\n\n1. _(gate: observe)_ \`${declared}\`.\n` },
       ],
       steps: legPlan(),
-      workflowText: workflow(...runLines),
-      jobName: "verify",
       baseline: [],
     });
 
   it("names the story, the command and BOTH remedies on a failure", () => {
-    const body = formatReliabilityGateParity(judge("pnpm --filter studio uat", ["-r test"]));
+    const body = formatReliabilityGateParity(judge("pnpm --filter studio uat"));
     assert.ok(body.includes("stories/s/story.md"));
     assert.ok(body.includes("pnpm --filter studio uat"));
     // Both ends, because which end is wrong is not this rung's call.
     assert.ok(body.includes("gate-order.ts"));
-    assert.ok(body.includes("ci.yml"));
+    assert.ok(body.includes("GATE_PLAN"));
     assert.ok(body.includes("story-author"));
   });
 
   it("states what it did NOT judge on a pass, so green is never read as total", () => {
-    const body = formatReliabilityGateParity(judge("pnpm --filter studio test", ["-r test"]));
+    const body = formatReliabilityGateParity(judge("pnpm --filter studio test"));
     assert.ok(body.includes("PASS"));
     assert.ok(body.includes("NOT JUDGED HERE"));
     assert.ok(body.includes("ceremony"));
@@ -938,7 +863,7 @@ describe("the remaining strings and branches nothing had read", () => {
     const targeted = judgeCoverage(gate1, new Set([targetKey("studio", "uat")]), new Set(["test"]));
     assert.equal(
       targeted.detail,
-      "a gate step or CI `run:` step invokes `uat` for studio",
+      "a gate-plan step invokes `uat` for studio",
     );
 
     const repoWide = judgeCoverage(
@@ -958,7 +883,7 @@ describe("the remaining strings and branches nothing had read", () => {
     assert.equal(
       partial.detail,
       "nothing runs the `uat` script of alpha, beta: it is not one of the repo-wide legs (test) and " +
-        "no gate step or CI `run:` step names it. Only alpha of alpha, beta is invoked directly, so " +
+        "no gate-plan step names it. Only alpha of alpha, beta is invoked directly, so " +
         "the declaration is not fully covered.",
     );
 
@@ -977,9 +902,7 @@ describe("the remaining strings and branches nothing had read", () => {
         { path: "stories/b/story.md", text: STORY_NO_BLOCK },
         { path: "stories/c/story.md", text: STORY_NO_BLOCK },
       ],
-      steps: legPlan(),
-      workflowText: workflow("-r test", "--filter studio uat"),
-      jobName: "verify",
+      steps: [...legPlan(), ...plan("pnpm --filter studio uat")],
       baseline: [],
     });
     assert.equal(parity.storiesWithBlock, 1, "two of the three declare nothing");
@@ -993,8 +916,6 @@ describe("the remaining strings and branches nothing had read", () => {
       judgeReliabilityGateParity({
         stories: [],
         steps: legPlan(),
-        workflowText: workflow("-r test"),
-        jobName: "verify",
         baseline: [],
       });
     assert.throws(noStories, (err: unknown) => {
@@ -1008,16 +929,14 @@ describe("the remaining strings and branches nothing had read", () => {
       judgeReliabilityGateParity({
         stories: [{ path: "stories/a/story.md", text: STORY_BLOCK_LAST }],
         steps: plan("pnpm check:boundaries"),
-        workflowText: workflow("check:boundaries"),
-        jobName: "verify",
         baseline: [],
       });
     assert.throws(noLegs, (err: unknown) => {
       assert.ok(err instanceof VacuousReliabilitySweep);
       assert.match(err.message, /no repo-wide `pnpm -r <script>` leg could be derived/);
       assert.match(err.message, /every declared gate would look uncovered/);
-      // It names the job it consulted, so a typo'd job name is distinguishable from a plan with no leg.
-      assert.match(err.message, /verify/);
+      // It names how many plan steps it read, so an empty plan is distinguishable from one with no leg.
+      assert.match(err.message, /derived from the plan \(1 step\(s\)\), so/);
       return true;
     });
   });
@@ -1042,7 +961,7 @@ describe("the remaining strings and branches nothing had read", () => {
       new Set(["test"]),
     );
     assert.equal(all.covered, true);
-    assert.equal(all.detail, "a gate step or CI `run:` step invokes `uat` for alpha, beta, gamma");
+    assert.equal(all.detail, "a gate-plan step invokes `uat` for alpha, beta, gamma");
 
     // Partly covered: the partial sentence lists the TWO hits, separated, against all three.
     const some = judgeCoverage(

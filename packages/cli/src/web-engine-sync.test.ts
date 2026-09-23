@@ -339,8 +339,8 @@ test("a checkout in which NO package has been adopted declares a SKIP locally", 
 
 test("the bootstrap state withholds the SKIP CODE in CI, but never the fact", () => {
   // This is the ONE blind branch reachable in CI (the workflow clones web/ or fails, so the
-  // absent-checkout branch cannot fire there). `.github/workflows/ci.yml` runs this script as a
-  // plain step, where every non-zero code is a failure — so emitting GATE_SKIP_EXIT_CODE would
+  // absent-checkout branch cannot fire there). CI runs this script through `pnpm gate --ci`, which
+  // counts a skip as a failure (ADR-0606 D3) — so emitting GATE_SKIP_EXIT_CODE would
   // convert a declared skip into a hard red, this arc's own defect with the sign flipped. What may
   // NOT be withheld is the statement that nothing was compared.
   const ci = judgeEngineCheck({ kind: "no-adopted-package" }, { inCi: true });
