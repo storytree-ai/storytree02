@@ -263,6 +263,7 @@ import {
   type ParkItem,
 } from "./graduate.js";
 import { emitNodeEnvelope, type Envelope, type NodeEdge } from "./envelope.js";
+import { defaultTestVerbIo, testCommand, testHelp, type TestVerbIo } from "./test-verb.js";
 import { membersCommand, type MembersInvocation, type MemberStoreLike } from "./members.js";
 import {
   libraryHealth,
@@ -2267,6 +2268,12 @@ export interface RunDeps {
    * Returns a line to print under the claims, or null for "nothing to say".
    */
   readonly recordClaimedUnits?: (nodeIds: readonly string[]) => string | null;
+  /**
+   * The `storytree test` world (files, package scripts, spawns) — tests inject a fake; absent means
+   * the real checkout under {@link repoRoot}, resolving relative arguments from the directory the
+   * operator typed the command in (`INIT_CWD`, which pnpm sets, else this process's cwd).
+   */
+  readonly testVerb?: TestVerbIo;
   readonly presence?: {
     readonly identity?: SessionIdentity | null;
     readonly claims?: SessionClaimStoreLike | null;
@@ -5517,6 +5524,16 @@ export async function run(argv: readonly string[], deps: RunDeps): Promise<Envel
       };
     }
     return dispatchCommand(positionals.slice(1));
+  }
+
+  if (area === "test") {
+    // Run EXACTLY the named test files under each package's own runner, every package CI runs
+    // included (`storytree-test-verb-covers-every-package`, owner: "B, cover everything"). Offline,
+    // no store. The runner comes from the worker's own module (`namedSubsetRunner`); vitest's
+    // filter semantics are made exact by excludes plus a `vitest list` pre-flight — see test-verb.ts.
+    if (help) return testHelp();
+    const io = deps.testVerb ?? defaultTestVerbIo(repoRoot(), process.env["INIT_CWD"] ?? process.cwd());
+    return testCommand(positionals.slice(1), io);
   }
 
   if (area === "context") {
