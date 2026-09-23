@@ -57,6 +57,7 @@ proof:
       - "packages/forest-world-r3f/src/ground-dependency.test.ts"
       - "packages/forest-world-r3f/src/ForestWorldCanvas.regrow.test.ts"
       - "packages/forest-world-r3f/src/ForestWorldCanvas.causal.test.ts"
+      - "packages/forest-world-r3f/src/ForestWorldCanvas.underlay.test.ts"
       - "packages/forest-world-r3f/src/ForestWorldCanvas.growth.test.ts"
     sourceGlobs:
       - "apps/studio/src/components/LandView.tsx"
@@ -75,19 +76,22 @@ proof:
     testGlobs:
       - "packages/forest-world-r3f/src/ground-dependency.test.ts"
       - "packages/forest-world-r3f/src/ForestWorldCanvas.regrow.test.ts"
+      - "packages/forest-world-r3f/src/ForestWorldCanvas.causal.test.ts"
+      - "packages/forest-world-r3f/src/ForestWorldCanvas.underlay.test.ts"
   real:
-    testFile: "packages/forest-world-r3f/src/ForestWorldCanvas.causal.test.ts"
-    sourceFile: "packages/forest-world-r3f/src/ForestWorldCanvas.causal.ts"
+    testFile: "packages/forest-world-r3f/src/ForestWorldCanvas.underlay.test.ts"
+    sourceFile: "packages/forest-world-r3f/src/ForestWorldCanvas.tsx"
+    editsExisting: true
     scope:
-      testGlobs: ["packages/forest-world-r3f/src/ForestWorldCanvas.causal.test.ts"]
-      sourceGlobs: ["packages/forest-world-r3f/src/ForestWorldCanvas.causal.ts"]
+      testGlobs: ["packages/forest-world-r3f/src/ForestWorldCanvas.underlay.test.ts"]
+      sourceGlobs: ["packages/forest-world-r3f/src/ForestWorldCanvas.tsx"]
     install: true
     typecheck:
       file: pnpm
       args: ["--filter", "@storytree/forest-world-r3f", "typecheck"]
     proofCommand:
       file: bun
-      args: ["test", "packages/forest-world-r3f/src/ForestWorldCanvas.causal.test.ts"]
+      args: ["test", "packages/forest-world-r3f/src/ForestWorldCanvas.underlay.test.ts"]
 ---
 
 # The canvas delivery — the dressed scene mounted in a real host surface, at a cost the frame can pay
@@ -246,7 +250,7 @@ absent at baseline and both tests must fail by assertion before production code 
    allowance, or timing threshold can satisfy either contract. Re-run the exact Bun file and the
    package typecheck; both clustered tests and all existing cache tests must be green.
 
-## Proof walkthrough — causal growth through the mounted canvas
+## Historical causal geometry proof record
 
 The earlier `ForestWorldCanvas.growth.ts` proof is retained as history only. Its local
 `RegrowCursor` names `absentIslandIds` and pathways, whereas the mounted canvas receives
@@ -314,7 +318,7 @@ it does not re-arm a paid real build or add an integration API.
    still carries the supplied descriptors. These are the 19 reported mutants at 15 source spans;
    an equivalent guard is acceptable only with evidence that it kills the named span.
 
-## Contracts (5)
+## Contracts (6)
 
 The cache contracts remain the signed pair in `packages/forest-world-r3f/src/ground-dependency.test.ts`.
 The signed cursor-adapter contract remains in
@@ -362,6 +366,40 @@ cannot credit these integration contracts.
      declared `fromEnd`; full/static segments return the original point-list identity without
      mutation.
    - **covers —** `packages/forest-world-r3f/src/ForestWorldCanvas.causal.ts`
+6. **`fcd-canvas-renders-on-demand-only-while-presentable`** — either 3D canvas paints only when its
+   surface can present a current app-owned sample
+   - **asserts —** `underlayComposition` accepts its existing registered/standalone inputs plus one
+     render-activity object `{ active, documentVisible }`. With both true, standalone and registered
+     canvases return `frameloop: 'demand'`; with either false, both return `frameloop: 'never'`.
+     The activity decision changes no backdrop, controls, props, trails, cave, or wisp decision.
+     It reads neither a cursor timestamp nor a schedule, so settling and reduced motion use the same
+     demand policy and cannot grow a renderer clock.
+   - **covers —** `packages/forest-world-r3f/src/ForestWorldCanvas.tsx`
+
+## Proof walkthrough — quiet rendering without a second clock
+
+The causal helpers and cursor adapter remain signed coverage. This arm changes only render scheduling:
+parking or a hidden document suppresses WebGL painting, never pauses, re-anchors, clamps, replaces, or
+otherwise alters the app-owned wall-clock cursor. A later visible paint samples the current app value and
+shows where the forest has reached after an unwatched interval.
+
+1. Extend the existing `underlayComposition` API with `{ active: boolean, documentVisible: boolean }`.
+   In its existing test, call the standalone branch with both true and assert
+   `canvasProps.frameloop === 'demand'`. The current standalone branch returns `undefined`, making this
+   an assertion red against current behaviour, not a missing export or loader failure.
+2. In the same named contract test, assert standalone and registered canvases return `demand` only when
+   both values are true, and `never` when either is false. Assert every other composition decision equals
+   its visible control: parking and document hiding cannot add controls or change the scene to be painted.
+3. `ForestWorldCanvas` consumes this policy with `active` defaulting to true and one document-visibility
+   subscription solely for policy state. It adds no timer, frame delta, regrow state, schedule, or cursor
+   mutation. `GrowthTextureUpload` and `createGroundInputCache` remain driven by the app presentation.
+4. Separately prove host transport: pass TreeView's existing `active` through both `LandViewMount` and
+   standalone `LandView` to their actual `ForestWorldCanvas`. The canvas's one document-visibility reader
+   serves both registered and standalone surfaces. This transport proof is separate from the policy unit.
+5. Browser staging uses real-corpus early, middle, and settled frames; advance the app manual clock while
+   the surface is parked or hidden; return and verify the current cursor sample rather than watched-time
+   resumption; compare reduced motion with the settled scene. Measure WebGL quiet through renderer paint or
+   frame signals, never suspended rAF or CSS transitions.
 
 ## Guidance
 
