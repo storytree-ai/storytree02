@@ -31,13 +31,16 @@ import {
   firstDifference,
   projectWorld,
   relocationArms,
+  goldenChrome,
   relocationCorpus,
   type FixtureStory,
   type WorldProjection,
 } from '@storytree/forest-layout/relocation';
+import { PLATE_SCALE } from '@storytree/forest-world';
 import { packWorld } from '@storytree/forest-layout';
 
-import { buildWorld } from './TreeView.js';
+import { buildWorld, nameplateLayout } from './TreeView.js';
+import { mapChromeClearance } from '../lib/nameplate.js';
 import type { TreeCapability, TreeStory } from '../types';
 
 const goldenPath = createRequire(import.meta.url).resolve('@storytree/forest-layout/relocation-golden');
@@ -141,6 +144,28 @@ describe('the chrome half — what the packer is handed, and can never work out 
     // ORDER is load-bearing, not incidental: the packer breaks row-ordering ties on input order,
     // so a filter that reordered the survivors would move islands without dropping any.
     expect(shipped).toEqual(['root-a', 'root-b', 'root-c', 'root-d', 'mid-a', 'mid-b', 'mid-c', 'mid-d', 'solo', 'deep-a', 'deep-b', 'deep-c']);
+  });
+
+  it('computes exactly the nameplate clearance the package fixture states as data (ADR-0598 D2)', () => {
+    // The SECOND thing the packer cannot work out for itself, and it arrives the same way the
+    // carried icons do: stated in the fixture as data, computed here from the studio's real plate.
+    // This is the join that makes the golden's five arms mean anything — the package compares a
+    // map built from `goldenChrome`, this file compares a map built from `mapChromeClearance`, and
+    // only if the two agree is `buildWorld` = chrome ∘ packWorld still one claim.
+    const ids = stories.map((s) => s.id);
+    const computed = mapChromeClearance(ids);
+    const stated = goldenChrome(ids);
+    expect(computed.rowBand).toBe(stated.rowBand);
+    expect([...computed.plateHalfWidth.entries()].sort()).toEqual([...stated.plateHalfWidth.entries()].sort());
+    // Non-vacuity: two empty maps and two zeros would satisfy every line above.
+    expect(computed.rowBand).toBeGreaterThan(0);
+    expect(computed.plateHalfWidth.size).toBe(ids.length);
+    // …and it is derived from the plate ACTUALLY DRAWN, so resizing the nameplate reds this rather
+    // than silently shipping a layout that no longer fits it.
+    expect([...computed.plateHalfWidth.values()][0]).toBeCloseTo(
+      (nameplateLayout(stories[0]!.id.length, false).w * PLATE_SCALE) / 2,
+      12,
+    );
   });
 
   it('computes exactly the carried-icon map the package fixture states as data', () => {

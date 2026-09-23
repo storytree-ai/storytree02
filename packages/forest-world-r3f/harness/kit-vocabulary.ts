@@ -101,15 +101,19 @@ export interface KitDressingOptions {
  * each surface — and `src/parcel-cells.ts`'s header carries the full note.
  */
 export function dressIslandFromKit(opts: KitDressingOptions): KitPlacement[] {
-  const blooms =
-    opts.island.flowers === false
-      ? 0
-      : islandCriteria(opts.island).filter((c) => c.state === 'proven').length;
+  // ⚠ ALL THREE CRITERION STATES, derived from the fixture's own criteria (ADR-0600 D1: every
+  // criterion is drawn and signing changes the flower's STATE rather than its existence). The
+  // `flowers === false` arm is the fixture's own "this island has no markers at all" switch, so it
+  // silences every state — an island with no criteria, not an island whose criteria are hidden.
+  const criteria = opts.island.flowers === false ? [] : islandCriteria(opts.island);
+  const countOf = (state: string): number => criteria.filter((c) => c.state === state).length;
   // ANNOTATED local, then one guarded assignment — `anti-slop/no-conditional-empty-object-spread`.
   const delegated: CellDressingOptions = {
     cells: layoutCells(groundCellsFrom(opts.scene)),
     facts: capabilityFacts(opts.island),
-    blooms,
+    blooms: countOf('proven'),
+    buds: countOf('pending'),
+    wilts: countOf('failing'),
     relief: opts.relief,
     footprint: opts.footprint,
   };

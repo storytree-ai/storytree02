@@ -41,8 +41,8 @@ import {
   pathClear,
   straddles,
 } from './dressing-ground.js';
-import { dressMapFromKit, dressMapWithCover, signedCriteriaByIsland } from './map-dressing.js';
-import { KIT_FOOTPRINTS_2026_08_29, isDressingRole, type KitPlacement } from './kit-vocabulary.js';
+import { criteriaByIsland, dressMapFromKit, dressMapWithCover, signedCriteriaByIsland } from './map-dressing.js';
+import { KIT_FOOTPRINTS_2026_08_29, isCriterionRole, isDressingRole, type KitPlacement } from './kit-vocabulary.js';
 import { LAND_RELIEF_AMPLITUDE } from './land-relief.js';
 import { WEAR_FALLOFF, wearOf } from './land-wear.js';
 import { shoreField } from './shore-fall.js';
@@ -116,11 +116,21 @@ const TILES_B = [
 const STORY_A = 'atlas';
 const STORY_B = 'beacon';
 
-/** `signed` criteria proven, the rest pending — so a bloom count is not the criteria count. */
-function criteria(prefix: string, total: number, signed: number) {
+/** `signed` criteria proven, then `failing` witnessed failing, and the rest pending — so a bloom
+ *  count is not the criteria count, which is exactly the distinction ADR-0600 turned into three
+ *  drawn forms rather than one drawn and two absent.
+ *
+ *  ⚠ `failing` DEFAULTS TO ZERO AND ONE TEST BELOW FLIPS IT. The live corpus holds no failing
+ *  criterion today, so a fixture that could not produce one would leave the whole `uat-wilt` path
+ *  — the mapper's case, the count, the placement — standing on a value that is permanently zero,
+ *  which is a path nothing proves rather than a path nothing needs. */
+function criteria(prefix: string, total: number, signed: number, failing = 0) {
   return Array.from({ length: total }, (_, i) => ({
     id: `${prefix}-uat-${i}`,
-    state: (i < signed ? 'proven' : 'pending') as 'proven' | 'pending',
+    state: (i < signed ? 'proven' : i < signed + failing ? 'failing' : 'pending') as
+      | 'proven'
+      | 'pending'
+      | 'failing',
   }));
 }
 
@@ -128,7 +138,7 @@ function territory(
   id: string,
   tiles: readonly { q: number; r: number }[],
   caps: readonly string[],
-  uat: { total: number; signed: number },
+  uat: { total: number; signed: number; failing?: number },
   status: SceneStatus = 'healthy',
 ): SceneTerritoryInput {
   const centres = tiles.map((h) => hexCenter(h, TUNED_LATTICE));
@@ -156,7 +166,7 @@ function territory(
     treeTitle: id,
     wisps: [],
     parcels,
-    uatCriteria: criteria(id, uat.total, uat.signed),
+    uatCriteria: criteria(id, uat.total, uat.signed, uat.failing ?? 0),
     plate: { w: 120, h: 33, rx: 7, idY: 14, subY: 27, idText: id, subText: id, title: id },
   };
 }
@@ -180,10 +190,10 @@ const MAPS = new Map<string, Descriptor3D[]>();
 
 /** The two-story map's descriptors — the shipped relaxed-MESH substrate, the one the studio emits. */
 function twoStoryMap(
-  a: { total: number; signed: number } = { total: 6, signed: 4 },
-  b: { total: number; signed: number } = { total: 5, signed: 2 },
+  a: { total: number; signed: number; failing?: number } = { total: 6, signed: 4 },
+  b: { total: number; signed: number; failing?: number } = { total: 5, signed: 2 },
 ): Descriptor3D[] {
-  const key = `${a.total}/${a.signed}|${b.total}/${b.signed}`;
+  const key = `${a.total}/${a.signed}/${a.failing ?? 0}|${b.total}/${b.signed}/${b.failing ?? 0}`;
   const cached = MAPS.get(key);
   if (cached) return cached;
   const drawTiles = [
@@ -305,14 +315,20 @@ test('⚠⚠ EVERY BLOOM STANDS ON THE ISLAND OF THE STORY THAT SIGNED IT', () =
   assert.equal(inA.length + inB.length, blooms.length, 'no bloom stands off both islands');
 });
 
-test('a story that signed NOTHING grows nothing, even beside one that signed everything', () => {
+test('a story that signed NOTHING grows no OPEN flower, even beside one that signed everything', () => {
   groundSanity();
   // ⚠ THE FAILURE THAT MOTIVATED THE UNIT, stated as a test: under the whole-map dressing, six
   // signatures held by atlas were scattered over every cell on the map, so beacon — which had
   // signed nothing — grew flowers. The picture asserted a signature nobody gave.
+  //
+  // ⚠ THE TITLE SAID "GROWS NOTHING" UNTIL 2026-09-23, and correcting it is not a weakening. Under
+  // ADR-0600 beacon grows FIVE BUDS, because it holds five criteria nobody has signed and the map
+  // now says so. What may never cross the water is a SIGNATURE, and that is what this asserts —
+  // the fence is unchanged and its subject is narrower than the old wording implied.
   const map = twoStoryMap({ total: 6, signed: 6 }, { total: 5, signed: 0 });
   assertSignatures(map, { [STORY_A]: 6 });
-  const blooms = dress(map).filter((p) => p.role === 'bloom');
+  const placements = dress(map);
+  const blooms = placements.filter((p) => p.role === 'bloom');
   assert.equal(blooms.length, 6);
   const bXs = map
     .filter((d) => d.kind === 'cell-ground' && d.island === STORY_B)
@@ -321,6 +337,113 @@ test('a story that signed NOTHING grows nothing, even beside one that signed eve
   for (const bloom of blooms) {
     assert.ok(bloom.at.x < bMin, `a bloom stood on the story that signed nothing (x=${bloom.at.x})`);
   }
+  // And the five it DOES grow are buds, all of them on its own side of the water.
+  const buds = placements.filter((p) => p.role === 'bud');
+  assert.equal(buds.length, 5, 'beacon holds five unsigned criteria and draws five');
+  for (const bud of buds) assert.ok(bud.at.x >= bMin, `a bud crossed onto the story that holds none`);
+});
+
+// ---------------------------------------------------------------------------
+// ADR-0600 — the count is the CRITERION count, per island
+// ---------------------------------------------------------------------------
+
+test('⚠⚠ AN ISLAND\'S FLOWER COUNT IS ITS CRITERION COUNT — and each island gets its OWN', () => {
+  groundSanity();
+  // ⚠⚠ THE WHOLE-MAP HALF OF ADR-0600 D2. The defect it closes is invisible in a picture: an
+  // island drawing four flowers over six criteria looks exactly like an island with four criteria,
+  // and reads as FULLY PROVEN. So the property is asserted as a total per island, in both roles,
+  // rather than as "buds appear somewhere".
+  const map = twoStoryMap({ total: 6, signed: 4 }, { total: 5, signed: 2 });
+  const placements = dress(map);
+  const criteria = placements.filter((p) => isCriterionRole(p.role));
+  assert.equal(criteria.length, 11, 'six criteria on atlas and five on beacon, all drawn');
+  assert.equal(placements.filter((p) => p.role === 'bloom').length, 6, 'the four + two signed');
+  assert.equal(placements.filter((p) => p.role === 'bud').length, 5, 'the two + three unsigned');
+
+  // ⚠ AND PER ISLAND, which is the claim a whole-map total cannot make: eleven flowers could be
+  // eleven on one island.
+  const boundsOf = (story: string) => {
+    const xs = map
+      .filter((d) => d.kind === 'cell-ground' && d.island === story)
+      .flatMap((d) => (d.kind === 'skipped' ? [] : (d.points ?? []).map((p) => p.x)));
+    return { min: Math.min(...xs), max: Math.max(...xs) };
+  };
+  const a = boundsOf(STORY_A);
+  const b = boundsOf(STORY_B);
+  assert.ok(a.max < b.min, 'the fixture keeps the two islands disjoint in x');
+  const within = (bounds: { min: number; max: number }) =>
+    criteria.filter((p) => p.at.x >= bounds.min && p.at.x <= bounds.max);
+  assert.equal(within(a).length, 6, 'atlas holds six criteria, so it stands six flowers');
+  assert.equal(within(b).length, 5, 'beacon holds five criteria, so it stands five flowers');
+  assert.equal(within(a).filter((p) => p.role === 'bloom').length, 4, 'four of atlas\'s six are open');
+  assert.equal(within(b).filter((p) => p.role === 'bloom').length, 2, 'two of beacon\'s five are open');
+});
+
+test('⚠ SIGNING A CRITERION OPENS ITS FLOWER — it does not ADD one', () => {
+  groundSanity();
+  // The property a member reads progress off (ADR-0600 D1): the island's flower count holds still
+  // while the mix moves. A map that ADDED a flower on signing would be the old behaviour wearing a
+  // bud, and the count alone would not catch it — this compares the SAME island at two signature
+  // levels.
+  const none = dress(twoStoryMap({ total: 6, signed: 0 }, { total: 5, signed: 0 }));
+  const some = dress(twoStoryMap({ total: 6, signed: 4 }, { total: 5, signed: 2 }));
+  const all = dress(twoStoryMap({ total: 6, signed: 6 }, { total: 5, signed: 5 }));
+  const total = (ps: readonly KitPlacement[]) => ps.filter((p) => isCriterionRole(p.role)).length;
+  assert.equal(total(none), 11);
+  assert.equal(total(some), 11);
+  assert.equal(total(all), 11);
+  const open = (ps: readonly KitPlacement[]) => ps.filter((p) => p.role === 'bloom').length;
+  assert.deepEqual([open(none), open(some), open(all)], [0, 6, 11], 'only the MIX moves');
+});
+
+test('⚠ criteriaByIsland answers for ONE state at a time, and a bud is never a signature', () => {
+  groundSanity();
+  const map = twoStoryMap({ total: 6, signed: 4 }, { total: 5, signed: 2 });
+  assert.deepEqual(Object.fromEntries(criteriaByIsland(map, 'uat-bloom')), { [STORY_A]: 4, [STORY_B]: 2 });
+  assert.deepEqual(Object.fromEntries(criteriaByIsland(map, 'uat-bud')), { [STORY_A]: 2, [STORY_B]: 3 });
+  // Nothing on THIS fixture is failing, and an empty answer is the honest one rather than a hole.
+  assert.equal(criteriaByIsland(map, 'uat-wilt').size, 0);
+  // ⚠ AND THE OLD NAME STILL MEANS SIGNATURES — the whole reason the states are separate kinds.
+  assert.deepEqual(
+    Object.fromEntries(signedCriteriaByIsland(map)),
+    Object.fromEntries(criteriaByIsland(map, 'uat-bloom')),
+  );
+});
+
+test('⚠⚠ A FAILING CRITERION IS DRAWN TOO, on its own island, and is NEVER counted as a signature', () => {
+  groundSanity();
+  // ⚠⚠ THE STATE THE LIVE CORPUS HAS NO INSTANCE OF, and therefore the one a fixture has to
+  // manufacture or leave unproven. Everything about it runs on a permanent zero otherwise: the
+  // mapper's case, the count, the placement, the role. A criterion the owner watched FAIL reading
+  // as one he signed is the worst misreport on this map, and it is reachable the moment the corpus
+  // holds one.
+  const map = twoStoryMap({ total: 6, signed: 2, failing: 3 }, { total: 5, signed: 0, failing: 1 });
+  assert.deepEqual(Object.fromEntries(criteriaByIsland(map, 'uat-bloom')), { [STORY_A]: 2 });
+  assert.deepEqual(Object.fromEntries(criteriaByIsland(map, 'uat-wilt')), { [STORY_A]: 3, [STORY_B]: 1 });
+  assert.deepEqual(Object.fromEntries(criteriaByIsland(map, 'uat-bud')), { [STORY_A]: 1, [STORY_B]: 4 });
+  // ⚠ THE FENCE: four failing criteria, and `signedCriteriaByIsland` still reports only the two
+  // signed ones. Beacon signed nothing, so it appears in NO signature count at all.
+  assert.deepEqual(Object.fromEntries(signedCriteriaByIsland(map)), { [STORY_A]: 2 });
+
+  const placements = dress(map);
+  assert.equal(placements.filter((p) => p.role === 'wilt').length, 4, 'four failing criteria, four nodding flowers');
+  assert.equal(placements.filter((p) => p.role === 'bloom').length, 2);
+  assert.equal(placements.filter((p) => p.role === 'bud').length, 5);
+  assert.equal(placements.filter((p) => isCriterionRole(p.role)).length, 11, 'eleven criteria, eleven flowers');
+
+  // And each island's wilts stand on its own ground — a failing criterion is a per-story claim
+  // exactly as a signature is.
+  const boundsOf = (story: string) => {
+    const xs = map
+      .filter((d) => d.kind === 'cell-ground' && d.island === story)
+      .flatMap((d) => (d.kind === 'skipped' ? [] : (d.points ?? []).map((p) => p.x)));
+    return { min: Math.min(...xs), max: Math.max(...xs) };
+  };
+  const a = boundsOf(STORY_A);
+  const b = boundsOf(STORY_B);
+  const wilts = placements.filter((p) => p.role === 'wilt');
+  assert.equal(wilts.filter((p) => p.at.x >= a.min && p.at.x <= a.max).length, 3);
+  assert.equal(wilts.filter((p) => p.at.x >= b.min && p.at.x <= b.max).length, 1);
 });
 
 test('the map still grows ONE object per capability, on the capability’s own parcel', () => {
@@ -330,7 +453,11 @@ test('the map still grows ONE object per capability, on the capability’s own p
   const map = twoStoryMap();
   assertSignatures(map, { [STORY_A]: 4, [STORY_B]: 2 });
   const placements = dress(map);
-  const caps = placements.filter((p) => p.role !== 'bloom').map((p) => p.capId);
+  // ⚠ `isCriterionRole`, NOT `role !== 'bloom'`. This line read the latter until 2026-09-23, and it
+  // was correct only while a criterion had ONE form: with buds and wilts on the map the old filter
+  // counts a story's unsigned criteria as capabilities, and the test goes green on a map that
+  // reports the wrong number of capabilities per island.
+  const caps = placements.filter((p) => !isCriterionRole(p.role)).map((p) => p.capId);
   assert.deepEqual([...caps].sort(), ['atlas-parse', 'atlas-store', 'beacon-emit']);
 });
 

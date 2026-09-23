@@ -49,6 +49,10 @@ import {
 } from '@storytree/forest-world';
 
 import {
+  UAT_CRITERION_KINDS,
+  UAT_MARKER_DESCRIPTOR,
+  UAT_MARKER_KINDS,
+  isUatCriterion,
   worldTo3D,
   type Descriptor3D,
   type InstanceDescriptor,
@@ -447,45 +451,142 @@ test('r3f-unknown-kind-skips-visibly: an unhandled SceneKind yields a named skip
   );
 });
 
-test('r3f UAT markers: ONLY the SIGNED criterion becomes a uat-bloom; pending and failing skip by name', () => {
-  // ⚠⚠ THE FENCE THIS TEST EXISTS FOR. A bloom is the claim "the owner SIGNED this criterion"
-  // (ADR-0226 D4), so it is bound by the same rule as the land's colour: a unit may read as the
-  // state it holds and as no other (ADR-0392 D5 / ADR-0398 D7). A mapper that emitted one for a
-  // PENDING or FAILING criterion would be the map inventing a signature nobody gave — and it would
-  // do it invisibly, because three flowers look like three flowers. So the proven wrapper maps and
-  // the other two keep falling through to the explicit skip.
+/** Every marker WRAPPER the built scene carries, as `criterion id -> wrapper kind` — read off the
+ *  scene itself rather than off the fixture, so the test asks what actually reached the map. */
+function markersInScene(node: SceneNode, out = new Map<string, string>()): Map<string, string> {
+  if (node.el === 'g') {
+    const kind = String(node.kind ?? '');
+    if ((UAT_MARKER_KINDS as readonly string[]).includes(kind) && node.id !== undefined) {
+      out.set(node.id, kind);
+    }
+    for (const child of node.children) markersInScene(child, out);
+  }
+  return out;
+}
+
+test('⚠⚠ EVERY UAT CRITERION IS DRAWN — the absence of a flower means NO CRITERION and nothing else', () => {
+  // ⚠⚠ THE PROPERTY THIS TEST EXISTS FOR (ADR-0600 D2), AND IT IS DELIBERATELY NOT "BUDS RENDER".
+  // A test that only checked buds appear would pass on a map that still silently dropped some
+  // OTHER state, which is the exact shape of the defect it replaces. So it asserts a TOTAL: every
+  // marker wrapper the scene actually built has its own instance descriptor, matched by criterion
+  // id, and the two sets are equal in both directions.
   //
-  // ⚠ THIS REPLACES AN ASSERTION THAT THE WHOLE FAMILY ADDED ZERO INSTANCES, which held from
-  // grounded-art inc 7 until 2026-08-31 and was the reason both shipped call sites had to pass
-  // `blooms: 0`. What has NOT changed is total coverage: every unmapped flower node is still a
-  // NAMED skip, never a throw and never a silent drop.
+  // ⚠ WHAT IT REPLACES, AND WHY THAT TEST WAS RIGHT UNTIL IT WAS WRONG. From 2026-08-31 to
+  // 2026-09-23 this slot held the opposite assertion — only `proven` maps, `pending` and `failing`
+  // skip BY NAME — fencing the map against asserting a signature nobody gave (ADR-0392 D5 /
+  // ADR-0398 D7). That fence was right about the CRITERION and wrong about the ISLAND: measured
+  // across the live corpus, 35 of 104 criteria were drawn as nothing, nine islands read as holding
+  // no acceptance work at all, and three read as fully proven while holding unsigned criteria
+  // (`docs/research/chapter2-uat-silence-2026-09-23/`). The fence is not dropped, it MOVED: an
+  // unsigned criterion has its own descriptor kind, so nothing that filters on `uat-bloom` can see
+  // one — which the next test pins.
   const uatCriteria = [
     { id: 'a', state: 'proven' as const },
     { id: 'b', state: 'pending' as const },
     { id: 'c', state: 'failing' as const },
+    { id: 'd', state: 'pending' as const },
   ];
   const bare = worldTo3D(buildScene(mkInput({ territories: [mkTerritory({})] })));
-  const withFlowers = worldTo3D(buildScene(mkInput({ territories: [mkTerritory({ uatCriteria })] })));
+  const scene = buildScene(mkInput({ territories: [mkTerritory({ uatCriteria })] }));
+  const withFlowers = worldTo3D(scene);
 
-  const blooms = withFlowers.filter(asInstance).filter((d) => d.kind === 'uat-bloom');
-  assert.equal(blooms.length, 1, 'one of the three criteria is signed, so one bloom');
-  assert.equal(blooms[0]!.criterion, 'a', 'the bloom names the criterion it stands for');
-  assert.equal(blooms[0]!.island, TERRITORY_ID, 'and the story whose signature it is');
+  const markers = markersInScene(scene);
+  assert.equal(markers.size, uatCriteria.length, 'the fixture did not reach the scene as four markers');
 
-  // The island is otherwise unchanged: the markers add a bloom and nothing else — no stray ground,
-  // no second tree. Comparing the NON-bloom instances against the flowerless island is what says
-  // so, and it is a sharper claim than counting blooms alone.
+  const drawn = withFlowers.filter(asInstance).filter(isUatCriterion);
+  // ⚠ MATCHED BY ID IN BOTH DIRECTIONS. A count alone would pass on a mapper that drew one
+  // criterion twice and another not at all — which is a misreport of exactly the kind this
+  // decision is about, wearing a correct total.
   assert.deepEqual(
-    withFlowers.filter(asInstance).filter((d) => d.kind !== 'uat-bloom'),
+    [...drawn].map((d) => d.criterion).sort(),
+    [...markers.keys()].sort(),
+    'a criterion reached the map with no descriptor, or a descriptor stands for no criterion',
+  );
+  for (const d of drawn) {
+    assert.equal(
+      d.kind,
+      UAT_MARKER_DESCRIPTOR[markers.get(d.criterion!) as keyof typeof UAT_MARKER_DESCRIPTOR],
+      `criterion ${d.criterion} was drawn in the wrong state`,
+    );
+    assert.equal(d.island, TERRITORY_ID, 'every criterion names the story whose island it is on');
+  }
+
+  // NO wrapper degrades to a skip any more — the half of total coverage that changed.
+  const skips = withFlowers.filter(asSkipped).map((s) => s.sceneKind);
+  for (const wrapper of UAT_MARKER_KINDS) {
+    assert.ok(!skips.includes(wrapper), `${wrapper} is drawn now, not skipped`);
+  }
+  // The flower BODY marks still do, which is the half that did not.
+  assert.ok(skips.includes('tall-flower-petal'), 'a flower body mark still skips by name');
+
+  // And the island is otherwise untouched: the markers add criterion descriptors and nothing else
+  // — no stray ground, no second tree. Comparing the non-criterion instances against the
+  // flowerless island is a sharper claim than counting criteria alone.
+  assert.deepEqual(
+    withFlowers.filter(asInstance).filter((d) => !isUatCriterion(d)),
     bare.filter(asInstance),
   );
+});
 
-  // And every other flower node degrades to an explicit NAMED skip (total coverage).
-  const skips = withFlowers.filter(asSkipped).map((s) => s.sceneKind);
-  assert.ok(skips.includes('tall-flower-pending'), 'the pending wrapper skips by name');
-  assert.ok(skips.includes('tall-flower-failing'), 'the failing wrapper skips by name');
-  assert.ok(skips.includes('tall-flower-petal'), 'a flower body mark skips by name');
-  assert.ok(!skips.includes('tall-flower-proven'), 'the proven wrapper is mapped, not skipped');
+test('⚠ A BUD IS NOT A SIGNATURE — the three states are three kinds, so no `uat-bloom` filter can see one', () => {
+  // ⚠⚠ THE FENCE, RESTATED WHERE IT NOW LIVES. `uat-bloom` means "the owner SIGNED this" and
+  // nothing else (ADR-0392 D5 / ADR-0398 D7). The reason ADR-0600 D1 is carried by three KINDS
+  // rather than by one kind with a `state` field is that every consumer already written —
+  // `signedCriteriaByIsland`, the harness counts — filters on the kind, so the safe reading is the
+  // one you get by doing nothing. A state field would have made the safe reading the one you have
+  // to remember.
+  const uatCriteria = [
+    { id: 'a', state: 'proven' as const },
+    { id: 'b', state: 'pending' as const },
+    { id: 'c', state: 'pending' as const },
+    { id: 'd', state: 'failing' as const },
+  ];
+  const out = worldTo3D(buildScene(mkInput({ territories: [mkTerritory({ uatCriteria })] })));
+  const of = (kind: string): InstanceDescriptor[] => out.filter(asInstance).filter((d) => d.kind === kind);
+
+  assert.deepEqual(of('uat-bloom').map((d) => d.criterion), ['a'], 'only the signed one is a bloom');
+  assert.deepEqual(of('uat-bud').map((d) => d.criterion).sort(), ['b', 'c'], 'the unsigned two are buds');
+  assert.deepEqual(of('uat-wilt').map((d) => d.criterion), ['d'], 'the failing one is a wilt');
+
+  // ⚠ AND THE THREE KINDS ARE DISTINCT VALUES, asserted rather than assumed. A table that mapped
+  // two states onto one kind would satisfy every count above on a fixture with one of each, and
+  // would silently merge them on the real map.
+  assert.equal(new Set(Object.values(UAT_MARKER_DESCRIPTOR)).size, UAT_MARKER_KINDS.length);
+  assert.deepEqual([...UAT_CRITERION_KINDS].sort(), ['uat-bloom', 'uat-bud', 'uat-wilt']);
+
+  // ⚠ THE INSTANCING GROUP IS THE KIND, per state. Merging the three into one group would draw
+  // every criterion with one prop and undo the whole decision at the canvas rather than here.
+  for (const d of out.filter(asInstance).filter(isUatCriterion)) assert.equal(d.group, d.kind);
+});
+
+test('⚠ A NEW MARKER STATE CANNOT REACH THE MAP UNDRAWN — the table is exhaustive over the core\'s own MarkerState', () => {
+  // ⚠⚠ THE GUARD IS THE TYPECHECK, NOT THIS TEST, and this test is here to say so where a reader
+  // will look. `UAT_MARKER_DESCRIPTOR` is declared `satisfies Record<\`tall-flower-${MarkerState}\`,
+  // InstanceKind>` over the type `@storytree/forest-world` exports, so a fourth marker state added
+  // there reds `pnpm typecheck` in THIS package with a missing-key error. No runtime assertion can
+  // do that job: the failure it guards against is a criterion arriving in a state nobody wrote a
+  // case for, which by construction no fixture written today can contain.
+  //
+  // What IS checkable at runtime is that the table's keys really are the scene's wrapper kinds —
+  // the two-place agreement that would otherwise be a comment.
+  assert.deepEqual(
+    [...UAT_MARKER_KINDS].sort(),
+    ['tall-flower-failing', 'tall-flower-pending', 'tall-flower-proven'],
+  );
+  const scene = buildScene(
+    mkInput({
+      territories: [
+        mkTerritory({
+          uatCriteria: [
+            { id: 'a', state: 'proven' },
+            { id: 'b', state: 'pending' },
+            { id: 'c', state: 'failing' },
+          ],
+        }),
+      ],
+    }),
+  );
+  assert.deepEqual([...new Set(markersInScene(scene).values())].sort(), [...UAT_MARKER_KINDS].sort());
 });
 
 test('r3f garden composition (grounded-art inc 11, ADR-0221): baked heroes + flat accents add ZERO 3D instances and skip by name', () => {

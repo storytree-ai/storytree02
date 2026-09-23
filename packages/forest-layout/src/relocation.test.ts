@@ -26,6 +26,17 @@
 // A future edit that legitimately changes the map re-captures again, in ITS OWN commit, saying
 // what moved and why — and adds its line here.
 //
+// ⚠ RE-CAPTURED A SECOND TIME, 2026-09-23 (ADR-0598 D2), and this one moved the map for two
+// reasons rather than one. (a) The island spacing ratio was re-derived 0.1 → 1: the gaps 0.1 named
+// had never been seen, because the seed-snap defect the previous re-capture repaired was inflating
+// every one of them by 1.31x, and with it gone the owner looked at the real spacing and called it
+// squished. (b) The packer now takes a NAMEPLATE CLEARANCE and holds it as a floor on both axes,
+// so a label can no longer land on a neighbouring island's land — which is a NEW chrome input,
+// stated in `relocation.fixture.test.ts` as data exactly the way `CARRIED_ICONS` is, and proved to
+// be the studio's real plate by `buildWorld.relocation.test.ts`. The five arms all carry it,
+// `legacy` deliberately included: a control arm handed a clearance must IGNORE it, and passing it
+// there is what makes that refusal witnessed rather than merely written down.
+//
 // ⚠ AND THIS IS ONLY HALF THE PROOF, deliberately. The golden was captured through the studio's
 // `buildWorld`, which computes two things this package cannot see: which stories are
 // `render: building` and so are never laid out, and which island carries which icon (the ADR-0102

@@ -24,11 +24,17 @@
 // and nothing else. An island therefore looks the same alone as it does in a crowd of thirty-five
 // — a property the whole-map call did not have and could not have had.
 //
+// ⚠ SINCE ADR-0600 THE VOCABULARY LAYER STANDS ONE FLOWER PER UAT CRITERION rather than one per
+// SIGNED criterion — opened where the owner signed it, closed where he has not, nodding where it
+// was witnessed failing. The attribution rule this module exists for is unchanged and now matters
+// three times over: a story's unsigned criteria are as much a per-story claim as its signed ones,
+// and scattering them over a neighbour's island would misreport that neighbour's outstanding work.
+//
 // ⚠ TWO ENTRY POINTS, AND THE DIFFERENCE IS WHAT STANDS — each one is a LAYER of the map's
 // dressing, kept as its own function so a comparison page can render the map as it drew before any
 // given landing rather than describing it.
 //
-//   dressMapFromKit    the vocabulary alone — one object per capability, one bloom per signature.
+//   dressMapFromKit    the vocabulary alone — one object per capability, one flower per criterion.
 //                      What every comparison that ASKS about the vocabulary reads.
 //   dressMapWithCover  + each healthy island's GROUND COVER — the recipe's bushes, tufts and
 //                      flower patches (`cover-dressing.ts`). ⚠ THIS IS WHAT THE CANVAS STANDS.
@@ -49,7 +55,7 @@ import { COVER_DENSITY, COVER_SIZE, dressCover } from './cover-dressing.js';
 import { RECIPE_ISLAND_AREA, islandExclusion } from './dressing-ground.js';
 import { capabilityFactsFrom, dressIslandFromKit, type KitPlacement, type RoleFootprints } from './kit-vocabulary.js';
 import { cellsByIsland, parcelCellsFrom, type LayoutCell } from './parcel-cells.js';
-import type { Descriptor3D } from './world-to-3d.js';
+import { type Descriptor3D, type InstanceKind } from './world-to-3d.js';
 
 export interface MapDressingOptions {
   /** The relief amplitude the ground is built at, so props sit ON the land rather than through it. */
@@ -94,9 +100,13 @@ export interface MapDressingOptions {
  * HOW MANY UAT CRITERIA EACH STORY HAS SIGNED, read off the map's own descriptors.
  *
  * One `uat-bloom` descriptor is one signed criterion (the mapper emits them only for
- * `tall-flower-proven`), so this is a count of what the scene ALREADY asserts rather than a second
- * opinion about proof state. The map cannot come to disagree with itself about how many signatures
- * a story holds, because there is only one source.
+ * `tall-flower-proven` — `UAT_MARKER_DESCRIPTOR`), so this is a count of what the scene ALREADY
+ * asserts rather than a second opinion about proof state. The map cannot come to disagree with
+ * itself about how many signatures a story holds, because there is only one source.
+ *
+ * ⚠ IT STILL COUNTS SIGNATURES ALONE, and after ADR-0600 that is a narrower thing than "criteria".
+ * An unsigned criterion is a `uat-bud` and a failing one a `uat-wilt`, so neither can reach this
+ * count — which is the point of their being separate kinds rather than one kind carrying a state.
  *
  * ⚠ A BLOOM WITH NO ISLAND IS DROPPED, and the direction of that failure is the point. An
  * unattributed signature is one that could be drawn on any island; refusing to count it means such
@@ -107,10 +117,30 @@ export interface MapDressingOptions {
  * folding them all onto one absent key would under-report a scene the core simply did not stamp.
  */
 export function signedCriteriaByIsland(descriptors: readonly Descriptor3D[]): Map<string, number> {
+  return criteriaByIsland(descriptors, 'uat-bloom');
+}
+
+/**
+ * HOW MANY UAT CRITERIA OF ONE STATE EACH STORY HOLDS, read off the map's own descriptors — the
+ * general form of {@link signedCriteriaByIsland}, which is now one call to it.
+ *
+ * ⚠ THE STATE IS THE DESCRIPTOR KIND, not a field on it, which is why this takes a kind and not a
+ * predicate. `uat-bloom` still means exactly "the owner signed this" (ADR-0392 D5 / ADR-0398 D7):
+ * a caller asking for signatures cannot be handed buds by an argument it got slightly wrong.
+ *
+ * Both rules of the original stand unchanged for every state. A marker with no island is DROPPED,
+ * so an unattributable criterion makes its story grow nothing rather than making every story grow
+ * its neighbour's. And the count is DEDUPED on the criterion id, with unstamped markers counted
+ * individually — an unstamped marker is still a distinct marker.
+ */
+export function criteriaByIsland(
+  descriptors: readonly Descriptor3D[],
+  kind: InstanceKind,
+): Map<string, number> {
   const seen = new Map<string, Set<string>>();
   const unnamed = new Map<string, number>();
   for (const d of descriptors) {
-    if (d.kind !== 'uat-bloom') continue;
+    if (d.kind !== kind) continue;
     const island = d.island;
     if (island === undefined) continue;
     if (d.criterion === undefined) {
@@ -128,8 +158,8 @@ export function signedCriteriaByIsland(descriptors: readonly Descriptor3D[]): Ma
 }
 
 /**
- * EVERY PROP THE VOCABULARY STANDS, island by island — one tree per capability, one bloom per
- * signed criterion, and nothing else.
+ * EVERY PROP THE VOCABULARY STANDS, island by island — one tree per capability, one flower per
+ * UAT criterion whatever its state (ADR-0600 D1), and nothing else.
  *
  * The order is first-seen island order, then the cells the substrate could not attribute — which
  * are dressed LAST and with NO blooms. Keeping them rather than dropping them is
@@ -153,8 +183,8 @@ export function dressMapFromKit(
  * paths). **This is what the canvas calls**; the function above is what a comparison page's
  * vocabulary arm calls.
  *
- * ⚠ THE ORDER IS PART OF THE PLACEMENT, exactly as it is for the blooms: capabilities, then the
- * island's signatures, then its cover — so a bush is scattered around everything that reports
+ * ⚠ THE ORDER IS PART OF THE PLACEMENT, exactly as it is for the criterion markers: capabilities,
+ * then the island's criteria, then its cover — so a bush is scattered around everything that reports
  * something, and never the other way about. Cover keeps no clearance (`clearanceFactor` returns
  * zero for it, which is the recipe's own rule), so the ORDER is what carries the relationship
  * rather than an occupancy: the things that report are placed first and are therefore placed on
@@ -174,20 +204,41 @@ function dressMap(
   cover: boolean,
 ): KitPlacement[] {
   const cells = parcelCellsFrom(descriptors);
-  const signed = signedCriteriaByIsland(descriptors);
+  // ⚠⚠ ALL THREE STATES, COUNTED SEPARATELY AND SPENT SEPARATELY (ADR-0600 D1). An island's flower
+  // count is its CRITERION count now, not its signature count — which is the whole correction:
+  // counted over the live corpus on 2026-09-23, signatures alone left 35 of 104 criteria with
+  // nothing drawn, nine islands reading as carrying no acceptance work at all and three reading as
+  // fully proven while holding criteria nobody had signed.
+  const signed = criteriaByIsland(descriptors, 'uat-bloom');
+  const unsigned = criteriaByIsland(descriptors, 'uat-bud');
+  const failing = criteriaByIsland(descriptors, 'uat-wilt');
   const out: KitPlacement[] = [];
 
-  const dress = (group: readonly LayoutCell[], blooms: number): KitPlacement[] =>
+  // ⚠ THE COUNTS ARE PASSED IN RATHER THAN LOOKED UP HERE, and the unattributed call below states
+  // its own three zeros. Reading them off a nullable island id instead would put three
+  // `island === null ? 0 : …` branches on a path no fixture can take — an unattributed cell set
+  // names no capability and places nothing whatever it is handed, so the branches are unkillable
+  // by construction (measured, on this landing).
+  const dress = (
+    group: readonly LayoutCell[],
+    criteria: { blooms: number; buds: number; wilts: number },
+  ): KitPlacement[] =>
     dressIslandFromKit({
       cells: group,
       facts: capabilityFactsFrom(group),
-      blooms,
+      ...criteria,
       relief: opts.relief,
       footprint: opts.footprint,
     });
 
   for (const [island, group] of cellsByIsland(cells)) {
-    out.push(...dress(group, signed.get(island) ?? 0));
+    out.push(
+      ...dress(group, {
+        blooms: signed.get(island) ?? 0,
+        buds: unsigned.get(island) ?? 0,
+        wilts: failing.get(island) ?? 0,
+      }),
+    );
     if (!cover) continue;
     out.push(
       ...dressCover({
@@ -209,12 +260,20 @@ function dressMap(
   // ⚠ CALLED UNCONDITIONALLY, EVEN WHEN THERE IS NOTHING TO DRESS. An `if (unattributed.length)`
   // guard reads as thrift and is a branch no test can kill: dressing an empty cell set names no
   // capability and places no bloom, so it appends nothing and the two paths are indistinguishable.
-  // ⚠ AND NO COVER: a cell the substrate could not attribute belongs to no STORY, so there is no
-  // story status for it to be healthy IN — the same fail-closed rule the blooms already follow.
+  // ⚠ AND NO COVER, AND NO CRITERION OF ANY STATE: a cell the substrate could not attribute belongs
+  // to no STORY, so there is no story status for it to be healthy IN and no story whose acceptance
+  // work it could report — the same fail-closed rule the signed criteria alone already followed.
   out.push(
     ...dress(
       cells.filter((c) => c.island === undefined),
-      0,
+      // Stryker disable next-line ObjectLiteral: EQUIVALENT, and stated precisely rather than
+      // claimed in general. Stryker rewrites this to `{}`, so all three counts arrive `undefined`;
+      // `dressIslandFromKit` clamps each with `Math.max(0, n)`, which is `NaN`, and
+      // `Array.from({ length: NaN })` is EMPTY — so the mutant stands exactly the nothing these
+      // three zeros stand. The literal is kept rather than dropped because it is the only place a
+      // reader learns that an unattributed cell set draws no criterion OF ANY STATE, which is a
+      // different statement from "it happens to draw none".
+      { blooms: 0, buds: 0, wilts: 0 },
     ),
   );
 

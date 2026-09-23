@@ -47,6 +47,7 @@ import {
   KIT_ROLES,
   KIT_ROLE_ASSEMBLIES,
   KIT_ROLE_SIZE,
+  KIT_ROLE_TILT,
   kitObjectNames,
 } from './kit-vocabulary.js';
 import type { KitAssembly, KitPlacement, KitRole } from './kit-vocabulary.js';
@@ -390,6 +391,37 @@ test('yaw really rotates — two placements differing only in yaw are different 
   const boxOf = (m: THREE.Mesh): THREE.Box3 =>
     new THREE.Box3().setFromBufferAttribute(m.geometry.getAttribute('position') as THREE.BufferAttribute);
   assert.ok(Math.abs(boxOf(a).max.x - boxOf(b).max.x) > 1e-6, 'the yaw reached no vertex');
+});
+
+test('⚠⚠ A WILT REALLY NODS — the role\'s tilt reaches the vertices, and only the wilt\'s does', () => {
+  // ⚠⚠ THE ONE LEVER THAT TELLS A FAILING CRITERION FROM A SIGNED ONE (ADR-0600). The kit has one
+  // flower mesh on a material shared with the ground cover, so neither colour nor shape is
+  // available; if the tilt did not reach the geometry the two would be drawn IDENTICALLY, and the
+  // map would report a criterion that failed as one the owner had signed. Nothing in a frame says
+  // otherwise, so it is asked of the vertices.
+  const boxOf = (m: THREE.Mesh): THREE.Box3 =>
+    new THREE.Box3().setFromBufferAttribute(m.geometry.getAttribute('position') as THREE.BufferAttribute);
+  const upright = boxOf(kitMeshes(KIT, [placement({ role: 'bloom', assembly: 'flower' })])[0]!);
+  const nodding = boxOf(kitMeshes(KIT, [placement({ role: 'wilt', assembly: 'flower' })])[0]!);
+
+  // Same object at the same declared width, so a difference can only be the attitude.
+  assert.equal(KIT_ROLE_SIZE.wilt.units, KIT_ROLE_SIZE.bloom.units);
+  assert.equal(KIT_ROLE_TILT.wilt > 0, true);
+  assert.ok(
+    nodding.max.y < upright.max.y - 1e-6,
+    `a nodding flower reaches ${nodding.max.y} and an upright one ${upright.max.y} — the tilt reached no vertex`,
+  );
+
+  // ⚠ AND THE BUD DOES NOT NOD. D3: an unsigned criterion is NOT YET, never WENT WRONG, so the one
+  // form that must not borrow the failing vocabulary is asserted not to.
+  const bud = boxOf(kitMeshes(KIT, [placement({ role: 'bud', assembly: 'flower' })])[0]!);
+  const scale = KIT_ROLE_SIZE.bud.units / KIT_ROLE_SIZE.bloom.units;
+  assert.ok(
+    Math.abs(bud.max.y - upright.max.y * scale) < 1e-6,
+    'the bud is leaning — it must be the bloom scaled and nothing else',
+  );
+  // ...and it IS narrower, which is the lever it uses instead.
+  assert.ok(bud.max.x < upright.max.x - 1e-6, 'the bud is not narrower than the bloom');
 });
 
 test('an empty dressing is no meshes, not one empty one', () => {

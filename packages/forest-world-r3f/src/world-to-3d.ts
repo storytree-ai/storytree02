@@ -12,7 +12,11 @@
 //   cave        → cave-arch         (the forced-route portal prop at the rim bearing)
 //   wisp        → wisp-sprite       (GPU point / sprite)
 //   tall-flower-proven
-//               → uat-bloom         (ONE signed UAT criterion of the owning STORY)
+//               → uat-bloom         (ONE UAT criterion of the owning STORY, SIGNED)
+//   tall-flower-pending
+//               → uat-bud           (ditto, NOT YET SIGNED — an unopened flower, ADR-0600 D1)
+//   tall-flower-failing
+//               → uat-wilt          (ditto, WITNESSED FAILING)
 //
 // Only the trail FILL pass carries geometry into 3D — the shadow/casing passes are
 // the 2D cased look, which the ribbon supplies itself; they skip explicitly.
@@ -119,6 +123,7 @@
 import {
   LAND_CAMERA_ELEVATION_DEG,
   trailFillWidth,
+  type MarkerState,
   type Pt,
   type SceneG,
   type SceneNode,
@@ -148,7 +153,48 @@ export type InstanceKind =
   | 'trail-ghost-strip'
   | 'cave-arch'
   | 'wisp-sprite'
-  | 'uat-bloom';
+  | 'uat-bloom'
+  | 'uat-bud'
+  | 'uat-wilt';
+
+/**
+ * WHICH DESCRIPTOR EACH UAT MARKER WRAPPER BECOMES — the whole of ADR-0600 D1 as a table.
+ *
+ * ⚠⚠ EVERY CRITERION IS DRAWN, AND THE ABSENCE OF A DESCRIPTOR NOW MEANS EXACTLY ONE THING: NO
+ * CRITERION (ADR-0600 D2). Until 2026-09-23 only the `proven` wrapper mapped and the other two
+ * fell to the default skip, on the reasoning that a bloom is the claim "the owner SIGNED this" so
+ * emitting one for an unsigned criterion would assert a signature nobody gave (ADR-0392 D5 /
+ * ADR-0398 D7). That reasoning was right about the criterion and wrong about the ISLAND: counted
+ * across the real corpus it left 35 of 104 criteria undrawn, nine islands reading as carrying no
+ * acceptance work at all and three reading as FULLY PROVEN while holding unsigned criteria
+ * (`docs/research/chapter2-uat-silence-2026-09-23/`). The fence is kept and moved: an unsigned
+ * criterion gets its own descriptor kind, so no consumer of `uat-bloom` can ever see one.
+ *
+ * ⚠ THE KEY TYPE IS DERIVED FROM THE CORE'S OWN `MarkerState`, NOT RESTATED. A fourth marker state
+ * added to `@storytree/forest-world` reds THIS package's typecheck — which is the only guard that
+ * can catch the failure this table exists to end, because the failure is a criterion reaching the
+ * map with nothing drawn and nothing anywhere saying so.
+ */
+export const UAT_MARKER_DESCRIPTOR = {
+  'tall-flower-proven': 'uat-bloom',
+  'tall-flower-pending': 'uat-bud',
+  'tall-flower-failing': 'uat-wilt',
+} as const satisfies Record<`tall-flower-${MarkerState}`, InstanceKind>;
+
+/** The marker wrapper kinds this mapper draws — the table's keys, so the two cannot disagree. */
+export const UAT_MARKER_KINDS = Object.keys(UAT_MARKER_DESCRIPTOR) as Array<
+  keyof typeof UAT_MARKER_DESCRIPTOR
+>;
+
+/** Every descriptor kind a UAT criterion can become — the table's values, deduped. */
+export const UAT_CRITERION_KINDS: readonly InstanceKind[] = [
+  ...new Set(Object.values(UAT_MARKER_DESCRIPTOR)),
+];
+
+/** Is this descriptor one acceptance criterion, whatever state it is in? */
+export function isUatCriterion(d: Descriptor3D): d is InstanceDescriptor {
+  return (UAT_CRITERION_KINDS as readonly string[]).includes(d.kind);
+}
 
 /** An instance descriptor: maps one core-family scene node to a 3D mesh instance.
  *  The discriminating `kind` is always an InstanceKind (never 'skipped'). */
@@ -161,7 +207,8 @@ export interface InstanceDescriptor {
   group: string;
   /** The material variant, derived from the territory's folded SceneStatus (e.g.
    *  'healthy' / 'unhealthy' / 'proposed'). Set for status-bearing families (cell-ground,
-   *  cave-arch, uat-bloom); absent on families that don't carry a territory status. */
+   *  cave-arch, and all three UAT marker kinds); absent on families that don't carry a territory
+   *  status. */
   material?: string;
   /** A ground-plane polyline: the family's own path as 3D points, in path order.
    *  On a `trail-strip` / `trail-ghost-strip` it is the segment's smoothed centreline —
@@ -169,7 +216,7 @@ export interface InstanceDescriptor {
    *  (the pathPoints approximation). On a `cell-ground` it is the parcel's CLOSED RING,
    *  each vertex once and no repeated first point (`polyPath` closes with `Z`, which
    *  carries no coordinates). Absent on point-like families (uat-bloom / wisp-sprite /
-   *  cave-arch), whose geometry is a primitive at `transform`. */
+   *  cave-arch, the UAT markers), whose geometry is a primitive at `transform`. */
   points?: Transform3D[];
   /** Ribbon / portal-mouth width in world px. Trail strips: `trailFillWidth(usage)` —
    *  the ONE width rule every surface shares; cave-arch: the portal mouth width. */
@@ -190,7 +237,7 @@ export interface InstanceDescriptor {
   /** THE OWNING STORY'S ISLAND ID — which island this instance belongs to.
    *
    *  Set on every family that belongs to exactly ONE island: `cell-ground`
-   *  and `uat-bloom` inherit it from the enclosing island-level group; `cave-arch`
+   *  and the UAT markers inherit it from the enclosing island-level group; `cave-arch`
    *  carries its own (`node.island`, the portal's home island — the portal sits on a rim and is
    *  reached through the trails layer, not through a territory group). Absent on `trail-strip` /
    *  `trail-ghost-strip` / `wisp-sprite`: a trail spans two islands and belongs to neither, and
@@ -211,9 +258,10 @@ export interface InstanceDescriptor {
    *  — and inheriting one of those would attribute a story's signatures to a capability while
    *  producing a perfectly ordinary-looking island. Same rule, same reason, as `parcel` below. */
   island?: string;
-  /** The UAT criterion this bloom stands for (`uat-bloom` only) — the criterion id the core
-   *  carried on the marker wrapper. Absent when the scene stamped none. A consumer that counts
-   *  blooms per island can dedupe on it rather than trusting arrival order. */
+  /** The UAT criterion this marker stands for (`uat-bloom` / `uat-bud` / `uat-wilt`) — the
+   *  criterion id the core carried on the marker wrapper. Absent when the scene stamped none. A
+   *  consumer that counts criteria per island can dedupe on it rather than trusting arrival
+   *  order. */
   criterion?: string;
   /** THE OWNING CAPABILITY'S ID (`cell-ground` only) — which capability's parcel this
    *  cell belongs to.
@@ -518,27 +566,33 @@ function walkNode(
       out.push({ kind: 'skipped', sceneKind: kind });
       break;
 
-    case 'tall-flower-proven': {
-      // ONE SIGNED UAT CRITERION OF THE OWNING STORY → a `uat-bloom` instance (ADR-0226 D4, one
-      // flower per criterion, the verdict read from the FORM). The marker wrapper carries a
-      // `translate(x y) scale(s)` which is folded into childXY; the scale is the 2D marker's own
+    case 'tall-flower-proven':
+    case 'tall-flower-pending':
+    case 'tall-flower-failing': {
+      // ONE UAT CRITERION OF THE OWNING STORY → one descriptor, ALWAYS (ADR-0226 D4, one flower
+      // per criterion, the verdict read from the FORM; ADR-0600 D1, every criterion is drawn and
+      // signing changes the flower's STATE rather than its existence). The marker wrapper carries
+      // a `translate(x y) scale(s)` which is folded into childXY; the scale is the 2D marker's own
       // drawing size and means nothing to a 3D consumer, which stands its own prop here.
       //
-      // ⚠⚠ ONLY THE `proven` WRAPPER MAPS. `tall-flower-pending` and `tall-flower-failing` keep
-      // falling through to the explicit skip, and that is a fence rather than an omission: a bloom
-      // is the claim "the owner SIGNED this", so a family that emitted one for an unsigned
-      // criterion would be the map asserting a signature nobody gave (ADR-0392 D5 /
-      // ADR-0398 D7). What an unsigned criterion should look like in 3D is a look decision this
-      // family does not own, and drawing nothing is the honest state until it is made.
-      const bloom: InstanceDescriptor = {
-        kind: 'uat-bloom',
+      // ⚠⚠ THE THREE STATES ARE THREE KINDS, NOT ONE KIND CARRYING A FIELD, and the direction of
+      // that choice is the point. `uat-bloom` still means exactly "the owner SIGNED this", so
+      // every consumer that already filters on it — `signedCriteriaByIsland`, the harness counts —
+      // stays true with no edit and CANNOT come to over-report a signature by forgetting a state
+      // filter. A single kind with a `state` field would have made the safe reading the one you
+      // have to remember, which is the failure mode ADR-0392 D5 / ADR-0398 D7 fence.
+      //
+      // ⚠ THE KIND COMES FROM {@link UAT_MARKER_DESCRIPTOR}, never from a literal here, so the
+      // switch cannot drift from the table the typecheck holds exhaustive.
+      const marker: InstanceDescriptor = {
+        kind: UAT_MARKER_DESCRIPTOR[kind],
         transform: { x: childXY.x, y: 0, z: childXY.y },
-        group: 'uat-bloom',
+        group: UAT_MARKER_DESCRIPTOR[kind],
         material: status ?? 'unknown',
       };
-      if (island !== undefined) bloom.island = island;
-      if (node.id !== undefined) bloom.criterion = node.id;
-      out.push(bloom);
+      if (island !== undefined) marker.island = island;
+      if (node.id !== undefined) marker.criterion = node.id;
+      out.push(marker);
       break;
     }
 
@@ -618,6 +672,10 @@ function walkNode(
  * - `wisp`        → `wisp-sprite`       (GPU sprite / point)
  * - `tall-flower-proven`
  *                 → `uat-bloom`         (one SIGNED UAT criterion of the owning story)
+ * - `tall-flower-pending`
+ *                 → `uat-bud`           (one UNSIGNED criterion — an unopened flower, ADR-0600 D1)
+ * - `tall-flower-failing`
+ *                 → `uat-wilt`          (one criterion witnessed FAILING)
  *
  * `tile` REFUSES rather than mapping (see `walkNode`'s `case 'tile'`) — the classic
  * extruded-hex substrate was retired (`retire-the-old-land-path`), and the shipped map draws
