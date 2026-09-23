@@ -120,7 +120,14 @@ function readStudioCss(): string {
  * form matched whichever came first in the file and asserted the wrong block's properties. It is
  * anchored on the two ground-layer classes it is ABOUT.
  */
-function groundSuppressionRule(css: string): { selector: string; body: string } {
+interface CssRule {
+  /** Everything before the `{` — the selector list. */
+  readonly selector: string;
+  /** Everything between the braces — the declarations. */
+  readonly body: string;
+}
+
+function groundSuppressionRule(css: string): CssRule {
   const m = /(\.world-pan-layer\.has-land-mount\s+\.hex-coastland[\s\S]*?)\{([^}]*)\}/.exec(css);
   if (m === null) throw new Error('the ground-suppression rule was not found in the studio stylesheet');
   return { selector: m[1]!, body: m[2]! };
@@ -237,6 +244,41 @@ describe('the land under the working map', () => {
     expect(body).not.toMatch(/visibility\s*:/);
     // And the selector must not reach the territory group, which CONTAINS the marks above.
     expect(selector).not.toMatch(/\.hex-flora/);
+  });
+
+  it('leaves the SVG scene graph BYTE-IDENTICAL — the determinism fence', async () => {
+    // ⚠⚠ THE STRONGEST FENCE IN THIS FILE, and the cheapest. ADR-0380 D6 fence 2 puts determinism
+    // on the scene graph rather than on a live raster, so the honest test of "the mount changed
+    // nothing about the map" is that the map's own markup is the SAME STRING with the flag on and
+    // off. It holds only because the mount touches no scene node: the land is a sibling of the
+    // `<svg>`, and the ground is hidden by a class on the pan layer OUTSIDE it. The moment anyone
+    // suppresses the ground by stamping a class on a scene node instead, this fails — which is the
+    // correct outcome, because that is a change to the thing the byte-locks in
+    // `@storytree/forest-world` pin.
+    const off = (await renderTreeAt('')).querySelector('svg.world-scene')!.outerHTML;
+    cleanup();
+    const on = (await renderTreeAt('?landMount=1')).querySelector('svg.world-scene')!.outerHTML;
+    expect(on.length).toBeGreaterThan(1000); // not two empty strings agreeing
+    expect(on).toBe(off);
+  });
+
+  it('keeps the keyboard camera working, with the land mounted', async () => {
+    // ADR-0380 D6 fence 1. The arrow/WASD camera lives on `.world-viewport`, which is the land
+    // layer's grandparent — but the land layer is `position: absolute` over the whole frame, so
+    // "the handler is still attached" is not the same claim as "the key still moves the camera".
+    // This drives the real handler and reads the real camera transform.
+    const container = await renderTreeAt('?landMount=1');
+    const vp = container.querySelector('.world-viewport') as HTMLElement;
+    const cameraTransform = () => container.querySelector('g.world-camera')!.getAttribute('transform');
+    const before = cameraTransform();
+    // ⚠ A null-to-something change would pass `not.toBe` without the key doing anything, so the
+    // starting camera is asserted present first.
+    expect(before).toBeTruthy();
+    await act(async () => {
+      vp.focus();
+      vp.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    });
+    expect(cameraTransform()).not.toBe(before);
   });
 
   it('states the z-order EXPLICITLY — because DOM order is NOT paint order here', () => {

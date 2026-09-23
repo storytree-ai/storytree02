@@ -1,6 +1,7 @@
 {
   "sourceOwnership": {
     "subtrees": {
+      "apps/studio/scripts/capture-land-mount.mjs": "forest-canvas-delivery",
       "apps/studio/scripts/measure-land-view.mjs": "forest-canvas-delivery",
       "apps/studio/scripts/probe-aged-drag.mjs": "forest-canvas-delivery",
       "apps/studio/src/components/LandView*.tsx": "forest-canvas-delivery",
