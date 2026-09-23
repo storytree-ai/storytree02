@@ -1,3 +1,14 @@
+/* gate-check
+runs: both
+subject: own-work
+cost: seconds
+why: >-
+  reds on a cross-organism dependency this diff added without a declared story edge
+
+  Survival audit (gate-machinery-audit-arc): FACTORY BOOKKEEPING. Commit 8b588085 caught a real
+  dependency cycle, and 04939391 / PR425 caught undeclared imports; without it invisible cycles and
+  cross-story coupling ship.
+*/
 /**
  * `pnpm check:boundaries` — the organism-boundary gate (ADR-0074), wired into `pnpm gate` and the CI
  * `verify` job.

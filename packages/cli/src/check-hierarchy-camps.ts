@@ -1,3 +1,26 @@
+/* gate-check
+runs: both
+subject: own-work
+cost: seconds
+why: >-
+  reds when this diff adds a module that reads the work hierarchy and declares no CAMP, or declares
+  one and reads the other clock. ADR-0445 D1 made the tree disk-canonical for proving and
+  live-canonical for rendering, and its Consequences name the failure mode this watches for — a
+  third reader added later without asking which camp it is in. Offline and disk-only, so it sits
+  with its `check:boundaries` / `check:ownership-totality` neighbours; its store-reading sibling
+  `check:hierarchy-drift` asks a different question and stays in block C
+
+  Survival audit (gate-machinery-audit-arc): PROOF INTEGRITY (ADR-0445 D1, added 2026-08-26).
+  PREVENTIVE rather than catch-evidenced, on the `check:web-experience-closure` precedent, and the
+  class it prevents is MEASURED rather than imagined: `readCorpusStoryDocs` walks every story
+  directory and no UAT instrument filters `status: retired`, so every instrument built over it
+  inherited that blindness for free (ADR-0396's Context). ADR-0445 D1 created a second, permanent
+  way for that to happen — the tree is now disk-canonical for proving and live-canonical for
+  rendering — and its own Consequences name the failure mode: "a THIRD reader added later without
+  asking which camp it is in". Without it a rendering surface acquires a checkout read (the
+  2026-08-25 yellow-island incident, structurally) or a proving rung acquires a live one (a proof
+  validating a tree the branch is not at), and nothing sits between the author and either.
+*/
 /**
  * `pnpm check:hierarchy-camps` — the thin I/O SHELL that holds every work-hierarchy reader to a
  * declared camp (ADR-0445 D1, `map-freshness-arc` inc-04). The rule lives in the pure judge next

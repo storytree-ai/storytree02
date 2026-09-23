@@ -226,8 +226,12 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-async function main(): Promise<void> {
-  const check = process.argv.includes("--check");
+/**
+ * Render the harness projections, or with `--check` compare them. `argv` defaults to this process's
+ * own arguments; the gate's `check-agents.ts` passes `["--check"]`.
+ */
+export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
+  const check = argv.includes("--check");
 
   // The store is held across the render loop AND the essentials gate below (which re-reads each
   // agent's cited artifacts), then closed at each normal exit. No try/finally: every failure path

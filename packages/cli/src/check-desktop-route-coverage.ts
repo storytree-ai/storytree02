@@ -1,3 +1,15 @@
+/* gate-check
+runs: local
+subject: own-work
+cost: seconds
+why: >-
+  reds when this diff leaves the desktop backend serving no route for a path the shared frontend
+  calls — the ABSENCE half its `check:mirror-conformance` neighbour is structurally blind to, since
+  a route the desktop never mirrored has no payload to be unequal. Three surfaces shipped broken
+  that way (`/api/arcs` #1191, `/api/floor-health` #1228, the Traversal tab's three reads), each
+  found by a human opening the app while the gate stayed green. Disk and source text only, so it
+  sits beside the mirror pair it completes
+*/
 /**
  * `pnpm check:desktop-route-coverage` — does the desktop backend serve every route the shared
  * frontend calls? (`traversal-panel-arc`, increment `desktop-route-coverage-is-unasked`.)

@@ -164,6 +164,11 @@ export interface GatePlanStep extends GateStep {
  * and its `why` — and `gate-order.test.ts` refuses a `check:*` script absent here unless it has an
  * explicit non-gate reason. CI reads this same list through `pnpm gate --ci` (ADR-0606 D3); there is
  * no workflow step to add alongside it.
+ *
+ * ⚠ THIS LIST IS ON ITS WAY OUT (ADR-0606 D1, `gate-checks-found-like-tests-arc` inc-03). Every check
+ * file already OPENS with a `/* gate-check` declaration of the same fields (`gate-checks.ts`), and
+ * `gate-checks.test.ts` holds the two to each other until the runner walks the discovered plan and
+ * this literal is deleted. Until then a new check needs BOTH: its entry here and its declaration.
  */
 /*
  * SURVIVAL AUDIT (bounded, authoritative; gate-machinery-audit-arc).
@@ -194,84 +199,13 @@ export interface GatePlanStep extends GateStep {
  *   WHY A RUNG AND NOT A LOCAL COMMAND. The arc reserved the right to say no, and the honest test
  *   was whether anything had regressed. Everything had. A rule at `error` in a config nothing runs
  *   is not a standard, it is a comment.
- * - check:manifest-fragments — FACTORY BOOKKEEPING (ADR-0556 D4, added 2026-09-15 by
- *   `repo-manifest-aggregate-leaves-git`). PREVENTIVE rather than catch-evidenced, on the
- *   `check:hierarchy-camps` precedent, and each escape it blocks is one no other rung can see. A
- *   committed `repo-manifest.json` is read by nothing, so it would pass every semantic check while
- *   quietly becoming the merge surface the arc removed; and a fragment written out of form composes to
- *   the same manifest, so every reader passes over it while its bytes — and every later diff of it —
- *   depend on who edited it last. What it absorbs rather than adds: a refused fragment set already
- *   redded `check:boundaries`, `check:ownership-totality` and `check:hierarchy-camps` under their own
- *   names, and now reds first under the manifest's. MEASURED cost, three warm runs on the dev box:
- *   3010 / 3042 / 2964 ms, almost all of it the pnpm-and-tsx start those three neighbours pay too.
- * - check:boundaries — FACTORY BOOKKEEPING. Commit 8b588085 caught a real dependency cycle, and
- *   04939391 / PR425 caught undeclared imports; without it invisible cycles and cross-story
- *   coupling ship.
- * - check:ownership-totality — FACTORY BOOKKEEPING (ADR-0317 D2, added 2026-08-14). PR #1326
- *   introduced two `packages/cli/src/typecheck-aperture*.ts` files under no declared subtree and a
- *   FULL gate went green with the ownership map already incomplete — `storytree ownership` is
- *   report-only and `check:boundaries` is package-grain, so nothing sat between the author and the
- *   decay; without it the map silently stops being total and the arc that owns it hand-repairs on
- *   every increment.
- * - check:hierarchy-camps — PROOF INTEGRITY (ADR-0445 D1, added 2026-08-26). PREVENTIVE rather than
- *   catch-evidenced, on the `check:web-experience-closure` precedent, and the class it prevents is
- *   MEASURED rather than imagined: `readCorpusStoryDocs` walks every story directory and no UAT
- *   instrument filters `status: retired`, so every instrument built over it inherited that blindness
- *   for free (ADR-0396's Context). ADR-0445 D1 created a second, permanent way for that to happen —
- *   the tree is now disk-canonical for proving and live-canonical for rendering — and its own
- *   Consequences name the failure mode: "a THIRD reader added later without asking which camp it is
- *   in". Without it a rendering surface acquires a checkout read (the 2026-08-25 yellow-island
- *   incident, structurally) or a proving rung acquires a live one (a proof validating a tree the
- *   branch is not at), and nothing sits between the author and either.
- * - check:mirror-conformance — PROOF INTEGRITY. Commit 3ef84c96 records a historical studio-only
- *   docs change producing 256+4 divergences; without it desktop and studio behavior diverge.
- * - check:mirror-conformance-live — PROOF INTEGRITY (ADR-0496 D2, added 2026-09-01). The same
- *   instrument as the rung above, over the REAL `events.node_claim` ledger instead of a fixture.
- *   Its catch-evidence is INHERITED rather than its own, and honestly so: `/api/activity` is the
- *   pair whose originating defect was a re-composed SELECT that lost the ADR-0200 `grade` column,
- *   and this is the only arm that folds rows the fixture author did not write. What it adds is the
- *   input nobody chose — the fixture proves the branches someone thought of, and a corpus supplies
- *   the ones nobody did (the `docs-trees` two-arm precedent, where the real `docs/` tree is exactly
- *   that second arm). It exists at all because the reason there had never been one — "CI is
- *   DB-free" — was measured FALSE (ADR-0495 / ADR-0496 D1).
- * - check:palette-transcription — PROOF INTEGRITY (added 2026-08-28,
- *   `the-shipped-canvas-third-status-palette` on adopt-the-land-into-the-shipped-map-arc).
- *   CATCH-EVIDENCED, not preventive: the drift it watches for had already landed three times and
- *   was live on the public site when the rung was written. The map's colour is what it REPORTS
- *   about a capability's proof state, so a palette no decision authorises is a map asserting
- *   states nobody decided — which this arc named as the one way it can do real harm.
- *
- * - check:guidance — FACTORY BOOKKEEPING. A clean worktree on 2026-08-05 caught stale
- *   definitions.generated.json after the live source moved; without it root operating guidance and
- *   definitions ship stale.
- * - check:agents — FACTORY BOOKKEEPING. Commit 66b70db3 / PR232 caught stale corpus-investigator
- *   and librarian projections; without it harness agents run stale instructions.
- * - check:web-grounding — FACTORY BOOKKEEPING. Commit ae90d950 records escaped stale doctrine after
- *   ADR-0040; without it public copy cites missing or superseded decisions.
- * - check:web-engine — FACTORY BOOKKEEPING. Commit 59b6504d / PR650 caught parent/web gitlink drift;
- *   without it the public site runs a stale forest engine.
- * - check:web-experience-closure — PROOF INTEGRITY (ADR-0336, added 2026-08-09). Re-wires only the
- *   static-import-closure third of the retired check:web-experience (ADR-0311 D2); the two
- *   runtime-marker assertions stayed retired until ADR-0454 (below). Preventive rather than
- *   catch-evidenced — it SKIPs (bootstrap allowance) until the story's Act 1 entry ships — but is a
- *   cheap, deterministic, offline machine expression of the ADR-0216 D2/D4 no-WebGL-in-Act-1
- *   constraint that no other rung watches for.
- * - check:web-experience-markers — PROOF INTEGRITY (ADR-0454, added 2026-08-26, narrowing ADR-0336
- *   D2). Re-wires the other two-thirds of the retired check:web-experience: the
- *   `data-experience-skip` / `data-experience-fallback` marker-presence assertions. ADR-0336 D2 left
- *   these retired on the premise that re-wiring needed a live-site network fetch; ADR-0454 found that
- *   premise did not match the retired judge's actual implementation (a static string search over the
- *   same `web/` submodule source the closure walk already reads) and re-wired them the same way,
- *   same posture, same cost. Preventive rather than catch-evidenced, on the check:web-experience-closure
- *   precedent — it protects owner decision 6 on `website-experience` (the skip/fallback affordances
- *   are load-bearing from the first increment), not a specific production catch.
+ * - EVERY CHECK — its evidence moved into the check's own declaration (ADR-0606 D1): the `why` of the
+ *   `/* gate-check` header each check file opens with, beside the code it describes. What stays here
+ *   is the evidence for the gate's BUILT-IN legs, which have no file of their own to carry it.
  * - pnpm -r typecheck — PROOF INTEGRITY. CI run 27761462602, fix 34f320dc, PR224 caught a moved,
  *   nonexistent export after other gates and build were green; without it a stale loader ships.
  * - pnpm -r test — PROOF INTEGRITY. CI run 30976384824, fix 327151fb, PR1151 caught
  *   credential-dependent suites after typecheck was green; without it behavior regressions ship.
- * - check:verification-decay — PROOF INTEGRITY. PR1119 on 2026-08-03 fired on
- *   unproven-seam-default; without it vacuous filters, skipped tests credited as proof, and
- *   fake-only defaults can ship.
  *
  * ★ WHERE EACH STEP RUNS IS ITS `runs` FIELD, AND NOTHING ELSE (ADR-0606, superseding ADR-0486).
  * `pnpm gate` runs `both` + `local`; `pnpm gate --ci` — the CI `verify` job — runs `both` + `ci`.

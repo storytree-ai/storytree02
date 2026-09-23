@@ -1,3 +1,18 @@
+/* gate-check
+runs: local
+subject: shared-environment
+cost: seconds
+ciIdentity: ci-presence
+why: >-
+  reds every session the moment any instrument breaches on main — the measured case behind the
+  parked entry `verification-decay-charges-by-authorship`. `runs: "local"` BY DECISION (ADR-0252
+  D3): a session drain obligation, never a merge barrier — see the ★ note above GATE_PLAN, and do
+  not 'fix' it by placing it in CI
+
+  Survival audit (gate-machinery-audit-arc): PROOF INTEGRITY. PR1119 on 2026-08-03 fired on
+  unproven-seam-default; without it vacuous filters, skipped tests credited as proof, and fake-only
+  defaults can ship.
+*/
 /**
  * `pnpm check:verification-decay` — the continuous mechanical half of the verification-decay
  * detection pass (ADR-0252, `verification-integrity-arc`). The thin disk-reading entrypoint: it

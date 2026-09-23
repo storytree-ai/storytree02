@@ -1,3 +1,19 @@
+/* gate-check
+runs: both
+subject: own-work
+cost: minutes
+skip:
+  when: >-
+    this branch changes no mutable TypeScript under a workspace project's `src/`, so there are no
+    mutants to generate — the ordinary shape of a corpus, docs or config landing, and the commonest
+    outcome of this rung
+  inCi: failure
+why: >-
+  asks whether the tests this branch wrote actually CATCH bugs in the lines this branch changed —
+  the red phase proves a test went red, never that it would have gone red for a slightly different
+  defect (ADR-0447 D2, ADR-0458). Runs AFTER the test leg deliberately: mutation results over a red
+  suite describe the breakage, not the tests
+*/
 // `pnpm check:mutation-diff` — the diff-scoped mutation rung (ADR-0458 / `diff-scoped-mutation-rung`).
 //
 // Mutate ONLY the lines this branch changed, and require this branch's OWN new or changed tests to
@@ -34,6 +50,7 @@ import {
   type ChangedRanges,
   concurrencyFor,
   declaredTestRoots,
+  entryPointsFromCheckNames,
   entryPointsFromMirrorRegistry,
   entryPointsFromScripts,
   entryPointsFromShellScripts,
@@ -551,6 +568,10 @@ function main(): void {
       // found` (it ends in `process.exit(0)` at module scope, so merely LOADING it kills the test
       // process — reproduced at 0 mutants).
       ...entryPointsFromShellScripts(readShellScripts()),
+      // The FOURTH kind: a gate CHECK file, which the gate finds by its name and runs as a program
+      // (ADR-0606 D1) — including a RETIRED one, which no script names and which still runs its
+      // `main()` on import, so merely loading it aborted this rung's dry run.
+      ...entryPointsFromCheckNames(ranges.map((r) => r.file)),
     ]),
     // Each project's OWN answer to "which directories do my tests live in", so a file dropped from
     // a directory the project itself declares it tests can be named as the real gap it is rather
@@ -575,7 +596,7 @@ function main(): void {
   for (const file of selection.exempted) {
     // Loud, never silent: an exemption a reader cannot see is indistinguishable from a file the
     // rung simply failed to notice.
-    console.log(`${TAG} EXEMPT (executable entry point — a root script invokes it, or the mirror registry spawns it): ${file}`);
+    console.log(`${TAG} EXEMPT (executable entry point — a script invokes it, the mirror registry spawns it, or it is a gate check the gate runs by its file name): ${file}`);
   }
 
   // EVERY RUN, not just the one where nothing survived the narrowing. This used to reach the reader
