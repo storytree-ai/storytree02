@@ -7,7 +7,7 @@
 // had. `stories/studio/story.md` declares `pnpm --filter studio uat` as "the machine proof obligation
 // for `studio#uat-1` through `studio#uat-13`", the corpus's ONLY full end-to-end acceptance journey
 // and the reference shape other stories' criteria are measured against (ADR-0294 D1). That command
-// appeared in no step of {@link GATE_PLAN} and no job of `.github/workflows/ci.yml`. So `pnpm gate`
+// appeared in no step of the gate's plan and no job of `.github/workflows/ci.yml`. So `pnpm gate`
 // and CI were both green on the very change that broke it, INCLUDING the change that would fix it.
 // The thirteen legs sat unsigned from 2026-08-03 to 2026-08-23 and the drift was found by hand, not
 // by a rung: the spec had come to assert a `.brand-name` class present nowhere in `apps/studio/src`,
@@ -52,12 +52,12 @@
 //
 // ── HOW "IS IT RUN?" IS ANSWERED, WITHOUT A HARDCODED LIST ────────────────────────────────────────
 //
-// Two tiers, and neither enumerates a script name in this file. Both read ONE source — `GATE_PLAN`,
+// Two tiers, and neither enumerates a script name in this file. Both read ONE source — the gate's own plan,
 // every placement — because since ADR-0606 D3 CI runs that same plan through `pnpm gate --ci` and
 // keeps no step list of its own. (Until then this module also parsed CI's `verify` job out of
 // `ci.yml`, borrowing the `gate-ci-parity` capability's workflow reader, and unioned the two sides.)
 //
-//   TIER 1 — AN EXACT INVOCATION. Some `GATE_PLAN` step issues a command that parses to the same
+//   TIER 1 — AN EXACT INVOCATION. Some plan step issues a command that parses to the same
 //     package script. This is what would cover a gate wired for ONE package's ONE script, and it is
 //     the tier `pnpm --filter studio uat` will satisfy once it is wired. A step placed `local`,
 //     `ci` or `both` counts alike: the question is whether ANYTHING runs it, not where.
@@ -234,7 +234,7 @@ export function declaredGatesIn(story: string, storyText: string): DeclaredGate[
 }
 
 /**
- * A plan step that runs ONE script across every workspace, as `GATE_PLAN` declares it: `pnpm -r`,
+ * A plan step that runs ONE script across every workspace, as the gate declares it: `pnpm -r`,
  * optionally `--no-bail`, then the script. Anchored at both ends, so a command that merely CONTAINS
  * the shape (`echo pnpm -r test`, `pnpm -r test --reporter=x`) grants no coverage.
  */
@@ -277,7 +277,7 @@ export function targetKey(pkg: string, script: string): string {
 }
 
 /**
- * Every package script some `GATE_PLAN` step invokes for a NAMED package — tier 1's evidence, parsed
+ * Every package script some plan step invokes for a NAMED package — tier 1's evidence, parsed
  * through the same {@link parsePackageScriptCommand} a story's declaration is.
  *
  * Keyed by {@link targetKey}, so a step running one package's `uat` never satisfies a different
@@ -607,7 +607,7 @@ export function formatReliabilityGateParity(parity: ReliabilityGateParity): stri
     lines.push(
       "",
       `${TAG}   Fix it at whichever end is true. If the command carries a real proof obligation, WIRE`,
-      `${TAG}   it — a step in \`GATE_PLAN\` (\`packages/cli/src/gate-order.ts\`), placed \`both\` to make`,
+      `${TAG}   it — a gate check: a \`check-<name>.ts\` file whose \`/* gate-check\` declaration places it \`both\` to make`,
       `${TAG}   it a merge wall as well as the habit, or \`local\` to keep it the habit only: CI runs that`,
       `${TAG}   same plan (ADR-0606). If it does not, stop DECLARING it as one — edit the story's`,
       `${TAG}   \`${RELIABILITY_GATES_HEADING}\` block, which is \`story-author\`'s call and not this`,

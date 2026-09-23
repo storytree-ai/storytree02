@@ -18,13 +18,18 @@
 /** The flags `gate-run.ts`'s `main()` actually branches on, each with the one line a caller needs. */
 const FLAGS: readonly (readonly [flag: string, blurb: string])[] = [
   ["--scope", "print what this gate WOULD test (the affected-scope decision) and exit"],
+  [
+    "--list",
+    "print the plan — every step in run order, where it runs, what it declares, each check's file and owner — and the retired checks; exit",
+  ],
+  ["--list --json", "the same listing as JSON, for a reader that is a program"],
   ["--full", "run every package, ignoring affected-scope narrowing"],
   ["--fail-fast", "stop at the first red instead of running every step"],
   ["--only <pattern>", "run only steps whose command matches (repeatable, comma-separated)"],
   ["--rerun-failed", "run exactly the steps the last WHOLE-plan run reported FAIL or NOT RUN"],
   [
     "--ci",
-    "run the plan as CI's `verify` job does: the CI placement, the PR merge commit's scope, a skip counts as a failure, one declared credential per step",
+    "run the plan as CI's `verify` job does: the CI placement, the PR merge commit's scope, a declared skip counts as a failure unless the check accepts it in CI, one declared credential per step",
   ],
   ["--help, -h", "print this and do nothing else"],
 ];

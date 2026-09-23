@@ -17,7 +17,7 @@ import {
  *
  * `check:coverage` was retired by ADR-0311 D2 and `coverage-gate.ts` beside this file carries the
  * UNWIRED banner, so this file LOOKS like a leftover. It is not. The `end-to-end over the REAL
- * corpus` test below runs inside `pnpm -r test` — GATE_PLAN step 6, which CI runs too — and walks
+ * corpus` test below runs inside `pnpm -r test` — the gate's test leg, which CI runs too — and walks
  * the real `stories/` tree, pinning live proof bindings that nothing else pins: that
  * `deploy-health-signal` and `act2-regrow-camera-zoom-out` are scanned and fully covered, and
  * act2's two literal `apps/studio/` proof paths. Moving or renaming one of those files reds HERE.

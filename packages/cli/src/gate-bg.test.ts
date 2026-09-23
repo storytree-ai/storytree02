@@ -58,13 +58,13 @@ const bash = resolveRepoBash();
  * This helper runs the REAL script, whose default path is `<worktree>/.gate-logs/gate-….log` — so
  * a call that omitted the override wrote a log AND a `.exit` file into the worktree's REAL
  * `.gate-logs/`, byte-shaped exactly like a finished gate. Because this suite runs inside
- * `pnpm -r test`, which is itself GATE_PLAN step 6, an ORDINARY GATE RUN forged the very
+ * `pnpm -r test`, which is itself the gate's test leg, an ORDINARY GATE RUN forged the very
  * completion signal `pnpm gate:bg` documents: a wait-loop keyed on `.gate-logs/*.exit` — the
  * documented contract — read exit=0 while the real gate was still mid-flight. One session
  * concluded "GATE DONE exit=0" twice for a gate that had not reached its summary table.
  *
  * Requiring the property at the TYPE level (not merely asserting at runtime) is deliberate: a
- * forgotten override is then a typecheck failure — GATE_PLAN step 5, which runs before the tests —
+ * forgotten override is then a typecheck failure — the gate's typecheck leg, which runs before the tests —
  * rather than a silent write into a directory the gate's own completion contract is read from. The
  * runtime assert below catches the same mistake made through a cast. To exercise the DEFAULT path,
  * use {@link runScriptCopy}, which relocates the script's own root into a temp dir.
@@ -245,7 +245,7 @@ test("a default-path run writes its finished-gate signal under the TEMP root, an
   //
   // The forgery this closes is specific. `.exit` holds a bare status and the log ends in a verdict
   // block, so a fixture's artifacts are byte-indistinguishable from a finished gate's; because this
-  // suite runs inside `pnpm -r test` — GATE_PLAN step 6 — an ordinary gate run used to leave two of
+  // suite runs inside `pnpm -r test` — the gate's test leg — an ordinary gate run used to leave two of
   // them behind, and a wait-loop keyed on `.gate-logs/*.exit` read exit=0 mid-flight.
   //
   // The real directory is deliberately NOT asserted on: a concurrent `pnpm gate:bg` writes there

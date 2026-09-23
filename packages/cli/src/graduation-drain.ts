@@ -3,10 +3,10 @@
 //
 // GATE STATUS: `check:graduation-worklist` was removed from the gate by ADR-0311 D2 on 2026-08-05
 // and has not returned. Its entrypoint `check-graduation-worklist.ts` is still invoked by nothing:
-// no root `package.json` script, no `GATE_PLAN` step (`gate-order.ts`), no CI job. Nothing here can
+// no root `package.json` script, no gate step, no CI job. Nothing here can
 // red anyone's landing. Kept deliberately (ADR-0311 D5); re-wiring needs fresh production-catch
 // evidence AND an ADR, never just the wiring.
-// Tombstone: `RETIRED_CHECKS` in `gate-order.ts`, pinned by `gate-order.test.ts`.
+// Tombstone: the retired check's own `retired:` declaration (ADR-0606 D6), held by `gate-order.test.ts`.
 //
 // REACHABILITY: since ADR-0371 this pure core is ALSO consumed by `graduate.ts`'s
 // `graduateCommand` — the `storytree library graduate [--review]` verb, which IS wired and is the

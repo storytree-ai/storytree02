@@ -15,7 +15,7 @@ import { classifySurfaceCoverage, loadSurfaceCoverageInputs } from "./surface-co
 /**
  * The `check:surface-coverage` drain ceiling — a rung ADR-0311 D2 RETIRED. Say what that does and
  * does not mean, because the two are easy to swap. These TESTS still run, inside `pnpm -r test`
- * (GATE_PLAN step 6). The RUNG does not: `check:surface-coverage` is in neither the root
+ * (the gate's test leg). The RUNG does not: `check:surface-coverage` is in neither the root
  * `package.json` nor `.github/workflows/ci.yml` (verified 2026-08-08), and `surface-coverage-drain.ts`
  * beside this file carries the UNWIRED banner. So what is exercised below is the retired module's own
  * logic plus the 0/0 ceiling pin — the REAL repo's surface counts are enforced by nobody. Declared,

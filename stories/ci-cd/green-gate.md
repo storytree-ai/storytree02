@@ -44,7 +44,8 @@ decisions: [560, 606]
 # `ci-cd` a story about the side-effects of a pipeline it did not own, and would fail `cold-rebuild`.
 #
 # AND ITS JUDGE IS COUPLED TO NO BUILDING. Unlike `gate-ci-parity` — which since ADR-0606 IS the gate
-# program in `packages/cli`, `GATE_PLAN` and its CI mode — this one reads ONLY
+# program in `packages/cli`, the plan it finds from each check's own file and its CI mode — this one
+# reads ONLY
 # `.github/workflows/ci.yml`, with no `@storytree/*` import. Nothing
 # draws it toward `packages/cli` except the accident of where the first draft was written, and this
 # story's body already claims `.github/workflows/` as its work-tracked home.
@@ -117,12 +118,13 @@ the authenticated shared-environment checks among them, UAT revision continuity 
 anything blocks the merge (ADRs 0022, 0560 and 0606).
 
 **The gate plan is the live list, and neither this paragraph nor the workflow names it.** Since
-ADR-0606 D3 `verify` names no check: which checks CI runs is each step's `runs` placement in
-`GATE_PLAN` ([`packages/cli/src/gate-order.ts`](../../packages/cli/src/gate-order.ts)), and holding
+ADR-0606 D3 `verify` names no check: which checks CI runs is each check's own `runs` placement,
+declared in the `/* gate-check` header its file opens with and found there by the gate
+([`packages/cli/src/gate-checks.ts`](../../packages/cli/src/gate-checks.ts), ADR-0606 D1), and holding
 that is `cli`'s [`gate-ci-parity`](../cli/gate-ci-parity.md). The set has moved often — ADR-0302 D4
 deleted the three seed-sync rungs, ADR-0311 D2 retired thirteen more (`check:manifest` and
-`check:web-experience` among them), and ADR-0606 took the whole list out of the workflow — which is
-why this capability never owned an enumeration. What it owns is the JOB: that it runs on the merge
+`check:web-experience` among them), and ADR-0606 took the whole list out of the workflow and then out
+of the gate itself — which is why this capability never owned an enumeration. What it owns is the JOB: that it runs on the merge
 ref, that it runs the gate in CI mode as a required step and names no check itself, that the
 verdict-history identity reaches that step alone, and that `automerge` cannot outrun it.
 
@@ -151,16 +153,19 @@ verdict-history identity reaches that step alone, and that `automerge` cannot ou
   placement in plan order (ADR-0606 D3): cheap own-work checks first, then the minutes-cost legs,
   then the shared-environment checks — the two generated-view checks and UAT revision continuity
   among them — so a sibling moving the live source can never precede this branch's own answer.
-  Holding that order is `gate-order.ts`'s job (`gate-ci-parity`), not this workflow's. But ordering
-  is about WHEN a verdict arrives, never about whether it binds: the gate step is required, a red or
-  skipped step inside it reds that step, and `automerge` (`needs: verify`) never runs.
+  Holding that order is the gate program's job — it derives the order from each check's declared
+  subject and cost (`gate-ci-parity`, `order-is-derived-from-declarations`) — not this workflow's. But
+  ordering is about WHEN a verdict arrives, never about whether it binds: the gate step is required, a
+  red step inside it reds that step — and so does a skip, unless the skipping check's own declaration
+  accepts that skip in CI — and `automerge` (`needs: verify`) never runs.
 - **Proof continuity is authenticated and late.** The pure candidate-revision judge belongs to
   [`cli`'s `uat-revision-continuity-gate`](../cli/uat-revision-continuity-gate.md), and the check's
   placement and identity declaration belong to `gate-ci-parity`. This capability owns the pipeline
   fact: `verify` signs in as the verdict-history reader WITHOUT exporting it, and hands that
   credential to its gate step alone, so the check runs with the live verdict credential available
   after branch-local proof, and its non-zero exit reds the gate step like any other. A store outage
-  is red, never an optional skip — and `pnpm gate --ci` reads even a declared skip as a failure.
+  is red, never an optional skip — and the continuity check declares no skip at all, so under
+  `pnpm gate --ci` an exit 3 from it is a failure too.
 
 ## Contracts (5)
 
@@ -183,9 +188,10 @@ verdict-history identity reaches that step alone, and that `automerge` cannot ou
      `continue-on-error`, or otherwise soft in the `verify` job, and `automerge` (`needs: verify`)
      never runs against a non-green one. Since ADR-0606 every content check runs inside `verify`'s one
      `pnpm gate --ci` step, so "no soft step" now holds at two layers: the workflow declares no soft
-     step (this audit), and inside the gate step a CI run exits non-zero on any red and reads even a
-     declared skip as a failure — `cli`'s `gate-ci-parity` (`ci-green-means-every-ci-step-passed`), a
-     cross-story pointer rather than a claim this audit proves.
+     step (this audit), and inside the gate step a CI run exits non-zero on any red, on an exit 3 its
+     check never declared, and on a declared skip unless that check's own declaration accepts the skip
+     in CI — `cli`'s `gate-ci-parity` (`ci-green-means-every-ci-step-passed`), a cross-story pointer
+     rather than a claim this audit proves.
      ⚠ **SCOPE THE ASSERTION TO THE `verify` JOB — a whole-file read of `ci.yml` FAILS on correct
      code.** Measured 2026-08-31, and again 2026-09-24 after ADR-0606 emptied `verify`: every real
      `continue-on-error: true` in the workflow — seven then, eight now — is in the `automerge` job,
@@ -196,7 +202,8 @@ verdict-history identity reaches that step alone, and that `automerge` cannot ou
      dispatch is LOUD (no `continue-on-error`) and must stay LAST, so a dispatch failure cannot skip
      the fail-soft claim-release steps above it. **The check list is NOT part of what this contract
      guarantees** — and since ADR-0606 it is not in the workflow at all: it is the gate plan's CI
-     placement (`GATE_PLAN` in `packages/cli/src/gate-order.ts`, steps placed `both` or `ci`).
+     placement (the fixed legs and found checks placed `both` or `ci`, which `pnpm gate --list`
+     prints).
      ADR-0302 D4, ADR-0311 D2 and ADR-0606 have each changed it, and a contract that froze an
      enumeration would have gone false on each of those days while the invariant it exists to pin
      stayed true.
@@ -214,7 +221,7 @@ verdict-history identity reaches that step alone, and that `automerge` cannot ou
      claim that Antigravity consumes the Gemini CLI surface. Neither sync check is a `verify` step of
      its own any more (ADR-0606 D3): `verify` runs both through its ONE `run: pnpm gate --ci` step
      and names no `pnpm check:*` step itself, and that step is required, not advisory (contract 2).
-     That the gate's CI placement includes both — each is placed `runs: "both"` in `GATE_PLAN` — is
+     That the gate's CI placement includes both — each declares `runs: both` in its own file — is
      `cli`'s [`gate-ci-parity`](../cli/gate-ci-parity.md) (`placement-selects-each-run`), a
      cross-story pointer rather than a claim this audit proves.
    - **and each names WHICH SIDE MOVED —** because both check a COMMITTED projection against the

@@ -33,8 +33,9 @@ why: >-
  * ({@link VacuousReliabilitySweep}) — the `check:ownership-totality` posture, where a probe that
  * cannot be consulted THROWS and never answers false.
  *
- * OFFLINE and READ-ONLY: disk only. No DB, no `--pg`, no git, no network, no spend — so it runs in CI
- * exactly as it runs on a laptop, and it sits in the gate's cheap-first block.
+ * OFFLINE and READ-ONLY: disk, plus the one `git ls-files` the gate's own discovery makes to find its
+ * checks (ADR-0606 D1). No DB, no `--pg`, no network, no spend — so it runs in CI exactly as it runs on
+ * a laptop, and it sits in the gate's cheap-first block.
  */
 
 import { readdirSync, readFileSync, existsSync } from "node:fs";
@@ -43,7 +44,9 @@ import { fileURLToPath } from "node:url";
 
 import { REPO_ROOT_ENV, resolveRepoRoot } from "@storytree/library";
 
-import { GATE_PLAN } from "./gate-order.js";
+import { discoverWorkspaceProjects } from "./ci-affected.js";
+import { loadGatePlan } from "./gate-checks.js";
+import { BUILT_IN_LEGS } from "./gate-order.js";
 import {
   formatReliabilityGateParity,
   judgeReliabilityGateParity,
@@ -92,11 +95,21 @@ function gatherStories(root: string): StoryFile[] {
 function main(): void {
   const stories = gatherStories(repoRoot);
 
-  // The WHOLE plan, every placement. CI runs this same list through `pnpm gate --ci` (ADR-0606 D3), so
-  // there is no second source to read — the workflow names no check any more.
+  // The WHOLE plan, every placement, found exactly as `pnpm gate` finds it (ADR-0606 D1). CI runs this
+  // same plan through `pnpm gate --ci` (D3), so there is no second source to read.
+  const loaded = loadGatePlan(
+    repoRoot,
+    discoverWorkspaceProjects(repoRoot).map((project) => project.dir),
+    BUILT_IN_LEGS,
+  );
+  if (!loaded.ok) {
+    throw new VacuousReliabilitySweep(
+      `the gate's own plan could not be assembled, so nothing can be judged as run: ${loaded.reasons.join("; ")}`,
+    );
+  }
   const parity = judgeReliabilityGateParity({
     stories,
-    steps: GATE_PLAN,
+    steps: loaded.plan,
     baseline: UNRUN_GATE_BASELINE,
   });
 

@@ -7,7 +7,7 @@
 //
 //   LOUD  — `gate-bg.test.ts` spawned `bash <ABSOLUTE WINDOWS PATH>`; Linux bash cannot open
 //           `C:\code\storytree\scripts\gate-bg.sh`, so it exited 127. That red `pnpm -r test` —
-//           then rung 13 of the 24-rung `&&` gate chain, now step 12 of the declared `GATE_PLAN`
+//           then rung 13 of the 24-rung `&&` gate chain, now a check the gate finds by its own file (ADR-0606)
 //           — for EVERY session whose shell resolved
 //           bash that way — i.e. every session driving the gate from PowerShell, the primary shell
 //           on this box. Caused by no branch; CI stayed green because CI is Linux. It surfaced only

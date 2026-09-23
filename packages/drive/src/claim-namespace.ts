@@ -594,7 +594,7 @@ export interface PhantomClaim {
  * bad reference is to EXPLAIN it, never to erase it. Declaring the set as a literal is what lets
  * `claim-namespace.test.ts` hold it to the resolver — every entry must still fail to resolve, and
  * every `likelyMeant` must resolve — which turns the measurement into a standing regression corpus
- * rather than a paragraph that ages out. It is the `RETIRED_CHECKS` pattern from `gate-order.ts`.
+ * rather than a paragraph that ages out. It is the pattern the gate's retired-check tombstone used (a declared inventory held to the tree).
  *
  * DELIBERATELY FROZEN, like `@storytree/library/fixture`. This is a snapshot of a live table and is
  * never reconciled against it; a 27th phantom cannot appear now that the check exists, and if the

@@ -2,7 +2,7 @@
 // gate on 2026-08-05. This module is the gate logic; its entrypoint `check-coverage.ts` is invoked by
 // nothing, so NO GATE STEP enforces what is below. Kept deliberately (ADR-0311 D5), not forgotten;
 // re-wiring it AS A RUNG needs fresh production-catch evidence AND an ADR, never just the wiring.
-// Tombstone: `RETIRED_CHECKS` in `gate-order.ts`, pinned by `gate-order.test.ts`.
+// Tombstone: the retired check's own `retired:` declaration (ADR-0606 D6), held by `gate-order.test.ts`.
 //
 // ⚠ BUT IT IS NOT UNREACHED, and an earlier revision of this banner said it was ("reached only from
 // there and from its own tests"). The SWEEP below has two live readers, neither of them a gate rung —

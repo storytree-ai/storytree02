@@ -209,7 +209,7 @@ export interface AdrHealthInputs {
   /**
    * Every decision's body prose, for `adr-body-links`. REQUIRED rather than optional and defaulted:
    * an optional view that falls back to `[]` makes the rung report PASS on a caller that forgot to
-   * pass it, which is the vacuous-green shape `RETIRED_CHECKS` exists to prevent. The rung carries
+   * pass it, which is the vacuous-green shape the retired-check tombstone exists to prevent. The rung carries
    * its own blind-read floor besides (see rung 8).
    */
   readonly decisionBodies: DecisionBodyView[];

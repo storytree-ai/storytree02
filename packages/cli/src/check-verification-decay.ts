@@ -6,7 +6,7 @@ ciIdentity: ci-presence
 why: >-
   reds every session the moment any instrument breaches on main — the measured case behind the
   parked entry `verification-decay-charges-by-authorship`. `runs: "local"` BY DECISION (ADR-0252
-  D3): a session drain obligation, never a merge barrier — see the ★ note above GATE_PLAN, and do
+  D3): a session drain obligation, never a merge barrier — see the ★ note in `gate-order.ts`, and do
   not 'fix' it by placing it in CI
 
   Survival audit (gate-machinery-audit-arc): PROOF INTEGRITY. PR1119 on 2026-08-03 fired on
@@ -121,7 +121,8 @@ import {
   projectDecisionFacts,
   type DecisionFacts,
 } from "./decision-source-decay.js";
-import { GATE_PLAN } from "./gate-order.js";
+import { discoverWorkspaceProjects } from "./ci-affected.js";
+import { checkNameFor, discoverChecks } from "./gate-checks.js";
 import { registeredMirrorRoutes } from "./mirror-conformance.js";
 import { MIRROR_SURFACE, REFERENCE_SURFACE } from "./route-surfaces.js";
 import { parseDispatchedRoutes } from "./route-tables.js";
@@ -938,90 +939,76 @@ const NO_DESCRIBED_CHANGES: readonly ChangeEvent[] = [];
 // ---------------------------------------------------------------------------
 
 /**
- * The `check:*` scripts the `gate` script ACTUALLY RUNS, read from the gate script itself.
+ * Every CHECK the gate runs, with the sources that produce its output — the gate's OWN discovery
+ * (ADR-0606 D1): the same check files `pnpm gate` finds by name and runs, so there is no second
+ * roster to scrape and nothing for this one to drift from. Each check's entry is its own file.
  *
  * A REGISTRY, NOT A SECOND LIST — the same discipline `mirror-pair-drift` uses in deriving its
  * coverage from the real `MIRRORS` registry. A hand-kept list of "which checks are advisory" would be
  * two spellings of one fact drifting apart, which is the class this whole sweep exists to fence.
  */
-const GATE_CHECK = /pnpm\s+(check:[\w-]+)/g;
-/** `pnpm --filter @storytree/cli exec node --import tsx src/foo.ts [--flag]` */
-const CLI_ENTRY = /src\/([\w-]+\.ts)\b/;
-/** `node scripts/foo.mjs` */
-const SCRIPT_ENTRY = /(scripts\/[\w-]+\.mjs)\b/;
 /** A sibling module in the same directory — `import { x } from "./foo.js"`. */
 const LOCAL_IMPORT = /from\s+"\.\/([\w-]+)\.js"/g;
 
-/** The npm scripts table, read once. An unreadable/!object `scripts` yields none. */
-function loadScripts(root: string) {
-  const parsed: unknown = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
-  const scripts = (parsed as { scripts?: unknown }).scripts;
-  if (typeof scripts !== "object" || scripts === null) return {};
-  const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(scripts as Record<string, unknown>)) {
-    if (typeof value === "string") out[key] = value;
+/** The same-directory modules one source imports, read, skipping any that are not `.ts` files. */
+function siblingSources(root: string, source: GateCheckSource): GateCheckSource[] {
+  const dir = path.posix.dirname(source.path);
+  const out: GateCheckSource[] = [];
+  for (const match of source.text.matchAll(LOCAL_IMPORT)) {
+    const rel = `${dir}/${match[1]}.ts`;
+    const abs = path.join(root, rel);
+    // A sibling that does not resolve to a `.ts` is a type-only or generated import, not a
+    // renderer — it contributes no output and is not a blind spot.
+    if (existsSync(abs)) out.push({ path: rel, text: readFileSync(abs, "utf8") });
   }
-  return out satisfies Record<string, string>;
-}
-
-/** The repo-relative entry file a check's command runs, or `undefined` for a shape not recognised. */
-function checkEntryFile(command: string | undefined): string | undefined {
-  if (command === undefined) return undefined;
-  const cli = CLI_ENTRY.exec(command);
-  if (cli?.[1] !== undefined) return `packages/cli/src/${cli[1]}`;
-  const script = SCRIPT_ENTRY.exec(command);
-  return script?.[1];
+  return out;
 }
 
 /**
- * Enumerate every `check:*` step in `pnpm gate`, with the sources that produce its output: the entry
- * plus ONE HOP of its sibling imports (this repo splits advisory checks entrypoint/judge, and the
- * printed lines live in the judge).
+ * Enumerate every gate check, with the sources that produce its output: the entry plus TWO HOPS of
+ * its sibling imports. This repo splits advisory checks entrypoint/judge, and the printed lines live
+ * in the judge — and since a check is a file named for itself, four checks are a THIN entry over the
+ * module that holds their logic (`check-guidance.ts` over `build-claude-md.ts`), which puts that
+ * module's own judges one hop further out. Two hops keeps each of them swept exactly as when the
+ * gate ran the wrapped module directly.
  *
- * THROWS on an empty roster AND on a check whose entry cannot be resolved or read, for the reason
+ * THROWS when the gate's discovery refuses a file or finds no live check, for the reason
  * {@link loadSurfaceRoutes} and {@link loadTestFileFacts} do: a check this cannot see contributes no
- * findings, so a broken resolution would report a clean sweep over a check it never opened.
+ * findings, so a broken discovery would report a clean sweep over checks it never opened.
  * {@link runDecaySweep} turns the throw into an ESCALATION (the sweep went blind) — the honest answer,
- * and the one no ceiling can clear. A novel command shape is cheap to teach the resolver; silently
- * skipping it is exactly the under-reporting this arc fences.
+ * and the one no ceiling can clear.
  */
 function loadGateChecks(root: string): GateCheckFacts[] {
-  const scripts = loadScripts(root);
-  const gate = scripts["gate"];
-  if (gate === undefined) throw new Error("the root package.json declares no `gate` script");
-
-  // The gate's step list moved OUT of the `gate` script's text on 2026-08-04: the script was a 25-link
-  // `&&` chain and is now a runner over the declared `GATE_PLAN` (parked entry
-  // `gate-runs-every-step-and-reports-per-step`). Scraping `pnpm check:x` tokens out of the script
-  // therefore observes NOTHING and this instrument correctly went blind — read the plan instead, which
-  // is the same roster and can no longer be lost to a change in how the script is spelled. The
-  // {@link GATE_CHECK} fallback stays for a chain-shaped `gate` (a revert, or another checkout).
-  const fromPlan = GATE_PLAN.map((s) => s.check).filter((c) => c !== undefined);
-  const fromScript = [...gate.matchAll(GATE_CHECK)].map((m) => m[1]).filter((n) => n !== undefined);
-  const names = [...new Set(fromPlan.length > 0 ? fromPlan : fromScript)];
-  requireObserved(names.length, "neither GATE_PLAN nor the `gate` script names any `check:*` step");
+  const discovery = discoverChecks(
+    root,
+    discoverWorkspaceProjects(root).map((project) => project.dir),
+  );
+  if (discovery.refused.length > 0) {
+    throw new Error(
+      `the gate's own discovery refused ${discovery.refused.map((r) => `${r.path} (${r.reason})`).join("; ")}`,
+    );
+  }
+  requireObserved(discovery.live.length, "the gate's discovery found no live check");
 
   const checks: GateCheckFacts[] = [];
-  for (const script of names) {
-    const entryFile = checkEntryFile(scripts[script]);
-    if (entryFile === undefined) {
-      throw new Error(`${script}: cannot resolve an entry file from its command`);
-    }
-    const entryAbs = path.join(root, entryFile);
-    if (!existsSync(entryAbs)) throw new Error(`${script}: entry ${entryFile} does not exist`);
-
-    const entryText = readFileSync(entryAbs, "utf8");
-    const sources: GateCheckSource[] = [{ path: entryFile, text: entryText }];
-    if (entryFile.startsWith("packages/cli/src/")) {
-      for (const match of entryText.matchAll(LOCAL_IMPORT)) {
-        const rel = `packages/cli/src/${match[1]}.ts`;
-        const abs = path.join(root, rel);
-        // A sibling that does not resolve to a `.ts` is a type-only or generated import, not a
-        // renderer — it contributes no output and is not a blind spot.
-        if (existsSync(abs)) sources.push({ path: rel, text: readFileSync(abs, "utf8") });
+  for (const check of discovery.live) {
+    const entry: GateCheckSource = { path: check.path, text: readFileSync(path.join(root, check.path), "utf8") };
+    const seen = new Set<string>([entry.path]);
+    const sources: GateCheckSource[] = [entry];
+    let frontier: GateCheckSource[] = [entry];
+    for (const _ of [1, 2]) {
+      const next: GateCheckSource[] = [];
+      for (const source of frontier) {
+        for (const sibling of siblingSources(root, source)) {
+          if (seen.has(sibling.path)) continue;
+          seen.add(sibling.path);
+          sources.push(sibling);
+          next.push(sibling);
+        }
       }
+      frontier = next;
     }
-    checks.push({ script, entryFile, sources });
+    checks.push({ script: check.name, entryFile: check.path, sources });
   }
   return checks;
 }
@@ -1132,12 +1119,6 @@ function readGitEvidence(root: string): GitEvidence {
 const WORKSPACE_SHAPE = ["package.json", "pnpm-workspace.yaml"] as const;
 /** Where `mirror-pair-drift` reads its registered-pairs exemption from. */
 const MIRROR_REGISTRY = "packages/cli/src/mirror-conformance.ts";
-/**
- * Where `warn-list-hygiene` reads its ROSTER from — which checks are swept at all. It moved out of the
- * `gate` script's text on 2026-08-04 (see {@link loadGateChecks}); the root `package.json` still supplies
- * each check's COMMAND, so BOTH are cross-inputs and the guard below names both.
- */
-const GATE_ROSTER = "packages/cli/src/gate-order.ts";
 
 /**
  * Which instruments cannot be split per-file THIS RUN, and why.
@@ -1170,12 +1151,15 @@ function crossInputGuards(ev: GitEvidence): Map<string, string> {
         "source files are untouched; charged rather than excused",
     );
   }
-  const touchedRoster = [GATE_ROSTER, "package.json"].filter((f) => ev.touched.has(f));
+  // The ROSTER is the set of check FILES the gate finds (ADR-0606 D1), so it moves whenever a branch
+  // touches one: adding a check, retiring one, or re-declaring one brings sources into the sweep that
+  // this branch never opened. Any touched check-named file charges the instrument's whole population.
+  const touchedRoster = [...ev.touched].filter((f) => checkNameFor(path.posix.basename(f)) !== undefined);
   if (touchedRoster.length > 0) {
     guards.set(
       WARN_LIST_HYGIENE,
-      `this branch changed ${touchedRoster.join(", ")} — the gate's ROSTER decides which checks are ` +
-        "swept at all and the root manifest supplies each one's command, so a signal can appear for a " +
+      `this branch changed ${touchedRoster.join(", ")} — a check FILE is what puts a check on the gate's ` +
+        "roster, and the roster decides which checks are swept at all, so a signal can appear for a " +
         "check whose own sources are untouched; charged rather than excused",
     );
   }

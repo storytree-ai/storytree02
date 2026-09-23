@@ -8,31 +8,25 @@ import assert from "node:assert/strict";
 
 import { discoverWorkspaceProjects } from "./ci-affected.js";
 import {
-  type BuiltInLegs,
   CHECK_NAME,
   type CheckFile,
   DECLARATION_CLOSER,
   DECLARATION_OPENER,
   type LiveCheck,
   type LiveCheckDeclaration,
+  checkInvocation,
   checkNameFor,
   checkStep,
   deriveGatePlan,
   discoverChecks,
   findCheckFiles,
+  listGatePlan,
+  loadGatePlan,
   readCheckDeclaration,
+  renderGatePlanListing,
   sortDeclaredChecks,
 } from "./gate-checks.js";
-import {
-  GATE_PLAN,
-  type GatePlanStep,
-  PRE_EXPENSIVE_CHECKS,
-  RETIRED_CHECKS,
-  SHARED_ENVIRONMENT_CHECKS,
-  SKIP_CAPABLE_CHECKS,
-  ciIdentityFor,
-  evaluateGateOrder,
-} from "./gate-order.js";
+import { BUILT_IN_LEGS, type BuiltInLegs, type GatePlanStep } from "./gate-order.js";
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
 
@@ -52,7 +46,7 @@ function refusal(source: string): string {
 
 // ── reading one declaration ──────────────────────────────────────────────────────────────────
 
-test("a full live declaration reads back as exactly what it says", () => {
+test("checks-are-found-from-their-files: a full live declaration reads back as exactly what it says", () => {
   const read = readCheckDeclaration(
     checkSource([
       "runs: local",
@@ -85,7 +79,7 @@ test("a full live declaration reads back as exactly what it says", () => {
   });
 });
 
-test("a minimal live declaration reads with no identity, no skip and nothing it must precede", () => {
+test("checks-are-found-from-their-files: a minimal live declaration reads with no identity, no skip and nothing it must precede", () => {
   assert.deepEqual(readCheckDeclaration(checkSource(MINIMAL)), {
     ok: true,
     declaration: {
@@ -101,7 +95,7 @@ test("a minimal live declaration reads with no identity, no skip and nothing it 
   });
 });
 
-test("every placement, subject, cost, identity and CI skip disposition is a value a declaration may take", () => {
+test("checks-are-found-from-their-files: every placement, subject, cost, identity and CI skip disposition is a value a declaration may take", () => {
   const accepted = (lines: readonly string[]): LiveCheckDeclaration => {
     const read = readCheckDeclaration(checkSource(lines));
     assert.ok(read.ok && read.declaration.status === "live", JSON.stringify(read));
@@ -124,7 +118,7 @@ test("every placement, subject, cost, identity and CI skip disposition is a valu
   }
 });
 
-test("a value outside its closed set is refused, naming the key", () => {
+test("checks-are-found-from-their-files: a value outside its closed set is refused, naming the key", () => {
   assert.match(refusal(checkSource(["runs: sometimes", "subject: own-work", "cost: seconds", "why: w"])), /runs: /);
   assert.match(refusal(checkSource(["runs: both", "subject: mine", "cost: seconds", "why: w"])), /subject: /);
   assert.match(refusal(checkSource(["runs: both", "subject: own-work", "cost: hours", "why: w"])), /cost: /);
@@ -132,7 +126,7 @@ test("a value outside its closed set is refused, naming the key", () => {
   assert.match(refusal(checkSource([...MINIMAL, "skip:", "  when: x", "  inCi: shrug"])), /skip\.inCi: /);
 });
 
-test("an unknown key is refused as a typo, at the top level and inside skip", () => {
+test("checks-are-found-from-their-files: an unknown key is refused as a typo, at the top level and inside skip", () => {
   assert.match(refusal(checkSource([...MINIMAL, "rnus: both"])), /Unrecognized key\(s\) in object: 'rnus'/);
   assert.match(
     refusal(checkSource([...MINIMAL, "skip:", "  when: x", "  inCi: failure", "  reason: y"])),
@@ -140,18 +134,18 @@ test("an unknown key is refused as a typo, at the top level and inside skip", ()
   );
 });
 
-test("a missing or blank reason is refused — a declaration must say why the check exists", () => {
+test("checks-are-found-from-their-files: a missing or blank reason is refused — a declaration must say why the check exists", () => {
   assert.match(refusal(checkSource(["runs: both", "subject: own-work", "cost: seconds"])), /why: Required/);
   assert.match(refusal(checkSource(["runs: both", "subject: own-work", "cost: seconds", "why: '   '"])), /why: /);
   assert.match(refusal(checkSource([...MINIMAL, "skip:", "  when: ''", "  inCi: failure"])), /skip\.when: /);
 });
 
-test("every clause of a malformed declaration is reported, not just the first", () => {
+test("checks-are-found-from-their-files: every clause of a malformed declaration is reported, not just the first", () => {
   const reason = refusal(checkSource(["subject: own-work", "cost: seconds"]));
   assert.match(reason, /^its declaration is malformed — runs: Required; why: Required$/);
 });
 
-test("runsBefore names only well-formed checks", () => {
+test("checks-are-found-from-their-files: runsBefore names only well-formed checks", () => {
   for (const good of ["check:ab", "check:a-bc", "check:a-b-c", "check:a1-2b"]) {
     const read = readCheckDeclaration(checkSource([...MINIMAL, `runsBefore: [${good}]`]));
     assert.ok(read.ok, `${good} should be accepted: ${JSON.stringify(read)}`);
@@ -161,7 +155,7 @@ test("runsBefore names only well-formed checks", () => {
   }
 });
 
-test("a file that does not OPEN with the declaration is refused, whatever it holds further down", () => {
+test("checks-are-found-from-their-files: a file that does not OPEN with the declaration is refused, whatever it holds further down", () => {
   const opener = /does not open with `\/\* gate-check` — a gate check declares itself on its first line/;
   assert.match(refusal("export {};\n"), opener);
   assert.match(refusal(`\n${checkSource(MINIMAL)}`), opener);
@@ -169,20 +163,20 @@ test("a file that does not OPEN with the declaration is refused, whatever it hol
   assert.match(refusal(checkSource(MINIMAL).replace(DECLARATION_OPENER, "// gate-check")), opener);
 });
 
-test("a declaration that never closes is refused — the closer must stand alone on its line", () => {
+test("checks-are-found-from-their-files: a declaration that never closes is refused — the closer must stand alone on its line", () => {
   const unclosed = /its declaration never closes — no line reads exactly `\*\/`/;
   assert.match(refusal([DECLARATION_OPENER, ...MINIMAL].join("\n")), unclosed);
   assert.match(refusal([DECLARATION_OPENER, ...MINIMAL, ` ${DECLARATION_CLOSER}`, "x"].join("\n")), unclosed);
 });
 
-test("CRLF line endings read the same as LF", () => {
+test("checks-are-found-from-their-files: CRLF line endings read the same as LF", () => {
   assert.deepEqual(
     readCheckDeclaration(checkSource(MINIMAL).replaceAll("\n", "\r\n")),
     readCheckDeclaration(checkSource(MINIMAL)),
   );
 });
 
-test("a YAML error or a YAML warning is refused, quoting the parser's first line", () => {
+test("checks-are-found-from-their-files: a YAML error or a YAML warning is refused, quoting the parser's first line", () => {
   assert.match(
     refusal(checkSource([...MINIMAL, "runs: local"])),
     /^its declaration is not clean YAML: Map keys must be unique at line 5, column 1:$/,
@@ -193,13 +187,13 @@ test("a YAML error or a YAML warning is refused, quoting the parser's first line
   );
 });
 
-test("a declaration that is not a mapping is refused as a whole", () => {
+test("checks-are-found-from-their-files: a declaration that is not a mapping is refused as a whole", () => {
   assert.match(refusal(checkSource([])), /\(the whole declaration\): Expected object, received null/);
   assert.match(refusal(checkSource(["just a string"])), /\(the whole declaration\): Expected object, received string/);
   assert.match(refusal(checkSource(["- a", "- b"])), /\(the whole declaration\): Expected object, received array/);
 });
 
-test("a retired declaration reads as retired, with the files it left behind", () => {
+test("checks-are-found-from-their-files: a retired declaration reads as retired, with the files it left behind", () => {
   assert.deepEqual(
     readCheckDeclaration(checkSource(["retired: ADR-0311 D2", "sources: [coverage-gate.ts, coverage-drain.ts]"])),
     {
@@ -217,7 +211,7 @@ test("a retired declaration reads as retired, with the files it left behind", ()
   });
 });
 
-test("a retired declaration carries nothing a live one does, names a decision, and names only sibling .ts files", () => {
+test("checks-are-found-from-their-files: a retired declaration carries nothing a live one does, names a decision, and names only sibling .ts files", () => {
   const malformed = /^its retired declaration is malformed — /;
   assert.match(refusal(checkSource(["retired: ADR-0311 D2", "runs: both"])), malformed);
   assert.match(refusal(checkSource(["retired: ' '"])), /retired: /);
@@ -229,7 +223,7 @@ test("a retired declaration carries nothing a live one does, names a decision, a
 
 // ── what counts as a check file ──────────────────────────────────────────────────────────────
 
-test("a check's name comes from its file name, in either of the two shapes", () => {
+test("checks-are-found-from-their-files: a check's name comes from its file name, in either of the two shapes", () => {
   assert.equal(checkNameFor("check-boundaries.ts"), "check:boundaries");
   assert.equal(checkNameFor("land-art-check.ts"), "check:land-art");
   assert.equal(checkNameFor("check-foo-check.ts"), "check:foo-check");
@@ -237,7 +231,7 @@ test("a check's name comes from its file name, in either of the two shapes", () 
   assert.equal(checkNameFor("check-Foo.ts"), "check:Foo");
 });
 
-test("test files, other extensions and near-misses are not checks at all", () => {
+test("checks-are-found-from-their-files: test files, other extensions and near-misses are not checks at all", () => {
   for (const name of [
     "check-boundaries.test.ts",
     "web-experience-check.test.ts",
@@ -257,14 +251,14 @@ test("test files, other extensions and near-misses are not checks at all", () =>
   }
 });
 
-test("CHECK_NAME accepts kebab-case stems and nothing else", () => {
+test("checks-are-found-from-their-files: CHECK_NAME accepts kebab-case stems and nothing else", () => {
   for (const good of ["check:a", "check:ab", "check:a-b", "check:a1-b2-c3"]) assert.ok(CHECK_NAME.test(good), good);
   for (const bad of ["check:A", "check:a_b", "check:a--b", "check:a.test", "xcheck:a", "check:a "]) {
     assert.ok(!CHECK_NAME.test(bad), bad);
   }
 });
 
-test("findCheckFiles keeps only check-shaped files, each in its workspace, in NAME order", () => {
+test("checks-are-found-from-their-files: findCheckFiles keeps only check-shaped files, each in its workspace, in NAME order", () => {
   const found = findCheckFiles(
     [
       "packages/cli/src/check-zeta.ts",
@@ -286,12 +280,12 @@ test("findCheckFiles keeps only check-shaped files, each in its workspace, in NA
   });
 });
 
-test("a file is assigned the workspace that CONTAINS it, never one that merely shares a prefix", () => {
+test("checks-are-found-from-their-files: a file is assigned the workspace that CONTAINS it, never one that merely shares a prefix", () => {
   const found = findCheckFiles(["packages/cli2/src/check-x.ts"], ["packages/cli", "packages/cli2"]);
   assert.deepEqual(found.files, [{ name: "check:x", path: "packages/cli2/src/check-x.ts", workspace: "packages/cli2" }]);
 });
 
-test("findCheckFiles refuses a misnamed check, one outside every workspace, and every file of a shared name", () => {
+test("checks-are-found-from-their-files: findCheckFiles refuses a misnamed check, one outside every workspace, and every file of a shared name", () => {
   const found = findCheckFiles(
     [
       "packages/cli/src/check-Bad.ts",
@@ -323,7 +317,7 @@ test("findCheckFiles refuses a misnamed check, one outside every workspace, and 
   ]);
 });
 
-test("sortDeclaredChecks splits found files by declaration, keeps earlier refusals, and skips a file gone from disk", () => {
+test("checks-are-found-from-their-files: sortDeclaredChecks splits found files by declaration, keeps earlier refusals, and skips a file gone from disk", () => {
   const file = (name: string): CheckFile => ({ name: `check:${name}`, path: `p/src/check-${name}.ts`, workspace: "p" });
   const sources = new Map<string, string>([
     ["p/src/check-live.ts", checkSource(MINIMAL)],
@@ -354,7 +348,7 @@ function git(cwd: string, ...args: string[]): void {
   assert.equal(res.status, 0, `git ${args.join(" ")}: ${res.stderr}`);
 }
 
-test("discoverChecks finds committed and untracked checks, and never an ignored, deleted or out-of-workspace one", () => {
+test("checks-are-found-from-their-files: discoverChecks finds committed and untracked checks, and never an ignored, deleted or out-of-workspace one", () => {
   const root = mkdtempSync(path.join(tmpdir(), "gate-checks-"));
   try {
     const write = (file: string, text: string): void => {
@@ -383,7 +377,7 @@ test("discoverChecks finds committed and untracked checks, and never an ignored,
   }
 });
 
-test("discoverChecks THROWS when git cannot list the tree — a discovery that could not look found nothing", () => {
+test("checks-are-found-from-their-files: discoverChecks THROWS when git cannot list the tree — a discovery that could not look found nothing", () => {
   const root = mkdtempSync(path.join(tmpdir(), "gate-checks-nogit-"));
   try {
     // Not a repository: git runs, refuses, and says why on stderr.
@@ -445,7 +439,7 @@ function reasons(checks: readonly LiveCheck[]): readonly string[] {
   return derived.ok ? [] : derived.reasons;
 }
 
-test("the plan is the fixed legs with each check in the block its subject and cost name", () => {
+test("order-is-derived-from-declarations: the plan is the fixed legs with each check in the block its subject and cost name", () => {
   assert.deepEqual(
     commands([
       check("shared-slow", { subject: "shared-environment", cost: "minutes" }),
@@ -457,7 +451,7 @@ test("the plan is the fixed legs with each check in the block its subject and co
   );
 });
 
-test("within a block the given order holds, except where a check must run before another", () => {
+test("order-is-derived-from-declarations: within a block the given order holds, except where a check must run before another", () => {
   assert.deepEqual(commands([check("b"), check("a")]).slice(1, 3), ["check:b", "check:a"]);
   assert.deepEqual(
     commands([check("a"), check("m", { runsBefore: ["check:a"] }), check("z")]).slice(1, 4),
@@ -469,14 +463,14 @@ test("within a block the given order holds, except where a check must run before
   );
 });
 
-test("a runsBefore into a LATER block is already satisfied and refuses nothing", () => {
+test("order-is-derived-from-declarations: a runsBefore into a LATER block is already satisfied and refuses nothing", () => {
   assert.deepEqual(
     commands([check("early", { runsBefore: ["check:late"] }), check("late", { subject: "shared-environment" })]),
     ["pnpm lint", "check:early", "pnpm -r typecheck", "pnpm -r test", "pnpm -r build", "check:late"],
   );
 });
 
-test("a runsBefore cycle is refused, naming every check caught in it", () => {
+test("order-is-derived-from-declarations: a runsBefore cycle is refused, naming every check caught in it", () => {
   assert.deepEqual(reasons([check("a", { runsBefore: ["check:b"] }), check("b", { runsBefore: ["check:a"] }), check("c")]), [
     "these checks' runsBefore declarations form a cycle: check:a, check:b",
   ]);
@@ -485,13 +479,13 @@ test("a runsBefore cycle is refused, naming every check caught in it", () => {
   ]);
 });
 
-test("a runsBefore naming no live check is refused", () => {
+test("order-is-derived-from-declarations: a runsBefore naming no live check is refused", () => {
   assert.deepEqual(reasons([check("a", { runsBefore: ["check:ghost"] })]), [
     "check:a declares runsBefore check:ghost, which is not a live gate check",
   ]);
 });
 
-test("a runsBefore into an EARLIER block is refused — the declaration contradicts its own subject and cost", () => {
+test("order-is-derived-from-declarations: a runsBefore into an EARLIER block is refused — the declaration contradicts its own subject and cost", () => {
   const backwards = (declarer: Partial<LiveCheckDeclaration>, target: Partial<LiveCheckDeclaration>): readonly string[] =>
     reasons([check("declarer", { ...declarer, runsBefore: ["check:target"] }), check("target", target)]);
   const expected = ["check:declarer declares runsBefore check:target, but check:target's subject and cost run it earlier"];
@@ -500,40 +494,264 @@ test("a runsBefore into an EARLIER block is refused — the declaration contradi
   assert.deepEqual(backwards({ subject: "shared-environment", cost: "minutes" }, { subject: "shared-environment" }), expected);
 });
 
-test("every refusal is reported together, not only the first", () => {
+test("order-is-derived-from-declarations: every refusal is reported together, not only the first", () => {
   assert.equal(
     reasons([check("a", { runsBefore: ["check:a"] }), check("b", { runsBefore: ["check:ghost"] })]).length,
     2,
   );
 });
-
-test("checkStep labels a check by its name and carries an identity only when one is declared", () => {
+test("order-is-derived-from-declarations: checkStep labels a check by its name, runs its own file, and carries only what it declared", () => {
   assert.deepEqual(checkStep(check("plain")), {
     command: "check:plain",
     check: "check:plain",
+    invocation: "pnpm -C packages/cli exec node --import ../../scripts/tsx-cache-off.mjs --import tsx src/check-plain.ts",
+    source: "packages/cli/src/check-plain.ts",
     runs: "both",
     subject: "own-work",
     cost: "seconds",
     why: "why plain",
   });
-  assert.deepEqual(checkStep(check("reader", { ciIdentity: "ci-presence", runs: "local" })), {
+  const skip = { when: "its input is absent", inCi: "failure" } as const;
+  assert.deepEqual(checkStep(check("reader", { ciIdentity: "ci-presence", runs: "local", skip })), {
     command: "check:reader",
     check: "check:reader",
+    invocation: "pnpm -C packages/cli exec node --import ../../scripts/tsx-cache-off.mjs --import tsx src/check-reader.ts",
+    source: "packages/cli/src/check-reader.ts",
     runs: "local",
     subject: "own-work",
     cost: "seconds",
+    skip,
     ciIdentity: "ci-presence",
     why: "why reader",
   });
 });
 
+// ── running a found check ────────────────────────────────────────────────────────────────────
+
+test("checks-are-found-from-their-files: a check runs its own file from its own workspace, in the form the root scripts always used", () => {
+  assert.equal(
+    checkInvocation({ name: "check:boundaries", path: "packages/cli/src/check-boundaries.ts", workspace: "packages/cli" }),
+    "pnpm -C packages/cli exec node --import ../../scripts/tsx-cache-off.mjs --import tsx src/check-boundaries.ts",
+  );
+  assert.equal(
+    checkInvocation({
+      name: "check:land-art",
+      path: "packages/forest-world-r3f/harness/land-art-check.ts",
+      workspace: "packages/forest-world-r3f",
+    }),
+    "pnpm -C packages/forest-world-r3f exec node --import ../../scripts/tsx-cache-off.mjs --import tsx harness/land-art-check.ts",
+  );
+  // The way back to the repo's `scripts/` is counted from the workspace's own depth.
+  assert.equal(
+    checkInvocation({ name: "check:deep", path: "a/b/c/check-deep.ts", workspace: "a/b/c" }),
+    "pnpm -C a/b/c exec node --import ../../../scripts/tsx-cache-off.mjs --import tsx check-deep.ts",
+  );
+});
+
+test("checks-are-found-from-their-files: a declared SKIP survives the gate's invocation as exit 3 — the protocol the runner reads", () => {
+  // End to end, through pnpm, because the hazard is pnpm's: `--filter … exec` turns a child's 3 into
+  // 1 (measured 2026-08-08). The gate builds this command itself now, so it is proven here, not assumed.
+  const root = checkoutRoot();
+  const dir = mkdtempSync(path.join(tmpdir(), "gate-skip-exit-"));
+  try {
+    const file = path.join(dir, "check-skips.ts");
+    writeFileSync(file, "process.exit(3);\n", "utf8");
+    const fromWorkspace = path.relative(path.join(root, "packages/cli"), file).split(path.sep).join("/");
+    const invocation = checkInvocation({
+      name: "check:skips",
+      path: `packages/cli/${fromWorkspace}`,
+      workspace: "packages/cli",
+    });
+    const res = spawnSync(invocation, { cwd: root, shell: true, encoding: "utf8" });
+    assert.equal(res.status, 3, `the skip code did not survive: ${res.stderr}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ── the whole plan, from a working tree ──────────────────────────────────────────────────────
+
+/** A throwaway working tree holding `files` (repo-relative path → text), with git initialised. */
+function workingTree(files: Readonly<Record<string, string>>): string {
+  const root = mkdtempSync(path.join(tmpdir(), "gate-plan-"));
+  git(root, "init", "-q");
+  for (const [file, text] of Object.entries(files)) {
+    mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+    writeFileSync(path.join(root, file), text, "utf8");
+  }
+  return root;
+}
+
+const SHARED = ["runs: local", "subject: shared-environment", "cost: seconds", "ciIdentity: ci-presence", "why: w"];
+
+test("checks-are-found-from-their-files: loadGatePlan assembles the whole plan — fixed legs, found checks in their blocks, and the retired listed apart", () => {
+  const root = workingTree({
+    "packages/tool/src/check-shared.ts": checkSource(SHARED),
+    "packages/tool/src/check-alpha.ts": checkSource(MINIMAL),
+    "packages/tool/src/check-old.ts": checkSource(["retired: ADR-0311 D2"]),
+    "packages/tool/src/lib.ts": "export {};\n",
+  });
+  try {
+    const loaded = loadGatePlan(root, ["packages/tool"], LEGS);
+    assert.ok(loaded.ok, loaded.ok ? "" : loaded.reasons.join("\n"));
+    assert.deepEqual(
+      loaded.plan.map((s) => s.command),
+      ["pnpm lint", "check:alpha", "pnpm -r typecheck", "pnpm -r test", "pnpm -r build", "check:shared"],
+    );
+    assert.equal(loaded.plan[5]?.ciIdentity, "ci-presence");
+    assert.deepEqual(loaded.retired.map((c) => [c.name, c.declaration.retiredBy]), [["check:old", "ADR-0311 D2"]]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("checks-are-found-from-their-files: loadGatePlan refuses — and assembles nothing — when a check file is refused or no live check exists", () => {
+  const broken = workingTree({
+    "packages/tool/src/check-alpha.ts": checkSource(MINIMAL),
+    "packages/tool/src/check-broken.ts": "export {};\n",
+  });
+  const retiredOnly = workingTree({ "packages/tool/src/check-old.ts": checkSource(["retired: ADR-0311 D2"]) });
+  try {
+    const refused = loadGatePlan(broken, ["packages/tool"], LEGS);
+    assert.equal(refused.ok, false);
+    assert.deepEqual(refused.ok ? [] : refused.reasons, [
+      "packages/tool/src/check-broken.ts: it does not open with `/* gate-check` — a gate check declares " +
+        "itself on its first line, before anything else (ADR-0606 D1)",
+    ]);
+    const empty = loadGatePlan(retiredOnly, ["packages/tool"], LEGS);
+    assert.deepEqual(empty.ok ? [] : empty.reasons, [
+      "no live check was found at all — a gate of only its fixed legs is not the gate",
+    ]);
+  } finally {
+    rmSync(broken, { recursive: true, force: true });
+    rmSync(retiredOnly, { recursive: true, force: true });
+  }
+});
+
+test("checks-are-found-from-their-files: loadGatePlan turns a git that could not look into a refusal, and a contradictory declaration set too", () => {
+  const nowhere = mkdtempSync(path.join(tmpdir(), "gate-plan-nogit-"));
+  const contradictory = workingTree({
+    "packages/tool/src/check-alpha.ts": checkSource([...MINIMAL, "runsBefore: [check:ghost]"]),
+  });
+  try {
+    const blind = loadGatePlan(nowhere, ["packages/tool"], LEGS);
+    assert.equal(blind.ok, false);
+    assert.match(blind.ok ? "" : (blind.reasons[0] ?? ""), /^the gate could not list its checks: git ls-files exited 128/);
+    assert.deepEqual(
+      (() => {
+        const loaded = loadGatePlan(contradictory, ["packages/tool"], LEGS);
+        return loaded.ok ? [] : loaded.reasons;
+      })(),
+      ["check:alpha declares runsBefore check:ghost, which is not a live gate check"],
+    );
+  } finally {
+    rmSync(nowhere, { recursive: true, force: true });
+    rmSync(contradictory, { recursive: true, force: true });
+  }
+});
+
+test("checks-are-found-from-their-files: an EMPTY listing is refused, never read as a gate with no checks", () => {
+  // git answers exit 0 with NOTHING for a directory it ignores — the mutation rung's `.stryker-tmp/`
+  // copy is the measured case — so an empty listing is a discovery that could not see, not a finding.
+  const root = workingTree({ "elsewhere/readme.md": "x\n" });
+  try {
+    assert.throws(
+      () => discoverChecks(root, ["packages/tool", "apps/site"]),
+      /^Error: the gate could not list its checks: git listed no files at all under packages\/tool, apps\/site in .* — refusing to read that as a gate with no checks$/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ── what `pnpm gate --list` shows ────────────────────────────────────────────────────────────
+
+test("checks-are-found-from-their-files: --list shows each step with its declaration, file and owner, then the retired checks", () => {
+  const plan = [
+    step("pnpm lint"),
+    checkStep(check("reader", { ciIdentity: "ci-presence", skip: { when: "absent", inCi: "failure" } })),
+    { ...step("pnpm -r build"), runs: "ci" as const },
+  ];
+  const retired = [
+    {
+      name: "check:old",
+      path: "packages/cli/src/check-old.ts",
+      workspace: "packages/cli",
+      declaration: { status: "retired" as const, retiredBy: "ADR-0311 D2", sources: [] },
+    },
+  ];
+  // An owner lookup that answers for ANY file, so a fixed leg's `null` owner can only come from its
+  // having no file at all — never from the lookup happening to know nothing.
+  const owners = new Map([["packages/cli/src/check-reader.ts", "reader-capability"]]);
+  const listing = listGatePlan(plan, retired, (file) => owners.get(file) ?? "retired-owner");
+  assert.deepEqual(listing, {
+    steps: [
+      {
+        command: "pnpm lint",
+        check: null,
+        runs: "both",
+        subject: "own-work",
+        cost: "seconds",
+        ciIdentity: null,
+        skip: null,
+        source: null,
+        owner: null,
+      },
+      {
+        command: "check:reader",
+        check: "check:reader",
+        runs: "both",
+        subject: "own-work",
+        cost: "seconds",
+        ciIdentity: "ci-presence",
+        skip: { when: "absent", inCi: "failure" },
+        source: "packages/cli/src/check-reader.ts",
+        owner: "reader-capability",
+      },
+      {
+        command: "pnpm -r build",
+        check: null,
+        runs: "ci",
+        subject: "own-work",
+        cost: "seconds",
+        ciIdentity: null,
+        skip: null,
+        source: null,
+        owner: null,
+      },
+    ],
+    retired: [{ check: "check:old", retiredBy: "ADR-0311 D2", source: "packages/cli/src/check-old.ts", owner: "retired-owner" }],
+  });
+  assert.deepEqual(renderGatePlanListing(listing), [
+    "the gate plan — 3 steps, found and ordered from each check's own declaration (`pnpm gate` runs 2: both + local; `pnpm gate --ci` runs 3: both + ci)",
+    "   1. pnpm lint [both; own-work; seconds] a fixed leg of the gate",
+    "   2. check:reader [both; own-work; seconds, signs in as ci-presence, may SKIP] packages/cli/src/check-reader.ts — owner reader-capability",
+    "   3. pnpm -r build [ci; own-work; seconds] a fixed leg of the gate",
+    "retired — found, never run (ADR-0606 D6): 1",
+    "  check:old [ADR-0311 D2] packages/cli/src/check-old.ts — owner retired-owner",
+  ]);
+});
+
+test("checks-are-found-from-their-files: --list names a check whose file no ownership declaration covers, rather than hiding it", () => {
+  const retiredOrphan = {
+    name: "check:gone",
+    path: "packages/cli/src/check-gone.ts",
+    workspace: "packages/cli",
+    declaration: { status: "retired" as const, retiredBy: "ADR-0302 D4", sources: [] },
+  };
+  const listing = listGatePlan([checkStep(check("orphan"))], [retiredOrphan], () => undefined);
+  assert.equal(listing.steps[0]?.owner, null);
+  assert.equal(listing.retired[0]?.owner, null);
+  const lines = renderGatePlanListing(listing);
+  assert.match(lines[1] ?? "", /packages\/cli\/src\/check-orphan\.ts — owner \(none declared\)$/);
+  assert.equal(lines[3], "  check:gone [ADR-0302 D4] packages/cli/src/check-gone.ts — owner (none declared)");
+  assert.match(
+    renderGatePlanListing(listGatePlan([{ ...checkStep(check("local")), runs: "local" }], [], () => undefined))[0] ?? "",
+    /`pnpm gate` runs 1: both \+ local; `pnpm gate --ci` runs 0: both \+ ci/,
+  );
+});
+
 // ── the REAL tree ────────────────────────────────────────────────────────────────────────────
-//
-// ⚠ SCAFFOLDING, DELETED WITH `GATE_PLAN` (gate-checks-found-like-tests-arc inc-03's second PR). Until
-// the runner walks the discovered plan, two descriptions of every check exist — the hand list and
-// the files' own declarations — and this holds them to each other so the switch cannot move a
-// check's placement, subject, cost, identity or skip on its way through (ADR-0606 end state 7). It is
-// the two-list shape ADR-0606 removes, kept for exactly one landing; do not extend it.
 
 /**
  * The real checkout, asked of git rather than derived from this file's location. Under
@@ -546,91 +764,35 @@ function checkoutRoot(): string {
   return res.stdout.trim();
 }
 
-function realDiscovery() {
+function realWorkspaces(root: string): string[] {
+  return discoverWorkspaceProjects(root).map((p) => p.dir);
+}
+
+test("checks-are-found-from-their-files: every check-shaped file in this repo declares itself cleanly", () => {
   const root = checkoutRoot();
-  return discoverChecks(root, discoverWorkspaceProjects(root).map((p) => p.dir));
-}
-
-/** Prose compared across the two descriptions, whose line wrapping differs. */
-function words(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
-}
-
-test("SCAFFOLDING: every check-shaped file in this repo declares itself cleanly", () => {
-  assert.deepEqual(realDiscovery().refused, []);
+  const discovery = discoverChecks(root, realWorkspaces(root));
+  assert.deepEqual(discovery.refused, []);
+  assert.ok(discovery.live.length > 20, "the real tree holds the gate's checks");
 });
 
-test("SCAFFOLDING: the live checks the files declare are exactly GATE_PLAN's, each saying what GATE_PLAN says", () => {
-  const discovery = realDiscovery();
-  const planned = GATE_PLAN.filter((s) => s.check !== undefined);
-  assert.deepEqual(
-    discovery.live.map((c) => c.name),
-    planned.map((s) => s.check ?? "").sort((a, b) => a.localeCompare(b, "en")),
-    "the checks the files declare and GATE_PLAN's checks differ — until inc-03's switch deletes " +
-      "GATE_PLAN, a new check needs BOTH its GATE_PLAN entry and a `/* gate-check` declaration " +
-      "opening its file (see gate-checks.ts)",
-  );
-  for (const step of planned) {
-    const found = discovery.live.find((c) => c.name === step.check);
-    assert.ok(found !== undefined, `${step.check} is in GATE_PLAN but no file declares it`);
-    const d = found.declaration;
-    assert.deepEqual(
-      { runs: d.runs, subject: d.subject, cost: d.cost, ciIdentity: d.ciIdentity, skips: d.skip !== undefined },
-      {
-        runs: step.runs,
-        subject: step.subject,
-        cost: step.cost,
-        ciIdentity: ciIdentityFor(step),
-        skips: SKIP_CAPABLE_CHECKS.has(step.check ?? ""),
-      },
-      `${step.check}: its declaration disagrees with GATE_PLAN`,
-    );
-    assert.ok(words(d.why).startsWith(words(step.why)), `${step.check}: its why must carry GATE_PLAN's reason first`);
-    if (d.skip !== undefined) {
-      assert.equal(words(d.skip.when), words(SKIP_CAPABLE_CHECKS.get(step.check ?? "") ?? ""), `${step.check}: skip.when`);
-      assert.equal(d.skip.inCi, "failure", `${step.check}: every skip is a failure in CI today`);
-    }
-  }
+test("checks-are-found-from-their-files: the real plan runs every live check the tree declares, once each", () => {
+  const root = checkoutRoot();
+  const discovery = discoverChecks(root, realWorkspaces(root));
+  const loaded = loadGatePlan(root, realWorkspaces(root), BUILT_IN_LEGS);
+  assert.ok(loaded.ok, loaded.ok ? "" : loaded.reasons.join("\n"));
+  const planned = loaded.plan.flatMap((s) => (s.check === undefined ? [] : [s.check]));
+  assert.deepEqual([...planned].sort(), discovery.live.map((c) => c.name).sort());
+  assert.equal(new Set(planned).size, planned.length);
 });
 
-test("SCAFFOLDING: the retired checks the files declare are exactly RETIRED_CHECKS' surviving ones", () => {
-  const discovery = realDiscovery();
-  const surviving = [...RETIRED_CHECKS].filter(([, entry]) => entry.sources.length > 0);
-  assert.deepEqual(
-    discovery.retired.map((c) => c.name),
-    surviving.map(([name]) => name).sort((a, b) => a.localeCompare(b, "en")),
-  );
-  for (const [name, entry] of surviving) {
-    const found = discovery.retired.find((c) => c.name === name);
-    assert.ok(found !== undefined, `${name} has no declaring file`);
-    assert.equal(path.posix.basename(found.path), entry.sources[0], `${name}: its entry file`);
-    assert.equal(found.declaration.retiredBy, entry.retiredBy, `${name}: retired by`);
-    assert.deepEqual(found.declaration.sources, entry.sources.slice(1), `${name}: the files it left behind`);
-  }
-});
-
-test("SCAFFOLDING: the DERIVED order keeps both of GATE_PLAN's ordering axes and the manifest rung's lead", () => {
-  const legs = (...wanted: string[]): GatePlanStep[] =>
-    wanted.map((command) => {
-      const found = GATE_PLAN.find((s) => s.command === command);
-      assert.ok(found !== undefined, command);
-      return found;
-    });
-  const derived = deriveGatePlan(realDiscovery().live, {
-    lead: legs("pnpm lint"),
-    wall: legs("pnpm -r --no-bail typecheck", "pnpm -r --no-bail test"),
-    trail: legs("pnpm -r build"),
-  });
-  assert.ok(derived.ok, derived.ok ? "" : derived.reasons.join("\n"));
-  const order = evaluateGateOrder({
-    steps: derived.plan,
-    earlyChecks: PRE_EXPENSIVE_CHECKS,
-    lateChecks: SHARED_ENVIRONMENT_CHECKS,
-  });
-  assert.equal(order.verdict, "ok", order.message);
-  const at = (name: string): number => derived.plan.findIndex((s) => s.check === name);
+test("order-is-derived-from-declarations: the real plan puts the manifest rung ahead of every rung that reads the composed manifest", () => {
+  // The one `runsBefore` today, and a real dependency (ADR-0556 D4): a refused fragment tree is named
+  // once, under the manifest's own name, before its three readers each stand down on it.
+  const root = checkoutRoot();
+  const loaded = loadGatePlan(root, realWorkspaces(root), BUILT_IN_LEGS);
+  assert.ok(loaded.ok, loaded.ok ? "" : loaded.reasons.join("\n"));
+  const at = (name: string): number => loaded.plan.findIndex((s) => s.check === name);
   for (const reader of ["check:boundaries", "check:ownership-totality", "check:hierarchy-camps"]) {
-    assert.ok(at("check:manifest-fragments") < at(reader), `check:manifest-fragments must precede ${reader}`);
+    assert.ok(at("check:manifest-fragments") >= 0 && at("check:manifest-fragments") < at(reader), reader);
   }
-  assert.equal(derived.plan.length, GATE_PLAN.length);
 });

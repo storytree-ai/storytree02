@@ -97,13 +97,14 @@ why: >-
  * perfectly, and "a proof that cannot fail is not a proof" is the class this arc exists to fence.
  * The judge that owns the comparison rules is the pure {@link file://./mirror-conformance.ts}.
  *
- * TWO ARMS, TWO GATE STEPS, AND THE SPLIT IS THE DECISION (`--arm`, ADR-0496 D1).
+ * TWO ARMS, TWO GATE CHECKS, TWO FILES — AND THE SPLIT IS THE DECISION (ADR-0496 D1).
  *
- *   `--arm fixtures` (the default, and what `pnpm check:mirror-conformance` runs) — every registered
+ *   THIS FILE, the fixtures arm (`pnpm check:mirror-conformance`) — every registered
  *     pair over the synthetic inputs above. Opens no connection, holds no credential, needs no
  *     network. Stays in the gate's OWN-WORK block and ahead of CI's auth step, where it always was.
  *
- *   `--arm live` (`pnpm check:mirror-conformance-live`) — the `/api/activity` pair ONLY, over a
+ *   `check-mirror-conformance-live.ts` (`pnpm check:mirror-conformance-live`; this file refuses the
+ *     old `--arm live`) — the `/api/activity` pair ONLY, over a
  *     SNAPSHOT of the real `events.node_claim` ledger. Runs in the gate's SHARED-ENVIRONMENT block
  *     and below CI's keyless-WIF auth step, because it can red for a reason that is not this diff.
  *
@@ -1982,7 +1983,7 @@ function decodePayload(probe: Probe, inputs: MirrorInputSet, payload: unknown, a
  * Run one surface's probe over every input, in that surface's own app dir so its bare
  * specifiers resolve through its own `node_modules`. Returns the decoded `{ input: Entry[] }` map.
  */
-function runProbe(probe: Probe, inputs: MirrorInputSet, args: string[]) {
+export function runProbe(probe: Probe, inputs: MirrorInputSet, args: string[]) {
   const file = join(repoRoot, probe.file);
   if (!existsSync(file)) throw new ProbeError(`probe module not found: ${probe.file}`);
 
@@ -2020,156 +2021,6 @@ function runProbe(probe: Probe, inputs: MirrorInputSet, args: string[]) {
     out[arg] = decodePayload(probe, inputs, (parsed as Record<string, unknown>)[arg], arg);
   }
   return out satisfies Record<string, Entry[]>;
-}
-
-// ---------- the live-corpus arm ----------
-
-/**
- * The columns the live snapshot reads from `events.node_claim` — the SAME seven the desktop's
- * `CLAIM_ROW_COLUMNS` builds its query from, declared again here rather than imported.
- *
- * THE COPY IS SOUND, AND FOR A REASON THAT DOES NOT GENERALISE. `packages/cli` may not import
- * `apps/desktop` (ADR-0176 / `check:boundaries`), so a shared constant is not available; and a copy
- * that DRIFTED could not manufacture a false red, because both probes are handed the SAME rows. A
- * column missing here reaches both folds as an absent field and both normalise it identically —
- * the arm would narrow silently, never lie. It is the one place in this file where a hand-copy is
- * safe, and the narrowing is what the printed row count makes visible.
- *
- * NO STALENESS FILTER, deliberately: the fold is what is under test, and dropping an aged-out row
- * is one of its branches. Filtering in SQL would decide that branch upstream of the assertion —
- * the same mistake as injecting already-folded claims.
- */
-const LIVE_CLAIM_ROW_COLUMNS = [
-  "unit_id",
-  "session_id",
-  "grade",
-  "branch",
-  "intent",
-  "claimed_at",
-  "heartbeat_at",
-] as const;
-
-/** One live-arm snapshot: the fixture both probes fold, and how many real rows it carries. */
-interface LiveSnapshot {
-  readonly dir: string;
-  readonly path: string;
-  readonly rows: number;
-}
-
-/**
- * Read the real `events.node_claim` ledger ONCE and write it as an ordinary `activity-fixtures`
- * fixture — raw rows plus a FIXED `now`, the shape both probes already consume unchanged.
- *
- * `builds` and `departures` ride as `null`. That is the ADVISORY-ABSENCE value, not a gap: the
- * desktop's builds fold is inline inside a `pg` closure in `apps/desktop/electron/backend-entry.ts`
- * and cannot be reached without that surface opening a connection, and `departures` is shared
- * `@storytree/notice-board` code with no drift class. The claim fold is the one this arm is for.
- *
- * THROWS on an unreachable store, and the caller turns that into a LOUD failure. There is no
- * fallback to the synthetic fixtures by design: a check that quietly compared something else would
- * report health for the comparison it did not make (ADR-0302's lesson).
- */
-async function snapshotLiveActivity(): Promise<LiveSnapshot> {
-  // Loaded lazily so `--arm fixtures` never pulls `pg` or the Cloud SQL connector into the process
-  // at all — that arm holds no credential and must stay able to run where none exists.
-  const { createPool, closePool } = await import("@storytree/library/store");
-  const handle = await createPool();
-  let claimRows: unknown[];
-  try {
-    const result = await handle.pool.query(
-      `SELECT ${LIVE_CLAIM_ROW_COLUMNS.join(", ")} FROM events.node_claim`,
-    );
-    claimRows = result.rows as unknown[];
-  } finally {
-    await closePool(handle.pool, handle.connector);
-  }
-
-  const dir = mkdtempSync(join(tmpdir(), "storytree-activity-live-"));
-  const path = join(dir, "activity-live-corpus.json");
-  writeFileSync(
-    path,
-    JSON.stringify({ now: new Date().toISOString(), claimRows, builds: null, departures: null }),
-    "utf8",
-  );
-  return { dir, path, rows: claimRows.length };
-}
-
-/**
- * `--arm live`: the `/api/activity` pair over the real ledger. One row, one input, and the same
- * comparison rules the fixture arm uses — the only thing that changes is where the rows came from.
- */
-async function runLiveArm(): Promise<void> {
-  const target = MIRRORS.find((m) => m.inputs === "activity-fixtures");
-  if (target === undefined) {
-    // Fail CLOSED: the registry moved under this arm and it has nothing to run. Reporting a pass
-    // would make it a step that cannot fail.
-    console.error("✗ live mirror conformance: no registered pair uses `activity-fixtures`");
-    process.exit(1);
-  }
-  const { spec } = target;
-
-  let snapshot: LiveSnapshot;
-  try {
-    snapshot = await snapshotLiveActivity();
-  } catch (err) {
-    console.error(
-      `✗ live mirror conformance: the live store did not answer — ${(err as Error).message}\n\n` +
-        "This arm folds the REAL `events.node_claim` ledger through both surfaces, so an\n" +
-        "unreachable store means the comparison did not happen. It fails rather than falling back\n" +
-        "to the synthetic fixtures, which would report health for a check that verified nothing\n" +
-        "(ADR-0302). Bring the store up (`pnpm db:up`) and re-run; in CI this step sits below the\n" +
-        "keyless-WIF auth step and carries STORYTREE_DB_USER.",
-    );
-    process.exit(1);
-  }
-
-  try {
-    let reference: Record<string, Entry[]>;
-    let mirror: Record<string, Entry[]>;
-    try {
-      reference = runProbe(target.reference, target.inputs, [snapshot.path]);
-      mirror = runProbe(target.mirror, target.inputs, [snapshot.path]);
-    } catch (err) {
-      console.error(`✗ ${spec.surface}: probe failure — ${(err as Error).message}`);
-      process.exit(1);
-    }
-
-    const ref = reference[snapshot.path] ?? [];
-    const mir = mirror[snapshot.path] ?? [];
-    if (ref.length === 0) {
-      console.error(
-        `✗ ${spec.surface}: ${spec.reference} returned an EMPTY payload for live-corpus — ` +
-          "a vacuous comparison is not a pass",
-      );
-      process.exit(1);
-    }
-
-    const divergences: Divergence[] = compareMirrors(ref, mir, spec, "live-corpus");
-    if (divergences.length > 0) {
-      console.error(`\n✗ live mirror conformance: the two surfaces fold the real ledger differently\n`);
-      console.error(`${formatDivergences(spec, divergences)}\n`);
-      process.exit(1);
-    }
-
-    console.log(
-      `✓ ${spec.surface}: ${spec.mirror} matches ${spec.reference} over live-corpus ` +
-        `(${snapshot.rows} claim row(s), ${ref.length} entries)`,
-    );
-    if (snapshot.rows === 0) {
-      // NARROWED, not skipped — and not red either. The envelope WAS compared (the three `layer:`
-      // markers), so this arm did real work; what it could not reach is the fold, because the
-      // ledger holds nothing to fold. An empty ledger is an honest state of the world — nobody is
-      // working — so failing here would be a false red, and staying silent would let a comparison
-      // that touched no row read as one that did. Same posture as `check:ground-space`'s narrowing.
-      console.log(
-        "  NARROWED — the live ledger held ZERO claim rows, so only the envelope was compared;\n" +
-          "  no grade, back-compat or staleness branch of either fold was exercised by this arm.\n" +
-          "  The synthetic arms in `pnpm check:mirror-conformance` cover those and always run.",
-      );
-    }
-  } finally {
-    rmSync(snapshot.dir, { recursive: true, force: true });
-  }
 }
 
 // ---------- the check ----------
@@ -2252,15 +2103,22 @@ function runFixtureArm(): void {
 }
 
 /**
- * Run one arm. `argv` defaults to this process's own arguments; the gate's
- * `check-mirror-conformance-live.ts` passes `["--arm", "live"]`, which is why the run below is guarded.
+ * Run the FIXTURE arm — this file's only arm. The live arm is its own check,
+ * `check-mirror-conformance-live.ts` (ADR-0496 D2; one file is one found check, ADR-0606 D1), and
+ * `--arm live` here is refused rather than silently answered with the fixtures.
  */
 export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
-  if (parseArm(argv) === "live") return runLiveArm();
+  if (parseArm(argv) === "live") {
+    console.error(
+      "check:mirror-conformance: the live arm is its own check now — run `pnpm check:mirror-conformance-live` " +
+        "(packages/cli/src/check-mirror-conformance-live.ts)",
+    );
+    process.exit(2);
+  }
   runFixtureArm();
 }
 
-// Run only when invoked directly, not when `check-mirror-conformance-live.ts` imports this module.
+// Run only when invoked directly, not when `check-mirror-conformance-live.ts` imports `runProbe`.
 // Fail CLOSED on anything the arms did not catch themselves: an unhandled rejection that exited 0
 // would be a conformance check reporting a pass it never computed.
 const invokedDirectly =

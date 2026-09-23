@@ -10,23 +10,16 @@
 // The git reading itself lives in `gate-run.ts` (spawn + repo root) and is deliberately not spawned
 // here, matching `ci-affected.test.ts`'s split: the judgement is proven, the shell stays thin.
 
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { pnpmArgsFor, type WorkspaceProject } from "./ci-affected.js";
-import {
-  GATE_PLAN,
-  type GatePlanStep,
-  PRE_EXPENSIVE_CHECKS,
-  SHARED_ENVIRONMENT_CHECKS,
-  evaluateGateOrder,
-  firstExpensiveIndex,
-  isExpensiveStep,
-  lastExpensiveIndex,
-} from "./gate-order.js";
+import { discoverWorkspaceProjects, pnpmArgsFor, type WorkspaceProject } from "./ci-affected.js";
+import { loadGatePlan } from "./gate-checks.js";
+import { BUILT_IN_LEGS, type GatePlanStep, evaluateGateOrder, isExpensiveStep } from "./gate-order.js";
 import {
   behindMainLines,
   gitLines,
@@ -145,12 +138,33 @@ test("gitLines drops blanks and trims, so a trailing newline is not a phantom pa
 
 // ── the rewrite narrows coverage and nothing else ────────────────────────────
 
+let foundPlan: readonly GatePlanStep[] | undefined;
+
+/**
+ * The REAL plan, found exactly as `pnpm gate` finds it (ADR-0606 D1), rooted at the checkout git names
+ * — under `check:mutation-diff` this suite runs from a git-ignored copy where discovery sees nothing.
+ */
+function realPlan(): readonly GatePlanStep[] {
+  if (foundPlan !== undefined) return foundPlan;
+  const top = spawnSync("git", ["rev-parse", "--show-toplevel"], {
+    cwd: fileURLToPath(new URL(".", import.meta.url)),
+    encoding: "utf8",
+  });
+  assert.equal(top.status, 0, top.stderr);
+  const root = top.stdout.trim();
+  const loaded = loadGatePlan(root, discoverWorkspaceProjects(root).map((p) => p.dir), BUILT_IN_LEGS);
+  assert.ok(loaded.ok, loaded.ok ? "" : loaded.reasons.join("\n"));
+  foundPlan = loaded.plan;
+  return foundPlan;
+}
+
 test("scopeGatePlan rewrites ONLY the expensive legs, and keeps every other command byte-identical", () => {
-  const scoped = scopeGatePlan(GATE_PLAN, "--filter ...@storytree/cli");
-  assert.equal(scoped.length, GATE_PLAN.length, "scoping must never drop a step");
+  const plan = realPlan();
+  const scoped = scopeGatePlan(plan, "--filter ...@storytree/cli");
+  assert.equal(scoped.length, plan.length, "scoping must never drop a step");
 
   for (const [i, step] of scoped.entries()) {
-    const original = GATE_PLAN[i] as GatePlanStep;
+    const original = plan[i] as GatePlanStep;
     assert.equal(step.check, original.check, "a step's check name is not the scope's business");
     if (isExpensiveStep(original.command)) {
       assert.equal(step.command, original.command.replace("pnpm -r ", "pnpm --filter ...@storytree/cli "));
@@ -179,6 +193,10 @@ test("a scoped leg is still RECOGNISED as an expensive leg — else the invarian
 
   // ...and does not swallow a neighbour that merely ends in a similar word.
   assert.ok(!isExpensiveStep("pnpm check:test-timing"));
+  // A check is labelled by its NAME, and the minutes-cost mutation rung is a check: its cost is
+  // declared in its own file, so the rewrite never sees it as a leg to narrow.
+  assert.ok(!isExpensiveStep("check:mutation-diff"));
+  assert.ok(!isExpensiveStep("check:unit-test"));
   assert.ok(!isExpensiveStep("pnpm check:manifest"));
   assert.ok(!isExpensiveStep("pnpm -r build"));
   assert.ok(!isExpensiveStep("pnpm -r --no-bail build"));
@@ -187,23 +205,22 @@ test("a scoped leg is still RECOGNISED as an expensive leg — else the invarian
 });
 
 test("the SCOPED plan still satisfies BOTH ordering axes — the plan that runs is the plan judged", () => {
-  const scoped = scopeGatePlan(GATE_PLAN, "--filter ...@storytree/library");
-  const verdict = evaluateGateOrder({
-    steps: scoped,
-    earlyChecks: PRE_EXPENSIVE_CHECKS,
-    lateChecks: SHARED_ENVIRONMENT_CHECKS,
-  });
+  const plan = realPlan();
+  const scoped = scopeGatePlan(plan, "--filter ...@storytree/library");
+  const verdict = evaluateGateOrder(scoped);
   assert.equal(verdict.verdict, "ok", verdict.message);
-  assert.equal(firstExpensiveIndex(scoped), firstExpensiveIndex(GATE_PLAN), "the wall must not move");
-  assert.equal(lastExpensiveIndex(scoped), lastExpensiveIndex(GATE_PLAN));
+  const walls = (steps: readonly GatePlanStep[]): number[] =>
+    steps.flatMap((step, i) => (isExpensiveStep(step.command) ? [i] : []));
+  assert.deepEqual(walls(scoped), walls(plan), "the wall must not move");
+  assert.equal(walls(plan).length, 2, "both `-r` legs are recognised, in either form");
 });
 
 test("a FULL scope is the identity — the default path is byte-for-byte what it always was", () => {
   for (const args of ["-r", " -r ", ""]) {
-    const scoped = scopeGatePlan(GATE_PLAN, args);
+    const scoped = scopeGatePlan(realPlan(), args);
     assert.deepEqual(
       scoped.map((s) => s.command),
-      GATE_PLAN.map((s) => s.command),
+      realPlan().map((s) => s.command),
       `\`${args}\` must leave the plan untouched`,
     );
   }
@@ -211,20 +228,16 @@ test("a FULL scope is the identity — the default path is byte-for-byte what it
 
 test("the rewrite consumes pnpmArgsFor's output verbatim — no second arg format to drift", () => {
   const scope = localAffectedScope({ ok: true, files: ["apps/studio/src/App.tsx"] }, PROJECTS);
-  const scoped = scopeGatePlan(GATE_PLAN, pnpmArgsFor(scope));
+  const scoped = scopeGatePlan(realPlan(), pnpmArgsFor(scope));
   const legs = scoped.filter((s) => isExpensiveStep(s.command)).map((s) => s.command);
   // `--no-bail` survives the rewrite in place: narrowing WHICH packages run must not quietly drop
   // the flag that makes all of the selected ones report.
-  //
-  // The third expensive leg is ADR-0458's mutation rung, which carries no `-r` to rewrite. It must
-  // come through BYTE-IDENTICAL rather than half-scoped into `pnpm --filter ...studio
-  // check:mutation-diff`, which would name a script the filtered packages do not declare. The rung
-  // does its own diff scoping internally, so there is nothing for this rewrite to do to it.
-  assert.deepEqual(legs, [
-    "pnpm --filter ...studio --no-bail typecheck",
-    "pnpm --filter ...studio --no-bail test",
-    "pnpm check:mutation-diff",
-  ]);
+  assert.deepEqual(legs, ["pnpm --filter ...studio --no-bail typecheck", "pnpm --filter ...studio --no-bail test"]);
+  // ADR-0458's mutation rung is minutes-cost too, but it is a CHECK that runs its own file and does its
+  // own diff scoping: it must come through untouched, never half-scoped into a filtered command.
+  const mutation = scoped.find((s) => s.check === "check:mutation-diff");
+  assert.equal(mutation?.command, "check:mutation-diff");
+  assert.equal(mutation?.invocation, realPlan().find((s) => s.check === "check:mutation-diff")?.invocation);
 });
 
 test("a name pnpmArgsFor refuses to splice falls back to the full run, and the plan follows", () => {
@@ -233,8 +246,8 @@ test("a name pnpmArgsFor refuses to splice falls back to the full run, and the p
   const unsafe = pnpmArgsFor({ mode: "affected", projects: ["evil name; rm -rf /"], reason: "x" });
   assert.equal(unsafe, "-r");
   assert.deepEqual(
-    scopeGatePlan(GATE_PLAN, unsafe).map((s) => s.command),
-    GATE_PLAN.map((s) => s.command),
+    scopeGatePlan(realPlan(), unsafe).map((s) => s.command),
+    realPlan().map((s) => s.command),
   );
 });
 

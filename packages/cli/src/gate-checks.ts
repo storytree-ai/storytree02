@@ -43,7 +43,15 @@ import path from "node:path";
 import { parseDocument } from "yaml";
 import { z } from "zod";
 
-import type { CiIdentity, GateCost, GatePlacement, GatePlanStep, GateSubject } from "./gate-order.js";
+import type {
+  BuiltInLegs,
+  CiIdentity,
+  GateCost,
+  GatePlacement,
+  GatePlanStep,
+  GateSubject,
+  StepSkip,
+} from "./gate-order.js";
 
 /** The first line of every declaration — exactly this, at the top of the file. */
 export const DECLARATION_OPENER = "/* gate-check";
@@ -54,14 +62,6 @@ export const DECLARATION_CLOSER = "*/";
 /** A check's name, as every surface prints it: `check:` and a kebab-case stem. */
 export const CHECK_NAME = /^check:[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-/** When and how a check may declare "I ran, and verified nothing" (exit 3). */
-export interface CheckSkip {
-  /** The condition under which it has nothing to check. */
-  readonly when: string;
-  /** What a CI run makes of that skip: a failure (every input CI supplies arrived), or accepted. */
-  readonly inCi: "failure" | "accepted";
-}
-
 /** What a live check says about itself. */
 export interface LiveCheckDeclaration {
   readonly status: "live";
@@ -70,8 +70,8 @@ export interface LiveCheckDeclaration {
   readonly cost: GateCost;
   /** The identity it signs in as under `--ci`; absent for a check that reads no store. */
   readonly ciIdentity: CiIdentity | undefined;
-  /** Absent for a check that never exits 3. */
-  readonly skip: CheckSkip | undefined;
+  /** When it may exit 3, and what CI makes of that — absent for a check that never does. */
+  readonly skip: StepSkip | undefined;
   /** Checks that must run after this one — declared only for a real dependency. */
   readonly runsBefore: readonly string[];
   readonly why: string;
@@ -324,6 +324,14 @@ export function discoverChecks(repoRoot: string, workspaces: readonly string[]):
       `the gate could not list its checks: git ls-files exited ${String(listing.status)} — ${why}`,
     );
   }
+  // An EMPTY listing is not "no checks": git answers exit 0 with nothing from a directory it ignores
+  // (the mutation rung's `.stryker-tmp/` copy is the measured case) or one that holds no workspace.
+  if (listing.stdout === "") {
+    throw new Error(
+      `the gate could not list its checks: git listed no files at all under ${workspaces.join(", ")} ` +
+        `in ${repoRoot} — refusing to read that as a gate with no checks`,
+    );
+  }
   const found = findCheckFiles(listing.stdout.split("\0"), workspaces);
   return sortDeclaredChecks(found, (file) => {
     const absolute = path.join(repoRoot, file.path);
@@ -331,25 +339,40 @@ export function discoverChecks(repoRoot: string, workspaces: readonly string[]):
   });
 }
 
-/** The gate's fixed legs, in the three slots discovery never moves (ADR-0606 D1: built-ins). */
-export interface BuiltInLegs {
-  /** Ahead of every check. */
-  readonly lead: readonly GatePlanStep[];
-  /** The minutes-cost legs the ordering axes are measured against. */
-  readonly wall: readonly GatePlanStep[];
-  /** After the own-work checks, ahead of the shared environment. */
-  readonly trail: readonly GatePlanStep[];
-}
-
 export type PlanDerivation =
   | { readonly ok: true; readonly plan: readonly GatePlanStep[] }
   | { readonly ok: false; readonly reasons: readonly string[] };
 
-/** One found check as a plan step, labelled by its name. */
+/**
+ * How the gate RUNS a found check: its own file, from its own workspace, in exactly the form the
+ * root `check:*` scripts always used — `pnpm -C <workspace> exec` with the tsx loader. `-C … exec`
+ * keeps the child's exit code, so a declared skip still arrives as 3; `--filter … exec` would
+ * collapse it to 1 (`EXIT_CODE_COLLAPSING_INVOCATION`).
+ */
+export function checkInvocation(check: CheckFile): string {
+  const up = check.workspace
+    .split("/")
+    .map(() => "..")
+    .join("/");
+  const file = check.path.slice(check.workspace.length + 1);
+  return `pnpm -C ${check.workspace} exec node --import ${up}/scripts/tsx-cache-off.mjs --import tsx ${file}`;
+}
+
+/** One found check as a plan step: labelled by its name, run by its own file, as it declared. */
 export function checkStep(check: LiveCheck): GatePlanStep {
-  const { runs, subject, cost, ciIdentity, why } = check.declaration;
-  const step: GatePlanStep = { command: check.name, check: check.name, runs, subject, cost, why };
-  return ciIdentity === undefined ? step : { ...step, ciIdentity };
+  const { runs, subject, cost, ciIdentity, skip, why } = check.declaration;
+  const step: GatePlanStep = {
+    command: check.name,
+    check: check.name,
+    invocation: checkInvocation(check),
+    source: check.path,
+    runs,
+    subject,
+    cost,
+    why,
+  };
+  const skipping: GatePlanStep = skip === undefined ? step : { ...step, skip };
+  return ciIdentity === undefined ? skipping : { ...skipping, ciIdentity };
 }
 
 /** One block in run order, and whatever a `runsBefore` cycle left unplaced. */
@@ -423,4 +446,124 @@ export function deriveGatePlan(checks: readonly LiveCheck[], builtIns: BuiltInLe
     }
   }
   return reasons.length > 0 ? { ok: false, reasons } : { ok: true, plan };
+}
+
+/** The gate's plan, found and ordered — or every reason it could not be. */
+export type GatePlanLoad =
+  | {
+      readonly ok: true;
+      readonly plan: readonly GatePlanStep[];
+      /** Found and never run (ADR-0606 D6), in name order. */
+      readonly retired: readonly RetiredCheck[];
+    }
+  | { readonly ok: false; readonly reasons: readonly string[] };
+
+/**
+ * THE GATE'S PLAN, as `pnpm gate` and `pnpm gate --ci` both walk it: every check the workspace
+ * projects' working tree holds, ordered around the fixed legs (ADR-0606 D1/D2).
+ *
+ * ALL OR NOTHING. It refuses — and the gate then runs no step at all — when git cannot list the
+ * tree, when any check-shaped file is refused, when no live check is found, or when the
+ * declarations contradict each other. A plan with a check quietly missing is the one outcome worse
+ * than no plan, because it would still print a verdict.
+ */
+export function loadGatePlan(
+  repoRoot: string,
+  workspaces: readonly string[],
+  legs: BuiltInLegs,
+): GatePlanLoad {
+  let discovery: CheckDiscovery;
+  try {
+    discovery = discoverChecks(repoRoot, workspaces);
+  } catch (err) {
+    return { ok: false, reasons: [(err as Error).message] };
+  }
+  const reasons = discovery.refused.map((refusal) => `${refusal.path}: ${refusal.reason}`);
+  if (discovery.live.length === 0) {
+    reasons.push("no live check was found at all — a gate of only its fixed legs is not the gate");
+  }
+  if (reasons.length > 0) return { ok: false, reasons };
+  const derived = deriveGatePlan(discovery.live, legs);
+  return derived.ok ? { ok: true, plan: derived.plan, retired: discovery.retired } : derived;
+}
+
+/** One step as `pnpm gate --list --json` reports it — `null` where the step declares nothing. */
+export interface ListedStep {
+  readonly command: string;
+  readonly check: string | null;
+  readonly runs: GatePlacement;
+  readonly subject: GateSubject;
+  readonly cost: GateCost;
+  readonly ciIdentity: CiIdentity | null;
+  readonly skip: StepSkip | null;
+  /** The check's file — `null` for a fixed leg. */
+  readonly source: string | null;
+  /** The story node the ownership map gives that file (ADR-0606 D1) — `null` when it names none. */
+  readonly owner: string | null;
+}
+
+/** A retired check as `--list` reports it: found, and never run (ADR-0606 D6). */
+export interface ListedRetired {
+  readonly check: string;
+  readonly retiredBy: string;
+  readonly source: string;
+  readonly owner: string | null;
+}
+
+/** What `pnpm gate --list` shows, and exactly what `--list --json` prints. */
+export interface GatePlanListing {
+  /** In plan order. */
+  readonly steps: readonly ListedStep[];
+  readonly retired: readonly ListedRetired[];
+}
+
+/** The plan and its retired checks, each file shown with its owner (`ownerOf` asks the ownership map). */
+export function listGatePlan(
+  plan: readonly GatePlanStep[],
+  retired: readonly RetiredCheck[],
+  ownerOf: (file: string) => string | undefined,
+): GatePlanListing {
+  return {
+    steps: plan.map((step) => ({
+      command: step.command,
+      check: step.check ?? null,
+      runs: step.runs,
+      subject: step.subject,
+      cost: step.cost,
+      ciIdentity: step.ciIdentity ?? null,
+      skip: step.skip ?? null,
+      source: step.source ?? null,
+      owner: step.source === undefined ? null : (ownerOf(step.source) ?? null),
+    })),
+    retired: retired.map((check) => ({
+      check: check.name,
+      retiredBy: check.declaration.retiredBy,
+      source: check.path,
+      owner: ownerOf(check.path) ?? null,
+    })),
+  };
+}
+
+/** The listing for a reader: one line per step in run order, then the retired checks. */
+export function renderGatePlanListing(listing: GatePlanListing): string[] {
+  const local = listing.steps.filter((step) => step.runs !== "ci").length;
+  const ci = listing.steps.filter((step) => step.runs !== "local").length;
+  const lines = [
+    `the gate plan — ${listing.steps.length} steps, found and ordered from each check's own declaration ` +
+      `(\`pnpm gate\` runs ${local}: both + local; \`pnpm gate --ci\` runs ${ci}: both + ci)`,
+  ];
+  for (const [index, step] of listing.steps.entries()) {
+    const identity = step.ciIdentity === null ? "" : `, signs in as ${step.ciIdentity}`;
+    const skip = step.skip === null ? "" : ", may SKIP";
+    const where =
+      step.source === null ? "a fixed leg of the gate" : `${step.source} — owner ${step.owner ?? "(none declared)"}`;
+    lines.push(
+      `  ${String(index + 1).padStart(2)}. ${step.command} [${step.runs}; ${step.subject}; ${step.cost}${identity}${skip}] ${where}`,
+    );
+  }
+  lines.push(`retired — found, never run (ADR-0606 D6): ${listing.retired.length}`);
+  for (const check of listing.retired) {
+    lines.push(`  ${check.check} [${check.retiredBy}] ${check.source} — owner ${check.owner ?? "(none declared)"}`);
+  }
+  return lines;
 }
