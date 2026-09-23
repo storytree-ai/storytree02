@@ -1,0 +1,37 @@
+{
+  "settledPixelIdentical": false,
+  "settledDifferenceBoundingBox": [
+    651,
+    41,
+    1360,
+    919
+  ],
+  "settledChangedPixels": 995,
+  "note": "Full screenshot comparison includes live app chrome; the structured camera/data comparison is asserted separately.",
+  "settledCanvasPixelIdentical": true,
+  "settledCanvasChangedPixels": 0,
+  "settledCanvasSize": [
+    1800,
+    1100
+  ],
+  "coverageDiagnostics": {
+    "early": {
+      "changedPixels": 1367,
+      "bounds": [
+        639,
+        620,
+        1299,
+        783
+      ]
+    },
+    "middle": {
+      "changedPixels": 11711,
+      "bounds": [
+        633,
+        6,
+        1800,
+        857
+      ]
+    }
+  }
+}
