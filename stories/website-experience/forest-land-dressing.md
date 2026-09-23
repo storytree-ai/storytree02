@@ -105,12 +105,13 @@ is not lit like the ground it stands on reads as a sticker, so the dressing cann
 an unlit ground). **Nothing upstream imports a dressing module**, in value or in type — the
 one-way property that makes this lane claimable alongside the other two.
 
-> **Proof status (honest) — UNPROVEN as a capability, and NOT unproven as code.** All 8 modules
-> carry real `node:test` suites in `packages/forest-world-r3f` and the package suite runs green.
-> What does not exist is a CONTRACT SET: no contract id leads any of those tests (ADR-0122), so
-> `storytree coverage forest-land-dressing` correctly reports zero and no signed verdict names this
-> unit. Authoring contracts over the behaviour these suites already assert is this lane's own first
-> increment, deliberately not done in the boundary landing that created it.
+> **Proof status (honest) — PARTIALLY PROVEN as a capability.** PR #2024 landed the first three
+> shore-selection contracts, with their signed result committed at `8171478a`; the duplicate signed
+> commit `4ca8a787` remains preserved in the integration history. That proof covers the
+> shore-selection connector, not all eight modules in this lane. The fourth contract,
+> `fld-a-visible-trail-strip-ends-on-the-dock-it-wears`, concerns the visible ribbon reaching that
+> connector's snapped shore. Read the current contract coverage and signing state through
+> `storytree coverage forest-land-dressing` rather than this historical note.
 
 ## The lane — 8 modules
 

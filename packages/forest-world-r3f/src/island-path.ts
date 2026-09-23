@@ -248,6 +248,19 @@ export function islandDocks(
   return out;
 }
 
+/**
+ * THE RENDERED TRAILS' SHORE DOCKS. This is deliberately an identity scaffold so the proof
+ * loop can author its red assertion against the consumer-facing API before the projection is
+ * implemented. The finished function will replace only eligible terminal points with the same
+ * dock positions {@link islandDocks} gives the worn paths.
+ */
+export function dockedTrailStrips(
+  _cells: readonly InstanceDescriptor[],
+  strips: readonly InstanceDescriptor[],
+): readonly InstanceDescriptor[] {
+  return strips;
+}
+
 /** The segment index over one island's rim, at dock reach — so the far-field short-circuit's
  *  proof holds for the dock query exactly as it does for the shore's. */
 export function rimGrid(rim: IslandRim): EdgeGrid {
