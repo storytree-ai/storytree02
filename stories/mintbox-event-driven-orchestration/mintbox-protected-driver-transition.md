@@ -7,7 +7,7 @@ outcome: "The active rendering-engine proof remains untouched until its own gree
 status: proposed
 proof_mode: integration-test
 depends_on: [mintbox-supervisor-events]
-decisions: [561, 505]
+decisions: [604, 505]
 proof:
   command:
     file: pnpm
@@ -39,6 +39,11 @@ proof:
 **Outcome —** The active rendering-engine proof remains untouched until its own green increment
 boundary releases its claim and terminal event, after which a fresh coordinator may adopt the newly
 eligible work.
+
+> **Current status —** ADR-0604 supersedes ADR-0561 and drops unattended dispatcher delivery; manual
+> lane launch is the current route. This retained legacy component and its walkthrough and contracts
+> document existing proof while `mintbox-dispatcher-retirement` awaits the already-decided code and
+> story retirement. It authorizes no further paid build and does not claim retirement complete.
 
 ## Proof walkthrough first
 
