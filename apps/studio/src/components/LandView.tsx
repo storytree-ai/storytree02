@@ -20,7 +20,12 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { SceneG } from '@storytree/forest-world';
-import type { Descriptor3D } from '@storytree/forest-world-r3f';
+import {
+  forestRegrowPresentation,
+  type Descriptor3D,
+  type ForestRegrowCursor,
+  type ForestRegrowPresentation,
+} from '@storytree/forest-world-r3f';
 
 import { landViewStream } from '../lib/landView.js';
 
@@ -30,6 +35,8 @@ export interface LandCanvasProps {
   /** CSS px. Present ⇒ the canvas opens on the DESIGNED RESTING VIEW (ADR-0471) rather than a fit,
    *  which is what makes this view and the map beside it open on the same composition. */
   viewport: { width: number; height: number };
+  /** The app-owned cursor, adapted here for the canvas without creating another clock. */
+  regrow: ForestRegrowPresentation | null;
 }
 
 /** The real canvas, in its own chunk. */
@@ -38,10 +45,10 @@ const ForestWorldCanvas = lazy(async () => {
   return { default: mod.ForestWorldCanvas };
 });
 
-function DefaultLandCanvas({ descriptors, viewport }: LandCanvasProps) {
+function DefaultLandCanvas({ descriptors, viewport, regrow }: LandCanvasProps) {
   return (
     <Suspense fallback={<p className="muted land-view-status">Loading the land…</p>}>
-      <ForestWorldCanvas descriptors={descriptors} viewport={viewport} />
+      <ForestWorldCanvas descriptors={descriptors} viewport={viewport} regrow={regrow} />
     </Suspense>
   );
 }
@@ -51,6 +58,8 @@ export interface LandViewProps {
    *  while the world is still resolving, which is a panel with a note in it and not an empty
    *  canvas claiming there is no forest. */
   scene: SceneG | null;
+  /** The app-owned regrow cursor while the world is growing; absent after settlement. */
+  regrowCursor?: ForestRegrowCursor | null;
   /** The canvas seam (above). Absent ⇒ the real, lazily-loaded one. */
   renderCanvas?: (props: LandCanvasProps) => React.ReactNode;
 }
@@ -90,7 +99,11 @@ function useMeasuredFrame(): [React.RefObject<HTMLDivElement | null>, { width: n
  * The land view panel. Renders one of four honest states and never throws: waiting for the world,
  * waiting for a frame, the land, or the reason the land could not be built.
  */
-export function LandView({ scene, renderCanvas = DefaultLandCanvas }: LandViewProps): React.JSX.Element {
+export function LandView({
+  scene,
+  regrowCursor = null,
+  renderCanvas = DefaultLandCanvas,
+}: LandViewProps): React.JSX.Element {
   const [ref, frame] = useMeasuredFrame();
   // ⚠ MEMOISED ON THE SCENE, AND THAT IS THE SMALLER HALF OF THE CURE RATHER THAN THE CURE. It stops
   // the conversion being paid twice when this panel re-renders for its OWN reasons — the frame
@@ -100,6 +113,7 @@ export function LandView({ scene, renderCanvas = DefaultLandCanvas }: LandViewPr
   // that is downstream, where the ground is keyed on its own CONTENT rather than on this array's
   // identity (`@storytree/forest-world-r3f`'s `ground-dependency.ts`).
   const stream = useMemo(() => (scene === null ? null : landViewStream(scene)), [scene]);
+  const regrow = useMemo(() => forestRegrowPresentation(regrowCursor), [regrowCursor]);
   return (
     <aside className="land-view" data-testid="land-view" aria-label="the land, drawn beside the map">
       <header className="land-view-head">
@@ -118,7 +132,7 @@ export function LandView({ scene, renderCanvas = DefaultLandCanvas }: LandViewPr
         {stream !== null && stream.ok && frame === null && (
           <p className="muted land-view-status">Measuring the frame…</p>
         )}
-        {stream !== null && stream.ok && frame !== null && renderCanvas({ descriptors: stream.descriptors, viewport: frame })}
+        {stream !== null && stream.ok && frame !== null && renderCanvas({ descriptors: stream.descriptors, viewport: frame, regrow })}
       </div>
     </aside>
   );

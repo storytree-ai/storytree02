@@ -13,6 +13,14 @@ export {
   type Descriptor3D,
 } from './world-to-3d.js';
 
+// The app cursor's renderer-facing presentation: pure adaptation only, with no app clock or
+// browser dependency, so either 3D delivery surface can consume the same settled-or-growing state.
+export {
+  forestRegrowPresentation,
+  type ForestRegrowCursor,
+  type ForestRegrowPresentation,
+} from './ForestWorldCanvas.regrow.js';
+
 // The island's SIZE from a declared land-per-capability ratio (the mapper's second in-place
 // resize after ADR-0517's footprint): the constant, its provenance and the pure arithmetic.
 export {

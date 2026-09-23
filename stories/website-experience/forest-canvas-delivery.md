@@ -3,7 +3,7 @@ id: "forest-canvas-delivery"
 tier: capability
 story: website-experience
 title: "The canvas delivery — the dressed scene mounted in a real host surface, at a cost the frame can pay"
-outcome: "One R3F canvas mounts the dressed scene into a real host surface at a cost the frame can pay: ForestWorldCanvas composes the three upstream lanes into one ground draw however many islands are standing, reuses that ground's exact inputs across separately materialised descriptor streams with equal ground-visible content, and the Studio mount sizes and registers the canvas in a running app."
+outcome: "One R3F canvas mounts the dressed scene into a real host surface at a cost the frame can pay: ForestWorldCanvas composes the three upstream lanes into one ground draw however many islands are standing, reuses that ground's exact inputs across separately materialised descriptor streams with equal ground-visible content, projects the app-owned forest-regrow cursor into renderer presentation without a second schedule or clock, and the Studio mount sizes and registers the canvas in a running app."
 status: proposed
 proof_mode: integration-test
 depends_on: [forest-scene-model, forest-land-surface, forest-land-dressing]
@@ -26,7 +26,8 @@ decisions: [123, 562]
 # is the STUDIO suite, which runs the mount half — `LandView.test.tsx`, `landView.test.ts`,
 # `canvasRegistration.test.ts`. The package half is `forest-ground-is-one-mesh.test.ts` (the
 # whole-forest-one-draw-call claim, whose fourth claim is a source parse of `ForestWorldCanvas.tsx`)
-# plus `ground-dependency.test.ts` (the exact content cache). The package files run under
+# plus `ground-dependency.test.ts` (the exact content cache) and `ForestWorldCanvas.regrow.test.ts`
+# (the cursor-presentation adapter). The package files run under
 # `pnpm --filter @storytree/forest-world-r3f test`. All are declared in `scope` because the lane
 # owns them; only one command can remain the capability's broad declared command.
 #
@@ -35,10 +36,10 @@ decisions: [123, 562]
 # machine assertion that reaches it today is the source parse named above, which that test's own
 # header calls its weakest claim on purpose. This is recorded rather than papered over.
 #
-# Node-borne real proof (ADR-0057): armed ONLY for the bounded ground-content-cache unit. It edits
-# one existing Bun test file and one existing source file, so CONFIRM_RED can observe both clustered
-# tests individually before implementation. It does not claim to prove the Studio mount or the
-# browser-bound canvas shell.
+# Node-borne real proof (ADR-0057): re-armed for the bounded cursor-presentation adapter. It adds
+# one pure Bun test and one pure source module; CONFIRM_RED catches the absent module and turns it
+# into an explicit failed export assertion before implementation. It does not claim to prove the
+# Studio wiring, geometric reveal, visibility policy, or browser-bound canvas shell.
 proof:
   command:
     file: pnpm
@@ -50,6 +51,7 @@ proof:
       - "apps/studio/src/lib/canvasRegistration.test.ts"
       - "packages/forest-world-r3f/src/forest-ground-is-one-mesh.test.ts"
       - "packages/forest-world-r3f/src/ground-dependency.test.ts"
+      - "packages/forest-world-r3f/src/ForestWorldCanvas.regrow.test.ts"
     sourceGlobs:
       - "apps/studio/src/components/LandView.tsx"
       - "apps/studio/src/lib/landView.ts"
@@ -57,21 +59,26 @@ proof:
       - "apps/studio/src/lib/canvasRegistration.constants.ts"
       - "packages/forest-world-r3f/src/ForestWorldCanvas.tsx"
       - "packages/forest-world-r3f/src/ground-dependency.ts"
+      - "packages/forest-world-r3f/src/ForestWorldCanvas.regrow.ts"
+  # Coverage follows the current real test file by default. The cache pair was signed under the
+  # preceding real arm, so keep its test visible to coverage without widening this adapter's write
+  # scope or changing its red→green proof.
+  coverage:
+    testGlobs: ["packages/forest-world-r3f/src/ground-dependency.test.ts"]
   real:
-    editsExisting: true
-    cluster: ["fcd-ground-cache-compares-content-without-serializing", "fcd-ground-cache-short-circuits-on-first-change"]
-    testFile: "packages/forest-world-r3f/src/ground-dependency.test.ts"
-    sourceFile: "packages/forest-world-r3f/src/ground-dependency.ts"
+    editsExisting: false
+    testFile: "packages/forest-world-r3f/src/ForestWorldCanvas.regrow.test.ts"
+    sourceFile: "packages/forest-world-r3f/src/ForestWorldCanvas.regrow.ts"
     scope:
-      testGlobs: ["packages/forest-world-r3f/src/ground-dependency.test.ts"]
-      sourceGlobs: ["packages/forest-world-r3f/src/ground-dependency.ts"]
+      testGlobs: ["packages/forest-world-r3f/src/ForestWorldCanvas.regrow.test.ts"]
+      sourceGlobs: ["packages/forest-world-r3f/src/ForestWorldCanvas.regrow.ts"]
     install: true
     typecheck:
       file: pnpm
       args: ["--filter", "@storytree/forest-world-r3f", "typecheck"]
     proofCommand:
       file: bun
-      args: ["test", "packages/forest-world-r3f/src/ground-dependency.test.ts"]
+      args: ["test", "packages/forest-world-r3f/src/ForestWorldCanvas.regrow.test.ts"]
 ---
 
 # The canvas delivery — the dressed scene mounted in a real host surface, at a cost the frame can pay
@@ -89,8 +96,9 @@ the scene-model lane's history. This lane starts `proposed` with zero signed cre
 affordable: `ForestWorldCanvas` composes the three upstream lanes into a single ground draw however
 many islands are standing; its ground-input cache recognises separately materialised descriptor
 streams by exact ground-visible content without rebuilding a serialized key for an equal stream;
-and the Studio's land view, land-view lib and canvas registration mount, size and register that
-canvas in a running app.
+its pure presentation adapter projects the app-owned forest-regrow cursor without deriving a
+second schedule or clock; and the Studio's land view, land-view lib and canvas registration mount,
+size and register that canvas in a running app.
 
 **Depends on —** all three upstream lanes — [`forest-scene-model`](forest-scene-model.md),
 [`forest-land-surface`](forest-land-surface.md) and
@@ -102,22 +110,24 @@ while all three art lanes are being worked by other sessions.
 > **Proof status (honest) — PROVEN ONLY IN PART, and only PARTLY covered as code.** The three
 > Studio mount files carry real suites (`LandView.test.tsx`, `landView.test.ts`,
 > `canvasRegistration.test.ts`, run by `pnpm --filter studio test`). The package half carries
-> `forest-ground-is-one-mesh.test.ts` plus the existing `ground-dependency.test.ts`, both run by
-> `pnpm --filter @storytree/forest-world-r3f test`.
+> `forest-ground-is-one-mesh.test.ts`, the existing `ground-dependency.test.ts`, and the new pure
+> `ForestWorldCanvas.regrow.test.ts`, all run by `pnpm --filter @storytree/forest-world-r3f test`.
 > **`ForestWorldCanvas.tsx` itself has no test**, and that is stated rather than remedied by
 > invention: a React-Three canvas has no honest headless oracle, its appearance is owner-witnessed
 > (ADR-0070), and the one machine assertion that reaches it is a SOURCE PARSE inside the draw-call
 > test — which that test's own header flags as its weakest claim, deliberately. The two cache
-> contracts below are the only part a signed verdict reaches: they were first built and signed
+> contracts below were first built and signed
 > together, as a cluster, by `batched-test-authoring-arc-inc-07`. The older tests carry no contract
-> id (ADR-0122), so no verdict covers the Studio mount or the canvas.
+> id (ADR-0122), so no verdict covers the Studio mount or the canvas. The cursor-presentation
+> contract is a separate, newly armed pure proof and carries no inherited verdict.
 
-## The lane — 2 package modules + the Studio mount
+## The lane — 3 package modules + the Studio mount
 
 | file | role |
 |---|---|
 | `packages/forest-world-r3f/src/ForestWorldCanvas.tsx` | the canvas: descriptors → instanced meshes + map controls; mounts exactly ONE `<CellGround>` and hands it the whole slice. |
 | `packages/forest-world-r3f/src/ground-dependency.ts` | the canvas's content-keyed ground-input cache: preserves exact invalidation while preventing an equal, freshly materialised descriptor stream from rebuilding the expensive ground. |
+| `packages/forest-world-r3f/src/ForestWorldCanvas.regrow.ts` | pure structural cursor → canvas-presentation adapter; it has no app import, schedule, clock, React state or descriptor filtering. |
 | `apps/studio/src/components/LandView.tsx` | the Studio's land view — where the canvas is mounted in a running app. |
 | `apps/studio/src/lib/landView.ts` | the land view's pure half (sizing, framing, the data it hands the canvas). |
 | `apps/studio/src/lib/canvasRegistration.ts` | canvas registration — how a mounted canvas announces itself to the host surface. |
@@ -158,8 +168,36 @@ surface mounts, sizes and registers it correctly.
    Through the cache's pure comparison seam, change the first ground-visible field and assert the
    equality decision stops there rather than scanning a later descriptor whose remaining fields
    cannot change it; a subsequent cache miss still records the entire new immutable snapshot.
+6. **The canvas consumes the app cursor without owning time.** Hand the pure adapter a structural
+   cursor shaped like the app's `ForestRegrowState`. Assert it preserves the cursor's progress,
+   hidden islands and segments, and each in-flight island/segment's local reveal data. `null` and a
+   settled cursor return `null`, so the canvas can take its static identity path without a hidden
+   presentation layer. The package imports no app module and derives no order, timing or geometry.
 
-## Proof walkthrough — compare exact ground content without rebuilding the serialized key
+## Proof walkthrough — project the existing cursor into renderer presentation
+
+This is one new, pure module and one new Bun test. It establishes the delivery seam only: this
+increment's glue wires it into the mounted canvas; later increments apply it to geometry and prove
+quiet/hidden behaviour.
+
+1. Author `ForestWorldCanvas.regrow.test.ts` first. Build the absolute `.ts` source path at runtime,
+   guard it with `existsSync` from `node:fs`, and only dynamically import it when the file exists;
+   otherwise use an empty object. Assert `typeof loaded.forestRegrowPresentation === 'function'`.
+   That is the required baseline mechanical red: an `AssertionError` naming the missing adapter,
+   rather than Bun resolving an absent `.js` specifier before its promise can be caught. Do not
+   create a source placeholder before this run.
+2. Once the export exists, pass a literal structural `ForestRegrowCursor` with a non-terminal
+   `progress`, absent islands, growing islands, hidden segments and drawing segments. Assert the
+   returned `ForestRegrowPresentation` carries progress verbatim as `progress`, absent islands as
+   `hiddenIslandIds`, growing islands as `growingIslandProgressById`, hidden segments as
+   `hiddenSegmentIds`, and drawing segments as `drawingSegmentProgressById` with `{ drawn,
+   fromEnd }` values. Assert both `null` and `settled: true` return `null`.
+3. Implement only `ForestWorldCanvas.regrow.ts`. Its structural input is compatible with the
+   app's `ForestRegrowState`, but it imports no `@storytree/app-surface` type or value. It has no
+   clock, no schedule calculation, no React state and no descriptor filtering. Run the exact Bun
+   file and the package typecheck after the adapter is present.
+
+## Previous proof walkthrough — compare exact ground content without rebuilding the serialized key
 
 This is ONE brownfield cache journey through `createGroundInputCache`, authored as a two-test
 cluster in the existing Bun file. Neither contract is a guard-rail: both new full titles must be
@@ -197,11 +235,11 @@ absent at baseline and both tests must fail by assertion before production code 
    allowance, or timing threshold can satisfy either contract. Re-run the exact Bun file and the
    package typecheck; both clustered tests and all existing cache tests must be green.
 
-## Contracts (2)
+## Contracts (3)
 
-The test-proven leaf behaviours are two new substantive tests in
-`packages/forest-world-r3f/src/ground-dependency.test.ts`, authored together because they observe
-the same `createGroundInputCache` comparison seam.
+The cache contracts remain the signed pair in `packages/forest-world-r3f/src/ground-dependency.test.ts`.
+The new cursor contract lives in `packages/forest-world-r3f/src/ForestWorldCanvas.regrow.test.ts`,
+where coverage can identify it independently.
 
 1. **`fcd-ground-cache-compares-content-without-serializing`** — an equal fresh stream reuses the
    cached ground without rebuilding its delimiter-separated dependency key
@@ -212,10 +250,19 @@ the same `createGroundInputCache` comparison seam.
 2. **`fcd-ground-cache-short-circuits-on-first-change`** — the first ground-visible mismatch decides
    invalidation before comparison reads the tail
    - **asserts —** the exported pure `sameGroundDependencies` helper reads a trailing
-     `trail-ghost-strip`'s counting `group` getter for an equal control, but reads it zero times when
-     the first cave's x position differs; the cache uses that helper for equality while separately
-     recording a complete immutable snapshot after a miss.
+   `trail-ghost-strip`'s counting `group` getter for an equal control, but reads it zero times when
+   the first cave's x position differs; the cache uses that helper for equality while separately
+   recording a complete immutable snapshot after a miss.
    - **covers —** `packages/forest-world-r3f/src/ground-dependency.ts`
+3. **`fcd-regrow-cursor-projects-without-a-second-clock`** — a structural app cursor becomes only
+   the renderer facts it needs
+   - **asserts —** `forestRegrowPresentation` copies a non-settled cursor's `progress`,
+     `absentStoryIds`, `growing` local progress, `hiddenSegmentIds`, and `drawingSegments`
+     (`drawn` plus `fromEnd`) into `progress`, `hiddenIslandIds`,
+     `growingIslandProgressById`, `hiddenSegmentIds`, and `drawingSegmentProgressById`; `null` or
+     `settled: true` returns `null`. The adapter does not accept a clock or plan and imports no
+     app-surface module, leaving schedule derivation and wall-clock ownership in the app.
+   - **covers —** `packages/forest-world-r3f/src/ForestWorldCanvas.regrow.ts`
 
 ## Guidance
 
