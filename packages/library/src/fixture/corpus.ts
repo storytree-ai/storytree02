@@ -29,8 +29,11 @@
 // `merge-ceremony` is kept for its genuinely multi-KB `steps` field (the `--raw` byte-exactness
 // test) and its real `surfaces` prose; `deep-modules` is what the studio UAT searches for. The two
 // `adr` rows are the studio UAT's DECISION tier (ADR-0425 dec 4): its walkthrough opens a decision
-// through the Library lens, hops `adr-0013` → `adr-0002` as an in-corpus cross-link, and follows
-// `deep-modules`'s own `asset:adr-0002` source into the decision behind it. They are here because
+// through the Library lens, moves from `adr-0002` to `adr-0013` through the finder, and reaches
+// `adr-0002` as the decision behind `deep-modules`. Nothing LINKS them: the citation pointers that
+// once did went with the `references` field (`fa4f96a5`), and the journey moved with that removal
+// rather than growing edges to keep a leg alive (ADR-0605; the rows carry no `dependsOn` on
+// purpose — ADR-0477 D6 fences which artifacts get one). They are here because
 // ADR-0403 dec 1 made decisions ordinary artifacts and deleted `docs/decisions/`, so the offline
 // sandbox had NO decision to open at all and that leg of the journey had no subject. Their bodies
 // are deliberately abridged: this is a sandbox seed, not an archive. The four

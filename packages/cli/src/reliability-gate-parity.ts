@@ -66,15 +66,14 @@
 //     them ({@link repoWideScripts}) — never listed here, so a leg added to or removed from the plan
 //     moves this check's answer with it.
 //
-// ⚠ THE ONE BREACH IT FOUND IS NOT WIRED YET, AND IT IS CARRIED RATHER THAN HIDDEN. Wiring
-// `pnpm --filter studio uat` is mechanically easy and was deliberately NOT done in the landing that
-// added this rung: the journey FAILS 4 of its 6 cases today, so wiring it would red every
-// studio-touching PR on a break none of them authored, and clearing it is `story-author`'s and the
-// `studio` capability's work rather than this one's. It is therefore an entry in
-// {@link UNRUN_GATE_BASELINE}, printed on every run, draining under a rule the rung enforces on
-// itself. What this landing bought is that the gap is now OBSERVED and BLOCKING for every future
-// declaration — which is the objective's own purpose clause — rather than that one instance being
-// executed. Read the baseline entry for the evidence and the unit that clears it.
+// THE ONE BREACH IT FOUND IS NOW RUN, AND THE BASELINE IS EMPTY. When this rung landed,
+// `pnpm --filter studio uat` was deliberately NOT wired: the journey failed 4 of its 6 cases, so
+// wiring it would have redded every studio-touching PR on a break none of them authored. It was
+// carried in {@link UNRUN_GATE_BASELINE} instead, printed on every run. On 2026-09-24
+// `studio-uat-journey-is-green-then-wired` moved the journey's legs with the features they prove
+// (ADR-0605), greened it, and wired it as a CI-placed `GATE_PLAN` step (`STUDIO_UAT_STEP` in
+// `gate-order.ts`) — which satisfies the declaration through tier 1 — and deleted the entry in the
+// same landing, as the rung requires.
 //
 // Pure: every function takes text/data and returns data. The caller supplies the real story files
 // and the real plan; nothing here touches disk.
@@ -313,39 +312,7 @@ export function targetedInvocations(steps: readonly GateStep[]): Set<string> {
  * must name what would clear it. "Not now" is not a reason; "this belongs to another capability and
  * here is the unit that owns it" is.
  */
-export const UNRUN_GATE_BASELINE: readonly BaselinedGate[] = [
-  {
-    story: "stories/studio/story.md",
-    command: "pnpm --filter studio uat",
-    blocker:
-      "BLOCKED ON AN OWNER FORK, not on the wiring and not on a selector — re-measured 2026-09-22 at " +
-      "`e78b5878`, which CORRECTS what this entry said when it landed. The command is wirable today " +
-      "(CI already installs the Chromium it needs, for the `check:land-art` rung), but the journey " +
-      "FAILS 4 of its 6 cases, so wiring it would red every studio-touching PR on a break none of " +
-      "them authored. All four share ONE structural cause: six criteria (3, 4, 5, 6, 9 and 12) " +
-      "assert that an artifact names the decision it stands on as a FOLLOWABLE LINK. " +
-      "⚠ THE EARLIER READING — that the spec merely asserts a retired `.asset-refs h4` = \"Sources\" " +
-      "and needs its selector re-pointed plus criteria 4/5/6 and 9 re-worded — IS REFUTED AT ITS OWN " +
-      "SOURCE, and a session that acts on it will find no fix exists. It was written from `3ea9c3cc`, " +
-      "whose message truthfully says \"The data is untouched; this is one commit and one revert\" — " +
-      "but `fa4f96a5` LATER deleted the `references` field ITSELF: the schema, every reader, and the " +
-      "fixture data, including the two pointers ADR-0425 dec 4 had added so these legs would have a " +
-      "subject at all. So there is no citation left anywhere to re-point a selector AT, and no " +
-      "surviving affordance on the artifact surface to re-point the legs ONTO: `AssetView`'s only " +
-      "links are \"back to the library\" and \"edit this one\", on the plain route and inside the " +
-      "overlay alike. The sole `depends_on` render is `LibraryFocusGraph`, which sits on the LENS " +
-      "rather than the overlay criterion 9 names, and it would draw nothing regardless because the " +
-      "fixture rows carry no edges — and ADR-0477 D6 puts authoring those on another arc, behind a " +
-      "fence that promises the owner a proposal first. Every remaining route therefore CHANGES what a " +
-      "leg proves and one of them reverses it, against ADR-0294 D1's reference shape, so the choice " +
-      "is the owner's: `oq-the-studio-uat-s-six-grounding-legs-assert-a-citation-lin` on " +
-      "`verification-integrity-arc` carries the four costed options. " +
-      "⚠ Do NOT chase criteria 1/7/8 or 10/11 as a fifth and sixth break. Each FAILED on one of two " +
-      "full runs and PASSED on the other purely under memory pressure on the shared dev box, and both " +
-      "were re-confirmed green in isolation (1/7/8 in 46.8s on a quiet box). Cleared by the increment " +
-      "`studio-uat-journey-is-green-then-wired` once that question is answered.",
-  },
-];
+export const UNRUN_GATE_BASELINE: readonly BaselinedGate[] = [];
 
 /** One declared-but-unrun gate the baseline carries, and the blocker that keeps it there. */
 export interface BaselinedGate {

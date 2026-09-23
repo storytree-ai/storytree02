@@ -48,6 +48,19 @@
 //     foundation — which is exactly why criterion 13 asserting `comments.json` byte-identical is
 //     now load-bearing: it is the standing proof that nothing in the studio writes to that store.
 //
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// MOVED WITH THE FEATURE (2026-09-24, ADR-0605). The citation tier is gone end to end: `3ea9c3cc`
+// retired the artifact page's "Sources" block and `fa4f96a5` then deleted the `references` field
+// itself — schema, readers and the fixture pointers ADR-0425 dec 4 had added for these legs — so
+// there is no in-product link from one artifact to another left to follow (ADR-0477 D1:
+// `depends_on` is the library's only edge, and the fixture rows carry none by design). Six legs
+// walked that link (3, 4, 5, 6, 9, 12). Under ADR-0605 a leg broken by a deliberate removal moves
+// with the feature, like a unit test attached to removed code, and nothing is built just to keep a
+// leg alive. So each is RE-POINTED at the navigation the studio still offers — the Library
+// finder's Decisions scope, the full-detail overlay and its Close control, the artifact page's
+// `library` crumb, and route history — and none is retired: the walkthrough keeps its thirteen
+// steps and its shape (ground a question, read the decision behind it, come back).
+//
 // The mutating tests write through the real handlers into the offline stores (git-tracked
 // apps/studio/data/comments.json; the gitignored, first-run-seeded
 // apps/studio/data/assets.runtime.json — ADR-0210) and MUST leave them at their seeded baseline: a
@@ -60,14 +73,15 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { GuidanceAsset } from '../src/types';
 
-// The two decision rows the offline fixture carries (ADR-0425 dec 4). `adr-0013` cites `adr-0002`,
-// which is criterion 3's in-corpus cross-link; `deep-modules` cites `adr-0002`, which is the
-// grounding hop criteria 4-6, 9 and 12 walk.
+// The two decision rows the offline fixture carries (ADR-0425 dec 4). Criterion 3 walks between
+// them through the Library finder; `adr-0002` is the decision behind `deep-modules`, the artifact
+// that grounds the question in criteria 4-6, 9 and 12. Nothing LINKS the two any more (ADR-0605 —
+// see the header): the operator reaches the decision through the Library, as he does today.
 const ADR_0002 = 'adr-0002';
 const ADR_0013 = 'adr-0013';
 const ADR_0002_TITLE = 'The work hierarchy — story, capability, contract';
 const ADR_0013_TITLE = 'A structured, schema-validated corpus; markdown as a generated view';
-/** The artifact that grounds the question in criteria 4-6 — a principle whose source IS a decision. */
+/** The artifact that grounds the question in criteria 4-6 — a principle that rests on ADR-0002. */
 const GROUNDING_ID = 'deep-modules';
 const GROUNDING_TITLE = 'Deep modules';
 
@@ -124,14 +138,23 @@ async function openInOverlay(page: Page, shelfTestId: string, query: string, id:
   await expect(page.locator('[data-testid="library-open-overlay"]')).toBeVisible();
 }
 
+/** The full-detail overlay the selection card's Open control raises over the map. */
+const openOverlay = (page: Page): Locator => page.locator('[data-testid="library-open-overlay"]');
+
 /**
- * The artifact's "Sources" citation of `decisionId`, as a LIVE LINK. This locator is the whole
- * point of ADR-0425 dec 4's half of the rewrite: an unresolvable pointer renders as an inert
- * `<span>` reading "(unknown doc)" / "(unknown asset)", so matching an `<a>` at this href is what
- * separates a working seam from the greyed-out text the retired `docs/decisions/` path left behind.
+ * Assert `scope` renders `adr-0002`'s own SUBSTANCE — its `## Status` and `## Decision` sections —
+ * not a title over an empty shell. Every leg that "reads the decision" asserts through here.
  */
-function sourceLink(scope: Scope, decisionId: string): Locator {
-  return scope.locator(`.asset-refs a[href="#/asset/${decisionId}"]`);
+async function expectDecisionSubstance(scope: Scope): Promise<void> {
+  const body = scope.locator('.asset-body');
+  await expect(body.getByRole('heading', { name: 'Status', exact: true })).toBeVisible();
+  await expect(body.getByRole('heading', { name: 'Decision', exact: true })).toBeVisible();
+}
+
+/** Assert `scope` renders `deep-modules`'s title AND its derived body — the grounding itself. */
+async function expectGrounding(scope: Scope): Promise<void> {
+  await expectDetail(scope, GROUNDING_TITLE);
+  await expect(scope.locator('.asset-body')).toContainText('deletion test');
 }
 
 /** Assert `scope` is showing the named artifact's detail (its own title heading renders first). */
@@ -240,7 +263,7 @@ test('story UAT (criteria 1, 7, 8): boot on the forest → browse the knowledge-
 // Criteria 2, 3 — the DECISION tier, reached where decisions actually live (ADR-0403 dec 1).
 // =============================================================================================
 
-test('story UAT (criteria 2, 3): open a decision through the Library chrome → hop a citation between decisions', async ({
+test('story UAT (criteria 2, 3): open a decision through the Library chrome → move to a sibling decision through the finder', async ({
   page,
 }) => {
   test.setTimeout(180_000);
@@ -273,18 +296,21 @@ test('story UAT (criteria 2, 3): open a decision through the Library chrome → 
   await expect(decisionBody.getByRole('heading', { name: 'Status', exact: true })).toBeVisible();
   await expect(overlay.locator('.chip.cat-adr')).toHaveText('adr');
 
-  // —— Criterion 3: the in-corpus cross-link between decisions. ADR-0013 cites ADR-0002; the
-  // citation resolves to a live link, the sibling renders, and Back restores the prior decision.
-  // Driven on the asset ROUTE (not the transient overlay) so `goBack` has real history to restore
-  // — the same shape the retired `#/doc/…` hop had.
-  await page.goto(`/#/asset/${ADR_0013}`);
-  await expectDetail(libraryRoute(page), ADR_0013_TITLE);
-  const citation = sourceLink(libraryRoute(page), ADR_0002);
-  await expect(citation).toHaveText(ADR_0002_TITLE); // resolved: the title, never a raw pointer
-  await citation.click();
-  await expectDetail(libraryRoute(page), ADR_0002_TITLE);
-  await page.goBack();
-  await expectDetail(libraryRoute(page), ADR_0013_TITLE);
+  // —— Criterion 3: move between decisions through the Library itself. There is no citation link
+  // left to hop (ADR-0605 — see the header), so the decision tier is walked the way the product
+  // offers: dismiss the open decision, and — the finder still holding its Decisions scope — search
+  // for the sibling and open it. The swap is asserted BOTH ways — the sibling's own heading renders
+  // AND the first decision's is gone — because an overlay that kept stale content would pass the
+  // first assertion alone.
+  await overlay.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(overlay).toHaveCount(0);
+  await expect(page.locator('[data-testid="library-scope-chip"]')).toBeVisible();
+  await page.locator('.library-finder-input').fill('0013');
+  await page.locator(`[data-testid="library-finder-row-${ADR_0013}"]`).click();
+  await page.locator('[data-testid="library-selection-card"]').getByLabel('Open').click();
+  await expectDetail(overlay, ADR_0013_TITLE);
+  await expect(overlay.locator('.asset-body').getByRole('heading', { name: /ADR-0013/ })).toBeVisible();
+  await expect(overlay.locator('.asset-body').getByRole('heading', { name: /ADR-0002/ })).toHaveCount(0);
 });
 
 // =============================================================================================
@@ -300,9 +326,7 @@ test('story UAT (criteria 4, 5, 6): find the artifact that grounds the question 
   // artifact that grounds it, entering the review affordance the way an operator reading closely
   // would.
   await page.goto(`/#/asset/${GROUNDING_ID}`);
-  await expectDetail(libraryRoute(page), GROUNDING_TITLE);
-  await expect(page.locator('.asset-refs h4')).toHaveText('Sources');
-  await expect(sourceLink(libraryRoute(page), ADR_0002)).toHaveText(ADR_0002_TITLE);
+  await expectGrounding(libraryRoute(page));
 
   await page.getByRole('button', { name: /switch to Edit/i }).click();
   // The review surface IS mounted — asserted POSITIVELY first, because every absence below would
@@ -322,33 +346,37 @@ test('story UAT (criteria 4, 5, 6): find the artifact that grounds the question 
   // is reconstructed from the real offline-store read-back rather than surviving in the first
   // render's memory.
   await page.reload();
-  await expectDetail(libraryRoute(page), GROUNDING_TITLE);
+  await expectGrounding(libraryRoute(page));
   await landOnForest(page);
   await openLibraryLens(page);
   await selectLifecycle(page, 'active');
   await openInOverlay(page, 'library-shelf-row-principle', 'deep', GROUNDING_ID);
-  const overlay = page.locator('[data-testid="library-open-overlay"]');
-  await expectDetail(overlay, GROUNDING_TITLE);
-  await expect(sourceLink(overlay, ADR_0002)).toHaveText(ADR_0002_TITLE);
+  await expectGrounding(openOverlay(page));
 
-  // —— Criterion 6: follow the decision source, read the decision, and come back. This is the
-  // round trip the owner performs when grounding a conversation held in Claude Code or Codex.
+  // —— Criterion 6: read the decision behind it, then come back — the round trip the owner performs
+  // when grounding a conversation held in Claude Code or Codex. With no citation link left
+  // (ADR-0605) he reaches the decision the way the product offers: the artifact page's `library`
+  // crumb into the Library, the Decisions scope, the decision itself; then Back to where the
+  // question started.
   await page.goto(`/#/asset/${GROUNDING_ID}`);
-  await sourceLink(libraryRoute(page), ADR_0002).click();
-  await expectDetail(libraryRoute(page), ADR_0002_TITLE);
-  const body = libraryRoute(page).locator('.asset-body');
-  await expect(body.getByRole('heading', { name: 'Status', exact: true })).toBeVisible();
-  await expect(body.getByRole('heading', { name: 'Decision', exact: true })).toBeVisible();
+  await expectGrounding(libraryRoute(page));
+  await libraryRoute(page).locator('.doc-crumb a').click();
+  await expect(page.locator('[data-testid="library-drawer"]')).toBeAttached({ timeout: WORLD_MS });
+  await page.locator('[data-testid="library-drawer-lens:library"]').click();
+  await expect(page.locator('[data-testid="library-finder"]')).toBeVisible();
+  await selectLifecycle(page, 'active');
+  await openInOverlay(page, 'library-shelf-decisions-row', '0002', ADR_0002);
+  await expectDetail(openOverlay(page), ADR_0002_TITLE);
+  await expectDecisionSubstance(openOverlay(page));
   await page.goBack();
-  await expectDetail(libraryRoute(page), GROUNDING_TITLE);
-  await expect(sourceLink(libraryRoute(page), ADR_0002)).toHaveText(ADR_0002_TITLE); // Sources intact on return
+  await expectGrounding(libraryRoute(page)); // back on the grounding artifact, intact
 });
 
 // =============================================================================================
-// Criteria 9 — the Library→decision seam through the OVERLAY mount specifically.
+// Criterion 9 — reading an artifact through the full-detail OVERLAY mount specifically.
 // =============================================================================================
 
-test('story UAT (criterion 9): open deep-modules in the full-detail overlay → follow its decision source', async ({
+test('story UAT (criterion 9): read deep-modules in the full-detail overlay → dismiss it back onto the Library', async ({
   page,
 }) => {
   test.setTimeout(180_000);
@@ -358,21 +386,19 @@ test('story UAT (criterion 9): open deep-modules in the full-detail overlay → 
   await selectLifecycle(page, 'active');
 
   // The selection card's Open control raises the SEPARATE full-detail overlay over the map
-  // (ADR-0187 dec 2) — the artifact's derived body and its Sources, rendered by the byte-locked
-  // LibraryDiveBody → AssetView router.
+  // (ADR-0187 dec 2) — the artifact's derived body, rendered by the byte-locked
+  // LibraryDiveBody → AssetView router. The derived body (not just the stored title) is what
+  // proves the router reached the renderer through THIS mount.
   await openInOverlay(page, 'library-shelf-row-principle', 'deep', GROUNDING_ID);
-  const overlay = page.locator('[data-testid="library-open-overlay"]');
-  await expectDetail(overlay, GROUNDING_TITLE);
-  await expect(overlay.locator('.asset-refs h4')).toHaveText('Sources');
-  // Grouped as a decision, not as a stray doc path (`CATEGORY_TO_GROUP.adr`), which is the
-  // observable difference between the store-backed citation and the retired `doc:decisions/…` one.
-  await expect(overlay.locator('.asset-refs-group h5')).toHaveText('Decisions (ADRs)');
+  const overlay = openOverlay(page);
+  await expectGrounding(overlay);
+  await expect(overlay.locator('.chip.cat-principle')).toBeVisible();
 
-  // …and the Library → decision seam: the cited decision opens as its own artifact. Before
-  // ADR-0425 dec 4 this pointer aimed at a deleted `docs/` file and AssetView rendered it as the
-  // literal inert text "(unknown doc)" — so asserting an `<a>` here is asserting the fix.
-  await sourceLink(overlay, ADR_0002).click();
-  await expectDetail(libraryRoute(page), ADR_0002_TITLE);
+  // …and the overlay is TRANSIENT: its Close control dismisses it back onto the Library lens, whose
+  // finder still holds the operator's narrowed result — reading the artifact cost him no place.
+  await overlay.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(overlay).toHaveCount(0);
+  await expect(page.locator(`[data-testid="library-finder-row-${GROUNDING_ID}"]`)).toBeVisible();
 });
 
 // =============================================================================================
@@ -501,15 +527,13 @@ test.describe('story UAT (criteria 10-13): the mutating journey', () => {
       await page.goto(`${cold.url}/#/asset/${PROBE_ID}`);
       await expect(page.locator('.error-box h2')).toHaveText('Artifact not found');
 
-      // …and the grounding hop walks end-to-end on a process that has never served it before: the
-      // artifact, its resolved decision source, and the decision's own body.
+      // …and the grounding is reconstructed on a process that has never served it before: the
+      // artifact and the decision behind it each render their own body from storage.
       await page.goto(`${cold.url}/#/asset/${GROUNDING_ID}`);
-      await expectDetail(libraryRoute(page), GROUNDING_TITLE);
-      await sourceLink(libraryRoute(page), ADR_0002).click();
+      await expectGrounding(libraryRoute(page));
+      await page.goto(`${cold.url}/#/asset/${ADR_0002}`);
       await expectDetail(libraryRoute(page), ADR_0002_TITLE);
-      await expect(
-        libraryRoute(page).locator('.asset-body').getByRole('heading', { name: 'Decision', exact: true }),
-      ).toBeVisible();
+      await expectDecisionSubstance(libraryRoute(page));
 
       // —— Criterion 13: return to the forest where the journey began, and leave the stores as
       // found. `assets.runtime.json` round-trips because the probe was authored, edited and
