@@ -120,6 +120,14 @@ export const GATE_SKIP_EXIT_CODE = 3;
  */
 export const GATE_PARTIAL_EXIT_CODE = 4;
 
+/**
+ * The note a {@link RunGateInput.skipIsFailure} run attaches to a step that declared a skip — so the
+ * summary says WHY a step that "only skipped" is red, instead of printing a bare exit 3 as a failure.
+ */
+export const REFUSED_SKIP_NOTE =
+  "declared a SKIP (exit 3), which a CI run does not accept — CI supplies every input a " +
+  "skip-capable check needs, so a skip there means an input never arrived";
+
 /** What one executed step reported. */
 export interface GateExecution {
   /** The process exit code; `null` when the step could not be spawned at all. */
@@ -161,6 +169,15 @@ export interface RunGateInput {
    * an absent row is the ambiguity this whole module removes.
    */
   readonly failFast?: boolean;
+  /**
+   * A step's {@link GATE_SKIP_EXIT_CODE} counts as a FAILURE, not a skip (default false). Set by
+   * `pnpm gate --ci` (ADR-0606 D3), and it reproduces what CI always did rather than adding a rule:
+   * a plain workflow step read ANY non-zero exit as a failure, and a check whose skip CI accepts
+   * never exits 3 there — it withholds the code and exits 0 (`skipDisposition`, `mutation-diff.ts`).
+   * So the only exit 3 CI can see is a skip CI did NOT sanction: a browser that never installed, a
+   * `web/` clone that never happened — the vacuous-green shape the old workflow comments warned of.
+   */
+  readonly skipIsFailure?: boolean;
   /** Checked before each step; `true` stops the walk and reports the remainder `not-run`. */
   readonly shouldStop?: () => boolean;
   /**
@@ -230,12 +247,13 @@ export async function runGate(input: RunGateInput): Promise<GateStepResult[]> {
     const started = now();
     const exec = await execute(step, index);
     const durationMs = now() - started;
+    const declaredSkip = exec.exitCode === GATE_SKIP_EXIT_CODE;
     const status: GateStepStatus =
       exec.unverified === true
         ? "not-run"
         : exec.exitCode === 0
           ? "pass"
-          : exec.exitCode === GATE_SKIP_EXIT_CODE
+          : declaredSkip && input.skipIsFailure !== true
             ? "skip"
             : "fail";
     const stepResult: Omit<GateStepResult, "note"> = {
@@ -244,8 +262,13 @@ export async function runGate(input: RunGateInput): Promise<GateStepResult[]> {
       exitCode: status === "not-run" ? null : exec.exitCode,
       durationMs,
     };
+    const notes = [
+      ...(exec.note !== undefined ? [exec.note] : []),
+      // Only a skip this run REFUSED carries the note; an ordinary red never does.
+      ...(status === "fail" && declaredSkip ? [REFUSED_SKIP_NOTE] : []),
+    ];
     const result: GateStepResult =
-      exec.note !== undefined ? { ...stepResult, note: exec.note } : stepResult;
+      notes.length > 0 ? { ...stepResult, note: notes.join("; ") } : stepResult;
     results.push(result);
     input.onStepDone?.(result, index, total);
 

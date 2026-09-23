@@ -24,7 +24,14 @@ import {
   isExpensiveStep,
   lastExpensiveIndex,
 } from "./gate-order.js";
-import { gitLines, localAffectedScope, renderScopeNotice, scopeGatePlan } from "./gate-scope.js";
+import {
+  gitLines,
+  localAffectedScope,
+  parseBehindCount,
+  renderBehindMainNotice,
+  renderScopeNotice,
+  scopeGatePlan,
+} from "./gate-scope.js";
 
 /** A representative workspace slice — names/dirs mirror the real repo shape. */
 const PROJECTS: WorkspaceProject[] = [
@@ -241,4 +248,36 @@ test("the run log states the scope and its reason, both modes", () => {
   assert.match(affected, /AFFECTED/);
   assert.match(affected, /@storytree\/cli, studio/);
   assert.match(affected, /dependents/, "the operator must know dependents are included, not just the named projects");
+});
+
+// ── the behind-main warning (ADR-0606 D5) ─────────────────────────────────────
+//
+// The stale-branch half of "local green, CI red": the local gate proves HEAD, CI proves the branch
+// MERGED onto main's tip. Until this warning, the diagnosis existed only as a function nothing called
+// (`diagnoseStaleBranch`, measured 2026-09-23), so no session was ever shown it.
+
+test("a rev-list count is read as a count, and anything else as unknown", () => {
+  assert.equal(parseBehindCount("7\n"), 7);
+  assert.equal(parseBehindCount("  12  "), 12);
+  assert.equal(parseBehindCount("0"), 0);
+  assert.equal(parseBehindCount(""), null);
+  assert.equal(parseBehindCount("abc"), null);
+  assert.equal(parseBehindCount("1.5"), null);
+  assert.equal(parseBehindCount("-3"), null);
+  assert.equal(parseBehindCount("3 4"), null);
+  assert.equal(parseBehindCount("x3"), null);
+});
+
+test("a current branch, and a branch whose distance is unknown, get no warning at all", () => {
+  assert.deepEqual(renderBehindMainNotice(0), []);
+  assert.deepEqual(renderBehindMainNotice(null), []);
+});
+
+test("a branch behind main is told how far, that CI proves the merge, and the remedy", () => {
+  assert.deepEqual(renderBehindMainNotice(1), [
+    "⚠ this branch is 1 commit(s) behind origin/main (as last fetched). CI proves the branch " +
+      "MERGED onto main's tip, so a green here does not predict a green CI until main is merged in:",
+    "    git fetch origin && git merge origin/main   — then re-gate.",
+  ]);
+  assert.match(renderBehindMainNotice(37)[0] ?? "", /^⚠ this branch is 37 commit\(s\) behind origin\/main/);
 });

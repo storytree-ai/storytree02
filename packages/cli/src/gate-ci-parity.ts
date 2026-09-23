@@ -19,7 +19,7 @@
 // The two are compared on every run, so the enumeration cannot drift unnoticed the way the capability
 // spec's own prose did (it claimed a shared floor of eight while the measured floor was 21).
 
-import type { GateStep } from "./gate-order.js";
+import type { GatePlacement, GateStep } from "./gate-order.js";
 
 // ── mechanism: slice one job's body out of a workflow ────────────────────────────
 
@@ -188,10 +188,17 @@ export function ciContentChecks(workflowText: string, jobName: string): Set<stri
  * The same canonical token set, derived from a {@link GateStep}-shaped plan (i.e. the real
  * `GATE_PLAN`): a step's own `check` field is used directly when present (it already names the
  * canonical `check:*` token), otherwise its `command` is normalised the same way a CI invocation is.
+ *
+ * A step placed `runs: "ci"` is NOT a local token — the local gate never runs it (ADR-0606 D3). That
+ * keeps this comparison honest for the one increment it outlives the studio build's move into the
+ * plan; ADR-0606 D4 deletes it once CI runs the gate.
  */
-export function localGatePlanTokens(steps: readonly GateStep[]): Set<string> {
+export function localGatePlanTokens(
+  steps: readonly (GateStep & { readonly runs?: GatePlacement })[],
+): Set<string> {
   const tokens = new Set<string>();
   for (const step of steps) {
+    if (step.runs === "ci") continue;
     if (step.check !== undefined) {
       tokens.add(step.check);
       continue;

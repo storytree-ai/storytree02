@@ -51,9 +51,14 @@ test("the match is an EXACT token, so `--only check:help` still runs a gate", ()
 
 test("the help names every flag main() actually branches on — help that omits one is a wrong answer", () => {
   const text = renderGateHelp();
-  for (const flag of ["--scope", "--full", "--fail-fast", "--only", "--rerun-failed", "--help"]) {
+  for (const flag of ["--scope", "--full", "--fail-fast", "--only", "--rerun-failed", "--ci", "--help"]) {
     assert.ok(text.includes(flag), `help omits ${flag}`);
   }
+  // `--ci` is the one flag CI itself passes (ADR-0606 D3), so its line has to say what it changes.
+  assert.match(
+    text,
+    /--ci\s+run the plan as CI's `verify` job does: the CI placement, the PR merge commit's scope, a skip counts as a failure, one declared credential per step/,
+  );
   for (const env of [
     "STORYTREE_GATE_FULL",
     "STORYTREE_GATE_FAIL_FAST",
