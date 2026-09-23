@@ -12,6 +12,17 @@ import {
 } from './ForestWorldCanvas.growth-material.js';
 import { installPropLighting } from './prop-lighting.js';
 
+/** Node's reporter serializes an entire Three shader/texture on `assert.match`/`assert.equal`
+ * failure. Under Stryker that can lose the terminal `(fail)` line and therefore the killer's
+ * attribution. Keep the predicates identical while making the failure payload one short name. */
+function assertShaderMatch(shader: string, pattern: RegExp, name: string): void {
+  assert.equal(pattern.test(shader), true, name);
+}
+
+function assertSame(actual: unknown, expected: unknown, name: string): void {
+  assert.ok(actual === expected, name);
+}
+
 test('the stable float table uploads only changed app presentation values', () => {
   const growth = createGrowthTexture(3);
   assert.deepEqual([...growth.values], [1, 1, 1]);
@@ -81,16 +92,16 @@ test('a cloned kit material preserves the source hook and cache key with the clo
     fragmentShader: THREE.ShaderLib.standard.fragmentShader,
   };
   clone.onBeforeCompile(shader as never, {} as THREE.WebGLRenderer);
-  assert.equal(hookReceiver, clone);
+  assertSame(hookReceiver, clone, 'source hook receives the growth clone');
   assert.equal(clone.customProgramCacheKey(), 'clone|storytree-regrow-growth-v1');
-  assert.match(shader.fragmentShader, /uPropIndirectScale/);
-  assert.match(shader.vertexShader, new RegExp(GROWTH_ANCHOR_ATTRIBUTE));
-  assert.match(shader.vertexShader, /#include <common>\nattribute float aRegrowSlot;/);
-  assert.match(shader.fragmentShader, /#include <common>\nvarying float vRegrowProgress;/);
-  assert.match(shader.fragmentShader, /vRegrowProgress <= 0\.0\) discard/);
-  assert.match(shader.vertexShader, /transformed = stRegrowProgress == 1\.0 \? transformed : mix\(aRegrowAnchor, transformed, stRegrowProgress\);/);
-  assert.match(shader.fragmentShader, /#include <clipping_planes_fragment>\nif \(vRegrowProgress <= 0\.0\) discard;/);
-  assert.equal(shader.uniforms.uRegrowProgress?.value, growth.texture);
+  assertShaderMatch(shader.fragmentShader, /uPropIndirectScale/, 'preserves prop lighting');
+  assertShaderMatch(shader.vertexShader, new RegExp(GROWTH_ANCHOR_ATTRIBUTE), 'declares the shared growth anchor');
+  assertShaderMatch(shader.vertexShader, /#include <common>\nattribute float aRegrowSlot;/, 'injects the kit slot declaration');
+  assertShaderMatch(shader.fragmentShader, /#include <common>\nvarying float vRegrowProgress;/, 'injects the kit progress varying');
+  assertShaderMatch(shader.fragmentShader, /vRegrowProgress <= 0\.0\) discard/, 'discards only zero progress');
+  assertShaderMatch(shader.vertexShader, /transformed = stRegrowProgress == 1\.0 \? transformed : mix\(aRegrowAnchor, transformed, stRegrowProgress\);/, 'keeps the full-growth position exact');
+  assertShaderMatch(shader.fragmentShader, /#include <clipping_planes_fragment>\nif \(vRegrowProgress <= 0\.0\) discard;/, 'injects discard after clipping');
+  assertSame(shader.uniforms.uRegrowProgress?.value, growth.texture, 'wires the shared progress texture');
   assert.equal(shader.uniforms.uRegrowProgressWidth?.value, 1);
   assert.ok(clone.version > 0, 'the cloned material recompiles with its growth hook');
 });
