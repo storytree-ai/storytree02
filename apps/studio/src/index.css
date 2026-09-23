@@ -1607,20 +1607,26 @@ a.stat:hover {
    they are the per-island groups INSIDE these layers, so the rule suppressed nothing the layers do
    not already contain and would have read as working while depending on a second selector staying
    in step. Hiding the layer is what the scene's own structure offers.
-   ⚠ AND `.hex-coast` (the `empties-layer`, the off-island board hexes) IS NOT SUPPRESSED. Those are
-   the board, not island land; the canvas draws no land there and is transparent, so they stay
-   visible exactly as they were.
-   ⚠⚠ THE LEGEND IS UNAFFECTED BY CONSTRUCTION — the answer to the no-drift question rather than a
-   mitigation of it, and it rests on two facts that were checked rather than assumed. First,
-   `WorldLegend` draws NO ground swatch at all: its whole vocabulary is `story-tree st-*`,
-   `garden-flora st-*` and the four wisp families, so the mount moves only a colour the legend never
-   described. Second, `buildScene` puts the parcel FLORA marks in the flora layer and only the
-   parcel CELLS in the ground layer (`scene.ts`'s parcel builder returns the two separately), so
-   hiding the ground layer cannot take a `garden-flora` mark with it. Everything the legend claims
-   to describe still wears the map's own classes in the SVG layer, so the legend still IS that
-   palette. (The ground tint's own three copies stay pinned by `pnpm check:palette-transcription`.) */
+   ⚠ `.hex-coast` is the empty board between islands. Under the mount it becomes transparent too:
+   the canvas supplies the smooth coast there, while retaining this SVG node preserves the
+   map's DOM and hit-testing behaviour. The mounted legend consequently names the status word on
+   each surviving nameplate; it does not claim that a removed hero-tree silhouette still carries it.
+   Parcel flora, UAT marks and session wisps remain in their own SVG layers. */
 .world-pan-layer.has-land-mount .hex-coastland,
-.world-pan-layer.has-land-mount .relaxed-land {
+.world-pan-layer.has-land-mount .relaxed-land,
+.world-pan-layer.has-land-mount .hex-coast {
+  opacity: 0;
+}
+
+/* The mounted surface already has its own trees and relief. Suppress only the SVG central hero tree,
+   leaving every semantic mark (parcel flora, UAT, sessions and the nameplate) and its parent hit
+   region in place. The procedural tree's signpost is a semantic direct child, so this hides its
+   artwork children individually rather than blanking the containing `g`. The remaining selectors
+   cover a static baked `<use>` and the normal vegetation-track sprite path; generic baked art and
+   flora are not hidden. */
+.world-pan-layer.has-land-mount g.story-tree > :not(.story-sign):not(title),
+.world-pan-layer.has-land-mount use[href^='#veg-hero-autumn-tree-'],
+.world-pan-layer.has-land-mount g.baked-art > .pop-motion-inner > image.veg-track-tree {
   opacity: 0;
 }
 
