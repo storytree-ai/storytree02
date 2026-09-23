@@ -18,18 +18,20 @@ arc: story-green-monotonicity-arc
 capabilities: [green-gate, repo-surface-manifest, adr-health-gate, auto-merge-on-green, merge-presence-retire, deploy-on-merge, ci-claim-corroborate]
 # `gate-ci-parity` LEFT this story on 2026-08-31 for `stories/cli`, with its code — the same shape as
 # `arc-explicit-id-fidelity`'s departure from `cli` under ADR-0369, and for a related reason. Its
-# ARTEFACT is a pure judge invoked by a `check:*` rung, which is a capability class `cli` already
-# hosts three times (`organism-boundary-tooling`, `work-hierarchy-camp-fence`,
-# `verification-decay-instruments`), and its judge must read the `GATE_PLAN` literal out of
-# `packages/cli/src/gate-order.ts` — so half its subject is `cli`'s own source. The line that decided
-# it, and that this story keeps: **ci-cd owns the PIPELINE — that a step runs, that it blocks, that it
-# sits on the merge ref, that `automerge` needs it. `cli` owns the JUDGE a `check:*` rung invokes.**
-# `check:boundaries` is the precedent already in the tree: a `verify` step this story enumerates in
-# `green-gate`, whose ANALYSER has always been a `cli` capability. What did NOT leave with it: UAT leg
-# 3 and Reliability Gate 3, which assert the local/CI relationship as repository-owned evidence on
-# this story's own journey — a story's UAT never had to mirror its capability list, and both ordinals
-# are burned and carry signed history, so neither moves. `green-gate` did NOT follow it; see that
-# file's frontmatter for why the same wall got the opposite answer.
+# artefact was then a pure judge invoked by a `check:*` rung, a capability class `cli` already hosted
+# three times (`organism-boundary-tooling`, `work-hierarchy-camp-fence`,
+# `verification-decay-instruments`). ADR-0606 (2026-09-23) deleted that judge along with the second
+# list it compared: CI's `verify` now runs `pnpm gate --ci` and names no check, and the capability is
+# the gate program's CI mode itself — `packages/cli/src/gate*.ts`, so more plainly `cli`'s than ever.
+# The line that decided it, and that this story keeps: **ci-cd owns the PIPELINE — that a step runs,
+# that it blocks, that it sits on the merge ref, that `automerge` needs it. `cli` owns the PROGRAM a
+# pipeline step invokes — which checks run, as whom, and what counts as green.** `check:boundaries`
+# is the precedent already in the tree: a check CI runs (through `pnpm gate --ci` since ADR-0606),
+# whose ANALYSER has always been a `cli` capability. What did NOT leave with it: UAT leg 3 and
+# Reliability Gate 3, which assert the local/CI relationship as repository-owned evidence on this
+# story's own journey — a story's UAT never had to mirror its capability list, and both ordinals are
+# burned and carry signed history, so neither moves. `green-gate` did NOT follow it; see that file's
+# frontmatter for why the same wall got the opposite answer.
 depends_on: [studio-cloud, notice-board]
 # ADR-0166 artifact edges: the deliberate NON-IMPORT seams among the depends_on above (build-artifact /
 # write-target / hosted-seam consumption, narrated per-edge in the comments/body of this spec) — the
@@ -77,8 +79,12 @@ repos) and ADR-0046 (merge→deploy CD).
 > local plan adds `check:verification-decay`" — measured false on 2026-08-31: the floor is 21 and the
 > local-only set has THREE members. The counts are struck rather than restated, because ADR-0486 D4
 > requires both sets be READ from their real definitions at runtime, never transcribed into prose that
-> goes stale. The live relationship is `ci.yml` vs the `GATE_PLAN` literal, and the judge that reads
-> them is now `cli`'s.)*
+> goes stale. The relationship was then `ci.yml` vs the `GATE_PLAN` literal, read by `cli`'s judge.)*
+>
+> *(Overtaken 2026-09-23 by ADR-0606, which supersedes ADR-0486. There is no second list any more: CI's
+> `verify` runs `pnpm gate --ci` over the one `GATE_PLAN`, and where each step runs is its own `runs`
+> placement — held by `cli`'s [`gate-ci-parity`](../cli/gate-ci-parity.md), whose comparison judge was
+> deleted rather than ported.)*
 
 ## Design floor
 
@@ -89,27 +95,30 @@ repos) and ADR-0046 (merge→deploy CD).
   (GitHub's PR merge ref), so a unit is proven against the trunk it will actually land on — a clean
   branch can still fail on something that landed on `main` *after* it was cut. This is the load-bearing
   reason a green local `pnpm gate` does not guarantee a green CI.
-- **The gate and CI share a content floor; each keeps steps the other does not.** It is a TWO-WAY
-  delta — **not** "gate = CI − build", an equality that was true once and is not now. CI keeps steps
-  the local plan does not (`pnpm -r build`, the PR-only merged-branch guard, the pinned web submodule
-  checkout, affected-scope selection, and the merge-ref); the local plan keeps steps CI does not. The
-  relationship is DECLARED and checkable rather than tribal knowledge, and both lists are READ from
-  their own sources at runtime: CI's from [`ci.yml`](../../.github/workflows/ci.yml), the local plan's
-  from the `GATE_PLAN` literal in
-  [`packages/cli/src/gate-order.ts`](../../packages/cli/src/gate-order.ts) — never from the root
-  `gate` script's text, which is now just the runner invocation and names zero steps, so any substring
-  test against it is vacuous.
-  **The judge that reads them is [`cli`'s `gate-ci-parity`](../cli/gate-ci-parity.md)**, not this
-  story's: `ci-cd` owns that the steps RUN and BLOCK on the merge ref, `cli` owns the analyser behind
-  the rung — the same split `check:boundaries` has always had. This story still walks the
-  relationship at its own tier (UAT leg 3, Reliability Gate 3).
-  *(Counts struck 2026-08-31. This bullet enumerated "EIGHT checks" by name and said the local plan
-  adds only `check:verification-decay`. Measured that day: the shared floor is 21 and the local-only
-  set has THREE members — `check:desktop-route-coverage`, `check:verification-decay`,
-  `check:definition-adjudication`. ADR-0486 D4 requires both sets be derived from their real
-  definitions at runtime, so the membership is deliberately NOT restated here; a spec that enumerates
-  gate steps goes false every time the gate is re-decided, which is the standing lesson open modeling
-  call 3 below already records.)*
+- **The gate and CI walk ONE plan, and each step's placement is the only difference in what they
+  run.** Since ADR-0606 (2026-09-23, superseding ADR-0486's declared two-way delta) CI's `verify` job
+  runs `pnpm gate --ci` and names no check. The local gate walks the steps of the `GATE_PLAN` literal
+  in [`packages/cli/src/gate-order.ts`](../../packages/cli/src/gate-order.ts) placed `both` or
+  `local`; CI walks those placed `both` or `ci`; and a step's `runs` field is the only record of where
+  it runs, so no step can be listed on one side while placed on the other. Both runs narrow their
+  `-r` legs through the one affected-scope classifier (ADR-0304 D2) — the local run from its
+  merge-base with `origin/main`, CI from the PR merge commit. What else separates them is pipeline
+  plumbing only CI carries — the PR-only merged-branch guard, the pinned web submodule checkout, and
+  the merge ref itself — and the merge ref is now DIAGNOSED where the reader is: the local gate warns,
+  before and beside its verdict, whenever the branch is behind `origin/main` (ADR-0606 D5). Read the
+  placements from `GATE_PLAN`, never from the root `gate` script's text, which is just the runner
+  invocation and names zero steps.
+  **The program is [`cli`'s `gate-ci-parity`](../cli/gate-ci-parity.md)**, not this story's: `ci-cd`
+  owns that `verify` runs the gate as a required step on the merge ref, `cli` owns what the gate runs
+  — the same split `check:boundaries` has always had. This story still walks the relationship at its
+  own tier (UAT leg 3, Reliability Gate 3).
+  *(Rewritten 2026-09-24 for ADR-0606, ADR-0139. This bullet described a TWO-WAY delta between two
+  hand-kept lists — `ci.yml`'s `verify` steps and `GATE_PLAN` — both read at runtime by
+  `gate-ci-parity`'s comparison judge, which ADR-0606 D4 deleted along with the second list. Its
+  2026-08-31 correction had already struck an enumeration of "EIGHT checks" measured false that day.
+  The membership is still deliberately NOT restated here, because a spec that enumerates gate steps
+  goes false every time the gate is re-decided — the standing lesson open modeling call 3 below
+  records.)*
 - **Auto-merge is a consequence of green, never a decision.** A non-draft, non-`hold` PR merges the
   instant `verify` passes. Draft / `hold` is the only opt-out, and it is temporary — flip to ready on
   green. Humans approve by making the PR ready, not by clicking merge.
@@ -157,10 +166,12 @@ ADR-0311 D2 retired from the gate and CI; open modeling call 5 below carries tha
 **Within-story** edges, read off the real pipeline (the `verify` → `automerge` job ordering in
 `ci.yml` and the `push:main` trigger of `deploy-studio.yml`):
 
-- `auto-merge-on-green` → `green-gate` — the `automerge` job `needs: verify` (`ci.yml:96`); it only
-  runs after the gate is green.
+- `auto-merge-on-green` → `green-gate` — the `automerge` job declares `needs: verify`; it only runs
+  after the gate is green.
 - `merge-presence-retire` → `auto-merge-on-green` — the retire steps are part of the SAME `automerge`
-  job, after the `gh pr merge` step (`ci.yml:130-183`); the merge IS the "work done" fact it acts on.
+  job, after its `gh pr merge` step; the merge IS the "work done" fact it acts on. *(Both bullets cited
+  `ci.yml` by line number — `:96` and `:130-183` — until 2026-09-24. Neither number still pointed at
+  what it named, so the steps are named instead.)*
 - `deploy-on-merge` → `auto-merge-on-green` — the `automerge` job's LAST step DISPATCHES
   `deploy-studio.yml` (`gh workflow run … --ref main`) after a studio-affecting merge. *(Corrected
   2026-08-31: this read "`deploy-studio.yml` triggers on the `push:main` the auto-merge creates
@@ -191,7 +202,11 @@ identically whether or not `green-gate` is ever signed. The bullet's own wording
 is defined relative to the `verify` job's invariant set" is a DEFINITIONAL relationship (shared
 subject), which the DAG does not encode. False both ways, so no `consumed_by: [cli]` is owed here
 either, and `ci-cd` keeps its zero inbound edges — the reasoning below is unchanged, not merely
-still-passing.)*
+still-passing. Re-run 2026-09-24 after ADR-0606, with the same answer on a stronger footing:
+`gate-ci-parity` no longer reads `ci.yml` at all — it is now the gate program `verify` RUNS — and none
+of its six contracts consumes anything `green-gate` delivers, while `green-gate`'s audit reads
+`ci.yml` alone. The runtime reliance between them is named in each spec as a cross-story pointer,
+never as an edge.)*
 
 **Cross-story boundary (ADR-0010 §4; direction per ADR-0058 §1, §3) — ci-cd's two OUTBOUND dependencies:**
 - `merge-presence-retire` depends on the **`presence-store`** capability of
@@ -347,12 +362,29 @@ witness. Opening the PR is now the session's own ceremony, not a repository seam
    repository ever grows a new repository-owned landing seam, that seam earns proof at its own
    capability first.
 2. **The verify workflow keeps its hard merge-candidate floor** _(gate: observe)_
-   `node --input-type=module -e "import fs from 'node:fs';const c=fs.readFileSync('.github/workflows/ci.yml','utf8');for(const s of ['pull_request:','branches: [main]','uses: actions/checkout@v6','Merged-branch guard (a branch dies on merge)','run: pnpm check:boundaries','run: pnpm check:mirror-conformance','run: pnpm check:web-grounding','run: pnpm check:web-engine','Affected scope (PRs only)','- name: Typecheck','- name: Test','run: pnpm -r build','run: pnpm check:guidance','run: pnpm check:agents','needs: verify'])if(!c.includes(s))throw new Error('missing verify seam: '+s)"`.
-   The command reads the landed workflow itself and fails on removal of any named standing seam. The
-   named checks are a FLOOR, not the complete list the job runs today (ADR-0336 added a tenth,
-   `check:web-experience-closure`, not named here); `check:manifest` and `check:web-experience` were
-   removed from this list when ADR-0311 D2 retired them, because a seam-presence gate that names a
-   retired rung reds on the retirement itself rather than on drift.
+   `node --input-type=module -e "import fs from 'node:fs';const q=String.fromCharCode(34);const src=fs.readFileSync('packages/cli/src/gate-order.ts','utf8');const i=src.indexOf('export const GATE_PLAN');if(i<0)throw new Error('GATE_PLAN literal not found');const end=src.indexOf('];',i);if(end<0)throw new Error('GATE_PLAN literal unterminated');const runs={};for(const part of src.slice(i,end).split(q).join('').split('command: ').slice(1)){const cmd=part.slice(0,part.indexOf(',')).split(' ').filter(t=>!t.startsWith('--')).join(' ');const r=part.indexOf('runs: ');if(r<0)throw new Error('plan step has no runs placement: '+cmd);runs[cmd]=part.slice(r+6,part.indexOf(',',r))}const c=fs.readFileSync('.github/workflows/ci.yml','utf8');for(const s of ['pull_request:','branches: [main]','uses: actions/checkout@v6','Merged-branch guard (a branch dies on merge)','run: pnpm gate --ci','steps.gate.outputs.mode','needs: verify'])if(!c.includes(s))throw new Error('missing verify seam: '+s);for(const s of ['pnpm check:manifest-fragments','pnpm check:boundaries','pnpm check:mirror-conformance','pnpm check:web-grounding','pnpm check:web-engine','pnpm check:guidance','pnpm check:agents','pnpm -r typecheck','pnpm -r test','pnpm -r build'])if(runs[s]!=='both'&&runs[s]!=='ci')throw new Error('verify no longer runs '+s+' (placed '+runs[s]+')')"`.
+   The command reads the landed workflow AND the gate plan that workflow now runs, and fails on the
+   removal of any named standing seam. Since ADR-0606 D3 the `verify` job names no check: it runs
+   `pnpm gate --ci`, which walks every `GATE_PLAN` step placed `both` or `ci`
+   ([`packages/cli/src/gate-order.ts`](../../packages/cli/src/gate-order.ts)). So each named check is
+   asserted where it now lives — as a plan step placed on the CI side — and the workflow is held only
+   to what it still carries itself: the `pull_request` → `main` trigger, the merge-candidate
+   checkout, the merged-branch guard, the one gate step, the affected-or-full `mode` that step
+   publishes, and `needs: verify`. The plan is read as TEXT — sliced to the `GATE_PLAN` literal, as
+   gate 3 does, with its double quotes and long flags stripped, so `pnpm -r --no-bail test` still
+   matches the declared `pnpm -r test`. If that literal is ever replaced, the command fails CLOSED on
+   `GATE_PLAN literal not found` rather than passing on nothing. The named checks are a FLOOR, not the
+   complete list CI runs — read that from `GATE_PLAN`.
+   `check:manifest-fragments` (ADR-0556 D4) is the manifest check the criterion names; it replaces
+   the `check:manifest` and `check:web-experience` this list dropped when ADR-0311 D2 retired them,
+   because a seam-presence gate that names a retired rung reds on the retirement itself rather than on
+   drift.
+   *(Repaired in place 2026-09-24, ADR-0139, for ADR-0606 — the criterion is unchanged. The previous
+   command searched `ci.yml` for `run: pnpm check:boundaries`, `run: pnpm check:mirror-conformance`,
+   `run: pnpm check:web-grounding`, `run: pnpm check:web-engine`, `Affected scope (PRs only)`,
+   `- name: Typecheck`, `- name: Test`, `run: pnpm -r build`, `run: pnpm check:guidance` and
+   `run: pnpm check:agents`. ADR-0606 D3 moved every one of those out of the workflow and into the
+   plan, so that command would have gone red having found nothing wrong.)*
    *(Corrected in place 2026-08-23, same rule: `'ADR number collision (open PRs)'` left this list —
    and gate 3's CI-only delta list — because **ADR-0403 dec 1 deleted the step**. Decisions are
    Postgres rows now, so there is no `docs/decisions/**` for two open PRs to collide on; `ci.yml`'s
@@ -360,17 +392,33 @@ witness. Opening the PR is now the session's own ceremony, not a repository seam
    and NOBODY SAW IT: until ADR-0421 the spine could not execute a `node -e "…"` command at all, so
    the gate had never once been observed either way.)*
 3. **The current local/CI relationship is declared** _(gate: observe)_
-   `node --input-type=module -e "import fs from 'node:fs';const src=fs.readFileSync('packages/cli/src/gate-order.ts','utf8');const i=src.indexOf('export const GATE_PLAN');if(i<0)throw new Error('GATE_PLAN literal not found');const end=src.indexOf('];',i);if(end<0)throw new Error('GATE_PLAN literal unterminated');const plan=src.slice(i,end);const planN=plan.replace(/\s+--[a-z][a-z-]*/g,'');const c=fs.readFileSync('.github/workflows/ci.yml','utf8');for(const s of ['check:boundaries','check:mirror-conformance','check:web-grounding','check:web-engine','check:guidance','check:agents'])if(!plan.includes(s)||!c.includes(s))throw new Error('shared gate seam drifted: '+s);for(const s of ['pnpm -r typecheck','pnpm -r test'])if(!planN.includes(s))throw new Error('shared expensive leg missing from GATE_PLAN: '+s);for(const s of ['- name: Typecheck','- name: Test'])if(!c.includes(s))throw new Error('shared expensive leg missing from verify: '+s);for(const s of ['pnpm -r build','Merged-branch guard (a branch dies on merge)','Affected scope (PRs only)'])if(!c.includes(s)||plan.includes(s))throw new Error('CI-only delta drifted: '+s);if(!plan.includes('check:verification-decay')||c.includes('check:verification-decay'))throw new Error('local-only delta drifted: check:verification-decay')"`.
-   It reads the local gate's real step list from the `GATE_PLAN` literal in
-   `packages/cli/src/gate-order.ts` — **never** from `package.json`'s `gate` script, which since
-   2026-08-04 is just the runner invocation (`… src/gate-run.ts`) and names zero steps, so every
-   substring assertion against its text passes vacuously. Slicing to the literal is what keeps the
-   `plan.includes(…)` negatives honest: the same file also declares `RETIRED_CHECKS`, so a whole-file
-   search would find `check:manifest` and report a retired rung as live. The assertions are the
-   two-way relationship, not the obsolete "gate = CI − build" equality: the eight shared checks are
-   present in both, `pnpm -r build` + the PR-only merged-branch guard + affected selection are present in CI
-   and absent from the plan, and `check:verification-decay` is present in the plan and absent from
-   CI — each direction asserted BOTH ways, so a step migrating between them fails here.
+   `node --input-type=module -e "import fs from 'node:fs';const q=String.fromCharCode(34);const src=fs.readFileSync('packages/cli/src/gate-order.ts','utf8');const i=src.indexOf('export const GATE_PLAN');if(i<0)throw new Error('GATE_PLAN literal not found');const end=src.indexOf('];',i);if(end<0)throw new Error('GATE_PLAN literal unterminated');const plan=src.slice(i,end).split(q).join('');const runs={};for(const part of plan.split('command: ').slice(1)){const cmd=part.slice(0,part.indexOf(',')).split(' ').filter(t=>!t.startsWith('--')).join(' ');const r=part.indexOf('runs: ');if(r<0)throw new Error('plan step has no runs placement: '+cmd);runs[cmd]=part.slice(r+6,part.indexOf(',',r))}for(const [s,v] of Object.entries(runs))if(v!=='both'&&v!=='local'&&v!=='ci')throw new Error('plan step with no valid placement: '+s+' ('+v+')');if(!String(JSON.parse(fs.readFileSync('package.json','utf8')).scripts.gate).includes('gate-run.ts'))throw new Error('the root gate script no longer walks GATE_PLAN');const c=fs.readFileSync('.github/workflows/ci.yml','utf8');if(!c.includes('run: pnpm gate --ci'))throw new Error('verify no longer walks GATE_PLAN');if(c.split(String.fromCharCode(10)).some(l=>!l.trim().startsWith('#')&&l.includes('pnpm check:')))throw new Error('verify names a check of its own again, so the plan is no longer the one list');for(const s of ['pnpm check:boundaries','pnpm check:mirror-conformance','pnpm check:web-grounding','pnpm check:web-engine','pnpm check:guidance','pnpm check:agents','pnpm -r typecheck','pnpm -r test'])if(runs[s]!=='both')throw new Error('shared floor drifted: '+s+' is placed '+runs[s]);if(runs['pnpm -r build']!=='ci')throw new Error('CI-only delta drifted: pnpm -r build is placed '+runs['pnpm -r build']);for(const s of ['Merged-branch guard (a branch dies on merge)','uses: actions/checkout@v6','Check out the pinned web submodule','steps.gate.outputs.mode'])if(!c.includes(s)||plan.includes(s))throw new Error('CI-only plumbing drifted: '+s);for(const s of ['pnpm check:verification-decay','pnpm check:definition-adjudication'])if(runs[s]!=='local')throw new Error('local-only delta drifted: '+s+' is placed '+runs[s])"`.
+   Since ADR-0606 the relationship is declared in ONE place — each `GATE_PLAN` step's `runs`
+   placement in `packages/cli/src/gate-order.ts` — and this reads it there. It asserts that both runs
+   walk that one plan: the root `gate` script still invokes the runner, and `verify` still runs
+   `pnpm gate --ci` and names no check of its own (a comment may mention one; a step may not). Then
+   the relationship itself, each direction asserted where it now lives: the shared floor is placed
+   `both`; the studio build is placed `ci`, and the PR-only merged-branch guard, the merge-candidate
+   checkout, the pinned web checkout and the affected-or-full `mode` the gate step publishes are
+   present in the workflow and absent from the plan, because only CI carries them; the live/advisory
+   health tails — `check:verification-decay` (`local` by ADR-0252 D3) and
+   `check:definition-adjudication` — are placed `local`; and every plan step carries one of the three
+   placements. It reads the real step list from the `GATE_PLAN` literal — **never** from
+   `package.json`'s `gate` script, which since 2026-08-04 is just the runner invocation and names
+   zero steps, so a step search against its text passes vacuously; the script is read only to confirm
+   it still invokes `gate-run.ts`. Slicing to the literal keeps the `plan.includes(…)` negatives
+   honest: the same file also declares `RETIRED_CHECKS`, so a whole-file search would find
+   `check:manifest` and report a retired rung as live. Double quotes and long flags are stripped from
+   the plan text, so `pnpm -r --no-bail test` matches the declared `pnpm -r test`. If the literal is
+   ever replaced, the command fails CLOSED on `GATE_PLAN literal not found`.
+   *(Repaired in place 2026-09-24, ADR-0139, for ADR-0606 — the criterion is unchanged — and the gate
+   was ALREADY RED. The previous command compared two hand-kept lists: shared checks present in both
+   `GATE_PLAN` and `ci.yml`, the CI-only items present in `ci.yml` and absent from the plan, and
+   `check:verification-decay` present in the plan and absent from CI. It had been red since PR #2038
+   (increment 1 of `gate-checks-found-like-tests-arc`), which added `pnpm -r build` to `GATE_PLAN` as
+   a `runs: "ci"` step. `plan.includes('pnpm -r build')` then became true and the command exited 1
+   with `CI-only delta drifted: pnpm -r build`. Nothing runs a story's observe gate automatically, so
+   nobody saw it — and ADR-0606 D3 was about to empty the other list it compared against.)*
    *(Corrected in place 2026-08-21, ADR-0139. This gate was RED on `main` and had been since
    ADR-0276 increment 4. It asserted the literals `pnpm -r typecheck` / `pnpm -r test` against the
    `GATE_PLAN` literal, which now declares `pnpm -r --no-bail typecheck` / `pnpm -r --no-bail test`,
@@ -434,6 +482,9 @@ Surfaced rather than guessed — plain files, cheap to revise.
    merely answered. (iii) The capability itself moved to [`stories/cli`](../cli/gate-ci-parity.md) on
    2026-08-31 with its code — so this story's `decisions:` does NOT acquire 486; the capability
    carries it. See the frontmatter note for the merits.
+   *(Superseded 2026-09-23, and the item stays closed: ADR-0606 replaced ADR-0486 and deleted the
+   second list the delta related, so the contract settled here no longer exists. The capability
+   now carries ADR-0606 in place of 486.)*
 2. **RESOLVED (owner, 2026-06-15 — ADR-0058).**
    The earlier "trunk with two forward leaf edges" framing was a modelling error. By the
    dependency-direction rule (ADR-0058 §1) ci-cd needs both sibling surfaces delivered to pass its own
@@ -452,12 +503,17 @@ Surfaced rather than guessed — plain files, cheap to revise.
    (ADRs 0051/0291: the canonical `session-orchestrator` rendered to root CLAUDE.md + AGENTS.md) and
    `check:agents` (ADRs 0052/0178/0234: the same delegatable Library population rendered to
    specialist `.claude/agents`, `.cursor/agents`, `.codex/agents`, Gemini CLI's native
-   `.gemini/agents`, and OpenCode's `.opencode/agent`). The live `verify` job's full content set is the NINE listed in `green-gate`.
+   `.gemini/agents`, and OpenCode's `.opencode/agent`). Since ADR-0606 the `verify` job names no check
+   at all: its content set is the gate plan's CI placement (the `GATE_PLAN` steps placed `both` or
+   `ci`), and `green-gate` lists none of it.
    The Gemini view inherits its parent Gemini CLI session's model/tools; this projection makes no
    Antigravity compatibility claim. **The standing lesson, not the count:** a spec that enumerates
-   gate steps goes false every time the gate is re-decided, so `green-gate` now points at
-   [`ci.yml`](../../.github/workflows/ci.yml) as the live list and contracts the INVARIANT (no step
-   is soft) rather than the membership.
+   gate steps goes false every time the gate is re-decided, so `green-gate` points at the gate plan
+   as the live list and contracts the INVARIANTS — `verify` runs the gate in CI mode as a required
+   step, and no step is soft — rather than the membership. *(Corrected in place 2026-09-24 for
+   ADR-0606: this said the `verify` job's content set was "the NINE listed in `green-gate`", and that
+   `green-gate` pointed at `ci.yml` as the live list. The workflow now names no check, and
+   `green-gate` enumerates none.)*
 4. **Status stays `proposed` (greenfield, like notice-board).** This machinery is live and working,
    but it has never been driven through storytree's own prove-it-gate red→green, and per ADR-0031
    authored status is a projection of signed verdicts, not of "it works in prod." Confirm `proposed`
@@ -520,3 +576,8 @@ Surfaced rather than guessed — plain files, cheap to revise.
    capabilities table above" was re-worded to name the capability instead: row 4 is now
    `auto-merge-on-green`, so the positional reference had silently re-pointed. Reliability Gate 3 and
    UAT leg 3 are unaffected — both stayed with this story.)*
+
+   *(Overtaken 2026-09-24 by ADR-0606, and the resolution stands as history. The contract it renamed,
+   `declared-content-delta-is-two-way`, was retired with the two-list comparison it asserted, and
+   Reliability Gate 3 no longer asserts "both directions" of a delta between two lists: it asserts the
+   placements of the one plan both runs now walk.)*

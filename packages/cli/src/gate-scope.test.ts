@@ -10,6 +10,9 @@
 // The git reading itself lives in `gate-run.ts` (spawn + repo root) and is deliberately not spawned
 // here, matching `ci-affected.test.ts`'s split: the judgement is proven, the shell stays thin.
 
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -25,6 +28,7 @@ import {
   lastExpensiveIndex,
 } from "./gate-order.js";
 import {
+  behindMainLines,
   gitLines,
   localAffectedScope,
   parseBehindCount,
@@ -47,7 +51,7 @@ const PROJECTS: WorkspaceProject[] = [
 
 // ── it delegates to CI's classifier, and that is the whole point (D2) ─────────
 
-test("an in-package local diff narrows to the changed projects", () => {
+test("both-runs-scope-through-one-classifier: an in-package local diff narrows to the changed projects", () => {
   const scope = localAffectedScope(
     { ok: true, files: ["packages/library/src/schema.ts", "packages/cli/src/gate-run.ts"] },
     PROJECTS,
@@ -59,7 +63,7 @@ test("an in-package local diff narrows to the changed projects", () => {
   );
 });
 
-test("the LOCAL gate honours CI's FULL triggers — one classifier, or a local pass stops predicting CI", () => {
+test("both-runs-scope-through-one-classifier: the LOCAL gate honours CI's FULL triggers — one classifier, or a local pass stops predicting CI", () => {
   // Each of these is a rule `ci-affected.ts` owns. They are asserted here because the D2 failure mode
   // is precisely a second local implementation that agrees today and drifts tomorrow: if this module
   // ever stopped delegating, these are the cases a hand-rolled local rule would get wrong.
@@ -78,7 +82,7 @@ test("the LOCAL gate honours CI's FULL triggers — one classifier, or a local p
   }
 });
 
-test("the LOCAL gate honours CI's reader-map NARROWING too — D2 cuts both ways", () => {
+test("both-runs-scope-through-one-classifier: the LOCAL gate honours CI's reader-map NARROWING too — D2 cuts both ways", () => {
   // The delegation test's mirror image. A local implementation that hard-coded "docs/** → FULL"
   // would still pass every assertion above while quietly disagreeing with CI about the one path
   // ADR-0394 narrows — and a local gate that runs MORE than CI is the failure that hides, because
@@ -106,7 +110,7 @@ test("the LOCAL gate honours CI's reader-map NARROWING too — D2 cuts both ways
   assert.match(renderScopeNotice(scope), /^scope: AFFECTED — @storytree\/app-surface, @storytree\/cli, @storytree\/drive /);
 });
 
-test("an untracked file counts as changed — a session gates mid-flight, before it commits", () => {
+test("both-runs-scope-through-one-classifier: an untracked file counts as changed — a session gates mid-flight, before it commits", () => {
   // The one place the local shape genuinely differs from CI's merge-commit diff. `gate-run.ts` appends
   // `git ls-files --others` to the tracked diff; both arrive here as one list.
   const scope = localAffectedScope(
@@ -118,13 +122,13 @@ test("an untracked file counts as changed — a session gates mid-flight, before
 
 // ── fail-open to FULL, on every unreadable input ─────────────────────────────
 
-test("an unreadable diff is a scope decision (full), never an error", () => {
+test("both-runs-scope-through-one-classifier: an unreadable diff is a scope decision (full), never an error", () => {
   const scope = localAffectedScope({ ok: false, reason: "no merge-base with origin/main" }, PROJECTS);
   assert.equal(scope.mode, "full");
   assert.match(scope.reason, /merge-base/);
 });
 
-test("an empty change set runs the full suite rather than nothing", () => {
+test("both-runs-scope-through-one-classifier: an empty change set runs the full suite rather than nothing", () => {
   // The dangerous reading of "nothing changed" is "nothing needs testing". Widening is the only safe
   // direction, and it is what `classifyChangedFiles` already does.
   const scope = localAffectedScope({ ok: true, files: [] }, PROJECTS);
@@ -256,7 +260,7 @@ test("the run log states the scope and its reason, both modes", () => {
 // MERGED onto main's tip. Until this warning, the diagnosis existed only as a function nothing called
 // (`diagnoseStaleBranch`, measured 2026-09-23), so no session was ever shown it.
 
-test("a rev-list count is read as a count, and anything else as unknown", () => {
+test("stale-branch-surfaced: a rev-list count is read as a count, and anything else as unknown", () => {
   assert.equal(parseBehindCount("7\n"), 7);
   assert.equal(parseBehindCount("  12  "), 12);
   assert.equal(parseBehindCount("0"), 0);
@@ -268,16 +272,47 @@ test("a rev-list count is read as a count, and anything else as unknown", () => 
   assert.equal(parseBehindCount("x3"), null);
 });
 
-test("a current branch, and a branch whose distance is unknown, get no warning at all", () => {
+test("stale-branch-surfaced: a current branch, and a branch whose distance is unknown, get no warning at all", () => {
   assert.deepEqual(renderBehindMainNotice(0), []);
   assert.deepEqual(renderBehindMainNotice(null), []);
 });
 
-test("a branch behind main is told how far, that CI proves the merge, and the remedy", () => {
+test("stale-branch-surfaced: a branch behind main is told how far, that CI proves the merge, and the remedy", () => {
   assert.deepEqual(renderBehindMainNotice(1), [
     "⚠ this branch is 1 commit(s) behind origin/main (as last fetched). CI proves the branch " +
       "MERGED onto main's tip, so a green here does not predict a green CI until main is merged in:",
     "    git fetch origin && git merge origin/main   — then re-gate.",
   ]);
   assert.match(renderBehindMainNotice(37)[0] ?? "", /^⚠ this branch is 37 commit\(s\) behind origin\/main/);
+});
+
+test("stale-branch-surfaced: a local run gets the warning, a CI run gets none — and never reads the count", () => {
+  assert.deepEqual(behindMainLines(false, () => 3), renderBehindMainNotice(3));
+  assert.equal(behindMainLines(false, () => 3).length, 2);
+  assert.deepEqual(behindMainLines(false, () => 0), []);
+  let reads = 0;
+  const count = (): number => {
+    reads += 1;
+    return 5;
+  };
+  // CI proves the merge ref itself, so it has nothing to warn about — and spends no git call finding out.
+  assert.deepEqual(behindMainLines(true, count), []);
+  assert.equal(reads, 0, "a CI run must not read the behind count at all");
+});
+
+test("stale-branch-surfaced: the shell prints the warning before the run AND beside the verdict", () => {
+  // THE WIRING IS THE CONTRACT. The previous form of this promise (`diagnoseStaleBranch`) passed its
+  // own tests for three weeks while nothing in production called it — so this reads `gate-run.ts`
+  // itself, as `gate-help.test.ts` does for its ordering, and pins both print sites.
+  const shell = readFileSync(path.join(fileURLToPath(new URL(".", import.meta.url)), "gate-run.ts"), "utf8");
+  const main = shell.slice(shell.indexOf("async function main"));
+  assert.ok(main.length > 0, "main() not found — this test has drifted from the shell it guards");
+  assert.match(main, /const behindNotice = behindMainLines\(ci, behindMainCount\);/);
+  const prints = [...main.matchAll(/for \(const line of behindNotice\) console\.log/g)].map((m) => m.index);
+  assert.equal(prints.length, 2, "the warning is printed exactly twice");
+  const runAt = main.indexOf("await runGate(");
+  const verdictAt = main.indexOf("renderGateSummary(results");
+  assert.ok(runAt > 0 && verdictAt > 0, "the run and the verdict must both still be found");
+  assert.ok((prints[0] ?? Infinity) < runAt, "the first print comes before any step runs");
+  assert.ok((prints[1] ?? -1) > verdictAt, "the second print comes after the verdict table");
 });

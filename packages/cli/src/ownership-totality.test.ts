@@ -19,6 +19,7 @@ test("a CI pull_request merge ref is charged against HEAD^1, not a merge base", 
   // caused by the check rather than by the tree. ADR-0195's classifier already anchors on HEAD^1.
   const choice = chooseBaseRef({
     eventName: "pull_request",
+    githubRef: undefined,
     hasSecondParent: true,
     mergeBase: null,
   });
@@ -31,6 +32,7 @@ test("the CI route needs BOTH conditions — a local branch that merged main mus
   // branch's OWN previous commit: charging against it would excuse everything done before the merge.
   const choice = chooseBaseRef({
     eventName: undefined,
+    githubRef: undefined,
     hasSecondParent: true,
     mergeBase: "abc123def456",
   });
@@ -40,6 +42,7 @@ test("the CI route needs BOTH conditions — a local branch that merged main mus
 test("a pull_request event with no second parent falls through to the merge base", () => {
   const choice = chooseBaseRef({
     eventName: "pull_request",
+    githubRef: undefined,
     hasSecondParent: false,
     mergeBase: "abc123def456",
   });
@@ -49,6 +52,7 @@ test("a pull_request event with no second parent falls through to the merge base
 test("the ordinary local run is charged against `merge-base origin/main HEAD`", () => {
   const choice = chooseBaseRef({
     eventName: undefined,
+    githubRef: undefined,
     hasSecondParent: false,
     mergeBase: "0123456789abcdef",
   });
@@ -58,14 +62,52 @@ test("the ordinary local run is charged against `merge-base origin/main HEAD`", 
 
 test("no anchor at all THROWS rather than charging a whole repo it never measured", () => {
   assert.throws(
-    () => chooseBaseRef({ eventName: undefined, hasSecondParent: false, mergeBase: null }),
+    () => chooseBaseRef({ eventName: undefined, githubRef: undefined, hasSecondParent: false, mergeBase: null }),
     (e: unknown) => e instanceof VacuousOwnershipSweep && /no base revision/.test((e as Error).message),
   );
 });
 
+test("a CI run of main whose merge base did not resolve is charged against HEAD — nothing on it is new", () => {
+  // Rule 3. Since ADR-0606 D3 the `verify` job fetches `main` at depth 1 BEFORE every step, so a
+  // `main` that moved after checkout leaves a shallow tip git cannot connect to HEAD, and rule 2
+  // cannot answer. On a run of `main` itself the true merge base is HEAD, so charging nobody is right.
+  const choice = chooseBaseRef({
+    eventName: "workflow_dispatch",
+    githubRef: "refs/heads/main",
+    hasSecondParent: true,
+    mergeBase: null,
+  });
+  assert.deepEqual(choice, {
+    ref: "HEAD",
+    because: "a CI run of main itself — its merge base with any later main is HEAD",
+  });
+});
+
+test("rule 3 is a FALLBACK: a CI run of main whose merge base resolves still uses it", () => {
+  const choice = chooseBaseRef({
+    eventName: "push",
+    githubRef: "refs/heads/main",
+    hasSecondParent: false,
+    mergeBase: "fedcba9876543210",
+  });
+  assert.equal(choice.ref, "fedcba9876543210");
+});
+
+test("rule 3 is for main ONLY — any other ref with no merge base still throws, and says why", () => {
+  for (const githubRef of ["refs/heads/feature", "refs/pull/1914/merge", undefined]) {
+    assert.throws(
+      () => chooseBaseRef({ eventName: "push", githubRef, hasSecondParent: false, mergeBase: null }),
+      (e: unknown) =>
+        e instanceof VacuousOwnershipSweep &&
+        /neither a CI pull_request merge ref nor a CI run of main/.test((e as Error).message),
+      String(githubRef),
+    );
+  }
+});
+
 test("an empty-string merge base is treated as no anchor, not as a valid revision", () => {
   assert.throws(
-    () => chooseBaseRef({ eventName: "push", hasSecondParent: false, mergeBase: "" }),
+    () => chooseBaseRef({ eventName: "push", githubRef: "refs/heads/feature", hasSecondParent: false, mergeBase: "" }),
     VacuousOwnershipSweep,
   );
 });

@@ -397,7 +397,7 @@ test("a partial summary whose selected step failed points at FAILED rather than 
 // ANY non-zero exit as a failure, and the checks whose skip CI accepts never exit 3 there. So in CI
 // the only exit 3 is a skip CI did not sanction — and it must red, loudly and with its reason.
 
-test("under skipIsFailure the reserved skip code is a FAIL carrying why, and the gate is red", async () => {
+test("ci-green-means-every-ci-step-passed: under skipIsFailure the reserved skip code is a FAIL carrying why, and the gate is red", async () => {
   const { execute } = scripted({ "pnpm check:land-art": GATE_SKIP_EXIT_CODE });
   const results = await runGate({
     steps: steps("check:a", "check:land-art"),
@@ -418,7 +418,7 @@ test("under skipIsFailure the reserved skip code is a FAIL carrying why, and the
   );
 });
 
-test("without skipIsFailure the same exit is a SKIP with no refusal note — the local protocol is unchanged", async () => {
+test("ci-green-means-every-ci-step-passed: without skipIsFailure the same exit is a SKIP with no refusal note — the local protocol is unchanged", async () => {
   const unset = await runGate({
     steps: steps("check:land-art"),
     execute: scripted({ "pnpm check:land-art": GATE_SKIP_EXIT_CODE }).execute,
@@ -438,7 +438,7 @@ test("without skipIsFailure the same exit is a SKIP with no refusal note — the
   }
 });
 
-test("under skipIsFailure an ordinary red carries no refusal note, and a pass still passes", async () => {
+test("ci-green-means-every-ci-step-passed: under skipIsFailure an ordinary red carries no refusal note, and a pass still passes", async () => {
   const { execute } = scripted({ "pnpm check:red": 1 });
   const results = await runGate({
     steps: steps("check:red", "check:green"),
@@ -451,7 +451,7 @@ test("under skipIsFailure an ordinary red carries no refusal note, and a pass st
   assert.equal(byCommand(results, "pnpm check:green").status, "pass");
 });
 
-test("a refused skip keeps the step's own note and adds the refusal after it", async () => {
+test("ci-green-means-every-ci-step-passed: a refused skip keeps the step's own note and adds the refusal after it", async () => {
   const results = await runGate({
     steps: steps("check:web-engine"),
     execute: () => ({ exitCode: GATE_SKIP_EXIT_CODE, note: "web/ absent" }),
@@ -461,7 +461,7 @@ test("a refused skip keeps the step's own note and adds the refusal after it", a
   assert.equal(byCommand(results, "pnpm check:web-engine").note, `web/ absent; ${REFUSED_SKIP_NOTE}`);
 });
 
-test("a killed step is still NOT RUN under skipIsFailure — the refusal is about skips, not kills", async () => {
+test("ci-green-means-every-ci-step-passed: a killed step is still NOT RUN under skipIsFailure — the refusal is about skips, not kills", async () => {
   const results = await runGate({
     steps: steps("check:slow"),
     execute: () => ({ exitCode: null, unverified: true, note: "killed by SIGTERM" }),

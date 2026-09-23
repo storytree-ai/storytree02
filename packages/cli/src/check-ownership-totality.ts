@@ -107,6 +107,7 @@ function pathLines(out: string | null): Set<string> {
 function resolveBaseRef(): BaseRefChoice {
   return chooseBaseRef({
     eventName: process.env["GITHUB_EVENT_NAME"],
+    githubRef: process.env["GITHUB_REF"],
     hasSecondParent: git(["rev-parse", "--verify", "--quiet", "HEAD^2"]) !== null,
     mergeBase: git(["merge-base", "origin/main", "HEAD"]),
   });

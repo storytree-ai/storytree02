@@ -13,6 +13,7 @@ import {
   CI_IDENTITY_ENV_PREFIX,
   CREDENTIAL_ENV_VARS,
   GITHUB_GROUP_END,
+  ciSelectionRefusal,
   ciIdentityEnvNames,
   ciStepEnvironment,
   ciVerdict,
@@ -39,9 +40,20 @@ function jobEnvironment(): NodeJS.ProcessEnv {
   };
 }
 
+// ── a CI run is the whole CI placement, or nothing ───────────────────────────
+
+test("ci-green-means-every-ci-step-passed: a CI run refuses --only and --rerun-failed, and accepts the whole plan", () => {
+  assert.equal(ciSelectionRefusal("all"), null);
+  const expected =
+    "--ci runs the whole CI plan; --only / --rerun-failed select part of it, and a partial run is " +
+    "never a merge verdict.";
+  assert.equal(ciSelectionRefusal("only"), expected);
+  assert.equal(ciSelectionRefusal("rerun-failed"), expected);
+});
+
 // ── identity variable names ──────────────────────────────────────────────────
 
-test("each identity's credential arrives under names derived from the identity", () => {
+test("ci-step-gets-only-its-declared-identity: each identity's credential arrives under names derived from the identity", () => {
   assert.deepEqual(ciIdentityEnvNames("ci-presence"), {
     credentials: "STORYTREE_CI_IDENTITY_CI_PRESENCE_CREDENTIALS",
     dbUser: "STORYTREE_CI_IDENTITY_CI_PRESENCE_DB_USER",
@@ -55,13 +67,13 @@ test("each identity's credential arrives under names derived from the identity",
 
 // ── the credential a step sees ───────────────────────────────────────────────
 
-test("a step with NO identity runs with every credential variable stripped, and nothing else touched", () => {
+test("ci-step-gets-only-its-declared-identity: a step with NO identity runs with every credential variable stripped, and nothing else touched", () => {
   const prepared = ciStepEnvironment(undefined, jobEnvironment());
   assert.ok(prepared.ok);
   assert.deepEqual(prepared.env, { PATH: "/usr/bin", CI: "true", GCLOUD_PROJECT: "storytree-498613" });
 });
 
-test("every name in CREDENTIAL_ENV_VARS is one the stripped environment no longer carries", () => {
+test("ci-step-gets-only-its-declared-identity: every name in CREDENTIAL_ENV_VARS is one the stripped environment no longer carries", () => {
   assert.deepEqual([...CREDENTIAL_ENV_VARS], [
     "GOOGLE_APPLICATION_CREDENTIALS",
     "CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE",
@@ -73,7 +85,7 @@ test("every name in CREDENTIAL_ENV_VARS is one the stripped environment no longe
   for (const name of CREDENTIAL_ENV_VARS) assert.equal(prepared.env[name], undefined, name);
 });
 
-test("a presence step gets the presence credential as its default — and never sees the other identity's", () => {
+test("ci-step-gets-only-its-declared-identity: a presence step gets the presence credential as its default — and never sees the other identity's", () => {
   const prepared = ciStepEnvironment("ci-presence", jobEnvironment());
   assert.ok(prepared.ok);
   assert.deepEqual(prepared.env, {
@@ -86,7 +98,7 @@ test("a presence step gets the presence credential as its default — and never 
   });
 });
 
-test("the verdict-history step gets ITS identity, not the presence one the job exported (ADR-0560)", () => {
+test("ci-step-gets-only-its-declared-identity: the verdict-history step gets ITS identity, not the presence one the job exported (ADR-0560)", () => {
   const prepared = ciStepEnvironment("ci-webverdict", jobEnvironment());
   assert.ok(prepared.ok);
   assert.equal(prepared.env["GOOGLE_APPLICATION_CREDENTIALS"], "/w/gha-creds-webverdict.json");
@@ -96,7 +108,7 @@ test("the verdict-history step gets ITS identity, not the presence one the job e
   assert.equal(prepared.env["STORYTREE_CI_IDENTITY_CI_PRESENCE_CREDENTIALS"], undefined);
 });
 
-test("an identity the run does not provide is REFUSED, naming exactly what is missing", () => {
+test("ci-step-gets-only-its-declared-identity: an identity the run does not provide is REFUSED, naming exactly what is missing", () => {
   const noWebverdict = jobEnvironment();
   delete noWebverdict["STORYTREE_CI_IDENTITY_CI_WEBVERDICT_CREDENTIALS"];
   const missingCredentials = ciStepEnvironment("ci-webverdict", noWebverdict);
@@ -114,7 +126,7 @@ test("an identity the run does not provide is REFUSED, naming exactly what is mi
   assert.doesNotMatch(missingUser.reason, /_CREDENTIALS/);
 });
 
-test("both halves missing are both named, and a blank value counts as missing", () => {
+test("ci-step-gets-only-its-declared-identity: both halves missing are both named, and a blank value counts as missing", () => {
   const blank: NodeJS.ProcessEnv = {
     STORYTREE_CI_IDENTITY_CI_PRESENCE_CREDENTIALS: "   ",
   };
@@ -127,7 +139,7 @@ test("both halves missing are both named, and a blank value counts as missing", 
   assert.match(prepared.reason, /did not export its credentials path$/);
 });
 
-test("the identity's values are trimmed before they become the step's credential", () => {
+test("ci-step-gets-only-its-declared-identity: the identity's values are trimmed before they become the step's credential", () => {
   const padded: NodeJS.ProcessEnv = {
     STORYTREE_CI_IDENTITY_CI_PRESENCE_CREDENTIALS: "  /w/creds.json \n",
     STORYTREE_CI_IDENTITY_CI_PRESENCE_DB_USER: " user@x.iam ",
@@ -143,7 +155,7 @@ test("the identity's values are trimmed before they become the step's credential
 
 // ── GitHub's workflow commands ───────────────────────────────────────────────
 
-test("a log section opens with ::group:: and closes with ::endgroup::, escaping what would end the command", () => {
+test("ci-run-reports-each-step-on-github: a log section opens with ::group:: and closes with ::endgroup::, escaping what would end the command", () => {
   assert.equal(githubGroupStart("[3/28] pnpm check:boundaries"), "::group::[3/28] pnpm check:boundaries");
   assert.equal(githubGroupStart("100% done\r\nnext"), "::group::100%25 done%0D%0Anext");
   assert.equal(GITHUB_GROUP_END, "::endgroup::");
@@ -153,7 +165,7 @@ function result(overrides: Partial<GateStepResult> & Pick<GateStepResult, "comma
   return { exitCode: 0, durationMs: 0, ...overrides };
 }
 
-test("a failed step raises an error annotation naming it, its exit code and its note", () => {
+test("ci-run-reports-each-step-on-github: a failed step raises an error annotation naming it, its exit code and its note", () => {
   assert.equal(
     githubErrorAnnotation(
       result({ command: "pnpm check:land-art", status: "fail", exitCode: 3, note: "a, b: c" }),
@@ -162,12 +174,12 @@ test("a failed step raises an error annotation naming it, its exit code and its 
   );
 });
 
-test("the annotation title escapes the property separators a message may keep", () => {
+test("ci-run-reports-each-step-on-github: the annotation title escapes the property separators a message may keep", () => {
   const line = githubErrorAnnotation(result({ command: "a,b", status: "fail", exitCode: 1 }));
   assert.equal(line, "::error title=gate step failed%3A a%2Cb::a,b (exit 1)");
 });
 
-test("an annotation for a step that never produced an exit code carries neither exit nor note", () => {
+test("ci-run-reports-each-step-on-github: an annotation for a step that never produced an exit code carries neither exit nor note", () => {
   assert.equal(
     githubErrorAnnotation(result({ command: "pnpm lint", status: "fail", exitCode: null })),
     "::error title=gate step failed%3A pnpm lint::pnpm lint",
@@ -180,7 +192,7 @@ test("an annotation for a step that never produced an exit code carries neither 
 
 // ── the summary page ─────────────────────────────────────────────────────────
 
-test("the verdict word follows the exit-code rule exactly", () => {
+test("ci-run-reports-each-step-on-github: the verdict word follows the exit-code rule exactly", () => {
   assert.equal(ciVerdict([result({ command: "a", status: "pass" })]), "GREEN");
   assert.equal(
     ciVerdict([result({ command: "a", status: "pass" }), result({ command: "b", status: "skip" })]),
@@ -194,7 +206,7 @@ test("the verdict word follows the exit-code rule exactly", () => {
   assert.equal(ciVerdict([]), "RED", "a run that proved nothing has not earned green");
 });
 
-test("the summary table lists every step in plan order with its result, time and note", () => {
+test("ci-run-reports-each-step-on-github: the summary table lists every step in plan order with its result, time and note", () => {
   const text = renderGithubSummary({
     verdict: "RED",
     scope: "scope: FULL (every package) — not a pull_request event",

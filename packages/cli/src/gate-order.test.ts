@@ -370,7 +370,7 @@ test("the plan's subject classification agrees with the two pinned sets", () => 
 // whole of what ADR-0486's two-list parity check used to buy, at the cost of one literal instead of
 // two lists and a comparator. (ADR-0606 D1's discovery step replaces even this literal.)
 
-test("every step declares where it runs, with no default to fall back on", () => {
+test("placement-selects-each-run: every step declares where it runs, with no default to fall back on", () => {
   for (const step of GATE_PLAN) {
     assert.ok(
       step.runs === "both" || step.runs === "local" || step.runs === "ci",
@@ -379,7 +379,7 @@ test("every step declares where it runs, with no default to fall back on", () =>
   }
 });
 
-test("the local-only and CI-only steps are exactly the ones decided, and everything else runs on both", () => {
+test("placement-selects-each-run: the local-only and CI-only steps are exactly the ones decided, and everything else runs on both", () => {
   const placed = (runs: string): string[] =>
     GATE_PLAN.filter((s) => s.runs === runs).map((s) => s.command);
   // LOCAL — session discipline, never a merge barrier (ADR-0252 D3 for the decay ceiling; ADR-0486
@@ -394,7 +394,7 @@ test("the local-only and CI-only steps are exactly the ones decided, and everyth
   assert.equal(placed("both").length, GATE_PLAN.length - 4);
 });
 
-test("a local run walks both + local and a CI run walks both + ci, each in plan order", () => {
+test("placement-selects-each-run: a local run walks both + local and a CI run walks both + ci, each in plan order", () => {
   const local = stepsFor(GATE_PLAN, "local").map((s) => s.command);
   const ci = stepsFor(GATE_PLAN, "ci").map((s) => s.command);
   assert.deepEqual(
@@ -413,7 +413,7 @@ test("a local run walks both + local and a CI run walks both + ci, each in plan 
   assert.ok(!ci.includes("pnpm check:verification-decay"));
 });
 
-test("stepsFor keeps `both` on both sides and never reorders", () => {
+test("placement-selects-each-run: stepsFor keeps `both` on both sides and never reorders", () => {
   const plan = [
     { id: 1, runs: "ci" },
     { id: 2, runs: "both" },
@@ -424,7 +424,7 @@ test("stepsFor keeps `both` on both sides and never reorders", () => {
   assert.deepEqual(stepsFor(plan, "ci").map((s) => s.id), [1, 2, 4]);
 });
 
-test("the ordering invariant holds on each side's run, not only on the whole plan", () => {
+test("placement-selects-each-run: the ordering invariant holds on each side's run, not only on the whole plan", () => {
   // `gate-run.ts` judges the WHOLE plan (the declared sets name steps from both sides) and then
   // filters it. That is only sound if filtering cannot break the order — checked here by judging
   // each side's run against the sets narrowed to the steps that side actually runs.
@@ -440,7 +440,7 @@ test("the ordering invariant holds on each side's run, not only on the whole pla
   }
 });
 
-test("every store-reading step signs in in CI, and the verdict-history reader signs in as itself (ADR-0560)", () => {
+test("ci-step-gets-only-its-declared-identity: every store-reading step signs in in CI, and the verdict-history reader signs in as itself (ADR-0560)", () => {
   for (const step of stepsFor(GATE_PLAN, "ci")) {
     const identity = ciIdentityFor(step);
     if (step.check === "check:uat-revision-continuity") {
@@ -453,7 +453,7 @@ test("every store-reading step signs in in CI, and the verdict-history reader si
   }
 });
 
-test("an identity is DECLARED only to override, and only on a step that reads the store", () => {
+test("ci-step-gets-only-its-declared-identity: an identity is DECLARED only to override, and only on a step that reads the store", () => {
   // The derived default already covers every store reader; a declaration on any other step would
   // hand a credential to a step whose verdict needs none.
   const declared = GATE_PLAN.filter((s) => s.ciIdentity !== undefined);
@@ -463,7 +463,7 @@ test("an identity is DECLARED only to override, and only on a step that reads th
   }
 });
 
-test("ciIdentityFor: an override wins, a store reader defaults to presence, anything else gets none", () => {
+test("ci-step-gets-only-its-declared-identity: ciIdentityFor: an override wins, a store reader defaults to presence, anything else gets none", () => {
   assert.equal(
     ciIdentityFor({ command: "pnpm check:adr-health", check: "check:adr-health", ciIdentity: "ci-webverdict" }),
     "ci-webverdict",
@@ -898,10 +898,13 @@ test("a rung promoted to a merge wall does not keep describing itself as local-o
     /LOCAL-ONLY today/,
     "the entry still claims to be local-only, which ADR-0547 D1 made false",
   );
+  // Since ADR-0606 the placement is a FIELD, so the claim is checked against the field — the prose
+  // may not say one thing while the step is placed another.
+  assert.equal(step.runs, "both", "the merge wall runs on both sides");
   assert.match(
     step.why,
-    /NO LONGER in `DECLARED_LOCAL_ONLY`/,
-    "the entry must record that it left the local-only set, since gate-ci-parity's declaration is the thing a reader cross-checks",
+    /placed `runs: "both"`/,
+    "the entry must name its placement, which is the thing a reader cross-checks",
   );
 });
 

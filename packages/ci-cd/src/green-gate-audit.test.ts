@@ -361,10 +361,31 @@ describe("every-step-is-required: no step in the verify job is soft", () => {
 
 // ── contract 3 ───────────────────────────────────────────────────────────────────
 
-describe("generated-views-in-sync: verify runs both generated-view checks", () => {
-  it("the real verify job runs check:guidance and check:agents", () => {
-    assert.equal(jobRunsCheck(readCiYaml(), "verify", "check:guidance"), true);
-    assert.equal(jobRunsCheck(readCiYaml(), "verify", "check:agents"), true);
+/** A step item's lines with every comment dropped — `stepItems` attaches a comment block to the step
+ * ABOVE it, so a step can carry prose naming something it does not itself do. */
+function nonCommentLines(step: string): string[] {
+  return step.split("\n").filter((line) => !line.trim().startsWith("#"));
+}
+
+const GATE_RUN = "run: pnpm gate --ci";
+
+describe("generated-views-in-sync: verify runs both generated-view checks through its one gate step", () => {
+  it("the real verify job has exactly one `pnpm gate --ci` step and names no `pnpm check:*` step itself", () => {
+    // ADR-0606 D3: CI walks the ONE plan through `pnpm gate --ci`, so `check:guidance` and
+    // `check:agents` run inside that step. Which checks the plan places in CI is `gate-ci-parity`'s
+    // contract (`placement-selects-each-run`); what this pipeline audit owns is that the step is there
+    // and that the workflow no longer keeps a list of its own that could drift from the plan.
+    const steps = realVerifySteps();
+    const gateSteps = steps.filter((step) => nonCommentLines(step).some((line) => line.trim() === GATE_RUN));
+    assert.equal(gateSteps.length, 1, "verify must run the gate in CI mode exactly once");
+    assert.equal(jobRunsCheck(readCiYaml(), "verify", "gate --ci"), true);
+
+    assert.equal(jobRunsCheck(readCiYaml(), "verify", "check:guidance"), false);
+    assert.equal(jobRunsCheck(readCiYaml(), "verify", "check:agents"), false);
+    const block = jobBlock(readCiYaml(), "verify");
+    assert.notEqual(block, null);
+    const named = nonCommentLines(block!).filter((line) => line.includes("pnpm check:"));
+    assert.deepEqual(named, [], "the workflow names no check — the plan does");
   });
 
   it("the mechanism reports false for a check the job does not actually run", () => {
@@ -377,71 +398,64 @@ describe("generated-views-in-sync: verify runs both generated-view checks", () =
     assert.equal(jobRunsCheck(FIXTURE_MISSING_CHECK, "verify", "check:agents"), false);
   });
 
-  it("both generated-view checks are also covered by contract 2 — neither is soft", () => {
-    // check:guidance and check:agents are ordinary steps of the verify job; contract 2's assertion
-    // that verify carries no continue-on-error step already covers them, so a regression that made
-    // either one soft would red THAT test, not silently pass here.
+  it("the gate step is covered by contract 2 — it is required, never soft", () => {
+    // The generated-view checks run inside the gate step, and contract 2's assertion that verify
+    // carries no continue-on-error step covers THAT step — so a regression that made it soft would red
+    // contract 2's test, not silently pass here.
     assert.deepEqual(softStepLines(readCiYaml(), "verify"), []);
   });
 });
 
-describe("UAT revision continuity is a required authenticated merge wall", () => {
-  it("the real verify job runs the exact-revision continuity check", () => {
-    assert.equal(
-      jobRunsCheck(readCiYaml(), "verify", "check:uat-revision-continuity"),
-      true,
-      "a changed existing UAT revision must not reach automerge without its current signed witness",
+// ── contract 5 ───────────────────────────────────────────────────────────────────
+
+describe("changed-uat-revision-proof-is-a-blocking-shared-environment-step: the gate step alone holds the verdict-history identity", () => {
+  it("the verdict-history sign-in exports nothing, and reaches only the gate step", () => {
+    const steps = realVerifySteps();
+    const verdictAccount =
+      "service_account: storytree-ci-webverdict@storytree-498613.iam.gserviceaccount.com";
+    const signIns = steps.filter((step) => nonCommentLines(step).some((line) => line.trim() === verdictAccount));
+    assert.equal(signIns.length, 1, "exactly one step signs in as the verdict-history reader");
+    const signIn = signIns[0]!;
+    assert.match(signIn, /^\s*id: webverdict$/m);
+    assert.match(signIn, /uses: google-github-actions\/auth@v3/);
+    assert.match(
+      signIn,
+      /workload_identity_provider: projects\/635716509357\/locations\/global\/workloadIdentityPools\/github-actions\/providers\/github/,
     );
+    assert.match(
+      signIn,
+      /^\s*export_environment_variables: false$/m,
+      "the verdict identity must never become the job's ambient credential",
+    );
+
+    const presence = steps.find((step) => /^\s*id: presence$/m.test(step));
+    assert.ok(presence, "verify must keep its presence sign-in");
+    assert.match(
+      presence,
+      /service_account: storytree-ci-presence@storytree-498613\.iam\.gserviceaccount\.com/,
+      "the presence identity stays the deliberately narrower one",
+    );
+
+    const gate = steps.find((step) => nonCommentLines(step).some((line) => line.trim() === GATE_RUN));
+    assert.ok(gate, "verify must run the gate in CI mode");
+    assert.match(
+      gate,
+      /STORYTREE_CI_IDENTITY_CI_WEBVERDICT_CREDENTIALS: \$\{\{ steps\.webverdict\.outputs\.credentials_file_path \}\}/,
+    );
+    assert.match(gate, /STORYTREE_CI_IDENTITY_CI_WEBVERDICT_DB_USER: storytree-ci-webverdict@storytree-498613\.iam/);
+
+    // Outside comments, only the sign-in and the gate step may name the verdict identity.
+    const naming = steps.filter((step) => nonCommentLines(step).some((line) => line.includes("storytree-ci-webverdict")));
+    assert.deepEqual(naming, [signIn, gate]);
+
+    // Both credentials exist before the gate starts, and nothing runs after it.
+    assert.ok(steps.indexOf(presence) < steps.indexOf(gate));
+    assert.ok(steps.indexOf(signIn) < steps.indexOf(gate));
+    assert.equal(steps.indexOf(gate), steps.length - 1, "the gate step is verify's last");
   });
 
   it("the continuity wall is covered by the no-soft-step contract", () => {
     assert.deepEqual(softStepLines(readCiYaml(), "verify"), []);
-  });
-
-  it("switches only the final continuity rung to the verdict-reader identity", () => {
-    const steps = realVerifySteps();
-    const presence = namedStep(
-      steps,
-      "Authenticate to GCP for live guidance (keyless WIF — ADR-0021)",
-    );
-    const continuityAuthName =
-      "Authenticate to GCP for UAT revision continuity (keyless WIF — ADR-0021)";
-    const continuityAuth = namedStep(steps, continuityAuthName);
-    const continuity = namedStep(steps, "Changed UAT revisions carry current proof");
-
-    assert.match(
-      presence,
-      /service_account: storytree-ci-presence@storytree-498613\.iam\.gserviceaccount\.com/,
-      "the existing live-guidance block must retain its deliberately narrower presence identity",
-    );
-    assert.match(
-      continuityAuth,
-      /workload_identity_provider: projects\/635716509357\/locations\/global\/workloadIdentityPools\/github-actions\/providers\/github/,
-    );
-    assert.match(
-      continuityAuth,
-      /service_account: storytree-ci-webverdict@storytree-498613\.iam\.gserviceaccount\.com/,
-    );
-    assert.equal(
-      steps.indexOf(continuity),
-      steps.indexOf(continuityAuth) + 1,
-      "the verdict-capable credential must be minted immediately before its only consumer",
-    );
-    assert.equal(
-      steps.indexOf(continuity),
-      steps.length - 1,
-      "continuity must remain the final verify step so no later step inherits its wider credential",
-    );
-    assert.deepEqual(
-      steps.filter((step) => step.includes("storytree-ci-webverdict")),
-      [continuityAuth, continuity],
-      "only the dedicated auth step and continuity itself may name the verdict identity",
-    );
-    assert.match(
-      continuity,
-      /STORYTREE_DB_USER: storytree-ci-webverdict@storytree-498613\.iam/,
-    );
-    assert.doesNotMatch(continuity, /storytree-ci-presence/);
   });
 });
 

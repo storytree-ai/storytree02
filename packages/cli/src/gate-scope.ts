@@ -122,6 +122,18 @@ export function renderBehindMainNotice(behind: number | null): string[] {
   ];
 }
 
+/**
+ * The behind-main lines ONE run prints: the warning on a local run, and NOTHING on a CI run — CI
+ * proves the merge ref itself, so there is no gap between what it tests and what merges.
+ *
+ * The count is a THUNK, read only on a local run, so a CI run never spends a git call on a number it
+ * would throw away. The shell prints what this returns twice — at the start of the run and again
+ * beside the verdict (`gate-scope.test.ts` pins that wiring against `gate-run.ts`'s source).
+ */
+export function behindMainLines(ci: boolean, behind: () => number | null): string[] {
+  return ci ? [] : renderBehindMainNotice(behind());
+}
+
 /** One line for the run log: what the gate is about to test, and why that is the scope. */
 export function renderScopeNotice(scope: AffectedScope): string {
   return scope.mode === "full"

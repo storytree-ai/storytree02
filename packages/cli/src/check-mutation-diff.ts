@@ -9,8 +9,8 @@
 //   1  at least one was not — or the run could not be trusted
 //   3  SKIP: this branch changes no mutable source, so there is nothing to mutate. A declared,
 //      opt-in skip, never inferred — the runner prints it as SKIP and the gate reads GREEN, NARROWED.
-//      LOCAL ONLY. `.github/workflows/ci.yml` runs this as an ordinary step where any non-zero code
-//      is a hard failure, so in CI that same state prints `NOTHING TO MUTATE` and exits 0 — the fact
+//      LOCAL ONLY. CI runs this through `pnpm gate --ci`, which counts exit 3 as a FAILURE
+//      (ADR-0606 D3), so in CI that same state prints `NOTHING TO MUTATE` and exits 0 — the fact
 //      is stated either way and only the code differs. See `skipDisposition` for why.
 //
 // WHY THE SCOPE CLASSIFIER IS IMPORTED RATHER THAN RE-DERIVED. `diff-scoped-mutation-rung` makes this
@@ -122,6 +122,7 @@ function gitOrNull(args: string[]): string | null {
 function resolveBaseRef(): BaseRefChoice {
   return chooseBaseRef({
     eventName: process.env["GITHUB_EVENT_NAME"],
+    githubRef: process.env["GITHUB_REF"],
     hasSecondParent: gitOrNull(["rev-parse", "--verify", "--quiet", "HEAD^2"]) !== null,
     mergeBase: gitOrNull(["merge-base", "origin/main", "HEAD"]),
   });

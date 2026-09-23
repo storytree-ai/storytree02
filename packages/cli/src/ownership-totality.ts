@@ -91,11 +91,20 @@ export class VacuousOwnershipSweep extends Error {
 export interface BaseRefEvidence {
   /** `GITHUB_EVENT_NAME`, or `undefined` outside CI. */
   readonly eventName: string | undefined;
+  /**
+   * `GITHUB_REF`, or `undefined` outside CI — the one observation rule 3 of {@link chooseBaseRef}
+   * turns on. REQUIRED rather than optional so every shell that gathers this evidence has to decide
+   * to supply it; an optional field would let a new gatherer silently lose the rule.
+   */
+  readonly githubRef: string | undefined;
   /** Does `HEAD^2` resolve? Present ⇒ HEAD is a merge commit. */
   readonly hasSecondParent: boolean;
   /** `git merge-base origin/main HEAD`, or `null` when it did not resolve. */
   readonly mergeBase: string | null;
 }
+
+/** The ref a CI run carries when it is a run of `main` itself — the only trigger of rule 3. */
+export const TRUNK_REF = "refs/heads/main";
 
 /** Which revision is "before", and how that was established. */
 export interface BaseRefChoice {
@@ -129,7 +138,15 @@ export interface BaseRefChoice {
  *     everything the branch did before its last merge.
  *  2. **`merge-base origin/main HEAD`** — the laptop, and any full clone. On a trunk run this
  *     resolves to HEAD itself, so nothing reads as new and the run correctly charges nobody.
- *  3. **Neither** — throw. There is no "before", so every file in the tree would read as this
+ *  3. **A CI run of `main` itself** (`GITHUB_REF` is `refs/heads/main`) whose merge base did NOT
+ *     resolve → `HEAD`. That commit is already on `main`, so its merge base with any later `main` is
+ *     itself; rule 2 simply could not see it. It cannot see it when `main` moves between checkout
+ *     and the job's depth-1 `main` fetch: the fetched tip is a shallow commit whose parents are
+ *     hidden, and git cannot connect it to HEAD. Measured on 2026-09-14 for the continuity wall
+ *     (ADR-0560's annotation), which carried this rule privately; since ADR-0606 D3 the `verify` job
+ *     fetches `main` BEFORE every step, so every rung anchored here is exposed and the rule lives in
+ *     the one shared judge instead.
+ *  4. **None of these** — throw. There is no "before", so every file in the tree would read as this
  *     branch's; a check that cannot find its anchor must say so rather than red a whole repo it
  *     never measured.
  */
@@ -148,9 +165,16 @@ export function chooseBaseRef(evidence: BaseRefEvidence): BaseRefChoice {
       because: `\`git merge-base origin/main HEAD\` → ${evidence.mergeBase.slice(0, 9)}`,
     };
   }
+  if (evidence.githubRef === TRUNK_REF) {
+    return {
+      ref: "HEAD",
+      because: "a CI run of main itself — its merge base with any later main is HEAD",
+    };
+  }
   throw new VacuousOwnershipSweep(
     "no base revision could be established — `merge-base origin/main HEAD` did not resolve (no " +
-      "origin/main ref, a detached or non-repo checkout) and this is not a CI pull_request merge ref",
+      "origin/main ref, a detached or non-repo checkout), and this is neither a CI pull_request " +
+      "merge ref nor a CI run of main",
   );
 }
 

@@ -26,14 +26,12 @@ import { chooseBaseRef, type BaseRefChoice, type BaseRefEvidence } from "./owner
  * health fold rather than blocked here merely for existing.
  */
 
-/** The ref a CI run carries when it is a run of `main` itself — the only trigger of the trunk rule. */
-const TRUNK_REF = "refs/heads/main";
-
-/** Where the shell is running: the shared anchor's evidence, plus the ref the CI run was started for. */
-export interface ContinuityBaseEvidence extends BaseRefEvidence {
-  /** `GITHUB_REF`, or `undefined` outside CI. */
-  readonly githubRef: string | undefined;
-}
+/**
+ * Where the shell is running — the shared anchor's evidence, unchanged. It carried `GITHUB_REF` as
+ * an extra field when the trunk rule lived only here; since ADR-0606 D3 that rule is rule 3 of the
+ * shared {@link chooseBaseRef}, so the evidence is the shared evidence.
+ */
+export type ContinuityBaseEvidence = BaseRefEvidence;
 
 /** The revision this wall compares against, and the words its report prints for it. */
 export interface ContinuityBase {
@@ -68,27 +66,29 @@ export function readContinuityBaseEvidence(
  * merge base "does not exist" on a run that changed nothing. Measured twice on 2026-09-14 — PR #1914's
  * first run, and `main`'s own dispatched run at 11:28Z — each within a minute of another landing.
  *
- * THREE RULES, in order, each giving the answer a full clone would give:
- *   1. a CI pull_request merge ref → `HEAD^1`, the base tip it was cut against. This is the shared
- *      {@link chooseBaseRef} (ADR-0195's anchor), and both of its conditions stay load-bearing;
+ * THREE RULES, in order, each giving the answer a full clone would give — all three now the shared
+ * {@link chooseBaseRef}'s, so this wall and every other rung anchored there cannot disagree:
+ *   1. a CI pull_request merge ref → `HEAD^1`, the base tip it was cut against (ADR-0195's anchor);
  *   2. `merge-base(origin/main, HEAD)` wherever it resolves — a laptop, or CI while `main` held still;
  *   3. a CI run of `main` itself → `HEAD`: that commit is already on `main`, so its merge base with any
- *      later `main` is itself.
- * Anything else returns `null`, which the judge reports as an unreadable base — still RED.
+ *      later `main` is itself. This rule was born HERE (2026-09-14) and moved into the shared judge
+ *      when ADR-0606 D3 put the `main` fetch ahead of every rung, exposing all of them to the race.
+ * Anything else returns `null`, which the judge reports as an unreadable base — still RED. What this
+ * function adds is only the report's wording for each answer.
  */
 export function chooseContinuityBase(evidence: ContinuityBaseEvidence): ContinuityBase | null {
   const shared = sharedAnchor(evidence);
-  if (shared === null) {
-    return evidence.githubRef === TRUNK_REF
-      ? { ref: "HEAD", label: "HEAD (a CI run of main itself — its merge base with any later main is HEAD)" }
-      : null;
+  if (shared === null) return null;
+  if (shared.ref === "HEAD^1") {
+    return { ref: "HEAD^1", label: "HEAD^1 (the base tip this pull request's merge ref was cut against)" };
   }
-  return shared.ref === "HEAD^1"
-    ? { ref: "HEAD^1", label: "HEAD^1 (the base tip this pull request's merge ref was cut against)" }
-    : { ref: shared.ref, label: `merge-base(origin/main, HEAD) ${shared.ref.slice(0, 9)}` };
+  if (shared.ref === "HEAD") {
+    return { ref: "HEAD", label: "HEAD (a CI run of main itself — its merge base with any later main is HEAD)" };
+  }
+  return { ref: shared.ref, label: `merge-base(origin/main, HEAD) ${shared.ref.slice(0, 9)}` };
 }
 
-/** {@link chooseBaseRef}, with its "neither rule applies" throw read as `null` — the case rule 3 answers. */
+/** {@link chooseBaseRef}, with its "no rule applies" throw read as `null` — an unreadable base. */
 function sharedAnchor(evidence: BaseRefEvidence): BaseRefChoice | null {
   try {
     return chooseBaseRef(evidence);

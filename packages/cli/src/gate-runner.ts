@@ -114,9 +114,10 @@ export const GATE_SKIP_EXIT_CODE = 3;
  * (and through it `storytree dispatch`), every `&&` chain and every caller reading only the exit code
  * still sees "not green" — deliberately. (`scripts/gate-bg.mjs` no longer reads the gate's status at
  * all: it detaches the run and returns, so what carries the 4 is the `.exit` file the shell writes.)
- * CI never runs a partial gate, so no CI step can observe it; the trap recorded against the skip
- * protocol (exit 3 is a contract with `gate-run.ts`, while `.github/workflows/ci.yml` reads ANY
- * non-zero as a hard red) does not reach here, and must not be re-opened by wiring `--only` into CI.
+ * CI never runs a partial gate, so no CI step can observe it — and since ADR-0606 D3 that is
+ * enforced rather than promised: `pnpm gate --ci` REFUSES `--only` / `--rerun-failed`, and a CI run
+ * reads a skip (exit 3) as a failure ({@link RunGateInput.skipIsFailure}). Do not re-open it by
+ * teaching the CI mode to run part of the plan.
  */
 export const GATE_PARTIAL_EXIT_CODE = 4;
 

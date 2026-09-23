@@ -282,14 +282,14 @@ export interface EngineCheckVerdict {
  *
  * WHY THE SKIP CODE IS LOCAL-ONLY, AND WHY THAT IS NOT A LOOPHOLE. `GATE_SKIP_EXIT_CODE` is a
  * protocol between a check and `gate-run.ts`, which renders 3 as SKIP and reports it in
- * `GATE GREEN, NARROWED`. CI does not use that runner — `.github/workflows/ci.yml` invokes these
- * scripts as ordinary steps, where every non-zero code is a failure. Emitting 3 there would convert
- * a DECLARED SKIP into a hard red, which is this arc's own defect wearing the opposite sign: a
- * report meaning something to its reader that its author did not intend. So the message still says
- * plainly that nothing was compared — the CI log stays honest — while the exit code speaks the
- * vocabulary its actual runner understands. Teaching CI the skip vocabulary is a workflow change
- * and its own decision; until then, the honest code here is the one that does not lie to the
- * runner reading it.
+ * `GATE GREEN, NARROWED`. CI runs the same runner in its CI mode (`pnpm gate --ci`, ADR-0606 D3),
+ * which counts every exit 3 as a FAILURE. Emitting 3 there would convert a DECLARED SKIP into a hard
+ * red, which is this arc's own defect wearing the opposite sign: a report meaning something to its
+ * reader that its author did not intend. So the message still says plainly that nothing was
+ * compared — the CI log stays honest — while the exit code speaks the vocabulary the CI mode
+ * understands. Letting a check DECLARE which of its skips CI accepts is ADR-0606 D1's per-check
+ * declaration (`gate-checks-found-like-tests-arc` inc-03); until then, the honest code here is the
+ * one that does not lie to the run reading it.
  */
 export function judgeEngineCheck(
   sight: EngineCheckSight,

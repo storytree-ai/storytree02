@@ -5,7 +5,7 @@ name: CI
 # post-merge full-suite backstop (ADR-0195 §5): the automerge job's GITHUB_TOKEN merge cannot
 # trigger the push run (GitHub anti-recursion — same reason the deploy dispatch exists), so after
 # an affected-only merge it dispatches a full run on main here instead. A dispatched run takes the
-# full `-r` path (the affected step is PR-only).
+# full `-r` path (the gate's CI scope narrows only on a pull_request — ADR-0606 D3).
 #
 # `merge_group` is the MERGE QUEUE half of ADR-0304 (D3/D4). GitHub's native queue builds a temporary
 # branch holding this PR on top of the PRs already queued ahead of it — the PROJECTED post-merge trunk
@@ -79,28 +79,32 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # The gate. Typecheck / test / build are offline and need no secrets.
+  # The gate. ONE step runs every check, from the ONE plan the local `pnpm gate` walks (ADR-0606,
+  # superseding ADR-0486): `pnpm gate --ci` selects the steps whose `runs` placement includes CI in
+  # `packages/cli/src/gate-order.ts`, scopes from this PR's merge commit through the shared classifier
+  # (ADR-0304 D2), counts a skip as a failure, and hands each store-reading step only the identity it
+  # declares. THIS JOB NAMES NO CHECK, deliberately. It used to keep its own hand-written copy of the
+  # plan, and a third thing — the `gate-ci-parity` detector — existed only to catch the two drifting
+  # apart; the owner judged that the wrong kind of solution (2026-09-23). To add, move or retire a
+  # check, edit the plan. This file changes only when the ENVIRONMENT does.
   #
-  # CI IS NO LONGER DB-FREE (ADR-0302 D3). The retained guidance and agent projection checks
-  # authenticate through the SAME keyless WIF identity the automerge job has used on every merged PR since
-  # ADR-0033 — no new pool, no new IAM, no new secret (infra/ci-presence.tf). This closes the class
-  # of reds that could only ever fire on the dev box while CI showed green.
-  #
-  # THAT DEPENDED ON THE DATABASE RUNNING 24/7 (ADR-0302 D2), and the dependency is not incidental:
-  # `storytree-ci-presence` holds cloudsql.client + cloudsql.instanceUser and NO wake role — the wake
-  # permission is bound to the studio runtime SA alone (infra/studio-db-wake.tf). Under ADR-0114's
-  # old 01:00-07:00 Sydney sleep window, every overnight PR would have redded on an instance CI has
-  # no way to start. That window is gone; do not re-introduce one without re-deciding this.
+  # CI IS NOT DB-FREE (ADR-0302 D3). The store-reading steps authenticate through keyless WIF
+  # identities (infra/ci-presence.tf) — no JSON key in a secret. THAT DEPENDS ON THE DATABASE RUNNING
+  # 24/7 (ADR-0302 D2): `storytree-ci-presence` holds cloudsql.client + cloudsql.instanceUser and NO
+  # wake role — the wake permission is bound to the studio runtime SA alone (infra/studio-db-wake.tf).
+  # Under ADR-0114's old 01:00-07:00 Sydney sleep window, every overnight PR would have redded on an
+  # instance CI has no way to start. That window is gone; do not re-introduce one without re-deciding
+  # this.
   # ---------------------------------------------------------------------------
   verify:
     name: verify
     runs-on: ubuntu-latest
-    # The affected-scope decision ('full' | 'affected'; empty on push/dispatch runs, where the
-    # step is skipped) — read by the automerge job's post-merge backstop dispatch (ADR-0195 §5).
+    # The affected-scope decision ('full' | 'affected') the gate step publishes — read by the automerge
+    # job's post-merge backstop dispatch (ADR-0195 §5).
     outputs:
-      mode: ${{ steps.affected.outputs.mode }}
-    # contents: read for checkout; pull-requests: read for the ADR cross-PR collision check (ADR-0050);
-    # id-token: write to mint the WIF OIDC token for the live-store checks below (ADR-0302 D3).
+      mode: ${{ steps.gate.outputs.mode }}
+    # contents: read for checkout; pull-requests: read for the merged-branch guard; id-token: write to
+    # mint the WIF OIDC tokens for the two identities the store-reading steps sign in as (ADR-0302 D3).
     permissions:
       contents: read
       pull-requests: read
@@ -109,7 +113,8 @@ jobs:
       # legacy/Agentic is a private submodule and not part of the pnpm workspace,
       # so the default no-submodule checkout is correct (and avoids needing creds).
       # fetch-depth 2 keeps the PR merge commit's FIRST PARENT (the base tip the merge was cut
-      # against) available — the affected-scope step below diffs HEAD^1..HEAD (ADR-0195).
+      # against) available — the gate's CI scope diffs HEAD^1..HEAD (ADR-0195), and the rungs that
+      # charge a branch only for what it added anchor on the same parent (`chooseBaseRef`).
       - name: Checkout
         uses: actions/checkout@v6
         with:
@@ -128,7 +133,8 @@ jobs:
       # re-landing the same branch name would erase live sessions from the map and feed the
       # stale-PR trap family. Refuse a PR whose head branch already has a merged PR. Fail-open on
       # gh errors (as the deleted ADR collision step above also did — a flaky API must never block
-      # every merge).
+      # every merge). A PIPELINE guard about the PR, not a check of the tree, so it is not a gate
+      # step and has no local counterpart.
       - name: Merged-branch guard (a branch dies on merge)
         if: github.event_name == 'pull_request'
         env:
@@ -150,13 +156,9 @@ jobs:
       # Bun is a TEST RUNTIME here, not a package manager — `bun-runtime-migration-arc`, whose intent
       # rules the package-manager axis OUT OF SCOPE. pnpm above still installs, still owns the
       # lockfile, and still owns the affected-scope classifier (ADR-0195 / ADR-0304 D2). All this
-      # step does is put `bun` on PATH so a package whose own `test` script says `bun test` can run;
-      # `pnpm --filter ...<name> test` is unchanged, because it just runs whatever each package says.
-      #
-      # WHY IT IS HERE AT ALL, AND WHY IT IS UNCONDITIONAL. The first converted package (increment 2,
-      # packages/proof-protocol) would go RED the moment it landed without this — CI has no Bun — so
-      # the CI step and the first conversion had to land together. It is a ONE-TIME cost, not a
-      # per-package one: every later conversion is then a one-line package.json edit.
+      # step does is put `bun` on PATH so a package whose own `test` script says `bun test` can run —
+      # and so the mutation rung can drive `bun test` through the patched
+      # @hughescr/stryker-bun-runner, which `pnpm install --frozen-lockfile` applies.
       #
       # The version is PINNED to what the arc measured (docs/research/bun-runtime-probe-2026-08-22.md
       # — Bun 1.4.0, the same build installed on the dev box). Bun's `node:test` support is PARTIAL
@@ -171,153 +173,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # The anti-slop ratchet (anti-slop-adoption-arc inc-07 / inc-17). Every vendored rule is
-      # either `error` at zero violations or `off` with a written reason (oxlint.config.ts,
-      # docs/typescript-standard.md) — but until this step, that zero was enforced ONLY by the
-      # local `pnpm gate`, on the honour of each session running one before landing. Measured
-      # 2026-08-24: `origin/main` went exit 1 on `pnpm lint` within hours of the rung's own PR,
-      # twice, and a later PR had to spend a separate commit clearing debt it did not create —
-      # because CI, the thing that actually gates the merge, never ran it. Same command as the
-      # gate's first step (`gate-order.ts`), unconditional and un-narrowed like every rung above:
-      # the ratchet needs the whole repo checked every time, not just this PR's affected slice.
-      - name: Lint (the anti-slop ratchet)
-        run: pnpm lint
+      # ── the ENVIRONMENT the plan's steps read. Everything below prepares inputs; nothing judges. ──
 
-      # Invisible control bytes in tracked text files (2026-09-22). A quoted shell heredoc strips one
-      # level of backslash, so a patch script emitting `\\b` delivers `\b` and the interpreter writes
-      # byte 0x08 into the source. This is a WALL rather than only the local gate's habit because the
-      # fault is invisible to review itself: tsc passes (0x08 is legal in a regex literal), oxlint
-      # passes, `grep -n` prints a clean line because the terminal EXECUTES the backspace, `git diff`
-      # renders nothing and the Read tool shows the same clean line. Measured twice in days, once
-      # turning `/\buniform\b/` into a regex no GLSL source can match — so the assertion negating it
-      # could never fail and sat green proving nothing. It found a third on its first real run: a raw
-      # NUL that `grep` could not even list, because grep treats a NUL-bearing file as binary. Scans
-      # bytes, not grep output. Offline, disk-only, sub-second, whole-repo and un-narrowed.
-      - name: Invisible control bytes
-        run: pnpm check:control-bytes
-
-      # The repo manifest's fragment tree (ADR-0556 D4, `repo-manifest-aggregate-leaves-git`). The committed
-      # aggregate left Git, so the fragments under `repo-manifest/` are the manifest's only bytes. This step
-      # composes them from this clean checkout and reds on a refused or unreadable set, on a fragment not
-      # written exactly as the composer writes it, and on a `repo-manifest.json` back beside the tree. It
-      # runs before the three steps that read the composed manifest, so a refused set is named once, here,
-      # under the manifest's own name. Nothing is generated and nothing is uploaded: CI proves the tree
-      # reproduces its own composition, and never puts a composed view back into a diff. Offline, disk-only.
-      - name: Repo manifest fragments
-        run: pnpm check:manifest-fragments
-
-      # Organism boundary (ADR-0074): the real cross-organism code-dependency graph must be a
-      # subgraph of the declared cross-story `depends_on` graph (substrate/ports excepted). Refuses
-      # an undeclared cross-story coupling or a dependency cycle — so coupling can't be added without
-      # a declared edge, which the studio forest then renders (no invisible coupling).
-      - name: Organism boundary
-        run: pnpm check:boundaries
-
-      # Source-ownership totality (ADR-0317 D2, charged by ADR-0301 — verification-integrity-arc
-      # `ownership-map-holds-totality`). `check:boundaries` above is at PACKAGE grain and correctly
-      # passes while a NEW file inside an owned package falls under no declared `sourceOwnership`
-      # subtree — measured on PR #1326, where a full gate went green with the map already
-      # incomplete. Charged BY AUTHORSHIP: a file this PR adds (or one it un-owns by deleting a
-      # declaration) REDS; a file already unowned on the base tip is reported and never charged, so
-      # a PR is never billed for the standing drain. Deliberately a ROOT step, OUTSIDE the ADR-0195
-      # narrowing below — a new unowned file may land in any package, including one the affected
-      # filter would not select.
-      #
-      # It anchors "before" on HEAD^1 here, exactly as `pnpm ci:affected` does: this is the
-      # pull_request MERGE ref, `fetch-depth: 2` keeps its first parent, and no `origin/main` is
-      # fetched (see `chooseBaseRef`).
-      - name: Source-ownership totality
-        run: pnpm check:ownership-totality
-
-      # Work-hierarchy CAMPS (ADR-0445 D1, `map-freshness-arc` inc-04). D1 made the tree
-      # disk-canonical for PROVING and live-canonical for RENDERING, and its own Consequences name
-      # the failure mode: "a THIRD reader added later without asking which camp it is in". This rung
-      # computes, from each module's code, which source it NAMES, and holds that against the camp
-      # declared in `repo-manifest/hierarchy-camps/_domain.json` -> `hierarchyCamps.readers` — in both directions, so an
-      # undeclared reader, a declared read the code does not perform, a live read in the prove camp,
-      # an unstated checkout fallback in the render camp, and a render reader reaching a prove
-      # reader's helper all red. Offline and disk-only: no store, no credential. Deliberately a ROOT
-      # step, OUTSIDE the ADR-0195 narrowing below — a new reader may land in any package, and the
-      # cross-camp rule reads two modules that need not be in the same affected scope.
-      - name: Work-hierarchy reader camps
-        run: pnpm check:hierarchy-camps
-
-      # The CONTRACT-LINE GRAMMAR (ADR-0459, realising ADR-0447 D4). Contracts are prose sentences
-      # bound to their tests by a naming convention, and a convention is not a grammar: an agent
-      # reading one must INFER trigger / system / response, and inference is where slop enters. This
-      # rung reds when a contract THIS BRANCH added or edited declares no `asserts —` sentence at all,
-      # or names its system nowhere mechanically. A RATCHET, never a migration — the corpus's 133
-      # standing breaches are charged to nobody, exactly as `check:ownership-totality` handles a
-      # pre-existing unowned file, and it anchors on the same `chooseBaseRef` so the two rungs can
-      # never disagree about what "before" means. It is HERE and not local-only for the
-      # anti-slop-adoption-arc reason: that rule regressed on `main` within a day of adoption because
-      # nothing at merge time held it. Offline, disk-and-git only: no store, no credential. A ROOT
-      # step, OUTSIDE the ADR-0195 narrowing below — a contract may be edited in any story directory,
-      # and `stories/**` narrows to a package scope that need not contain this check.
-      - name: Contract-line grammar
-        run: pnpm check:contract-grammar
-
-      # A story's DECLARED reliability gate, held to something that actually RUNS it
-      # (verification-integrity-arc, `declared-reliability-gate-is-run-by-a-rung`). A story's
-      # `## Reliability Gates` block names the command carrying that story's machine proof
-      # obligation, and nothing compared that declared population against the commands anything
-      # executes — so a declared gate could rot with both the gate and CI green on the very change
-      # that broke it.
-      #
-      # ⚠ ON THE WALL AS WELL AS IN THE GATE, and the evidence is inside the current commit range
-      # rather than argued: 3ea9c3cc ("stop rendering the Sources block on every read surface")
-      # retired a pane, updated every unit test it broke, and left `stories/studio`'s UAT journey —
-      # the corpus's only end-to-end acceptance journey — red, because nothing runs it. That is a
-      # CI-shaped escape: the unit tests it did update are exactly what `pnpm -r test` covers.
-      #
-      # Judges only the class whose runnability is mechanically decidable (`pnpm --filter <pkg>
-      # <script>`), states on every run what it did NOT judge, and is a ratchet rather than a
-      # migration: the one pre-existing breach is carried in a declared baseline that FAILS once it
-      # goes stale. Offline and disk-only — no git, no store, no credential. A ROOT step, OUTSIDE the
-      # affected-only narrowing below: any package's change can wire or unwire a declared gate, and
-      # `stories/**` narrows to a scope that does not contain this check.
-      - name: Declared reliability gates are run by something
-        run: pnpm check:reliability-gate-parity
-
-      # The IMAGE's credential filter, held to git's (ADR-0547, realising ADR-0544 D5's residual).
-      # `.gcloudignore` and `.gitignore` are two INDEPENDENT lists that happen to need to agree: the
-      # by-hand image build uploads the working tree as it stands, and the builder never reads the
-      # git list — so a file correctly kept out of git can still be copied straight into a PUBLIC
-      # image. This rung reads both and reds when a secret-shaped or private-runtime entry is in one
-      # and missing from the other. It fails rather than skips when either file is absent, because a
-      # rung whose whole value is comparing two lists must never quietly compare nothing.
-      #
-      # ⚠ IT IS HERE, AND NOT GATE-ONLY, BECAUSE THE GATE IS A HABIT AND THIS IS A WALL — the same
-      # argument `check:contract-grammar` above was put on the wall for, and for the same measured
-      # reason: two drift instances in three days (2026-09-06 and 2026-09-08), both introduced by
-      # updating one list and not the other, and neither noticed by a human. The owner directed the
-      # promotion (ADR-0547) after the authoring session hit GitHub's `workflow`-scope refusal and
-      # escalated rather than routing around it.
-      #
-      # Offline and disk-only: two file reads, no git, no store, no credential, milliseconds. A ROOT
-      # step, OUTSIDE the ADR-0195 affected-only narrowing below — either list may be edited by a
-      # change in any package, and neither path narrows to a scope containing this check.
-      - name: Image credential filter mirrors git's
-        run: pnpm check:gcloudignore-mirror
-
-      # Cross-surface mirror conformance (verification-integrity-arc inc 2). Surfaces that
-      # re-compose another's route — the desktop backend hand-mirrors the studio's /api/docs walk
-      # and may never import it (ADR-0176) — must serve the SAME payload. Each surface is run by
-      # its own probe in its own process over one shared input and the JSON is diffed. Deliberately
-      # a ROOT step, OUTSIDE the ADR-0195 affected-only narrowing below: drift is introduced by
-      # editing EITHER surface, and the affected filter would run only the edited one's suite.
-      #
-      # THIS STEP STAYS HERE, AHEAD OF THE AUTH BLOCK, AND THAT IS NOW A DECISION RATHER THAN AN
-      # ACCIDENT (ADR-0496 D1). It ran here because a stale header claimed "CI is DB-free"; that
-      # claim was false, and its live companion `Cross-surface mirror conformance (live ledger)`
-      # below now holds the credential. Splitting them is what keeps these nine fixture rows'
-      # feedback early: they need no store, and a red here can only be this branch's.
-      - name: Cross-surface mirror conformance
-        run: pnpm check:mirror-conformance
-
-      # Clone the PINNED web submodule so the grounding check validates the exact vendored site.
-      # storytree-web is PUBLIC, so this needs no creds (unlike the private legacy/Agentic, which is
-      # why the checkout above takes no submodules). ADR-0056.
+      # Clone the PINNED web submodule so the `check:web-*` family and `check:ground-space` read the
+      # exact vendored site. storytree-web is PUBLIC, so this needs no creds (unlike the private
+      # legacy/Agentic, which is why the checkout above takes no submodules). ADR-0056. `pnpm lint`
+      # ignores `web/**` (oxlint.config.ts), so cloning it ahead of every step changes no other verdict.
       - name: Check out the pinned web submodule
         run: |
           sha=$(git ls-tree HEAD web | awk '{print $3}')
@@ -326,60 +187,17 @@ jobs:
           git clone --quiet https://github.com/storytree-ai/storytree-web.git web
           git -C web checkout --quiet "$sha"
 
-      # (`web claims grounded` stood here until ADR-0403 dec 1. It reads the DECISION LOG, which is
-      # in the store now, so it moved down to the live-store block below — it needs the WIF auth step
-      # that has not run yet at this point. The web/ submodule it also needs is cloned above and
-      # stays cloned, so only the ordering changed.)
-
-      # The site consumes the shared forest-world render core as a SYNCED @generated artifact
-      # (web/src/lib/forest-world/), not as private source — ADR-0093 Decision 3. Fail if that copy
-      # has drifted from packages/forest-world (re-sync with `pnpm sync:web-engine` + bump the
-      # submodule). SKIPs while the pinned site hasn't adopted the core yet (no forest-world/ dir) —
-      # the render-core twin of `check:web-grounding`, needs the cloned web/ above.
-      - name: web engine in sync
-        run: pnpm check:web-engine
-
-      # No WebGL in Act 1's static import closure (ADR-0336, re-wiring only the closure third of the
-      # retired check:web-experience — ADR-0311 D2). SKIPs (bootstrap allowance) until the site adopts
-      # an experience entry; needs the cloned web/ above.
-      - name: web experience closure
-        run: pnpm check:web-experience-closure
-
-      # The marker-presence third of the retired check:web-experience (ADR-0454, narrowing ADR-0336
-      # D2 — that D2's premise that re-wiring needs a live-site fetch did not match the retired
-      # judge's actual static-source implementation). SKIPs (bootstrap allowance) until the site
-      # adopts an experience entry; needs the cloned web/ above.
-      - name: web experience markers
-        run: pnpm check:web-experience-markers
-
-      # The ADR-0367 screen-space-distance guard (`ground-space-truth-arc-inc-01`): every
-      # point-to-point distance in a file that mints projected coordinates from the lattice must
-      # declare which space it is measured in. It runs HERE, after the web/ clone, for the reason it
-      # exists: the fourth instance of the class survived PR #1356 by living in `web/src`, which no
-      # workspace project's test leg covers and only the `check:web-*` family reads. Unlike its three
-      # neighbours it has NO skip branch — the parent's own surfaces are always scannable, so it
-      # narrows (and says so) rather than opting out, and any non-zero exit here is a real failure.
-      - name: ground-space markers
-        run: pnpm check:ground-space
-
-      # THE ART RUNG (`the-art-instrument-becomes-a-build-rung`, ADR-0418 D4). The local gate has
-      # run this since PR #1699; it runs HERE for the one class of breakage a local gate structurally
-      # cannot see — two branches each green alone whose MERGE breaks the art. CI is the only thing
-      # that builds that merge, and this art is assembled from a SHARED palette and shared land code,
-      # so that class is not hypothetical. It sits between its two gate-order neighbours
-      # (`check:ground-space` above, `check:palette-transcription` below) so the CI order and
-      # `packages/cli/src/gate-order.ts` cannot drift apart.
-      #
-      # ⚠ THE INSTALL IS WHY THE SKIP CANNOT FIRE HERE, AND THAT IS THE POINT. `check:land-art` is in
-      # SKIP_CAPABLE_CHECKS with exactly one skippable condition — a Playwright browser that was never
-      # downloaded — and the reserved exit 3 is LOCAL only, so in CI any non-zero is a failure. The
-      # tempting fix is to make the rung print-and-exit-0 here, which is the vacuous-green shape: a
-      # rung that passes forever because the browser never arrived. Installing the browser is the
-      # opposite fix. If the install fails, the INSTALL step fails, which is loud and diagnosable.
+      # THE BROWSER `check:land-art` DRIVES — and THE INSTALL IS WHY THAT RUNG'S SKIP CANNOT FIRE HERE,
+      # which is the point. Its one skippable condition is a Playwright browser that was never
+      # downloaded, and `pnpm gate --ci` counts any skip as a failure. The tempting fix is to make the
+      # rung print-and-exit-0 in CI, which is the vacuous-green shape: a rung that passes forever
+      # because the browser never arrived. Installing the browser is the opposite fix. If the install
+      # fails, the INSTALL step fails, which is loud and diagnosable.
       #
       # ⚠ FULL `chromium`, never `chromium-headless-shell` alone: the rung's preflight resolves
       # `chromium.executablePath()`, which is the full browser. A shell-only install leaves that path
-      # absent and the rung would SKIP in CI while looking installed.
+      # absent and the rung would SKIP — which the gate would then report as a failure that names
+      # nothing about the real cause.
       #
       # Cost measured 2026-08-28 on the rung itself: 29.1 s on 12 cores and 29.0 s restricted to 2
       # (`taskset -c 0,1`). It is not CPU-parallel-bound — SwiftShader rasterises each canvas serially
@@ -387,186 +205,56 @@ jobs:
       - name: Install Chromium for the art rung
         run: pnpm -C packages/forest-world-r3f exec playwright install --with-deps chromium
 
-      - name: Land art (an instrument can fail a build for the art being wrong)
-        run: pnpm check:land-art
+      # `origin/main` for the rungs that compare against it: `check:hierarchy-drift` reads
+      # `origin/main:stories`, and `check:uat-revision-continuity` anchors on it off a pull request.
+      # `actions/checkout` here is fetch-depth 2 on the PR merge ref, so `origin/main` does not exist
+      # otherwise and those rungs would fail CLOSED on an unreadable base. `--depth=1` brings the tip
+      # commit with its complete tree, which is all the freshness rule reads, and the explicit refspec
+      # is what actually creates the remote-tracking ref — a bare `git fetch origin main` leaves only
+      # FETCH_HEAD behind. On a PR the rungs that charge a branch for what it ADDED still anchor on
+      # HEAD^1 (`chooseBaseRef`); on a CI run of `main` itself they anchor on HEAD.
+      - name: Fetch main
+        run: git fetch --depth=1 origin +refs/heads/main:refs/remotes/origin/main
 
-      # The status palette says ONE thing across all three places it is written down:
-      # `apps/studio/src/index.css` (canonical — where ADR-0462 and ADR-0470 were authored),
-      # `forest-world-r3f/harness/palette-band.ts` (a declared transcription) and
-      # `forest-world-r3f/src/ForestWorldCanvas.tsx` (what the shipped map, and since 2026-08-28
-      # the public site's chapter 2, actually draws). The land's colour IS a capability's proof
-      # state (ADR-0392 D5 / ADR-0398 D7), so a copy that disagrees is the map reporting a state
-      # nobody decided. It runs here as an ORDINARY step: it has no skip branch, because all three
-      # sources are always present in a full checkout, so any non-zero exit is a real failure.
-      - name: status palette transcriptions agree
-        run: pnpm check:palette-transcription
-
-      # Affected-only PR scope (ADR-0195, amends ADR-0022; ADR-0304 D2 puts the SAME classifier
-      # behind the local `pnpm gate`): classify the PR's changed files and,
-      # when every one maps cleanly into the workspace graph, narrow typecheck+test to the changed
-      # projects PLUS their dependents (pnpm's `--filter "...<name>"`). Conservative by
-      # construction — an unmapped root-path file (scripts/**, tsconfig.base.json, lockfile, …),
-      # any package.json, or the cross-boundary corpus seed (apps/studio/data/**) forces the full
-      # `-r` run, because those inputs are read by tests the dependency graph can't see. Only the
-      # root paths whose readers were MEASURED (ADR-0394/ADR-0399's ROOT_PATH_READERS) narrow
-      # instead. The
-      # push-to-main run below never narrows (`|| '-r'` when this step is skipped) — the backstop
-      # that keeps main green if a PR gate ever under-selects; fix forward from there. A MERGE-QUEUE
-      # run never narrows either (this step is PR-only): the queue's whole job is proving the
-      # PROJECTED post-merge trunk, so the full `-r` suite is the correct scope there.
-      - name: Affected scope (PRs only)
-        id: affected
-        if: github.event_name == 'pull_request'
-        run: pnpm ci:affected
-
-      - name: Typecheck
-        run: pnpm ${{ steps.affected.outputs.pnpm_args || '-r' }} typecheck
-
-      # @storytree/core corpus validation + the node:test suites across packages.
-      # This is the gate per CLAUDE.md ("Gate: pnpm -r typecheck · pnpm -r test") — scoped to the
-      # affected projects on PRs (ADR-0195), full on pushes to main.
-      - name: Test
-        run: pnpm ${{ steps.affected.outputs.pnpm_args || '-r' }} test
-
-      # The diff-scoped mutation rung (ADR-0458, `mutation-rung-in-ci`). Mutates ONLY the line spans
-      # this branch changed and passes only if this branch's OWN new or changed tests kill every
-      # mutant. It gives the red phase the teeth it lacks: red-green proves a test went red, never
-      # that it would still have gone red for a slightly different defect. NO score and NO threshold
-      # — ADR-0447 refused a mutation-score ceiling outright, and this step adds no policy of its own.
-      #
-      # HERE for the same reason `gate-order.ts` declares it here: after the test leg, because
-      # mutation results gathered over a RED suite describe the breakage, not the strength of the
-      # tests. It is a ROOT step, outside the ADR-0195 narrowing above — it takes its own scope from
-      # the diff via `chooseBaseRef`, the SAME judge `check:ownership-totality` uses, which anchors on
-      # HEAD^1 on this pull_request merge ref precisely because `fetch-depth: 2` fetches no
-      # `origin/main` (see `chooseBaseRef`). Nothing to configure here for that; it already holds.
-      #
-      # THE SKIP IS HANDLED IN THE CHECK, NOT WITH `continue-on-error`. The rung exits
-      # GATE_SKIP_EXIT_CODE (3) locally when the branch changes no mutable TypeScript under a
-      # project's `src/` — the ordinary shape of a corpus, docs or config landing and this rung's
-      # COMMONEST outcome. A plain step reads any non-zero as a hard failure, so the check itself
-      # prints `NOTHING TO MUTATE` and exits 0 when `CI=true` (`skipDisposition` in
-      # `mutation-diff.ts`). `continue-on-error` would have been the wrong instrument: it swallows
-      # REAL reds too, and the whole point of this step is that the rung finally blocks a merge.
-      #
-      # Needs the `Set up Bun` step above — the mutation runner drives `bun test` through the patched
-      # @hughescr/stryker-bun-runner, and `pnpm install --frozen-lockfile` applies that patch.
-      - name: Mutation rung (this branch's tests must kill this branch's mutants)
-        run: pnpm check:mutation-diff
-
-      # The only buildable target is apps/studio (`vite build`); the packages
-      # export raw TS and have no build step. studio's `vite build` used to fail
-      # because its dev API pulled the Node-only store substrate into config load;
-      # that store import is now lazy, so the gate verifies the client build too.
-      - name: Build
-        run: pnpm -r build
-
-      # -----------------------------------------------------------------------
-      # SHARED LIVE SOURCE — deliberately after this branch's typecheck, tests, and build.
-      # ADR-0302/0307 moved the Library agent tier to the live store while keeping its generated
-      # harness projections committed. A sibling can therefore move the source beneath this branch;
-      # these are real catches, but they must not precede the branch-local proof they do not own.
-      - name: Authenticate to GCP for live guidance (keyless WIF — ADR-0021)
+      # THE TWO KEYLESS IDENTITIES (ADR-0021), both signed in before the gate starts, because one gate
+      # step cannot change identity between its children by step order the way this job once did.
+      # The gate hands each store-reading step exactly the identity the plan declares for it
+      # (`ciIdentityFor`), and strips every credential from every other step — so the test leg and
+      # every other branch-local step still run with NO credential, as they did when they ran before
+      # any sign-in. AUTHORITY STAYS SPLIT (ADR-0560): `storytree-ci-presence` deliberately cannot
+      # read verdict history; `storytree-ci-webverdict` is the verdict-history reader, and only
+      # `check:uat-revision-continuity` declares it. The presence sign-in exports itself as the job's
+      # ambient credential exactly as it always did (and with it the project variables the store steps
+      # have always run with); the verdict-history sign-in does NOT, so it can never become anyone's
+      # default. The gate step passes each identity's credentials path explicitly, and a step that
+      # declares an identity the run did not provide FAILS, naming the missing variable.
+      - name: Authenticate to GCP as the presence identity (keyless WIF — ADR-0021)
+        id: presence
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: projects/635716509357/locations/global/workloadIdentityPools/github-actions/providers/github
           service_account: storytree-ci-presence@storytree-498613.iam.gserviceaccount.com
 
-      # CLAUDE.md, AGENTS.md and definitions.generated.json are generated root views of the live
-      # session-orchestrator/definition tier. Fail rather than silently ship stale operating rules.
-      - name: Root agent guidance in sync
-        env:
-          STORYTREE_DB_USER: storytree-ci-presence@storytree-498613.iam
-        run: pnpm check:guidance
-
-      # The four native harness directories are generated views of the live delegatable agents.
-      - name: Harness agents in sync
-        env:
-          STORYTREE_DB_USER: storytree-ci-presence@storytree-498613.iam
-        run: pnpm check:agents
-
-      # The decision-binding gate (ADR-0037 §3–4): every decision parses, its edges resolve, the
-      # supersedes relation holds both ways, no healthy story rests on a proposed decision, and the
-      # load-bearing tag sits only on accepted ones. It ran as a case inside `pnpm -r test` until
-      # ADR-0403 dec 1 made its subject a database — that suite is credential-free by ADR-0302 D3, so
-      # a real-corpus assertion belongs on a rung permitted to hold a connection (ADR-0307 D4).
-      - name: Decision log health
-        env:
-          STORYTREE_DB_USER: storytree-ci-presence@storytree-498613.iam
-        run: pnpm check:adr-health
-
-      # The public site's load-bearing claims carry data-grounds="ADR-…" refs; fail if any cites a
-      # missing or superseded decision — the doctrine-drift guard (ADR-0056). storytree-web can't
-      # self-check; only this repo reads the decision log. Down here rather than beside its two web/
-      # siblings because that log is in the store now and this step needs the auth above.
-      - name: web claims grounded
-        env:
-          STORYTREE_DB_USER: storytree-ci-presence@storytree-498613.iam
-        run: pnpm check:web-grounding
-
-      # The live half of the cross-surface mirror harness (ADR-0496 D2). Its block-A sibling above
-      # proves every registered pair over SYNTHETIC fixtures and holds no credential; this folds the
-      # REAL `events.node_claim` ledger through both surfaces' independently re-composed
-      # `/api/activity` claim folds — the pair whose originating defect was a re-composed SELECT that
-      # lost the ADR-0200 `grade` column, and the one arm whose input nobody chose.
-      #
-      # DOWN HERE FOR THE SAME REASON AS ITS FOUR NEIGHBOURS: it needs the auth step above, and its
-      # subject is shared live state, so a sibling's landing can move it under this branch. The
-      # HARNESS reads the ledger once and hands both probes one identical fixture — neither surface
-      # opens a connection, which is also what keeps the desktop probe inside ADR-0117 d.1/d.5.
-      # An unreachable store FAILS this step; it never falls back to the fixtures (ADR-0302).
-      - name: Cross-surface mirror conformance (live ledger)
-        env:
-          STORYTREE_DB_USER: storytree-ci-presence@storytree-498613.iam
-        run: pnpm check:mirror-conformance-live
-
-      # ADR-0223 D3: the authored `dependsOn` dependency edge must stay acyclic. Live-store like its
-      # two neighbours above, and here for the same reason — the corpus is the shared thing a branch
-      # can break without touching a file, so a branch-local gate would never see it. ONE bulk read.
-      - name: Library dependsOn DAG is acyclic
-        env:
-          STORYTREE_DB_USER: storytree-ci-presence@storytree-498613.iam
-        run: pnpm check:library-dag-acyclic
-
-      # ADR-0445 D1 (`map-freshness-arc` inc-02): the live store's MIRROR of `stories/**` must still
-      # describe the tree `main` has. It is regenerated by the automerge job below on every merge, so
-      # this rung is what makes a regeneration that did not take LOUD instead of leaving a frozen
-      # projection to be discovered by whoever switches the readers onto it. Live-store like its three
-      # neighbours above, and shared-environment for the same reason: a sibling's landing moves it.
-      #
-      # THE EXPLICIT FETCH IS LOAD-BEARING. `actions/checkout` here is fetch-depth 2 on the PR merge
-      # ref, so `origin/main` does not exist in this checkout and the rung would fail CLOSED on an
-      # unreadable base rather than judging anything. `--depth=1` brings the tip commit with its
-      # complete tree, which is all the freshness rule reads (`git rev-parse origin/main:stories`),
-      # and the explicit refspec is what actually creates the remote-tracking ref — a bare
-      # `git fetch origin main` leaves only FETCH_HEAD behind.
-      - name: Work-hierarchy mirror is current
-        env:
-          STORYTREE_DB_USER: storytree-ci-presence@storytree-498613.iam
-        run: |
-          git fetch --depth=1 origin +refs/heads/main:refs/remotes/origin/main
-          pnpm check:hierarchy-drift
-
-      # ADR-0560 D3/D4: the fetched `origin/main` above also anchors this exact-revision continuity
-      # wall at `merge-base(origin/main, HEAD)`. Unlike the mirror check, this compares the base
-      # hierarchy to the candidate hierarchy and reads the signed verdict stream. It remains its
-      # own required step so the green-gate audit can see the wall directly. A missing ref,
-      # credential, store read, criterion identity or revision is a hard red.
-      #
-      # AUTHORITY STAYS SPLIT. The live-guidance steps above keep `storytree-ci-presence`, whose
-      # deliberate boundary excludes verdict history. This last step switches to the already-
-      # provisioned website-verdict identity: its repo-scoped WIF binding and SQL grants permit
-      # SELECT on `events.verdict` without granting presence access to lifecycle history.
-      - name: Authenticate to GCP for UAT revision continuity (keyless WIF — ADR-0021)
+      - name: Authenticate to GCP as the verdict-history reader (keyless WIF — ADR-0021, ADR-0560)
+        id: webverdict
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: projects/635716509357/locations/global/workloadIdentityPools/github-actions/providers/github
           service_account: storytree-ci-webverdict@storytree-498613.iam.gserviceaccount.com
+          export_environment_variables: false
 
-      - name: Changed UAT revisions carry current proof
+      # ── THE GATE. Every check, from the one plan. ─────────────────────────────────────────────────
+      # Read a failure from the error annotations at the top of the run (each names its step), the
+      # per-step table on the run's summary page, or the step's collapsible sections in this log. A
+      # skip here is a failure: CI supplies every input a skip-capable check needs.
+      - name: Gate (every check, from the one plan — ADR-0606)
+        id: gate
         env:
-          STORYTREE_DB_USER: storytree-ci-webverdict@storytree-498613.iam
-        run: pnpm check:uat-revision-continuity
+          STORYTREE_CI_IDENTITY_CI_PRESENCE_CREDENTIALS: ${{ steps.presence.outputs.credentials_file_path }}
+          STORYTREE_CI_IDENTITY_CI_PRESENCE_DB_USER: storytree-ci-presence@storytree-498613.iam
+          STORYTREE_CI_IDENTITY_CI_WEBVERDICT_CREDENTIALS: ${{ steps.webverdict.outputs.credentials_file_path }}
+          STORYTREE_CI_IDENTITY_CI_WEBVERDICT_DB_USER: storytree-ci-webverdict@storytree-498613.iam
+        run: pnpm gate --ci
 
   # ---------------------------------------------------------------------------
   # Auto-merge-on-green, done inside free Actions (GitHub-native auto-merge is
