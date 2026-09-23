@@ -1,3 +1,26 @@
+/* gate-check
+runs: both
+subject: own-work
+cost: seconds
+skip:
+  when: >-
+    the `web/` submodule is absent locally (it is cloned in CI, where an absent web/ is a hard
+    failure instead)
+  inCi: failure
+why: >-
+  reds when this diff's web/ pin's experience entry page drops the data-experience-skip or
+  data-experience-fallback marker (ADR-0454, narrowing ADR-0336 D2)
+
+  Survival audit (gate-machinery-audit-arc): PROOF INTEGRITY (ADR-0454, added 2026-08-26, narrowing
+  ADR-0336 D2). Re-wires the other two-thirds of the retired check:web-experience: the
+  `data-experience-skip` / `data-experience-fallback` marker-presence assertions. ADR-0336 D2 left
+  these retired on the premise that re-wiring needed a live-site network fetch; ADR-0454 found that
+  premise did not match the retired judge's actual implementation (a static string search over the
+  same `web/` submodule source the closure walk already reads) and re-wired them the same way, same
+  posture, same cost. Preventive rather than catch-evidenced, on the check:web-experience-closure
+  precedent — it protects owner decision 6 on `website-experience` (the skip/fallback affordances
+  are load-bearing from the first increment), not a specific production catch.
+*/
 // check:web-experience-markers — the skip/fallback marker-presence guard (ADR-0454).
 //
 // Re-wires the marker-presence third of the retired `check:web-experience` rung (ADR-0311 D2),

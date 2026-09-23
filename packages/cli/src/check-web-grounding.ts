@@ -1,3 +1,23 @@
+/* gate-check
+runs: both
+subject: shared-environment
+cost: seconds
+ciIdentity: ci-presence
+skip:
+  when: >-
+    the `web/` submodule is absent locally (it is cloned in CI, where an absent web/ is a hard
+    failure instead)
+  inCi: failure
+why: >-
+  it validates the public site's ADR citations against the DECISION LOG, which is shared live state
+  since ADR-0403 dec 1 — a sibling's status flip can red it, so it cannot run ahead of this branch's
+  own work. It was `own-work` while the corpus was files in this diff; only its SUBJECT moved. Still
+  skip-capable on an absent web/ submodule, and the skip is decided BEFORE the store is dialled so a
+  DB outage can never read as the submodule skip
+
+  Survival audit (gate-machinery-audit-arc): FACTORY BOOKKEEPING. Commit ae90d950 records escaped
+  stale doctrine after ADR-0040; without it public copy cites missing or superseded decisions.
+*/
 // The drift gate that binds the PUBLIC website (the `web` submodule, storytree-web) back to this
 // repo's decision record (ADR-0056). Load-bearing factual claims on the site carry a
 // `data-grounds="ADR-NNNN[,…]"` attribute — invisible on the page, discoverable in the repo. This

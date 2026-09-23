@@ -1,3 +1,22 @@
+/* gate-check
+runs: both
+subject: own-work
+cost: seconds
+why: >-
+  reds when a story DECLARES a reliability gate — a `pnpm --filter <pkg> <script>` command in its
+  `## Reliability Gates` block — that no gate step, no CI step and no repo-wide `-r` leg runs.
+  ADR-0251's mirror-conformance class, applied to the declaration↔execution pair: `pnpm --filter
+  studio uat` was named as the machine proof obligation for all thirteen `studio` legs, the corpus's
+  only end-to-end acceptance journey, and was run by NOTHING — so the gate and CI were both green on
+  the very change that broke it. Demonstrated inside the current commit range rather than argued:
+  3ea9c3cc retired the Sources pane, updated every unit test it broke, and left the UAT journey red,
+  because nothing runs it. Judges the class whose runnability is MECHANICALLY decidable and says on
+  every run what it did not judge; `exec`-form witness checks and `storytree gate run` ceremonies
+  name no package script and are excluded deliberately. A ratchet, never a migration, exactly like
+  its `check:contract-grammar` neighbour: the one pre-existing breach is carried in a declared
+  baseline that FAILS when it goes stale, so it drains rather than accumulating. Disk only — no git,
+  no store, no network — so it sits in the cheap-first block
+*/
 /**
  * `pnpm check:reliability-gate-parity` — the thin I/O SHELL that holds every story's DECLARED
  * reliability gate to something that actually runs it. The rule lives in the pure judge next door

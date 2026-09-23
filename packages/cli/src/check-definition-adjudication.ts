@@ -1,3 +1,16 @@
+/* gate-check
+runs: local
+subject: shared-environment
+cost: seconds
+ciIdentity: ci-presence
+why: >-
+  reds when a `definition` row is neither carrying an authored dependsOn edge nor named as
+  deliberately carrying none (ADR-0468 D3). It sits beside check:library-dag-acyclic for the same
+  reason: the tier it judges is live state, so ANY session's artifact edit can red it even on a
+  branch that touched no corpus. Deliberately NOT the weaker `every definition carries an edge` —
+  that shape prices the tier toward padding, which is the failure ADR-0464's candidate-D refusal
+  names
+*/
 /**
  * `pnpm check:definition-adjudication` — ADR-0468 D3's rung over the `definition` tier.
  *

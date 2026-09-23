@@ -1,3 +1,14 @@
+/* gate-check
+runs: both
+subject: own-work
+cost: seconds
+why: >-
+  reds when this diff moves one mirrored surface and not its twin
+
+  Survival audit (gate-machinery-audit-arc): PROOF INTEGRITY. Commit 3ef84c96 records a historical
+  studio-only docs change producing 256+4 divergences; without it desktop and studio behavior
+  diverge.
+*/
 /**
  * `pnpm check:mirror-conformance` — the cross-surface conformance harness
  * (verification-integrity-arc inc 2). A sibling of `check:boundaries` / `check:manifest`: wired
@@ -119,7 +130,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { appendTraversalEvents } from "@storytree/context-traversal-capture";
 import type { TraversalLineIdentity } from "@storytree/context-traversal-capture";
@@ -2240,14 +2251,23 @@ function runFixtureArm(): void {
   console.log("✓ cross-surface mirror conformance: every mirrored payload matches its reference");
 }
 
-async function main(): Promise<void> {
-  if (parseArm(process.argv.slice(2)) === "live") return runLiveArm();
+/**
+ * Run one arm. `argv` defaults to this process's own arguments; the gate's
+ * `check-mirror-conformance-live.ts` passes `["--arm", "live"]`, which is why the run below is guarded.
+ */
+export async function main(argv: readonly string[] = process.argv.slice(2)): Promise<void> {
+  if (parseArm(argv) === "live") return runLiveArm();
   runFixtureArm();
 }
 
+// Run only when invoked directly, not when `check-mirror-conformance-live.ts` imports this module.
 // Fail CLOSED on anything the arms did not catch themselves: an unhandled rejection that exited 0
 // would be a conformance check reporting a pass it never computed.
-main().catch((err: unknown) => {
-  console.error(`✗ mirror conformance: ${err instanceof Error ? err.stack ?? err.message : String(err)}`);
-  process.exit(1);
-});
+const invokedDirectly =
+  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (invokedDirectly) {
+  main().catch((err: unknown) => {
+    console.error(`✗ mirror conformance: ${err instanceof Error ? err.stack ?? err.message : String(err)}`);
+    process.exit(1);
+  });
+}

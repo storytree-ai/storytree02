@@ -1,3 +1,6 @@
+/* gate-check
+retired: ADR-0311 D2
+*/
 // ⚠ UNWIRED — `check:web-experience` was RETIRED from the gate by ADR-0311 D2 (2026-08-05), and no
 // root `package.json` script, `GATE_PLAN` step, or CI job invokes THIS FILE'S OWN `main()`. Its own
 // unit tests still run under `pnpm -r test`, so they stay GREEN while this file's own combined

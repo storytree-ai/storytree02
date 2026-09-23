@@ -1,3 +1,7 @@
+/* gate-check
+retired: ADR-0311 D2
+sources: [graduation-drain.ts]
+*/
 // ⚠ UNWIRED — `check:graduation-worklist` was RETIRED from the gate by ADR-0311 D2 (2026-08-05), and NOTHING
 // invokes this file: it appears in no root `package.json` script, no `GATE_PLAN` step
 // (`gate-order.ts`), and no CI job. Its own unit tests still run under `pnpm -r test`, so they
