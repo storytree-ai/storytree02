@@ -1,3 +1,12 @@
+/* gate-check
+runs: both
+subject: shared-environment
+cost: seconds
+ciIdentity: ci-presence
+why: >-
+  a dependsOn cycle is authored by a live artifact write, so ANY session's edit can red it — the
+  corpus it judges is shared even when this branch touched none of it (ADR-0223 D3)
+*/
 /**
  * `pnpm check:library-dag-acyclic` — ADR-0223 D3's fail-closed acyclicity gate over the authored
  * `dependsOn` dependency edge.

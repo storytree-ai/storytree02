@@ -1,3 +1,17 @@
+/* gate-check
+runs: both
+subject: own-work
+cost: seconds
+why: >-
+  reds when this diff leaves a point-to-point distance undeclared in a file that mints projected
+  coordinates from the lattice (`ground-space-truth-arc-inc-01`). ADR-0367 D1 gave the land a
+  camera, so a distance between two PROJECTED points silently over-enforces on the depth axis and
+  starves marks out — measured four times, in four different surfaces. It sits with the
+  `check:web-*` family because it is the only other rung that reads `web/src`, which is where the
+  instance that survived PR #1356 lived; but unlike them it does NOT skip on an absent submodule
+  (the parent's own surfaces are always scannable, so a skip would misreport what ran) and it prints
+  a NARROWED line instead
+*/
 /**
  * `pnpm check:ground-space` — the ADR-0367 screen-space-distance guard
  * (`ground-space-truth-arc` end state 3: "the fault class is shown to be CLOSED, not assumed

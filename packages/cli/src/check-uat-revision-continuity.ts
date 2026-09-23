@@ -1,3 +1,15 @@
+/* gate-check
+runs: both
+subject: shared-environment
+cost: seconds
+ciIdentity: ci-webverdict
+why: >-
+  ADR-0560 D3/D4's production-catch wall compares this branch's existing UAT criterion revisions
+  with its merge base and requires the candidate revision's exact current signed pass. The hierarchy
+  is this branch's, but the proof stream is shared live state, so a sibling can move the answer and
+  the rung belongs after both expensive legs beside check:hierarchy-drift; an unreadable base,
+  store, identity or revision is a red, never a skip
+*/
 import {
   mkdirSync,
   mkdtempSync,

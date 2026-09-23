@@ -1,3 +1,28 @@
+/* gate-check
+runs: both
+subject: own-work
+cost: seconds
+runsBefore: [check:boundaries, check:ownership-totality, check:hierarchy-camps]
+why: >-
+  reds when the repo manifest's fragment tree under `repo-manifest/` does not compose, when a
+  fragment is not written exactly as the composer writes it (`--write` repairs that), or when a
+  `repo-manifest.json` sits beside the tree (ADR-0556 D4). The committed aggregate left Git in
+  `repo-manifest-aggregate-leaves-git`, so the fragments are the manifest's only bytes and this is
+  the rung that holds that end state. Disk only — no git, no store — and FIRST among the manifest's
+  readers, so a refused set is named once, under the manifest's own name, before `check:boundaries`,
+  `check:ownership-totality` and `check:hierarchy-camps` each stand down on it
+
+  Survival audit (gate-machinery-audit-arc): FACTORY BOOKKEEPING (ADR-0556 D4, added 2026-09-15 by
+  `repo-manifest-aggregate-leaves-git`). PREVENTIVE rather than catch-evidenced, on the
+  `check:hierarchy-camps` precedent, and each escape it blocks is one no other rung can see. A
+  committed `repo-manifest.json` is read by nothing, so it would pass every semantic check while
+  quietly becoming the merge surface the arc removed; and a fragment written out of form composes to
+  the same manifest, so every reader passes over it while its bytes — and every later diff of it —
+  depend on who edited it last. What it absorbs rather than adds: a refused fragment set already
+  redded `check:boundaries`, `check:ownership-totality` and `check:hierarchy-camps` under their own
+  names, and now reds first under the manifest's. MEASURED cost, three warm runs on the dev box:
+  3010 / 3042 / 2964 ms, almost all of it the pnpm-and-tsx start those three neighbours pay too.
+*/
 /**
  * `pnpm check:manifest-fragments` — the thin I/O shell over {@link judgeManifestTree} (ADR-0556 D4,
  * `repo-manifest-aggregate-leaves-git`), wired into `pnpm gate` and the CI `verify` job. The rule and its wording

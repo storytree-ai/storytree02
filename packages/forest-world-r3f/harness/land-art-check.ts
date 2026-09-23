@@ -1,3 +1,26 @@
+/* gate-check
+runs: both
+subject: own-work
+cost: seconds
+skip:
+  when: >-
+    Playwright's Chromium was never downloaded in this checkout, so no page can be driven — the ONLY
+    skippable condition, deliberately: vite failing, a page 404ing or capture crashing are all reds.
+    A skip here audits NOTHING, so it is printed as such rather than as a narrowing
+  inCi: failure
+why: >-
+  reds when the land art is wrong. ADR-0418 D3 lifted the closed-palette fence on
+  `forest-world-r3f/harness/` and D4 required a replacement that can still FAIL; PR #1673 built it
+  into `capture.mjs` and mutation-tested it, and then nothing ever ran it — it appeared in no gate
+  step, in no CI step, and is not reachable from the package's `test` script, which collects
+  `*.test.ts` while capture is a `.mjs` driver. An instrument that CAN fail, that no build asks,
+  cannot fail a build, which is what this arc's fence 3 requires. The rung starts its own vite
+  server on an ephemeral port (so a sibling worktree's harness on the pinned 5184 cannot answer it),
+  drives the three pages that between them carry all three parts of D4, and refuses both when
+  `capture.mjs` refuses AND when a page audited less than it is declared to prove — the second being
+  the half capture cannot assert about the run it is inside. ~29 s, browser-backed but
+  SwiftShader-only, so it needs no GPU
+*/
 // land-art-check.ts — THE RUNG THAT ASKS. `pnpm check:land-art`.
 //
 // ADR-0418 D4 required a check that can still fail once the closed palette is lifted, and PR #1673
