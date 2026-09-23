@@ -32,6 +32,10 @@ decisions: [123, 93, 562]
 # would let this lane's leaf write the surface, dressing and delivery lanes — silently re-merging
 # exactly what the split exists to separate. Narrowing a declared scope changes no behaviour and
 # arms nothing new.
+#
+# The current real arm is the explicit per-vertex island-slot transport. It replaces the inherited
+# mapper arm without claiming its three historical contracts: coverage keeps the mapper test while
+# the new proof changes only `cell-ground-geometry`'s optional input/output pair.
 proof:
   command:
     file: pnpm
@@ -70,16 +74,22 @@ proof:
       - "packages/forest-world-r3f/src/kit-vocabulary.ts"
       - "packages/forest-world-r3f/src/shade-ladder.ts"
       - "packages/forest-world-r3f/src/detail-normal.ts"
+  coverage:
+    testGlobs: ["packages/forest-world-r3f/src/world-to-3d.test.ts"]
   real:
-    testFile: "packages/forest-world-r3f/src/world-to-3d.test.ts"
-    sourceFile: "packages/forest-world-r3f/src/world-to-3d.ts"
+    editsExisting: true
+    testFile: "packages/forest-world-r3f/src/cell-ground-geometry.test.ts"
+    sourceFile: "packages/forest-world-r3f/src/cell-ground-geometry.ts"
     scope:
-      testGlobs: ["packages/forest-world-r3f/src/world-to-3d.test.ts"]
-      sourceGlobs: ["packages/forest-world-r3f/src/world-to-3d.ts"]
+      testGlobs: ["packages/forest-world-r3f/src/cell-ground-geometry.test.ts"]
+      sourceGlobs: ["packages/forest-world-r3f/src/cell-ground-geometry.ts"]
     install: true
     typecheck:
       file: pnpm
       args: ["--filter", "@storytree/forest-world-r3f", "typecheck"]
+    proofCommand:
+      file: bun
+      args: ["test", "--preload", "./scripts/tsx-cache-off.mjs", "packages/forest-world-r3f/src/cell-ground-geometry.test.ts"]
 ---
 
 # The scene model — a real forest world becomes typed 3D scene geometry
@@ -122,8 +132,8 @@ rests on, not an aspiration.
 > see the corrected note in Guidance), so ADR-0559 D4 would withhold credit from it independently.
 > Every reader agrees and agreed before the split: `storytree tree website-experience` reports this
 > lane `status=proposed`. The other 14 modules in the lane carry real `node:test` suites but no
-> contract id leads one of them, so `storytree coverage forest-scene-model` reports 3 contracts,
-> all three anchored on `world-to-3d.test.ts`.
+> contract id leads one of them; the explicit-slot proof below adds one current geometry contract
+> while coverage keeps the three historical mapper contracts visible.
 
 ## The lane — 15 modules
 
@@ -187,11 +197,33 @@ input maps deterministically to typed 3D descriptors that carry the semantic lay
 4. Feed a drawable with an unhandled/unknown `kind` → assert an explicit `skipped` descriptor (with
    the kind named) and no throw — the mapping is total and fail-visible.
 
-## Contracts (3)
+## Explicit island-slot proof walkthrough
+
+The canvas needs direct vertex provenance for its growth texture; an atlas UV offset is a sample
+address and may be shared by different islands, so it is not identity. Extend only
+`cellGroundGeometry`:
+
+1. Add optional `CellGroundGeometryInput.islandSlot`, a resolver from the source cell's `island` id
+   to one numeric slot, and `CellGroundGeometry.islandSlots`, one float per emitted vertex. Before
+   the implementation, cast the result in the existing test to an optional `islandSlots` field and
+   assert a two-island resolver produces the expected per-vertex slot run. At the recorded
+   baseline, the result lacked that buffer, making this an assertion red against existing code.
+2. With the resolver present, every top face and skirt vertex emitted from an island receives that
+   island's resolver value. With it omitted, `islandSlots` is zero-length exactly like the existing
+   optional atlas/status buffers, preserving the old geometry shape rather than silently declaring
+   slot zero for every island. The mutation rung observed a surviving conditional at
+   `cell-ground-geometry.ts:527` that makes `input.islandSlot === undefined` false. Repair that
+   observed gap with the omitted-resolver case: `islandSlots` must be zero-length and
+   `positions`, `normals`, `colors`, `statuses`, and `atlasOrigins` must remain byte-identical to
+   the baseline geometry. This strengthens the existing optional-input contract only.
+3. The resolver is passed the cell's direct `island` id. No reverse lookup from `atlasOrigins`, no
+   import from delivery, and no geometry or triangulation change is allowed.
+
+## Contracts (4)
 
 Each one isolated automated test (`node:test`, the package suite), cited at real `file:line`. Per
 ADR-0122 each contract id leads a distinctly-named test; `storytree coverage forest-scene-model`
-reports 3/3.
+reports 4/4, including the signed explicit-slot proof (`5e06fd51`).
 
 ⚠ **The three ids below are BYTE-IDENTICAL to the ones the pre-split `forest-rendering-engine`
 carried, deliberately.** A contract id is proof-bearing identity and ADR-0253 makes criterion
@@ -220,6 +252,12 @@ carry those names. The capability was renamed; its contract ids were not, and mu
      loudly instead — see the corrected ground-family note in Guidance.)
    - **covers —** `packages/forest-world-r3f/src/world-to-3d.ts` — test:
      `packages/forest-world-r3f/src/world-to-3d.test.ts:375`
+4. **`r3f-ground-vertices-carry-explicit-island-slots`** — the merged ground retains the island
+   identity each vertex came from
+   - **asserts —** a two-island cell input and direct resolver produces one slot per emitted vertex,
+     including skirt vertices, with each island's value intact; omitting the resolver leaves the
+     optional slot buffer empty.
+   - **covers —** `packages/forest-world-r3f/src/cell-ground-geometry.ts`
 
 ## Guidance
 

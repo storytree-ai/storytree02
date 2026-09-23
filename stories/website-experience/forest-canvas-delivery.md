@@ -36,10 +36,12 @@ decisions: [123, 562]
 # machine assertion that reaches it today is the source parse named above, which that test's own
 # header calls its weakest claim on purpose. This is recorded rather than papered over.
 #
-# Node-borne real proof (ADR-0057): re-armed for the bounded cursor-presentation adapter. It adds
-# one pure Bun test and one pure source module; CONFIRM_RED catches the absent module and turns it
-# into an explicit failed export assertion before implementation. It does not claim to prove the
-# Studio wiring, geometric reveal, visibility policy, or browser-bound canvas shell.
+# Node-borne real proof (ADR-0057): re-armed for the bounded causal-growth helper. It adds one
+# pure Bun test and one pure source module; CONFIRM_RED catches the absent module through an
+# existsSync-guarded absolute `.ts` import and turns it into an explicit failed export assertion.
+# It proves a content-stable ground cache and the cursor-map handoff, not island layout, physical
+# path clipping, shader attachment, React wiring, visibility policy, or the browser-bound canvas
+# shell.
 proof:
   command:
     file: pnpm
@@ -52,6 +54,7 @@ proof:
       - "packages/forest-world-r3f/src/forest-ground-is-one-mesh.test.ts"
       - "packages/forest-world-r3f/src/ground-dependency.test.ts"
       - "packages/forest-world-r3f/src/ForestWorldCanvas.regrow.test.ts"
+      - "packages/forest-world-r3f/src/ForestWorldCanvas.growth.test.ts"
     sourceGlobs:
       - "apps/studio/src/components/LandView.tsx"
       - "apps/studio/src/lib/landView.ts"
@@ -60,25 +63,28 @@ proof:
       - "packages/forest-world-r3f/src/ForestWorldCanvas.tsx"
       - "packages/forest-world-r3f/src/ground-dependency.ts"
       - "packages/forest-world-r3f/src/ForestWorldCanvas.regrow.ts"
+      - "packages/forest-world-r3f/src/ForestWorldCanvas.growth.ts"
   # Coverage follows the current real test file by default. The cache pair was signed under the
   # preceding real arm, so keep its test visible to coverage without widening this adapter's write
   # scope or changing its red→green proof.
   coverage:
-    testGlobs: ["packages/forest-world-r3f/src/ground-dependency.test.ts"]
+    testGlobs:
+      - "packages/forest-world-r3f/src/ground-dependency.test.ts"
+      - "packages/forest-world-r3f/src/ForestWorldCanvas.regrow.test.ts"
   real:
-    editsExisting: false
-    testFile: "packages/forest-world-r3f/src/ForestWorldCanvas.regrow.test.ts"
-    sourceFile: "packages/forest-world-r3f/src/ForestWorldCanvas.regrow.ts"
+    editsExisting: true
+    testFile: "packages/forest-world-r3f/src/ForestWorldCanvas.growth.test.ts"
+    sourceFile: "packages/forest-world-r3f/src/ForestWorldCanvas.growth.ts"
     scope:
-      testGlobs: ["packages/forest-world-r3f/src/ForestWorldCanvas.regrow.test.ts"]
-      sourceGlobs: ["packages/forest-world-r3f/src/ForestWorldCanvas.regrow.ts"]
+      testGlobs: ["packages/forest-world-r3f/src/ForestWorldCanvas.growth.test.ts"]
+      sourceGlobs: ["packages/forest-world-r3f/src/ForestWorldCanvas.growth.ts"]
     install: true
     typecheck:
       file: pnpm
       args: ["--filter", "@storytree/forest-world-r3f", "typecheck"]
     proofCommand:
       file: bun
-      args: ["test", "packages/forest-world-r3f/src/ForestWorldCanvas.regrow.test.ts"]
+      args: ["test", "packages/forest-world-r3f/src/ForestWorldCanvas.growth.test.ts"]
 ---
 
 # The canvas delivery — the dressed scene mounted in a real host surface, at a cost the frame can pay
@@ -110,7 +116,7 @@ while all three art lanes are being worked by other sessions.
 > **Proof status (honest) — PROVEN ONLY IN PART, and only PARTLY covered as code.** The three
 > Studio mount files carry real suites (`LandView.test.tsx`, `landView.test.ts`,
 > `canvasRegistration.test.ts`, run by `pnpm --filter studio test`). The package half carries
-> `forest-ground-is-one-mesh.test.ts`, the existing `ground-dependency.test.ts`, and the new pure
+> `forest-ground-is-one-mesh.test.ts`, the existing `ground-dependency.test.ts`, and the pure
 > `ForestWorldCanvas.regrow.test.ts`, all run by `pnpm --filter @storytree/forest-world-r3f test`.
 > **`ForestWorldCanvas.tsx` itself has no test**, and that is stated rather than remedied by
 > invention: a React-Three canvas has no honest headless oracle, its appearance is owner-witnessed
@@ -119,7 +125,9 @@ while all three art lanes are being worked by other sessions.
 > contracts below were first built and signed
 > together, as a cluster, by `batched-test-authoring-arc-inc-07`. The older tests carry no contract
 > id (ADR-0122), so no verdict covers the Studio mount or the canvas. The cursor-presentation
-> contract is a separate, newly armed pure proof and carries no inherited verdict.
+> contract was separately signed by PR #2030 (`real-mudvcbfy`). The pure causal-growth helper was
+> subsequently signed by delivery run `1de0c96`; it is not a claim that
+> the mounted canvas or its shader has begun visibly growing.
 
 ## The lane — 3 package modules + the Studio mount
 
@@ -235,11 +243,54 @@ absent at baseline and both tests must fail by assertion before production code 
    allowance, or timing threshold can satisfy either contract. Re-run the exact Bun file and the
    package typecheck; both clustered tests and all existing cache tests must be green.
 
-## Contracts (3)
+## Causal-growth proof walkthrough
+
+`ForestWorldCanvas.growth.ts` now exports the signed pure helper
+`forestWorldCanvasGrowth(descriptors, cursor)`. It keeps the ground object independent of cursor
+facts and copies the non-settled island and pathway maps into renderer-facing maps. It neither
+samples time nor derives a schedule. This is a delivery seam only; it does not claim mounted or
+shader-visible growth.
+
+The original integration design remains work for the following delivery and visual units:
+`islandGrowthLayout(cells)` will derive direct-id stable slots and island-centre anchors;
+`islandGrowthProgress(presentation, islandId)` will select hidden, growing and landed progress;
+and `regrowTrailPoints(segmentId, points, presentation)` will clip a real polyline by Euclidean
+arclength from its declared end. They are not exports of this signed helper and are not claimed by
+this landing.
+
+## Mutation-repair walkthrough — observed helper gaps
+
+The mutation rung reported 19 live/no-coverage mutants in the already-signed
+`forestWorldCanvasGrowth` helper. This follow-up strengthens only the exact changed-line guards;
+it does not re-arm a paid real build or add an integration API.
+
+1. In `ForestWorldCanvas.growth.test.ts`, retain the existsSync-guarded absolute `.ts` import and
+   load `forestWorldCanvasGrowth`. For the reported length comparison and return spans at
+   `ForestWorldCanvas.growth.ts:30:7-35` and `:30:44-49`, distinguish an equal stream from a
+   different-length stream.
+2. For the 13 survived comparator mutations at `:36:7-39:33`, `:36:7-38:41`,
+   `:36:7-37:29`, `:36:7-36:50`, `:36:7-36:27`, `:36:31-36:50`, `:37:7-29`, `:38:7-41`, and
+   `:39:7-33` (some spans carry more than one mutant), vary each compared descriptor field while
+   keeping the rest equal. The cache may reuse its ground object only when the complete compared
+   descriptor content is equal.
+3. For the three cache-guard mutants at `:48:7-68`, `:48:7-38`, and `:48:42-68`, observe the
+   first call, an equal fresh call, and a changed call so reuse requires both a populated cache and
+   equal content. For the object-literal mutant at `:53:18-33`, observe that the replacement ground
+   still carries the supplied descriptors. These are the 19 reported mutants at 15 source spans;
+   an equivalent guard is acceptable only with evidence that it kills the named span.
+
+## Contracts (5)
 
 The cache contracts remain the signed pair in `packages/forest-world-r3f/src/ground-dependency.test.ts`.
 The new cursor contract lives in `packages/forest-world-r3f/src/ForestWorldCanvas.regrow.test.ts`,
-where coverage can identify it independently.
+where coverage can identify it independently. The causal-growth pair is in
+`packages/forest-world-r3f/src/ForestWorldCanvas.growth.test.ts`.
+
+The two causal-growth ids below remain authored obligations for the later delivery integration.
+The signed `forestWorldCanvasGrowth` helper currently preserves the named in-flight island and
+pathway maps; it supplies neither island-layout/anchor API nor polyline clipping. Test names keep
+their existing contract ids, so coverage records their presence, but that syntactic join is not a
+claim that the signed helper has already rendered either obligation.
 
 1. **`fcd-ground-cache-compares-content-without-serializing`** — an equal fresh stream reuses the
    cached ground without rebuilding its delimiter-separated dependency key
@@ -263,6 +314,20 @@ where coverage can identify it independently.
      `settled: true` returns `null`. The adapter does not accept a clock or plan and imports no
      app-surface module, leaving schedule derivation and wall-clock ownership in the app.
    - **covers —** `packages/forest-world-r3f/src/ForestWorldCanvas.regrow.ts`
+4. **`fcd-regrow-progress-uses-explicit-island-identity`** — later delivery integration makes every
+   3D island sample the existing cursor by its id
+   - **asserts —** the future direct-id layout supplies stable slots and island-centre anchors; it
+     gives an absent island progress 0, a growing island its local cursor progress, and
+     landed/settled islands progress 1. No atlas origin is used as an island key. The signed helper
+     only preserves `growingIslandProgressById` for that later consumer.
+   - **future delivery target —** `packages/forest-world-r3f/src/ForestWorldCanvas.growth.ts`
+5. **`fcd-regrow-pathways-clip-at-physical-fronts`** — later delivery integration makes a pathway
+   appear only where its cursor says it has reached
+   - **asserts —** the future pathway consumer yields no drawable points for a hidden or zero
+     segment, clips a partial polyline at its Euclidean-arclength front from the declared end, and
+     returns the original point-list identity for a full/static segment. The signed helper only
+     preserves `drawingPathwayProgressById` for that later consumer.
+   - **future delivery target —** `packages/forest-world-r3f/src/ForestWorldCanvas.growth.ts`
 
 ## Guidance
 
