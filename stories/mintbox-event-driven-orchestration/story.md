@@ -10,13 +10,19 @@ arc: mintbox-event-driven-orchestration-arc
 capabilities: [mintbox-supervisor-events, mintbox-protected-driver-transition, mintbox-terra-lane-launch]
 depends_on: [agent, notice-board, arc]
 artifact_edges: [arc]
-decisions: [561, 505]
+decisions: [604, 505]
 ---
 
 # Mintbox event-driven orchestration — fresh Astra decisions, sustained Terra execution
 
 **Outcome —** Unattended Mintbox graphics work continues safely through compact event-driven Astra
 coordination and Terra lane execution without retaining a coordinator through worker activity.
+
+> **Current status —** ADR-0604 supersedes the dispatcher decision recorded as ADR-0561. Manual lane
+> launch is the current Mintbox route. These retained legacy components, walkthroughs, contracts and
+> UAT criteria document existing proof rather than the delivery now wanted; their code and story
+> retirement is already parked as `mintbox-dispatcher-retirement`, and this interim record does not
+> claim that retirement complete.
 
 ## Proof walkthrough first
 
