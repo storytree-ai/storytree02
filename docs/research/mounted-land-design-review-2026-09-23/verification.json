@@ -1,0 +1,19 @@
+{
+  "viewsCompared": 28,
+  "unchangedFlatImages": 9,
+  "errors": [],
+  "storyLabels": 36,
+  "edgeIdentityElements": 342,
+  "coveragePlants": 2442,
+  "statuses": {
+    "territory": {
+      "healthy": 26,
+      "proposed": 10
+    },
+    "parcel": {
+      "healthy": 182,
+      "proposed": 30
+    }
+  },
+  "isolatedPaintControlsVerified": true
+}

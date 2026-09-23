@@ -134,6 +134,23 @@ describe('legendFacts', () => {
 });
 
 describe('WorldLegend (adaptive bar)', () => {
+  it('mounted land reads story status from nameplate text instead of tree silhouettes', () => {
+    const { container } = renderLegend(offlineWorld(), { storyStatusFromNameplate: true });
+
+    const statusButton = screen.getByRole('button', { name: 'story status' });
+    expect(statusButton.querySelector('svg')).toBeNull();
+    fireEvent.click(statusButton);
+
+    const drawer = screen.getByRole('region', { name: 'legend — story status' });
+    expect(drawer.textContent).toMatch(/An island is a story\. Read its status beneath its name\./i);
+    expect(drawer.textContent).toMatch(/healthy.*signed proof.*baseline/i);
+    expect(drawer.textContent).toMatch(/Plants describe individual capabilities/i);
+    expect(drawer.textContent).toMatch(/Active work appears as session wisps/i);
+    expect(drawer.querySelector('.legend-fan svg')).toBeNull();
+    expect(drawer.querySelector('.legend-fan .legend-tile-icon')).toBeNull();
+    expect(container.textContent).not.toMatch(/big tree is the story itself/i);
+  });
+
   it('offline world: no orbiting (building) entry; proof stays and explains the under-claim', () => {
     renderLegend(offlineWorld());
     for (const label of ['story trees', 'test coverage', 'proof']) {
