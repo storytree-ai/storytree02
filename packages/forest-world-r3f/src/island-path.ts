@@ -195,9 +195,23 @@ export function islandDocks(
   cells: readonly InstanceDescriptor[],
   strips: readonly InstanceDescriptor[],
 ): Map<string, CoastPoint[]> {
+  const { docks } = discoverDocks(cells, strips);
+  const out = new Map<string, CoastPoint[]>();
+  for (const [island, found] of docks) out.set(island, [...found.values()]);
+  return out;
+}
+
+/** The shared dock decision, including the accepted endpoint assignments the visible strip
+ * projection consumes. Keeping that assignment here means the ribbon never makes a second,
+ * subtly different decision about terminals, named rims, reach, or snapping. */
+function discoverDocks(
+  cells: readonly InstanceDescriptor[],
+  strips: readonly InstanceDescriptor[],
+) {
   const rims = islandRims(cells);
   const grids = rims.map(rimGrid);
   const docks = new Map<string, Map<string, CoastPoint>>();
+  const assignments = new Map<InstanceDescriptor, Map<string, CoastPoint>>();
   for (const rim of rims) docks.set(rim.island, new Map());
   const ends = new Map<string, CoastPoint[]>();
   for (const strip of strips) {
@@ -241,11 +255,39 @@ export function islandDocks(
       const found = docks.get(nearest.island)!;
       // First arrival keeps the landing; a later end a hair away is the same dock.
       if (!found.has(vertexKey(nearest.dock))) found.set(vertexKey(nearest.dock), nearest.dock);
+      const assigned = assignments.get(strip) ?? new Map<string, CoastPoint>();
+      assigned.set(vertexKey(end), nearest.dock);
+      assignments.set(strip, assigned);
     }
   }
-  const out = new Map<string, CoastPoint[]>();
-  for (const [island, found] of docks) out.set(island, [...found.values()]);
-  return out;
+  return { docks, assignments };
+}
+
+/**
+ * THE RENDERED TRAILS' SHORE DOCKS. Each accepted terminal is replaced with the same snapped
+ * position the worn path consumes; the input descriptor stream stays untouched.
+ */
+export function dockedTrailStrips(
+  cells: readonly InstanceDescriptor[],
+  strips: readonly InstanceDescriptor[],
+): readonly InstanceDescriptor[] {
+  const { assignments } = discoverDocks(cells, strips);
+  return strips.map((strip) => {
+    const assigned = assignments.get(strip);
+    if (assigned === undefined) return strip;
+    // Assignments are created only while visiting stripEndpoints: absent or empty points emit
+    // no endpoint and cannot reach here. Extra points guards were equivalent mutation survivors.
+    const points = strip.points!;
+    const last = points.length - 1;
+    return {
+      ...strip,
+      points: points.map((point, index) => {
+        if (index !== 0 && index !== last) return point;
+        const dock = assigned.get(vertexKey({ x: point.x, z: point.z }));
+        return dock === undefined ? point : { ...point, x: dock.x, z: dock.z };
+      }),
+    };
+  });
 }
 
 /** The segment index over one island's rim, at dock reach — so the far-field short-circuit's

@@ -105,12 +105,13 @@ is not lit like the ground it stands on reads as a sticker, so the dressing cann
 an unlit ground). **Nothing upstream imports a dressing module**, in value or in type — the
 one-way property that makes this lane claimable alongside the other two.
 
-> **Proof status (honest) — UNPROVEN as a capability, and NOT unproven as code.** All 8 modules
-> carry real `node:test` suites in `packages/forest-world-r3f` and the package suite runs green.
-> What does not exist is a CONTRACT SET: no contract id leads any of those tests (ADR-0122), so
-> `storytree coverage forest-land-dressing` correctly reports zero and no signed verdict names this
-> unit. Authoring contracts over the behaviour these suites already assert is this lane's own first
-> increment, deliberately not done in the boundary landing that created it.
+> **Proof status (honest) — PARTIALLY PROVEN as a capability.** PR #2024 landed the first three
+> shore-selection contracts, with their signed result committed at `8171478a`; the duplicate signed
+> commit `4ca8a787` remains preserved in the integration history. That proof covers the
+> shore-selection connector, not all eight modules in this lane. The fourth contract,
+> `fld-a-visible-trail-strip-ends-on-the-dock-it-wears`, concerns the visible ribbon reaching that
+> connector's snapped shore. Read the current contract coverage and signing state through
+> `storytree coverage forest-land-dressing` rather than this historical note.
 
 ## The lane — 8 modules
 
@@ -147,11 +148,11 @@ dressed prop belongs to the ground it stands on.
 5. Assert ground cover thins where the path and props already occupy the cell — dressing composes
    with itself and does not double-populate.
 
-## Contracts (3)
+## Contracts (4)
 
-Both are assertions about `island-path.ts`, the canvas-side connector that decides where a
+These are assertions about `island-path.ts`, the canvas-side connector that decides where a
 dependency trail comes ashore. They are this lane's FIRST contracts — the lane was born of a split
-carrying no proof at all — and they are the pair the `real:` arm above authors.
+carrying no proof at all — and the `real:` arm above authors their single test/source pair.
 
 1. **`fld-a-routed-junction-is-never-a-dock`** — an end position two or more visible strips share is
    a junction, and a junction is never a landing
@@ -177,6 +178,22 @@ carrying no proof at all — and they are the pair the `real:` arm above authors
      harness fixtures are in that class), and a named island beyond `DOCK_REACH` still forms no
      dock. On the real map this makes the 35-island assertion unconditional: no island a dependency
      trail terminates at is left without a dock.
+   - **covers —** `packages/forest-world-r3f/src/island-path.ts`
+4. **`fld-a-visible-trail-strip-ends-on-the-dock-it-wears`** — a rendered trail reaches the same
+   shore as its worn path
+   - **asserts —** `dockedTrailStrips(cells: readonly InstanceDescriptor[], strips: readonly
+     InstanceDescriptor[]): readonly InstanceDescriptor[]` returns new descriptors only for visible
+     terminal `trail-strip` ends that `islandDocks` accepts. For each accepted end it replaces only
+     that endpoint with the exact snapped dock, retaining every original interior point and every
+     semantic descriptor field (`kind`, `edges`, `segment`, `width`, `usage`, `hidden`, and the
+     remaining descriptor data); the inputs remain unchanged and repeated calls are deep-equal.
+     Hidden and ghost strips, shared junction ends, missing polylines, and ends beyond reach remain
+     byte-for-byte as supplied. The test proves the adjusted visible endpoints equal the docks that
+     `islandDocks` supplies and the shore endpoints used by `islandPaths`, rather than merely
+     comparing counts. It exercises a named-island channel where the nearest unrelated rim must not
+     win, a shared named junction that must not move, and the committed real-forest fixture: its
+     103 visible strips and 52 terminal positions are conserved while every accepted terminal end
+     visibly terminates at its corresponding dock.
    - **covers —** `packages/forest-world-r3f/src/island-path.ts`
 
 ## Proof walkthrough
@@ -247,6 +264,16 @@ not have, in the same visual vocabulary the true ones use.
 - **The existing real-map test currently PINS the shortfall** as `['uat-detail-studio']`. Closing
   contract 3 makes that list empty, so the pin is updated in the same test file — the fence becoming
   unconditional is part of the deliverable, not a separate tidy-up.
+
+**UNIT 3 — CONTRACT 4: THE VISIBLE RIBBON AND THE WORN PATH SHARE ONE SHORE.** The mounted canvas
+currently gives `TrailStrip` the original routed descriptors while `islandDocks` snaps only the
+ground wear to the coast. That leaves a sea ribbon visibly ending offshore beside the path it is
+meant to continue. The new helper is a pure dressing-side projection over the current
+`InstanceDescriptor` stream — `MeshDescriptor` is not a type in this package and must not be
+invented at the caller boundary. It derives each accepted replacement from the same `islandDocks`
+result the wear consumes; it does not re-run nearest-rim, named-island, terminal, or reach logic.
+The later canvas supplement passes this returned strip list to `TrailStrip`; it owns that one-line
+consumer wiring and no new routing rule.
 
 ## Guidance
 
