@@ -19,6 +19,7 @@ import {
   workspacePackageOf,
   declaredTestRoots,
   formatNarrowingLines,
+  entryPointsFromCheckNames,
   entryPointsFromMirrorRegistry,
   entryPointsFromScripts,
   entryPointsFromShellScripts,
@@ -242,6 +243,34 @@ test("mutation-diff: several scripts naming the same file yield one entry", () =
     b: "pnpm -C packages/cli exec tsx src/x.ts",
   });
   assert.deepEqual(entries, ["packages/cli/src/x.ts"]);
+});
+
+test("mutation-diff: every file NAMED like a gate check is an entry point — live, retired or harness — and nothing else is (ADR-0606 D1)", () => {
+  assert.deepEqual(
+    entryPointsFromCheckNames([
+      "packages/cli/src/check-process-graph.ts",
+      "packages\\cli\\src\\check-boundaries.ts",
+      "./packages/forest-world-r3f/harness/land-art-check.ts",
+      "check-at-root.ts",
+      "packages/cli/src/check-boundaries.test.ts",
+      "packages/cli/src/gate-checks.ts",
+      "packages/drive/src/uat-drive-witness.check.ts",
+      "packages/cli/check-dir/lib.ts",
+    ]),
+    [
+      "packages/cli/src/check-process-graph.ts",
+      "packages/cli/src/check-boundaries.ts",
+      "packages/forest-world-r3f/harness/land-art-check.ts",
+      "check-at-root.ts",
+    ],
+  );
+});
+
+test("mutation-diff: the rung exempts check-named files among the ones it would mutate", () => {
+  // The wiring, not the predicate: without it a branch touching a retired check aborts the whole
+  // rung at the dry run, because the runner LOADS every target and a retired check runs its `main()`.
+  const shell = readFileSync(new URL("./check-mutation-diff.ts", import.meta.url), "utf8");
+  assert.match(shell, /exemptFiles: new Set\(\[[\s\S]*\.\.\.entryPointsFromCheckNames\(ranges\.map\(\(r\) => r\.file\)\),\s*\]\)/);
 });
 
 test("mutation-diff: the model-driven UAT executable is registered as a root entry point", () => {

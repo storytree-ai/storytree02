@@ -1,3 +1,23 @@
+/* gate-check
+runs: both
+subject: own-work
+cost: seconds
+skip:
+  when: >-
+    the `web/` submodule is absent locally (it is cloned in CI, where an absent web/ is a hard
+    failure instead)
+  inCi: failure
+why: >-
+  reds when Act 1's static import closure in this diff's web/ pin reaches three or @react-three/*
+  (ADR-0336)
+
+  Survival audit (gate-machinery-audit-arc): PROOF INTEGRITY (ADR-0336, added 2026-08-09). Re-wires
+  only the static-import-closure third of the retired check:web-experience (ADR-0311 D2); the two
+  runtime-marker assertions stayed retired until ADR-0454 (`check:web-experience-markers`). Preventive rather than
+  catch-evidenced — it SKIPs (bootstrap allowance) until the story's Act 1 entry ships — but is a
+  cheap, deterministic, offline machine expression of the ADR-0216 D2/D4 no-WebGL-in-Act-1
+  constraint that no other rung watches for.
+*/
 // check:web-experience-closure — the no-WebGL-in-Act-1 static-import-closure guard (ADR-0336).
 //
 // Re-wires ONLY the static-closure third of the retired `check:web-experience` rung (ADR-0311 D2):

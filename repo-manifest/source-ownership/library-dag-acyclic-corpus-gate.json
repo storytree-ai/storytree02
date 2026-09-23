@@ -1,0 +1,7 @@
+{
+  "sourceOwnership": {
+    "subtrees": {
+      "packages/cli/src/check-library-dag-acyclic.ts": "library-dag-acyclic-corpus-gate"
+    }
+  }
+}
