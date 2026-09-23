@@ -36,13 +36,14 @@ decisions: [123, 562]
 # machine assertion that reaches it today is the source parse named above, which that test's own
 # header calls its weakest claim on purpose. This is recorded rather than papered over.
 #
-# Node-borne real proof (ADR-0057): re-armed for the real canvas-facing regrow geometry helpers.
-# The signed `forestWorldCanvasGrowth` test remains its historical, private seam; it did not have
-# the mounted consumer's `ForestRegrowPresentation` or `InstanceDescriptor` API and proves none of
-# this increment. The new assertions namespace-import the EXISTING regrow module and first assert
-# that each new named export is a function, so CONFIRM_RED is an attributable assertion failure,
-# never a missing-module resolution failure. They prove layout/progress/path geometry only; React
-# wiring and the owner-witnessed visual remain integration work.
+# Node-borne real proof (ADR-0057): re-armed as a NET-NEW pure causal module. The signed
+# `forestWorldCanvasGrowth` test remains its historical, private seam; it did not have the mounted
+# consumer's `ForestRegrowPresentation` or `InstanceDescriptor` API and proves none of this
+# increment. The earlier arm incorrectly called for missing exports from an existing source while
+# its `editsExisting` brief rightly forbids a missing-symbol red. The new test may import its absent
+# implementation and observe the structural red the net-new arm permits. It proves
+# layout/progress/path geometry only; React wiring and the owner-witnessed visual remain integration
+# work.
 proof:
   command:
     file: pnpm
@@ -55,6 +56,7 @@ proof:
       - "packages/forest-world-r3f/src/forest-ground-is-one-mesh.test.ts"
       - "packages/forest-world-r3f/src/ground-dependency.test.ts"
       - "packages/forest-world-r3f/src/ForestWorldCanvas.regrow.test.ts"
+      - "packages/forest-world-r3f/src/ForestWorldCanvas.causal.test.ts"
       - "packages/forest-world-r3f/src/ForestWorldCanvas.growth.test.ts"
     sourceGlobs:
       - "apps/studio/src/components/LandView.tsx"
@@ -64,28 +66,28 @@ proof:
       - "packages/forest-world-r3f/src/ForestWorldCanvas.tsx"
       - "packages/forest-world-r3f/src/ground-dependency.ts"
       - "packages/forest-world-r3f/src/ForestWorldCanvas.regrow.ts"
+      - "packages/forest-world-r3f/src/ForestWorldCanvas.causal.ts"
       - "packages/forest-world-r3f/src/ForestWorldCanvas.growth.ts"
-  # The cursor-map adapter is already signed. This real arm extends its existing test and source
-  # module with the mounted consumer's concrete geometry API; the older growth helper remains
-  # covered as historical evidence without claiming it proves the integration.
+  # The cursor-map adapter is already signed and remains coverage. This real arm creates the
+  # mounted consumer's concrete geometry seam beside it; the older growth helper remains covered
+  # as historical evidence without claiming it proves the integration.
   coverage:
     testGlobs:
       - "packages/forest-world-r3f/src/ground-dependency.test.ts"
       - "packages/forest-world-r3f/src/ForestWorldCanvas.regrow.test.ts"
   real:
-    editsExisting: true
-    testFile: "packages/forest-world-r3f/src/ForestWorldCanvas.regrow.test.ts"
-    sourceFile: "packages/forest-world-r3f/src/ForestWorldCanvas.regrow.ts"
+    testFile: "packages/forest-world-r3f/src/ForestWorldCanvas.causal.test.ts"
+    sourceFile: "packages/forest-world-r3f/src/ForestWorldCanvas.causal.ts"
     scope:
-      testGlobs: ["packages/forest-world-r3f/src/ForestWorldCanvas.regrow.test.ts"]
-      sourceGlobs: ["packages/forest-world-r3f/src/ForestWorldCanvas.regrow.ts"]
+      testGlobs: ["packages/forest-world-r3f/src/ForestWorldCanvas.causal.test.ts"]
+      sourceGlobs: ["packages/forest-world-r3f/src/ForestWorldCanvas.causal.ts"]
     install: true
     typecheck:
       file: pnpm
       args: ["--filter", "@storytree/forest-world-r3f", "typecheck"]
     proofCommand:
       file: bun
-      args: ["test", "packages/forest-world-r3f/src/ForestWorldCanvas.regrow.test.ts"]
+      args: ["test", "packages/forest-world-r3f/src/ForestWorldCanvas.causal.test.ts"]
 ---
 
 # The canvas delivery — the dressed scene mounted in a real host surface, at a cost the frame can pay
@@ -253,10 +255,15 @@ The earlier `ForestWorldCanvas.growth.ts` proof is retained as history only. Its
 does not describe the canvas's `InstanceDescriptor`. A pass against that seam is not a pass for
 what the canvas mounts.
 
-This increment extends the existing `ForestWorldCanvas.regrow.ts` module and its existing Bun test.
-The test namespace-imports that already-present module, treats each prospective export as optional,
-and asserts `typeof` is `function` before calling it. The baseline is therefore a named export
-assertion against current code, with the rest of the existing cursor tests green.
+This increment creates `ForestWorldCanvas.causal.ts` and its Bun test. The new module imports only
+the structural `ForestRegrowPresentation` type from the existing cursor adapter and the real
+`InstanceDescriptor` type; it imports no app module, clock, React state, or canvas component. The
+test is authored first: build the absolute `.ts` source path at runtime, guard it with
+`existsSync` from `node:fs`, dynamically import it only when present, otherwise use an empty
+object, then assert each of `islandGrowthLayout`, `islandGrowthProgress`, and `regrowTrailPoints`
+is a function before calling it. CONFIRM_RED is therefore a named assertion against the absent
+net-new implementation, never a raw module-loader error. The existing cursor-adapter test stays
+green as retained coverage.
 
 1. Export `IslandGrowthLayout`, with `islandId`, canonical `slot`, and an `anchor` `{ x, y, z }`,
    plus `islandGrowthLayout(cells: readonly InstanceDescriptor[])` returning a
@@ -278,16 +285,13 @@ assertion against current code, with the rest of the existing cursor tests green
    whose Euclidean 3D arclength is `drawn × total`; reverse the traversal only when `fromEnd` is
    true, with the interpolated front retained at the correct end. A fully drawn segment returns
    the original point-list identity. The helper never mutates the strip or any source point.
-4. Wire those facts into the real `ForestWorldCanvas`: ground and every vegetation placement on an
-   island use the SAME anchor-based affine growth transform, so a flower cannot precede the land
-   that carries it. Roads call `regrowTrailPoints` before `<Line>` receives their points. This is
-   consumption of the already-derived presentation: it must not filter the descriptor stream,
-   invalidate `createGroundInputCache`, derive a schedule, sample wall time, or introduce a
-   renderer-side animation loop.
-5. The Bun assertions use actual `InstanceDescriptor` fixtures: multiple `cell-ground` rings for
+4. The Bun assertions use actual `InstanceDescriptor` fixtures: multiple `cell-ground` rings for
    two island ids, real `trail-strip` `segment`/`points`, a hidden segment, partial fronts in both
    directions, a full segment, null presentation, and a source array retained for identity and
-   non-mutation checks. Run the exact regrow test and the package typecheck after the exports exist.
+   non-mutation checks. Run the exact causal test and the package typecheck after the exports exist.
+   A later canvas consumer may apply these already-derived facts, but it must not filter the
+   descriptor stream, invalidate `createGroundInputCache`, derive a schedule, sample wall time, or
+   introduce a renderer-side animation loop.
 
 ## Historical mutation-repair walkthrough — observed helper gaps
 
@@ -313,8 +317,10 @@ it does not re-arm a paid real build or add an integration API.
 ## Contracts (5)
 
 The cache contracts remain the signed pair in `packages/forest-world-r3f/src/ground-dependency.test.ts`.
-All regrow contracts live in `packages/forest-world-r3f/src/ForestWorldCanvas.regrow.test.ts` and
-consume the real `ForestRegrowPresentation`/`InstanceDescriptor` seam. The old
+The signed cursor-adapter contract remains in
+`packages/forest-world-r3f/src/ForestWorldCanvas.regrow.test.ts`. The causal geometry contracts
+live in the new `packages/forest-world-r3f/src/ForestWorldCanvas.causal.test.ts` and consume the
+real `ForestRegrowPresentation`/`InstanceDescriptor` seam. The old
 `ForestWorldCanvas.growth.test.ts` remains signed history for its private helper; its test names
 cannot credit these integration contracts.
 
@@ -345,19 +351,17 @@ cannot credit these integration contracts.
    - **asserts —** `islandGrowthLayout` makes one direct-id-stable, canonical-slot layout per
      `cell-ground` island with an anchor at its cell-vertex bounding centre. Given that layout,
      `islandGrowthProgress` returns 0 for a hidden island, its exact local map value for a growing
-     island, and 1 for landed/unknown and null-presentation islands. The mounted ground and its
-     vegetation share that layout's anchor-based affine transform; no atlas origin or capability id
-     becomes an island key.
-   - **covers —** `packages/forest-world-r3f/src/ForestWorldCanvas.regrow.ts` and the consuming
-     `ForestWorldCanvas.tsx` composition
+     island, and 1 for landed/unknown and null-presentation islands. No atlas origin or capability
+     id becomes an island key, and the helper accepts no clock, schedule, React state, or descriptor
+     filter.
+   - **covers —** `packages/forest-world-r3f/src/ForestWorldCanvas.causal.ts`
 5. **`fcd-regrow-pathways-clip-at-physical-fronts`** — a pathway appears only where its cursor has
    physically reached
    - **asserts —** `regrowTrailPoints` reads a real strip's `segment` and `points`; hidden and zero
      segments yield no points; a partial segment clips its Euclidean 3D arclength from the
      declared `fromEnd`; full/static segments return the original point-list identity without
-     mutation. The canvas passes those returned points to the road line.
-   - **covers —** `packages/forest-world-r3f/src/ForestWorldCanvas.regrow.ts` and the consuming
-     `ForestWorldCanvas.tsx` composition
+     mutation.
+   - **covers —** `packages/forest-world-r3f/src/ForestWorldCanvas.causal.ts`
 
 ## Guidance
 
