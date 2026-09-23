@@ -5,10 +5,20 @@ Evidence for `the-land-sits-under-the-working-map` on `mount-the-land-on-a-real-
 flag this increment added.
 
 **Taken on:** the Mint box (RTX 2060), headless Chromium, 2560x1600, against the studio dev server
-at HEAD `5c0632f6` on `claude/lane-f-the-mount`, live Cloud SQL store (`store: pg, db: ok`, 47
-stories). The capture driver proves the server's `code.directory` names THIS worktree before it
-opens a page and refuses otherwise — this box runs several worktrees at once, and a sibling's server
-answering the port would otherwise be filed as this branch's evidence.
+at HEAD `9cb2bd2a` on `claude/lane-f-the-mount`, live Cloud SQL store (`store: pg, db: ok`, 47
+stories). The capture driver proves the server's `code.directory` names THIS worktree, and that its
+`code.stale` is false, before it opens a page — this box runs several worktrees at once, and a
+sibling's server (or this tree's own server still holding pre-merge code) would otherwise be filed
+as this branch's evidence.
+
+⚠ **WHICH MAP THESE PICTURES ARE OF, because it changed twice today.** They are taken AFTER both
+sibling lanes landed: PR #2027 (`lane-d`, the map's spacing re-derived so nameplates stop
+overlapping) and PR #2026 (`lane-e`, every acceptance criterion drawn, unsigned ones as unopened
+buds — ADR-0600). So the islands sit at the new spacing and carry the new buds, and the land is
+registered under both. An earlier set of these arms was taken against the pre-merge layout and
+discarded; the registration held across the layout change without any change to this branch, which
+is the property that matters — `registrationCamera` solves from the studio's own camera, so it is
+independent of where the islands happen to sit.
 
 **Instrument:** `apps/studio/scripts/capture-land-mount.mjs`.
 

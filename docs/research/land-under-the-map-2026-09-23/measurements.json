@@ -1,9 +1,9 @@
 {
-  "takenAt": "2026-09-23T04:13:25.814Z",
+  "takenAt": "2026-09-23T04:49:22.995Z",
   "served": {
     "served": "/home/mickh/code/Storytree/.claude/worktrees/laneF",
     "branch": "claude/lane-f-the-mount",
-    "head": "5c0632f6a9a23e5630cb8697ee6edc3f7d7892ab",
+    "head": "9cb2bd2a5dc05ff5eecefd78d4c9a2c12fc91daa",
     "store": "pg"
   },
   "viewport": {
@@ -19,7 +19,7 @@
       "counts": {
         "parcels": 212,
         "caves": 0,
-        "trailFills": 125,
+        "trailFills": 114,
         "crowns": 0,
         "flora": 0,
         "nameplates": 36,
@@ -35,7 +35,7 @@
       "counts": {
         "parcels": 212,
         "caves": 0,
-        "trailFills": 125,
+        "trailFills": 114,
         "crowns": 0,
         "flora": 0,
         "nameplates": 36,
@@ -51,7 +51,7 @@
       "counts": {
         "parcels": 212,
         "caves": 0,
-        "trailFills": 125,
+        "trailFills": 114,
         "crowns": 0,
         "flora": 0,
         "nameplates": 36,
