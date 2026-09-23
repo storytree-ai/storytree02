@@ -160,7 +160,7 @@ dressed prop belongs to the ground it stands on.
 5. Assert ground cover thins where the path and props already occupy the cell — dressing composes
    with itself and does not double-populate.
 
-## Placement-attribution proof walkthrough
+## Proof walkthrough
 
 `map-dressing` already knows the owning island while it makes that island's placements. Expose that
 fact as `dressMapWithCoverAttribution(descriptors, options)`, returning
@@ -258,7 +258,11 @@ carrying no proof at all. The placement-attribution contract is the current `rea
    - **covers —** `packages/forest-world-r3f/src/map-dressing.ts`,
      `packages/forest-world-r3f/src/kit-mesh.ts`
 
-## Proof walkthrough
+## Historical shoreline proof record
+
+The four shoreline contracts above are completed history. This record preserves the acceptance
+setup that proved them; it is not the current `real:` arm and must not be supplied to a new
+placement-attribution build.
 
 **THE SUBJECT IS A MEASURED DEFECT, NOT A MISSING FEATURE.** `islandDocks` already exists and
 already works on the harness crowd fixture, whose synthetic strips end exactly on the clipped rim by

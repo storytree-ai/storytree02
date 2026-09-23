@@ -244,7 +244,7 @@ absent at baseline and both tests must fail by assertion before production code 
    allowance, or timing threshold can satisfy either contract. Re-run the exact Bun file and the
    package typecheck; both clustered tests and all existing cache tests must be green.
 
-## Causal-growth proof walkthrough
+## Proof walkthrough — causal growth through the mounted canvas
 
 The earlier `ForestWorldCanvas.growth.ts` proof is retained as history only. Its local
 `RegrowCursor` names `absentIslandIds` and pathways, whereas the mounted canvas receives
