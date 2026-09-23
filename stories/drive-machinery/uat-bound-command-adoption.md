@@ -41,7 +41,7 @@ proof:
 by that leg's resolved proof-gate binding.
 
 **Depends on —** [`build-drive-cli`](build-drive-cli.md) provides the existing `runAdopt`
-observation/signing boundary; [`uat-machine-gate-resolution`](uat-machine-gate-resolution.md)
+observation/signing boundary; [`uat-machine-gate-resolution`](../library/uat-machine-gate-resolution.md)
 provides the exact fail-closed bound gate that boundary must consume.
 
 > **Proof status (honest) — authored `proposed`, REAL-proven.** Runs `real-mrf1bo0f` and

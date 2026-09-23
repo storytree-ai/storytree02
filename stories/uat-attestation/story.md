@@ -190,8 +190,8 @@ The bold lead is each test's title; the `(witness: …)` tag declares who may at
 > proof is absent. Grep the built tree for the contract id before concluding a capability is unbuilt.
 >
 > - **Leg 1 (Decompose) — DELETED.** Proven by the capability
->   [`uat-machine-proof-binding`](../drive-machinery/uat-machine-proof-binding.md) (story
->   `drive-machinery`), whose declared `proof.real.testFile` is
+>   [`uat-machine-proof-binding`](../library/uat-machine-proof-binding.md) (story `library`), whose
+>   declared `proof.real.testFile` is
 >   `packages/library/src/uat-test-criteria.test.ts`: "parser reads authored criteria, titles,
 >   witnesses, and would-be state", "invalid witness is refused and an absent witness stays either" and
 >   "schema defaults remain conservative but exact identity/revision are mandatory" — the leg's whole

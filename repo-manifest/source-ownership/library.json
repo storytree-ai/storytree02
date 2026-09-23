@@ -12,6 +12,7 @@
       "packages/library/src/decision-support-seam.ts": "library",
       "packages/library/src/index.ts": "library",
       "packages/library/src/knowledge-depth.ts": "library",
+      "packages/library/src/legacy-uat-disposition.ts": "library",
       "packages/library/src/repo-root.ts": "library",
       "packages/library/src/search-prose.ts": "library",
       "packages/library/src/search.ts": "library",

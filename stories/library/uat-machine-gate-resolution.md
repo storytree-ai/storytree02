@@ -1,7 +1,7 @@
 ---
 id: "uat-machine-gate-resolution"
 tier: capability
-story: drive-machinery
+story: library
 title: "Exact fail-closed UAT gate resolution"
 outcome: "Each parsed machine UAT leg resolves only to its named command-bearing observe gate, with every missing or ineligible binding refused."
 status: proposed
@@ -76,7 +76,7 @@ human resolution.
 
 The resolver returns the bound gate data needed by the drive, but does not execute its command or
 sign a verdict. That consumption belongs to
-[`uat-bound-command-adoption`](uat-bound-command-adoption.md).
+[`uat-bound-command-adoption`](../drive-machinery/uat-bound-command-adoption.md).
 
 ## Integration test
 
@@ -97,6 +97,6 @@ choosing the first observe gate cannot accidentally pass. No DB, subprocess, or 
 
 ## Follow-up machine-witness authoring
 
-[`uat-bound-command-adoption`](uat-bound-command-adoption.md) is now REAL-proven, and the separate
+[`uat-bound-command-adoption`](../drive-machinery/uat-bound-command-adoption.md) is now REAL-proven, and the separate
 story-author migration has bound existing machine legs to exact command-bearing observe gates.
 Human legs whose full live success condition still lacks a standing command remain human.

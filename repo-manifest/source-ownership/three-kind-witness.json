@@ -1,7 +1,0 @@
-{
-  "sourceOwnership": {
-    "subtrees": {
-      "packages/library/src/legacy-uat-disposition.ts": "three-kind-witness"
-    }
-  }
-}

@@ -1,7 +1,8 @@
 {
   "sourceOwnership": {
     "subtrees": {
-      "packages/library/src/fixture": "seed-corpus-scripts"
+      "packages/library/src/fixture": "seed-corpus-scripts",
+      "packages/library/src/templates.ts": "seed-corpus-scripts"
     }
   }
 }

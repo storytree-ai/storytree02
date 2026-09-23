@@ -6,7 +6,7 @@ outcome: "The spine drives any registered node through a genuine red→green pro
 status: proposed
 proof_mode: UAT
 arc: story-green-monotonicity-arc
-capabilities: [halt-aware-sequence, red-green-phase-machine, work-verdict-event-log, phase-scoped-write-wall, shell-test-observer, prove-it-gate, owned-loop-phase-author, real-build-worktree, prove-spec-resolution, spec-borne-proof-config, proof-command-vocabulary, story-topo-build, story-real-chain, multi-file-existing-source, gate-as-proof-authoring, build-drive-cli, adoption-pocket-classifier, uat-machine-proof-binding, uat-machine-gate-resolution, uat-bound-command-adoption, live-author-accounting-override, leaf-slices-observer-activation, live-build-db-preflight, post-build-curation-pass, build-usage-accounting, phase-activity-write]
+capabilities: [halt-aware-sequence, red-green-phase-machine, work-verdict-event-log, phase-scoped-write-wall, shell-test-observer, prove-it-gate, owned-loop-phase-author, real-build-worktree, prove-spec-resolution, spec-borne-proof-config, proof-command-vocabulary, story-topo-build, story-real-chain, multi-file-existing-source, gate-as-proof-authoring, build-drive-cli, adoption-pocket-classifier, uat-bound-command-adoption, live-author-accounting-override, leaf-slices-observer-activation, live-build-db-preflight, post-build-curation-pass, build-usage-accounting, phase-activity-write]
 # `oq-hygiene-gate` was DROPPED from this list on 2026-08-30 when it retired (ADR-0477 removed the
 # library `references` field its input lived in). The drop is required, not cosmetic: rollupStoryGreen
 # iterates this array with no retired filter, so a retired id left here computes null and DROPS the
@@ -56,7 +56,7 @@ consumed_by: [cli]
 # explicit alternative (555), and the
 # accounting-only `liveAuthorOverride` widening of the resolver's author seam that lets a
 # live-spend-only adapter earn a MACHINE activation leg with no agent and no credentials (243 —
-# capabilities 22 and 23).
+# capabilities 20 and 21).
 decisions: [5, 20, 30, 31, 35, 37, 57, 59, 60, 112, 180, 184, 232, 243, 555]
 ---
 
@@ -70,7 +70,7 @@ node/story build drive (`node build` / `story build`, PRs #26–#30), REAL workt
 promotion (ADR-0031), the leaf's bounded feedback tools (ADR-0035), and — until 2026-08-30 — the
 OQ-hygiene gate on live story builds (ADR-0037 §5, retired with ADR-0477's removal of the library
 `references` field it read; [`oq-hygiene-gate`](oq-hygiene-gate.md) records the retirement), plus
-ADR-0180's strict per-machine-UAT proof binding. Per the V1
+the drive's consumption of ADR-0180's strict per-machine-UAT proof binding. Per the V1
 lesson recorded in ADR-0031 §3, **machinery is
 ordinary work in the ordinary tree** — it gets a normal story, not a special meta-corner. It spans
 the spine in `packages/orchestrator`, proof DATA in `packages/proof-protocol`, event persistence in
@@ -133,7 +133,7 @@ and this story's frontmatter carries the `agent` edge in `depends_on`. The coupl
 documented prose — it is a first-class declared, world-visible edge (the boundary gate, ADR-0074,
 now sees the spine↔leaf seam).
 
-## Capabilities (26)
+## Capabilities (24)
 
 Listed roots-first (a capability appears after everything it depends on). `proposed` means this
 greenfield unit lacks a current signed pass; the Proof blockquote in each file records the standing
@@ -159,27 +159,25 @@ evidence and any unsigned live arms without treating either as brownfield proven
 | 16 | [`multi-file-existing-source`](multi-file-existing-source.md) | A node declares a multi-file scope + an edit-existing-source regression red→green (bug-fixes/refactors), keeping test-author ≠ code-author. | proposed | `spec-borne-proof-config`, `proof-command-vocabulary` |
 | 17 | [`gate-as-proof-authoring`](gate-as-proof-authoring.md) | Authoring an ADR earns a signed verdict through the unchanged gate by reducing to edit-existing with a structural-completeness check — the machine witnesses hygiene, never acceptance. | proposed | `multi-file-existing-source`, `spec-borne-proof-config` |
 | 18 | [`adoption-pocket-classifier`](adoption-pocket-classifier.md) | The spine turns each uncovered brownfield pocket into a proposed reliability gate with a build-tests classification and the key forks the human must settle. | proposed | `build-drive-cli` |
-| 19 | [`uat-machine-proof-binding`](uat-machine-proof-binding.md) | The Story UAT parser carries each explicit proof-gate annotation into the strict per-leg model without dropping or inventing a binding. | proposed | — |
-| 20 | [`uat-machine-gate-resolution`](uat-machine-gate-resolution.md) | Each parsed machine UAT leg resolves only to its named command-bearing observe gate, with every missing or ineligible binding refused. | proposed | `uat-machine-proof-binding` |
-| 21 | [`uat-bound-command-adoption`](uat-bound-command-adoption.md) | `runAdopt` observes and signs each machine UAT leg only through the command supplied by that leg's resolved proof-gate binding. | proposed | `build-drive-cli`, `uat-machine-gate-resolution` |
-| 22 | [`live-author-accounting-override`](live-author-accounting-override.md) | An offline caller can supply the resolved live author for accounting, and supplying it without an author override is refused fail-closed. | proposed | `prove-spec-resolution` |
-| 23 | [`leaf-slices-observer-activation`](leaf-slices-observer-activation.md) | An offline real chain invokes the leaf-slices observer once per node with that node's own run accounting, and a canned live author still cannot move a verdict. | proposed | `live-author-accounting-override`, `story-real-chain` |
-| 24 | [`live-build-db-preflight`](live-build-db-preflight.md) | A build that owns the live store begins only against a database it has just watched accept connections. | proposed | — |
-| 25 | [`post-build-curation-pass`](post-build-curation-pass.md) | A green story build ends by enacting a scoped curator's open-question judgments behind a kind fence the curator cannot open. | proposed | — |
-| 26 | [`build-usage-accounting`](build-usage-accounting.md) | A build's per-slice token accounting lands on its own event stream as a kind no verdict reads. | proposed | `work-verdict-event-log` |
-| 27 | [`phase-activity-write`](phase-activity-write.md) | Each phase the spine commits to is recorded as a fresh phase-stamped `building` event by an observer that lives outside the gate. | proposed | `work-verdict-event-log` |
-| ~~28~~ | ~~[`capability-proof-continuity`](capability-proof-continuity.md)~~ | **RETIRED 2026-09-19 (ADR-0580 D3), never built.** The pure capability-rename resolver was specified but neither its source nor its test was ever authored; its arc (`rendering-engine-structure-arc`) is closed and ADR-0562 met its purpose without it. Its registered-but-absent test file held the one-contract limit's single slot, which the retirement frees. | — | ~~`work-verdict-event-log`~~ |
+| 19 | [`uat-bound-command-adoption`](uat-bound-command-adoption.md) | `runAdopt` observes and signs each machine UAT leg only through the command supplied by that leg's resolved proof-gate binding. | proposed | `build-drive-cli`, `uat-machine-gate-resolution` |
+| 20 | [`live-author-accounting-override`](live-author-accounting-override.md) | An offline caller can supply the resolved live author for accounting, and supplying it without an author override is refused fail-closed. | proposed | `prove-spec-resolution` |
+| 21 | [`leaf-slices-observer-activation`](leaf-slices-observer-activation.md) | An offline real chain invokes the leaf-slices observer once per node with that node's own run accounting, and a canned live author still cannot move a verdict. | proposed | `live-author-accounting-override`, `story-real-chain` |
+| 22 | [`live-build-db-preflight`](live-build-db-preflight.md) | A build that owns the live store begins only against a database it has just watched accept connections. | proposed | — |
+| 23 | [`post-build-curation-pass`](post-build-curation-pass.md) | A green story build ends by enacting a scoped curator's open-question judgments behind a kind fence the curator cannot open. | proposed | — |
+| 24 | [`build-usage-accounting`](build-usage-accounting.md) | A build's per-slice token accounting lands on its own event stream as a kind no verdict reads. | proposed | `work-verdict-event-log` |
+| 25 | [`phase-activity-write`](phase-activity-write.md) | Each phase the spine commits to is recorded as a fresh phase-stamped `building` event by an observer that lives outside the gate. | proposed | `work-verdict-event-log` |
+| ~~26~~ | ~~[`capability-proof-continuity`](capability-proof-continuity.md)~~ | **RETIRED 2026-09-19 (ADR-0580 D3), never built.** The pure capability-rename resolver was specified but neither its source nor its test was ever authored; its arc (`rendering-engine-structure-arc`) is closed and ADR-0562 met its purpose without it. Its registered-but-absent test file held the one-contract limit's single slot, which the retirement frees. | — | ~~`work-verdict-event-log`~~ |
 
-Capabilities 24–27 were authored on 2026-08-07 (`capability-layer-coverage-arc`) over greenfield drive
+Capabilities 22–25 were authored on 2026-08-07 (`capability-layer-coverage-arc`) over greenfield drive
 code that was already implemented and already had a passing colocated suite, but which no node's
 `outcome:` covered — so `repo-manifest.json` declared it at STORY grain for want of a capability.
 Retrospective registration does not change that provenance (ADR-0395), so they remain `proposed`
-without current signed passes. Like capabilities 19–23, they are deliberately absent from every
+without current signed passes. Like capabilities 19–21, they are deliberately absent from every
 `(covers:)` list in **Reliability Gates** below: gate-3 RUNS their proving files, but adding them to a
 frozen covers-list changes what an already-signed verdict claims, so it stays a separate, id-aware
 decision.
 
-Capability 28 was the net-new pure resolver specified in `rendering-engine-structure-arc` (ADR-0559).
+Capability 26 was the net-new pure resolver specified in `rendering-engine-structure-arc` (ADR-0559).
 It RETIRED unbuilt on 2026-09-19 (ADR-0580 D3): its arc closed and ADR-0562 met its purpose without
 it, so it is no longer in this story's capability list. Its doc survives as history.
 
@@ -283,20 +281,12 @@ coupling) and marked.
     command for both the CONFIRM observations and the `run_proof` feedback tool) and threads the
     command's display into `realPrompts`. The 7 default nodes are unchanged (the A parity guard stays
     green). No `test-command-registry.ts` change; no new ADR (ships under ADR-0057 §3 + ADR-0020).
-- `uat-machine-proof-binding` *(authored `proposed`, REAL-proven — completed proof commit `c49e179`)*
-  - `uat-test-criteria.ts` parses the explicit `proof-gate` annotation into the strict per-leg model;
-    `uat-test-criteria.test.ts` is its complete literal edit-existing REAL proof pair. It has no within-story
-    prerequisite and claims no resolver or adopt behaviour.
-- `uat-machine-gate-resolution` → `uat-machine-proof-binding` *(authored `proposed`, REAL-proven —
-  proof commit `28be1de`)*
-  - `witness-resolution.ts` consumes the parser's exact `proofGateId` and returns only its named
-    command-bearing observe gate or an explicit refusal. Its literal edit-existing REAL pair is
-    `witness-resolution.{ts,test.ts}`.
 - `uat-bound-command-adoption` → `build-drive-cli`, `uat-machine-gate-resolution` *(authored
   `proposed`, REAL-proven — completed proof commit `a7389fb`)*
   - `adopt.ts` extends the existing `runAdopt` drive entry and consumes the exact resolved command
-    before signing a machine UAT id. Its literal edit-existing REAL pair is `adopt.{ts,test.ts}`.
-    These three increments replace the earlier six-file unit whose spotlight proved only parsing.
+    before signing a machine UAT id. The exact resolver is a `library` capability, so this is a
+    cross-story consumption through its declared boundary; its literal edit-existing REAL pair is
+    `adopt.{ts,test.ts}`.
 - `live-author-accounting-override` → `prove-spec-resolution` *(authored `proposed`, ADR-0243 D1/D3/D6)*
   - extends the resolution layer the same way `spec-borne-proof-config` does: it widens
     `RealResolveOptions` with an accounting-only `liveAuthorOverride?: LiveAuthor` (the EXISTING
@@ -573,14 +563,14 @@ BUILT outer-loop (2026-06-27, `assembleProposal` + `adopt plan --readings`, comm
 real offline suite in the orchestrator package. It remains greenfield `proposed` without a current
 signed pass (ADR-0395), while gate-1's `(covers:)` records the real suite coverage rather than a
 provenance claim.
-Capabilities 19–21 — parser
-[`uat-machine-proof-binding`](uat-machine-proof-binding.md), exact resolver
-[`uat-machine-gate-resolution`](uat-machine-gate-resolution.md), and drive consumption
-[`uat-bound-command-adoption`](uat-bound-command-adoption.md) — retain authored `proposed` status
-while their separate signed REAL verdicts derive proof health (ADR-0020). They are intentionally not
-folded into the suite-level capability-covering observe gates: each was driven red→green through
-its own literal REAL pair.
-Capabilities 22–23 — [`live-author-accounting-override`](live-author-accounting-override.md) and
+The parser [`uat-machine-proof-binding`](../library/uat-machine-proof-binding.md) and exact resolver
+[`uat-machine-gate-resolution`](../library/uat-machine-gate-resolution.md) belong to the `library`
+story, where their `packages/library` source lives. This story retains only their consumer,
+[`uat-bound-command-adoption`](uat-bound-command-adoption.md). All three retain authored `proposed`
+status while their separate signed REAL verdicts derive proof health (ADR-0020); none is folded into
+a suite-level capability-covering observe gate because each was driven red→green through its own
+literal REAL pair.
+Capabilities 20–21 — [`live-author-accounting-override`](live-author-accounting-override.md) and
 [`leaf-slices-observer-activation`](leaf-slices-observer-activation.md), the ADR-0243 accounting seam —
 are held to the same rule and are deliberately absent from every `(covers:)` list above. Each earns
 its own signed `--real` verdict; adding either to a gate's covers list would falsely let a suite-level
