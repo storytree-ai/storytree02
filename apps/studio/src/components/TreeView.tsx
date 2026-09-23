@@ -3204,7 +3204,14 @@ export function TreeView({
               the selection ring) is above the land unconditionally. Inside `.world-pan-layer` so it
               inherits the drag transform (ADR-0272 D2) and stays registered through a gesture with
               neither layer re-rasterising. */}
-          {landMount && <LandViewMount scene={scene} camera={presentedCam} drawProps={landMountProps} />}
+          {landMount && (
+            <LandViewMount
+              scene={scene}
+              camera={presentedCam}
+              drawProps={landMountProps}
+              regrowCursor={act2Player.regrowing ? act2Player.state : null}
+            />
+          )}
           <svg
             ref={svgRef}
             className={`world-scene lane-motion-${selectionMotion}${
@@ -3524,7 +3531,7 @@ export function TreeView({
         {/* THE LAND VIEW — beside the working map, never over it and never instead of it. It is a
             SIBLING of `.world-frame`, so the map above keeps its own frame, its own camera and its
             own hit targets; this panel reads the same `scene` and draws it. */}
-        {landView && <LandView scene={scene} />}
+        {landView && <LandView scene={scene} regrowCursor={act2Player.regrowing ? act2Player.state : null} />}
 
         {selected && (
           <StoryPanel

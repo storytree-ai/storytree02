@@ -33,7 +33,12 @@
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { SceneG } from '@storytree/forest-world';
-import type { Descriptor3D } from '@storytree/forest-world-r3f';
+import {
+  forestRegrowPresentation,
+  type Descriptor3D,
+  type ForestRegrowCursor,
+  type ForestRegrowPresentation,
+} from '@storytree/forest-world-r3f';
 import type { RegisteredUnderlay } from '@storytree/forest-world-r3f/canvas';
 
 import { landViewStream } from '../lib/landView.js';
@@ -44,6 +49,8 @@ import type { Camera } from '../lib/worldCamera.js';
 export interface LandMountCanvasProps {
   descriptors: readonly Descriptor3D[];
   registered: RegisteredUnderlay;
+  /** The app-owned cursor, adapted here for the canvas without creating another clock. */
+  regrow: ForestRegrowPresentation | null;
 }
 
 /** The real canvas, in its own chunk — the same chunk `LandView` loads, so opening both costs one. */
@@ -52,10 +59,10 @@ const ForestWorldCanvas = lazy(async () => {
   return { default: mod.ForestWorldCanvas };
 });
 
-function DefaultMountCanvas({ descriptors, registered }: LandMountCanvasProps) {
+function DefaultMountCanvas({ descriptors, registered, regrow }: LandMountCanvasProps) {
   return (
     <Suspense fallback={null}>
-      <ForestWorldCanvas descriptors={descriptors} registered={registered} />
+      <ForestWorldCanvas descriptors={descriptors} registered={registered} regrow={regrow} />
     </Suspense>
   );
 }
@@ -74,6 +81,8 @@ export interface LandViewMountProps {
    * every frame of every drag to arrive at the same pixels.
    */
   camera: Camera | null;
+  /** The app-owned regrow cursor while the world is growing; absent after settlement. */
+  regrowCursor?: ForestRegrowCursor | null;
   /** Draw the kit props as well as the ground — the staging arm, off by default. */
   drawProps?: boolean;
   /** The canvas seam, so the mount is provable in jsdom. Absent ⇒ the real, lazily-loaded one. */
@@ -126,6 +135,7 @@ function useMeasuredFrame(): [
 export function LandViewMount({
   scene,
   camera,
+  regrowCursor = null,
   drawProps = false,
   renderCanvas = DefaultMountCanvas,
 }: LandViewMountProps): React.JSX.Element {
@@ -138,6 +148,7 @@ export function LandViewMount({
     () => (camera === null || frame === null ? null : mountedLandCamera(camera, frame)),
     [camera, frame],
   );
+  const regrow = useMemo(() => forestRegrowPresentation(regrowCursor), [regrowCursor]);
 
   const body = (() => {
     if (stream === null) return { state: 'waiting-for-world' as const, node: null };
@@ -156,7 +167,7 @@ export function LandViewMount({
     const withProps: RegisteredUnderlay = drawProps ? { ...registeredProps, props: true } : registeredProps;
     return {
       state: 'drawn' as const,
-      node: renderCanvas({ descriptors: stream.descriptors, registered: withProps }),
+      node: renderCanvas({ descriptors: stream.descriptors, registered: withProps, regrow }),
     };
   })();
 

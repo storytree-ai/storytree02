@@ -32,6 +32,7 @@ import { Canvas, useThree } from '@react-three/fiber';
 import { Line, MapControls } from '@react-three/drei';
 import { Color, OrthographicCamera, type Mesh, type Texture } from 'three';
 import type { InstanceDescriptor, Descriptor3D } from './world-to-3d.js';
+import type { ForestRegrowPresentation } from './ForestWorldCanvas.regrow.js';
 import {
   frameWorld,
   orthographicZoomFor,
@@ -1209,6 +1210,11 @@ export interface ForestWorldCanvasProps {
   /** The pure mapping's output (`worldTo3D(buildScene(input))`). Skips are ignored
    *  here — they are audit records, not drawables. */
   descriptors: readonly Descriptor3D[];
+  /**
+   * The app clock's current presentation. This is deliberately only the consumption seam: the
+   * renderer owns no clock or schedule, and the geometry application follows in the next unit.
+   */
+  regrow?: ForestRegrowPresentation | null;
   /** Opt the trail network visible. Trails are HIDDEN BY DEFAULT (ADR-0169 §3): with
    *  no focus concept on this canvas yet, the honest minimal reveal is all-or-nothing —
    *  a future focus feature filters strips by their `edges` metadata instead. */
@@ -1480,7 +1486,13 @@ function CalibratedLights() {
  * 2.5D isometric per ADR-0380 D6 fence 4). Client-only
  * (`ssr:false` posture — the site lazy-loads this island after the inflection).
  */
-export function ForestWorldCanvas({ descriptors, showTrails = false, viewport, registered }: ForestWorldCanvasProps) {
+export function ForestWorldCanvas({
+  descriptors,
+  showTrails = false,
+  viewport,
+  registered,
+  regrow,
+}: ForestWorldCanvasProps) {
   // The relaxed-mesh parcels — the ONE ground substrate this canvas draws. A second, classic
   // extruded-hex ground component used to be mounted unconditionally beside this one, filtered
   // off the descriptor stream by its own retired mesh family; both the component and the family
@@ -1530,6 +1542,9 @@ export function ForestWorldCanvas({ descriptors, showTrails = false, viewport, r
   // object is what stops a surface ending up half-registered: a canvas with the host's camera but
   // its own `MapControls`, or a transparent backdrop but a second canopy.
   const compose = underlayComposition(registered, showTrails);
+  // This read is intentional: `regrow` reaches the real canvas now, while the next increment
+  // applies its already-derived presentation to the ground, paths and vegetation.
+  const hasRegrowPresentation = regrow !== null && regrow !== undefined;
   return (
     /* ⚠ `orthographic` is the fence (ADR-0380 D6 fence 4), and `fov` is GONE rather than merely
        unused: R3F reads the presence of `fov` as a request for a PerspectiveCamera, so leaving it
@@ -1548,6 +1563,7 @@ export function ForestWorldCanvas({ descriptors, showTrails = false, viewport, r
       orthographic
       {...EXACT_COLOUR_CANVAS_PROPS}
       {...compose.canvasProps}
+      data-regrow-active={hasRegrowPresentation ? 'true' : undefined}
       camera={{ position: frame.position, near: frame.near, far: frame.far }}
     >
       {/* ⚠ THE BACKDROP IS THE HOST'S IN REGISTERED MODE. Standalone this paints the dark board
