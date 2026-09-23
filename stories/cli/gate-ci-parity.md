@@ -113,7 +113,7 @@ proof:
 # Gate↔CI parity by construction — the local gate and CI walk one plan, split only by each step's placement
 
 **Outcome —** A green local `pnpm gate` predicts a green CI `verify`, because both walk the ONE gate
-plan — and nobody keeps that plan. The gate ASSEMBLES it: its four fixed legs (`BUILT_IN_LEGS` in
+plan — and nobody keeps that plan. The gate ASSEMBLES it: its five fixed legs (`BUILT_IN_LEGS` in
 `packages/cli/src/gate-order.ts`) plus every check it FINDS by file name, each reading where it runs,
 its subject, its cost, its skip policy and its CI identity from the `/* gate-check` declaration its
 own file opens with, and ordered from those declarations (`packages/cli/src/gate-checks.ts`,

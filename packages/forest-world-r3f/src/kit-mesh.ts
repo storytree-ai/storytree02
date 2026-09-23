@@ -592,7 +592,11 @@ interface MergeBucket {
  * whichever colour arrived first — an island reporting a state that half its capabilities do not
  * hold, drawn with no error anywhere. The cost is one extra draw call per tint actually used.
  */
-export function kitMeshes(kit: LoadedKit, placements: readonly KitPlacement[]): THREE.Mesh[] {
+export function kitMeshes(
+  kit: LoadedKit,
+  placements: readonly KitPlacement[],
+  onTransformedPart?: (placement: KitPlacement, geometry: THREE.BufferGeometry) => void,
+): THREE.Mesh[] {
   const byMaterial = new Map<string, MergeBucket>();
   const tints = new Map<string, THREE.MeshStandardMaterial>();
   const m = new THREE.Matrix4();
@@ -620,6 +624,7 @@ export function kitMeshes(kit: LoadedKit, placements: readonly KitPlacement[]): 
     );
     for (const part of assembly.objects) {
       const geometry = part.geometry.clone().applyMatrix4(m);
+      onTransformedPart?.(placement, geometry);
       const material = tintedMaterial(kit, part.material, part.materialName, placement.tint, tints);
       const key = material === part.material ? part.materialName : `${part.materialName}::${placement.tint}`;
       const bucket = byMaterial.get(key);

@@ -30,9 +30,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { Line, MapControls } from '@react-three/drei';
-import { Color, OrthographicCamera, type Mesh, type Texture } from 'three';
+import { BufferAttribute, Color, OrthographicCamera, type BufferGeometry, type Mesh, type Texture } from 'three';
 import type { InstanceDescriptor, Descriptor3D } from './world-to-3d.js';
 import type { ForestRegrowPresentation } from './ForestWorldCanvas.regrow.js';
+import { islandGrowthProgress, regrowTrailPoints } from './ForestWorldCanvas.causal.js';
 import {
   frameWorld,
   orthographicZoomFor,
@@ -68,6 +69,15 @@ import {
   type GroundInput,
   type GroundInputOptions,
 } from './ground-dependency.js';
+import {
+  GROWTH_ANCHOR_ATTRIBUTE,
+  GROWTH_SLOT_ATTRIBUTE,
+  cloneGrowthMaterial,
+  createGrowthTexture,
+  installGroundGrowth,
+  setGrowthTexture,
+  type GrowthTexture,
+} from './ForestWorldCanvas.growth-material.js';
 import { SHADOW_PENUMBRA, type ShadowCaster } from './land-shadow.js';
 import { CONTACT_SPREAD, SHADOW_CONTACT_BAND, type ContactBand } from './contact-shade.js';
 import { SHADOW_DEPTH, SHADOW_EDGE, type ShadowDepthOptions } from './shadow-rung.js';
@@ -978,7 +988,23 @@ export function shippedGroundBuild(
  *  buffer still CARRIES `colors` — the comparison instrument builds the pre-adoption arms out of
  *  it — but uploading an attribute no material reads would be payload the map draws nothing
  *  with. */
-function CellGround({ ground }: { ground: GroundInput }) {
+function anchorsForGround(
+  slots: Float32Array,
+  layout: GroundInput['growthLayout'],
+): Float32Array {
+  const bySlot = new Map([...layout.values()].map((entry) => [entry.slot, entry.anchor]));
+  const anchors = new Float32Array(slots.length * 3);
+  for (let vertex = 0; vertex < slots.length; vertex += 1) {
+    const anchor = bySlot.get(slots[vertex]!);
+    if (anchor === undefined) continue;
+    anchors[vertex * 3] = anchor.x;
+    anchors[vertex * 3 + 1] = anchor.y;
+    anchors[vertex * 3 + 2] = anchor.z;
+  }
+  return anchors;
+}
+
+function CellGround({ ground, growth }: { ground: GroundInput; growth: GrowthTexture }) {
   // ⚠ ONE DEPENDENCY, NOT THREE. The parcels, the casters and the strips are derived together by
   // `createGroundInputCache` and handed over as one object, so this memo cannot be re-entered for a
   // ground that did not change — and, just as important, cannot be SKIPPED for one that did. Three
@@ -987,7 +1013,12 @@ function CellGround({ ground }: { ground: GroundInput }) {
   const built = useMemo(() => {
     const { cells, casters, strips } = ground;
     const { field, shore, wear, input } = shippedGroundBuild(cells, casters, strips);
-    const geo = cellGroundGeometry(input);
+    const geo = cellGroundGeometry({
+      ...input,
+      // Slot `growth.width - 1` is deliberately reserved for data without an island identity.
+      // It stays full-grown, rather than borrowing slot zero's unrelated progress.
+      islandSlot: (island) => ground.growthLayout.get(island ?? '')?.slot ?? growth.width - 1,
+    });
     // ⚠ LAYER 1 IS WORN UNCONDITIONALLY AND WITH NO FLAG, like the relief, the ladder, the grain
     // and the shadow before it — this arc's end-state item 6 is explicit that a flag nobody
     // flips is not adoption, and the layer sat built-but-switched-off for a day on exactly that
@@ -1006,8 +1037,10 @@ function CellGround({ ground }: { ground: GroundInput }) {
     const wearField = wear();
     const extras: GroundLayerExtras = { rock: SHIPPED_LAYERS.rock, detail: SHIPPED_LAYERS.detail };
     if (wearField !== null) extras.wear = { field: wearField, mix: SHIPPED_LAYERS.wearMix };
-    return { geo, ...buildGroundMaterial(field, SHIPPED_GRASS, shore(), SHIPPED_SAND_MIX, extras) };
-  }, [ground]);
+    const material = buildGroundMaterial(field, SHIPPED_GRASS, shore(), SHIPPED_SAND_MIX, extras);
+    installGroundGrowth(material.material, growth);
+    return { geo, anchors: anchorsForGround(geo.islandSlots, ground.growthLayout), ...material };
+  }, [ground, growth]);
   // ⚠ THE MATERIAL AND ITS TEXTURE ARE DISPOSED, WHICH THE MODULE-SCOPE SINGLETON NEVER NEEDED
   // TO BE. The occlusion field is about 107 KB of GPU memory for one island, and a canvas that
   // re-mounts on every navigation would strand one copy per visit — a leak that grows with use
@@ -1032,6 +1065,8 @@ function CellGround({ ground }: { ground: GroundInput }) {
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" args={[built.geo.positions, 3]} />
         <bufferAttribute attach="attributes-normal" args={[built.geo.normals, 3]} />
+        <bufferAttribute attach={`attributes-${GROWTH_SLOT_ATTRIBUTE}`} args={[built.geo.islandSlots, 1]} />
+        <bufferAttribute attach={`attributes-${GROWTH_ANCHOR_ATTRIBUTE}`} args={[built.anchors, 3]} />
         <bufferAttribute
           attach={`attributes-${GROUND_STATUS_ATTRIBUTE}`}
           args={[built.geo.statuses, 1]}
@@ -1099,7 +1134,38 @@ const kit = (): Promise<LoadedKit> => (kitPromise ??= loadEmbeddedKit());
  * that drew no props over it would be every capability unreported, which ADR-0392 D5 / ADR-0398
  * D7 rank strictly worse. The console line names the role and both numbers.
  */
-function KitProps({ placements }: { placements: readonly KitPlacement[] }) {
+function stampGrowthAttributes(
+  geometry: BufferGeometry,
+  islandId: string | undefined,
+  layout: GroundInput['growthLayout'],
+): void {
+  const position = geometry.getAttribute('position');
+  const growth = islandId === undefined ? undefined : layout.get(islandId);
+  const slots = new Float32Array(position.count);
+  const anchors = new Float32Array(position.count * 3);
+  if (growth !== undefined) {
+    slots.fill(growth.slot);
+    for (let vertex = 0; vertex < position.count; vertex += 1) {
+      anchors[vertex * 3] = growth.anchor.x;
+      anchors[vertex * 3 + 1] = growth.anchor.y;
+      anchors[vertex * 3 + 2] = growth.anchor.z;
+    }
+  } else slots.fill(layout.size);
+  geometry.setAttribute(GROWTH_SLOT_ATTRIBUTE, new BufferAttribute(slots, 1));
+  geometry.setAttribute(GROWTH_ANCHOR_ATTRIBUTE, new BufferAttribute(anchors, 3));
+}
+
+function KitProps({
+  placements,
+  islandByPlacement,
+  layout,
+  growth,
+}: {
+  placements: readonly KitPlacement[];
+  islandByPlacement: GroundInput['islandByPlacement'];
+  layout: GroundInput['growthLayout'];
+  growth: GrowthTexture;
+}) {
   const [loaded, setLoaded] = useState<LoadedKit | null>(null);
   useEffect(() => {
     let live = true;
@@ -1129,15 +1195,22 @@ function KitProps({ placements }: { placements: readonly KitPlacement[] }) {
         drift,
       );
     }
-    return kitMeshes(loaded, placements);
-  }, [loaded, placements]);
+    const built = kitMeshes(loaded, placements, (placement, geometry) => {
+      stampGrowthAttributes(geometry, islandByPlacement.get(placement), layout);
+    });
+    for (const mesh of built) mesh.material = cloneGrowthMaterial(mesh.material as import('three').MeshStandardMaterial, growth);
+    return built;
+  }, [growth, islandByPlacement, layout, loaded, placements]);
 
   // ⚠ THE MERGED GEOMETRY IS DISPOSED, THE KIT'S OWN IS NOT. `kitMeshes` clones every part and
   // bakes its transform in, so each mesh here owns geometry nothing else refers to; the kit's
   // source geometry and its materials are the module singleton's and outlive every mount.
   useEffect(
     () => () => {
-      for (const m of meshes) m.geometry.dispose();
+      for (const m of meshes) {
+        m.geometry.dispose();
+        (m.material as import('three').MeshStandardMaterial).dispose();
+      }
     },
     [meshes],
   );
@@ -1168,8 +1241,8 @@ function KitProps({ placements }: { placements: readonly KitPlacement[] }) {
 // above stays. It is the transcription of that authored vocabulary, and it is what
 // `leaf-tint.ts`'s `mapped` token is measured against.
 
-function TrailStrip({ strip }: { strip: InstanceDescriptor }) {
-  const pts = strip.points ?? [];
+function TrailStrip({ strip, regrow }: { strip: InstanceDescriptor; regrow: ForestRegrowPresentation | null | undefined }) {
+  const pts = regrowTrailPoints(strip, regrow ?? null) ?? [];
   if (pts.length < 2) return null;
   return (
     <Line
@@ -1212,7 +1285,7 @@ export interface ForestWorldCanvasProps {
   descriptors: readonly Descriptor3D[];
   /**
    * The app clock's current presentation. This is deliberately only the consumption seam: the
-   * renderer owns no clock or schedule, and the geometry application follows in the next unit.
+   * renderer owns no clock or schedule; its stable geometry consumes this presentation directly.
    */
   regrow?: ForestRegrowPresentation | null;
   /** Opt the trail network visible. Trails are HIDDEN BY DEFAULT (ADR-0169 §3): with
@@ -1480,6 +1553,15 @@ function CalibratedLights() {
   );
 }
 
+/** Upload one app-clock sample before paint and request a demand-frame only when it changed. */
+function GrowthTextureUpload({ growth, values }: { growth: GrowthTexture; values: readonly number[] }) {
+  const invalidate = useThree((state) => state.invalidate);
+  useLayoutEffect(() => {
+    if (setGrowthTexture(growth, values)) invalidate();
+  }, [growth, invalidate, values]);
+  return null;
+}
+
 /**
  * The minimal R3F canvas of the spike: descriptors → placeholder meshes under drei
  * `MapControls` (pan / zoom a top-down-ish world map — NOT rotate; the projection is fixed
@@ -1523,6 +1605,16 @@ export function ForestWorldCanvas({
   const cacheRef = useRef<((d: readonly Descriptor3D[]) => GroundInput) | null>(null);
   cacheRef.current ??= createGroundInputCache(SHIPPED_GROUND_INPUT);
   const ground = cacheRef.current(descriptors);
+  // The presentation is already wall-clock derived by the app.  This merely uploads its current
+  // values into the stable island table; it owns neither a frame loop nor a second schedule.
+  const growth = useMemo(() => createGrowthTexture(ground.growthLayout.size + 1), [ground]);
+  // This texture is shared by ground and props, so the canvas owns its lifetime rather than either
+  // consumer.  The final slot is the deliberately full fallback for unattributed geometry.
+  useEffect(() => () => growth.texture.dispose(), [growth]);
+  const progressBySlot = new Array<number>(growth.width).fill(1);
+  for (const entry of ground.growthLayout.values()) {
+    progressBySlot[entry.slot] = islandGrowthProgress(entry, regrow ?? null);
+  }
   // trail-ghost-strip descriptors are deliberately not drawn (the surface's call —
   // the under-island run is told by the cave props, which render unconditionally
   // like the 2D scene's flora-layer props).
@@ -1546,8 +1638,8 @@ export function ForestWorldCanvas({
   // object is what stops a surface ending up half-registered: a canvas with the host's camera but
   // its own `MapControls`, or a transparent backdrop but a second canopy.
   const compose = underlayComposition(registered, showTrails);
-  // This read is intentional: `regrow` reaches the real canvas now, while the next increment
-  // applies its already-derived presentation to the ground, paths and vegetation.
+  // This read is intentional: the app-owned presentation drives ground, pathways and vegetation
+  // without a renderer-owned clock or schedule.
   const hasRegrowPresentation = regrow !== null && regrow !== undefined;
   return (
     /* ⚠ `orthographic` is the fence (ADR-0380 D6 fence 4), and `fov` is GONE rather than merely
@@ -1574,18 +1666,26 @@ export function ForestWorldCanvas({
           behind the world; under a host the host has already painted its own (the studio's sea
           gradient), and overpainting it would make a mount a look change. */}
       {compose.backdrop && <color attach="background" args={['#101418']} />}
+      <GrowthTextureUpload growth={growth} values={progressBySlot} />
       <CalibratedLights />
-      <CellGround ground={ground} />
+      <CellGround ground={ground} growth={growth} />
       {/* ⚠ REGISTERED MODE DRAWS THE LAND AND NOTHING THAT MEANS ANYTHING. The host's own layer
           already carries every mark that makes a claim about the work — the crowns, the flora, the
           signposts, all five wisp families, the nameplates, the trails and the hit targets — and
           ADR-0380 D6 fence 3 keeps those there. So the props are opt-in (see
           {@link RegisteredUnderlay.props}) and the trails, caves and wisp sprites are off: each
           would be a SECOND drawing of a mark the host is already responsible for. */}
-      {compose.props && <KitProps placements={ground.placements} />}
+      {compose.props && (
+        <KitProps
+          placements={ground.placements}
+          islandByPlacement={ground.islandByPlacement}
+          layout={ground.growthLayout}
+          growth={growth}
+        />
+      )}
       {compose.trails &&
         trails.map((t, i) => (
-          <TrailStrip key={i} strip={t} />
+          <TrailStrip key={i} strip={t} regrow={regrow} />
         ))}
       {compose.caves &&
         caves.map((c, i) => (

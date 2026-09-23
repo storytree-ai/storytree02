@@ -19,7 +19,7 @@ import assert from "node:assert/strict";
 
 import { discoverWorkspaceProjects, pnpmArgsFor, type WorkspaceProject } from "./ci-affected.js";
 import { loadGatePlan } from "./gate-checks.js";
-import { BUILT_IN_LEGS, type GatePlanStep, evaluateGateOrder, isExpensiveStep } from "./gate-order.js";
+import { BUILT_IN_LEGS, type GatePlanStep, STUDIO_UAT_STEP, evaluateGateOrder, isExpensiveStep } from "./gate-order.js";
 import {
   behindMainLines,
   gitLines,
@@ -166,7 +166,9 @@ test("scopeGatePlan rewrites ONLY the expensive legs, and keeps every other comm
   for (const [i, step] of scoped.entries()) {
     const original = plan[i] as GatePlanStep;
     assert.equal(step.check, original.check, "a step's check name is not the scope's business");
-    if (isExpensiveStep(original.command)) {
+    if (original.command === STUDIO_UAT_STEP) {
+      assert.equal(step.command, "pnpm --filter ...@storytree/cli --if-present uat");
+    } else if (isExpensiveStep(original.command)) {
       assert.equal(step.command, original.command.replace("pnpm -r ", "pnpm --filter ...@storytree/cli "));
     } else {
       assert.equal(step.command, original.command, `${original.command} must not be rewritten`);
@@ -233,11 +235,34 @@ test("the rewrite consumes pnpmArgsFor's output verbatim — no second arg forma
   // `--no-bail` survives the rewrite in place: narrowing WHICH packages run must not quietly drop
   // the flag that makes all of the selected ones report.
   assert.deepEqual(legs, ["pnpm --filter ...studio --no-bail typecheck", "pnpm --filter ...studio --no-bail test"]);
+  // The studio journey names one package, so it has no `-r` to swap: it runs `uat` over the same set.
+  assert.equal(scoped.find((s) => s.cost === "minutes" && s.check === undefined && !isExpensiveStep(s.command))?.command, "pnpm --filter ...studio --if-present uat");
   // ADR-0458's mutation rung is minutes-cost too, but it is a CHECK that runs its own file and does its
   // own diff scoping: it must come through untouched, never half-scoped into a filtered command.
   const mutation = scoped.find((s) => s.check === "check:mutation-diff");
   assert.equal(mutation?.command, "check:mutation-diff");
   assert.equal(mutation?.invocation, realPlan().find((s) => s.check === "check:mutation-diff")?.invocation);
+});
+
+test("the studio UAT leg is keyed on the studio's affected scope: narrowed it runs `uat` over the affected set, full it runs as declared", () => {
+  // Narrowed: `--if-present` is what makes a branch that cannot reach the studio pay nothing — pnpm
+  // expands the dependents-inclusive set and runs `uat` only where a package declares it. Without it
+  // a scope holding no `uat` script would error rather than run nothing.
+  const plan = realPlan();
+  const narrowed = scopeGatePlan(plan, "--filter ...@storytree/cli --filter ...@storytree/library");
+  const leg = narrowed.find((_, i) => plan[i]?.command === STUDIO_UAT_STEP);
+  assert.equal(leg?.command, "pnpm --filter ...@storytree/cli --filter ...@storytree/library --if-present uat");
+  // Its minutes cost is DECLARED on the leg, so the rewrite cannot move it across the ordering wall:
+  // the shared environment still runs after it, and the invariant holds over the narrowed plan.
+  assert.equal(leg?.cost, "minutes");
+  assert.equal(leg?.runs, "ci");
+  assert.equal(evaluateGateOrder(narrowed).verdict, "ok");
+  // Full: declared verbatim, so the journey is never silently dropped from a full run.
+  assert.equal(scopeGatePlan(plan, "-r").find((s) => s.command === STUDIO_UAT_STEP)?.command, STUDIO_UAT_STEP);
+  // The `-r` legs' matcher is not the journey's: neither form is a leg the `-r` swap narrows.
+  assert.ok(!isExpensiveStep(STUDIO_UAT_STEP));
+  assert.ok(!isExpensiveStep("pnpm --filter ...studio uat"));
+  assert.ok(!isExpensiveStep("pnpm check:uat-revision-continuity"));
 });
 
 test("a name pnpmArgsFor refuses to splice falls back to the full run, and the plan follows", () => {

@@ -355,7 +355,7 @@ kind owes a seed export any more.
   *nothing at all* — which cost ~25 min of hand re-runs per hit and once hid a genuine RED behind an
   unrelated flake. It is now a runner over a FOUND plan
   — every check is a `check-<name>.ts` / `<name>-check.ts` file that opens with a `/* gate-check`
-  declaration of itself (ADR-0606), and `gate-run.ts` finds them, orders them around the four fixed
+  declaration of itself (ADR-0606), and `gate-run.ts` finds them, orders them around the five fixed
   legs and runs them — that executes every step and prints a per-step **PASS / FAIL / SKIP / NOT RUN**
   table. **Registering a check is writing that ONE file** — no list, no workflow edit, no root script
   (the `check:*` scripts in `package.json` are human shortcuts nothing holds to anything).

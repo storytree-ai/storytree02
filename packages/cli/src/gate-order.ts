@@ -4,9 +4,10 @@
 // THERE IS NO HAND-KEPT LIST OF CHECKS HERE (ADR-0606 D1/D2, superseding ADR-0486). The plan `pnpm
 // gate` walks is DERIVED: every check declares itself at the top of its own file (`/* gate-check`),
 // `gate-checks.ts` finds those files by NAME the way a test runner finds tests and orders them by
-// what they declare, and the four FIXED legs below — lint, the two `-r` legs, the studio build — are
-// placed around them. Registering a check is writing its file. There is no list to add it to, here
-// or in CI, which runs the same derived plan through `pnpm gate --ci` (ADR-0606 D3).
+// what they declare, and the FIXED legs below — lint, the two `-r` legs, the studio build and the
+// studio's UAT journey — are placed around them. Registering a check is writing its file. There is
+// no list to add it to, here or in CI, which runs the same derived plan through `pnpm gate --ci`
+// (ADR-0606 D3).
 //
 // THE RUNNER MAY NARROW THE PLAN (ADR-0304 D1). The two `-r` legs are declared in full, and
 // `gate-run.ts` rewrites them to the affected scope (`pnpm --filter ...<name> …`) just before running
@@ -152,6 +153,26 @@ export interface GatePlanStep extends GateStep {
 }
 
 /**
+ * The studio story's declared reliability gate (`stories/studio/story.md`, `studio#gate-1`) — the
+ * corpus's only full end-to-end acceptance journey — as the plan runs it: a FIXED leg, because it is
+ * a package script, not a check file. Wired 2026-09-24 (`studio-uat-journey-is-green-then-wired`):
+ * until then NOTHING ran it, and a commit that retired the surface it walked repaired every unit test
+ * it broke and left the journey red for weeks.
+ *
+ * CI-ONLY, and the reason is this box rather than a principle: the journey pins port 5174 with
+ * `--strictPort`, so two studio-affected gates on the shared dev box would collide and one would red
+ * on the port, not on the product. CI's runner is its own machine.
+ *
+ * KEYED ON THE STUDIO'S AFFECTED SCOPE. Under a narrowed scope {@link import("./gate-scope.js").scopeGatePlan}
+ * rewrites it to `pnpm <affected> --if-present uat`: pnpm expands the dependents-inclusive affected
+ * set and runs `uat` only where a package declares it, so the journey runs exactly when `apps/studio`
+ * or anything it depends on changed, and a branch that cannot reach the studio pays nothing. A full
+ * scope runs it as declared. Its minutes cost is DECLARED on the leg, which is what keeps the shared
+ * environment after it — the ordering axes read the declaration, not the command text.
+ */
+export const STUDIO_UAT_STEP = "pnpm --filter studio uat";
+
+/**
  * The gate's FIXED legs, in the three slots the derived plan places around the checks (ADR-0606 D1:
  * "the gate's built-ins, not a list anyone extends"):
  *
@@ -256,7 +277,15 @@ export const BUILT_IN_LEGS: BuiltInLegs = {
       runs: "ci",
       subject: "own-work",
       cost: "seconds",
-      why: "the only buildable target is `apps/studio` (`vite build`) — every package exports raw TS with no build step — and a Vite build can fail on something `tsx` tolerates, which is exactly what it caught when the studio's dev API pulled the Node-only store substrate into config load. CI-ONLY BY PLACEMENT (ADR-0606 D4, ADR-0486 D2(a)'s environmental class): it is the one step only CI's clean checkout is asked to prove. It stays full-scope — the affected rewrite touches the two `-r` legs only — and sits after the own-work checks and ahead of the shared environment, the slot it held in `ci.yml`",
+      why: "the only buildable target is `apps/studio` (`vite build`) — every package exports raw TS with no build step — and a Vite build can fail on something `tsx` tolerates, which is exactly what it caught when the studio's dev API pulled the Node-only store substrate into config load. CI-ONLY BY PLACEMENT (ADR-0606 D4, ADR-0486 D2(a)'s environmental class): it is one of the steps only CI's clean checkout is asked to prove. It stays full-scope — the affected rewrite touches the two `-r` legs and the studio journey only — and sits after the own-work checks and ahead of the shared environment, the slot it held in `ci.yml`",
+    },
+    {
+      command: STUDIO_UAT_STEP,
+      check: undefined,
+      runs: "ci",
+      subject: "own-work",
+      cost: "minutes",
+      why: "the studio story's declared reliability gate, which nothing ran until 2026-09-24 — so when `3ea9c3cc` and `fa4f96a5` retired the citation surface it walked, every unit test was repaired and this journey sat red unseen. Own-work: it drives the real dev server against the committed offline fixture (`STORYTREE_STUDIO_STORE=json`), no store and no credential, so only this diff can red it. CI-ONLY because the journey pins port 5174 with `--strictPort` and concurrent local gates on the shared dev box would collide on it; narrowed to the studio's affected scope (see STUDIO_UAT_STEP). It reuses the Chromium CI already installs for `check:land-art`. Sits beside the studio build, ahead of the shared environment",
     },
   ],
 };

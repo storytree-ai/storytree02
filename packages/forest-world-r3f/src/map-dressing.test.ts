@@ -42,6 +42,7 @@ import {
   straddles,
 } from './dressing-ground.js';
 import { criteriaByIsland, dressMapFromKit, dressMapWithCover, signedCriteriaByIsland } from './map-dressing.js';
+import * as mapDressing from './map-dressing.js';
 import { KIT_FOOTPRINTS_2026_08_29, isCriterionRole, isDressingRole, type KitPlacement } from './kit-vocabulary.js';
 import { LAND_RELIEF_AMPLITUDE } from './land-relief.js';
 import { WEAR_FALLOFF, wearOf } from './land-wear.js';
@@ -561,6 +562,74 @@ test('the dressing is deterministic — the same map dresses identically twice',
   groundSanity();
   assertSignatures(twoStoryMap(), { [STORY_A]: 4, [STORY_B]: 2 });
   assert.deepEqual(dress(twoStoryMap()), dress(twoStoryMap()));
+});
+
+test('fld-every-dressed-placement-keeps-its-island: the companion result preserves each exact placement’s producing island', () => {
+  groundSanity();
+  // Namespace access is deliberate: until the companion exists this is an ASSERTION red, rather
+  // than a named import stopping the test module before the contract can run.
+  const dressWithAttribution = (
+    mapDressing as typeof mapDressing & {
+      dressMapWithCoverAttribution?: (
+        descriptors: readonly Descriptor3D[],
+        opts: Parameters<typeof dressMapWithCover>[1],
+      ) => { placements: KitPlacement[]; islandByPlacement: ReadonlyMap<KitPlacement, string> };
+    }
+  ).dressMapWithCoverAttribution;
+  assert.equal(typeof dressWithAttribution, 'function', 'map dressing exposes its placement-attribution companion');
+  if (typeof dressWithAttribution !== 'function') return;
+
+  // Two attributed islands hold every criterion state and healthy cover. A third, islandless
+  // capability separates the fail-closed absence from a map that simply attributes every prop.
+  const descriptors: Descriptor3D[] = [
+    ...twoStoryMap({ total: 6, signed: 2, failing: 2 }, { total: 5, signed: 1, failing: 1 }),
+    {
+      kind: 'cell-ground',
+      transform: { x: 900, y: 0, z: 20 },
+      group: 'cell-ground',
+      material: 'healthy',
+      parcel: 'unattributed-capability',
+      points: [
+        { x: 880, y: 0, z: 0 },
+        { x: 920, y: 0, z: 0 },
+        { x: 920, y: 0, z: 40 },
+        { x: 880, y: 0, z: 40 },
+      ],
+    },
+  ];
+  const opts = { relief: LAND_RELIEF_AMPLITUDE, footprint: FOOT };
+  const attributed = dressWithAttribution(descriptors, opts);
+  const legacy = dressMapWithCover(descriptors, opts);
+
+  // Attribution changes no placement algorithm: the public wrapper stays byte-for-byte equal in
+  // order and transforms, so delivery can opt in without retuning art or cover.
+  assert.deepEqual(attributed.placements, legacy);
+
+  const boundsOf = (island: string) => {
+    const xs = descriptors
+      .filter((d) => d.kind === 'cell-ground' && d.island === island)
+      .flatMap((d) => (d.kind === 'skipped' ? [] : (d.points ?? []).map((p) => p.x)));
+    return { min: Math.min(...xs), max: Math.max(...xs) };
+  };
+  const bounds = new Map([[STORY_A, boundsOf(STORY_A)], [STORY_B, boundsOf(STORY_B)]]);
+  const islandless = attributed.placements.filter((p) => p.capId === 'unattributed-capability');
+  assert.equal(islandless.length, 1, 'the fixture’s islandless capability still receives its tree');
+  assert.equal(attributed.islandByPlacement.has(islandless[0]!), false, 'an islandless placement is not attributed');
+  assert.equal(
+    attributed.islandByPlacement.size,
+    attributed.placements.length - islandless.length,
+    'every and only island-made placement is attributed',
+  );
+
+  for (const [placement, island] of attributed.islandByPlacement) {
+    assert.ok(attributed.placements.includes(placement), 'the map key is the exact returned placement object');
+    const range = bounds.get(island);
+    if (!range) assert.fail(`the placement claims an island the fixture did not produce: ${island}`);
+    assert.ok(
+      placement.at.x >= range.min && placement.at.x <= range.max,
+      `a ${placement.role} at ${placement.at.x} is attributed to ${island} but stands off its ground`,
+    );
+  }
 });
 
 test('GROUND IS NOT A SIGNATURE — a map of nothing but cells signs nothing', () => {

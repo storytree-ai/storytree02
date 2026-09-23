@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import type { GateStep } from "./gate-order.js";
+import { BUILT_IN_LEGS, type GateStep } from "./gate-order.js";
 import {
   type BaselinedGate,
   declaredGatesIn,
@@ -151,9 +151,6 @@ const GOLDEN_STALE_GHOST = [
   "[check:reliability-gate-parity]     no story declares this command any more — the declaration was reworded, retired or deleted, so the entry is a ghost. Delete it.",
   "[check:reliability-gate-parity]   Edit UNRUN_GATE_BASELINE in packages/cli/src/reliability-gate-parity.ts.",
 ].join(LF);
-
-const GOLDEN_BASELINE_BLOCKER =
-  "BLOCKED ON AN OWNER FORK, not on the wiring and not on a selector — re-measured 2026-09-22 at `e78b5878`, which CORRECTS what this entry said when it landed. The command is wirable today (CI already installs the Chromium it needs, for the `check:land-art` rung), but the journey FAILS 4 of its 6 cases, so wiring it would red every studio-touching PR on a break none of them authored. All four share ONE structural cause: six criteria (3, 4, 5, 6, 9 and 12) assert that an artifact names the decision it stands on as a FOLLOWABLE LINK. ⚠ THE EARLIER READING — that the spec merely asserts a retired `.asset-refs h4` = \"Sources\" and needs its selector re-pointed plus criteria 4/5/6 and 9 re-worded — IS REFUTED AT ITS OWN SOURCE, and a session that acts on it will find no fix exists. It was written from `3ea9c3cc`, whose message truthfully says \"The data is untouched; this is one commit and one revert\" — but `fa4f96a5` LATER deleted the `references` field ITSELF: the schema, every reader, and the fixture data, including the two pointers ADR-0425 dec 4 had added so these legs would have a subject at all. So there is no citation left anywhere to re-point a selector AT, and no surviving affordance on the artifact surface to re-point the legs ONTO: `AssetView`'s only links are \"back to the library\" and \"edit this one\", on the plain route and inside the overlay alike. The sole `depends_on` render is `LibraryFocusGraph`, which sits on the LENS rather than the overlay criterion 9 names, and it would draw nothing regardless because the fixture rows carry no edges — and ADR-0477 D6 puts authoring those on another arc, behind a fence that promises the owner a proposal first. Every remaining route therefore CHANGES what a leg proves and one of them reverses it, against ADR-0294 D1's reference shape, so the choice is the owner's: `oq-the-studio-uat-s-six-grounding-legs-assert-a-citation-lin` on `verification-integrity-arc` carries the four costed options. ⚠ Do NOT chase criteria 1/7/8 or 10/11 as a fifth and sixth break. Each FAILED on one of two full runs and PASSED on the other purely under memory pressure on the shared dev box, and both were re-confirmed green in isolation (1/7/8 in 46.8s on a quiet box). Cleared by the increment `studio-uat-journey-is-green-then-wired` once that question is answered.";
 
 const GOLDEN_BLOCK_LAST = "\n\n1. _(gate: observe)_ `pnpm --filter studio uat`.\n";
 
@@ -1028,15 +1025,15 @@ describe("the remaining strings and branches nothing had read", () => {
     assert.ok(coverage.detail.includes("(none)"), coverage.detail);
   });
 
-  it("the REAL baseline entry's blocker is pinned WHOLE", () => {
-    // The blocker is built from a dozen concatenated pieces, so emptying any ONE of them left the
-    // length assertion satisfied and the mutant alive. This is the entry a session reads to learn why
-    // the corpus's only end-to-end journey is carried rather than run, and what would clear it — so
-    // it is pinned to the byte, and changing it is a deliberate edit here as well as there.
-    assert.equal(UNRUN_GATE_BASELINE.length, 1);
-    assert.equal(UNRUN_GATE_BASELINE[0]?.story, "stories/studio/story.md");
-    assert.equal(UNRUN_GATE_BASELINE[0]?.command, "pnpm --filter studio uat");
-    assert.equal(UNRUN_GATE_BASELINE[0]?.blocker, GOLDEN_BASELINE_BLOCKER);
+  it("the REAL baseline is EMPTY — the studio journey it carried is now run by the plan", () => {
+    // It carried exactly one entry — `pnpm --filter studio uat` — until 2026-09-24, when
+    // `studio-uat-journey-is-green-then-wired` greened the journey and wired it as a CI-placed plan
+    // step. The rung reds on a stale entry, so the deletion was owed in that same landing; this pins
+    // that it happened and that the plan really covers the declaration through tier 1.
+    assert.deepEqual(UNRUN_GATE_BASELINE, []);
+    // A FIXED leg of every plan the gate derives, so the fixed legs alone must cover it.
+    const fixedLegs = [...BUILT_IN_LEGS.lead, ...BUILT_IN_LEGS.wall, ...BUILT_IN_LEGS.trail];
+    assert.ok(targetedInvocations(fixedLegs).has(targetKey("studio", "uat")));
   });
 });
 

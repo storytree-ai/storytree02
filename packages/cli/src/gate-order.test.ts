@@ -16,6 +16,7 @@ import {
   type GatePlanStep,
   LOAD_BEARING_MARKER,
   RETIRED_TEST_COMPANIONS,
+  STUDIO_UAT_STEP,
   UNWIRED_MARKER,
   companionFileFor,
   evaluateGateOrder,
@@ -68,10 +69,10 @@ function planStep(
 // ── the fixed legs ───────────────────────────────────────────────────────────────────────────
 //
 // The only steps the gate names itself (ADR-0606 D1: "the gate's built-ins, not a list anyone
-// extends"). Every CHECK is found from its own file; these four are pinned here because nothing else
+// extends"). Every CHECK is found from its own file; these five are pinned here because nothing else
 // declares them.
 
-test("the fixed legs are lint, the two `-r` legs and the studio build — each in its slot, placement and class", () => {
+test("the fixed legs are lint, the two `-r` legs, the studio build and its UAT journey — each in its slot, placement and class", () => {
   const summary = (legs: readonly GatePlanStep[]) =>
     legs.map((leg) => [leg.command, leg.check, leg.runs, leg.subject, leg.cost]);
   assert.deepEqual(summary(BUILT_IN_LEGS.lead), [["pnpm lint", undefined, "both", "own-work", "seconds"]]);
@@ -80,7 +81,14 @@ test("the fixed legs are lint, the two `-r` legs and the studio build — each i
     ["pnpm -r --no-bail test", undefined, "both", "own-work", "minutes"],
   ]);
   // CI-only by placement (ADR-0606 D4): only CI's clean checkout is asked to prove the studio build.
-  assert.deepEqual(summary(BUILT_IN_LEGS.trail), [["pnpm -r build", undefined, "ci", "own-work", "seconds"]]);
+  // The studio journey is the one fixed leg a check could not be: a package script, CI-only because it
+  // pins a port the shared dev box would collide on, and minutes-cost, so the shared environment
+  // stays after it (`studio-uat-journey-is-green-then-wired`).
+  assert.deepEqual(summary(BUILT_IN_LEGS.trail), [
+    ["pnpm -r build", undefined, "ci", "own-work", "seconds"],
+    ["pnpm --filter studio uat", undefined, "ci", "own-work", "minutes"],
+  ]);
+  assert.equal(BUILT_IN_LEGS.trail[1]?.command, STUDIO_UAT_STEP);
   for (const leg of [...BUILT_IN_LEGS.lead, ...BUILT_IN_LEGS.wall, ...BUILT_IN_LEGS.trail]) {
     assert.ok(leg.why.trim().length > 40, `\`${leg.command}\` gives no reason it is in the gate`);
     assert.equal(leg.invocation, undefined, `a fixed leg runs its own command: ${leg.command}`);
