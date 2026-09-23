@@ -132,8 +132,7 @@ export function planTestRun(args: readonly string[], io: TestVerbIo): TestPlan {
   const suites = new Set<string>();
   const filesByPackage = new Map<string, { readonly script: string; readonly files: string[] }>();
   for (const arg of args) {
-    const rel = path.relative(io.workspace, path.resolve(io.cwd, arg)).replaceAll("\\", "/");
-    const parts = rel.split("/");
+    const parts = path.relative(io.workspace, path.resolve(io.cwd, arg)).split(path.sep);
     const packageDir = parts.slice(0, 2).join("/");
     const rest = parts.slice(2);
     const script = WORKSPACE_ROOTS.has(parts[0]) ? io.readTestScript(packageDir) : undefined;
