@@ -25,6 +25,7 @@ import {
   controlPoint,
   crossingControls,
   dockOnRim,
+  dockedTrailStrips,
   isDockableStrip,
   islandDocks,
   islandPaths,
@@ -310,6 +311,27 @@ test('fld-a-dock-lands-on-an-island-the-trail-names: named rims beat a nearer un
     strip({ x: 42, z: -200 }, shared, { edges: ['source->west'] }),
   ]);
   assert.deepEqual([...junction.entries()], [['west', []], ['east', []]]);
+});
+
+test('fld-a-visible-trail-strip-ends-on-the-dock-it-wears: an accepted terminal is moved onto the worn path dock', () => {
+  const rim = [island('shore', 0, 0, 100)];
+  const visible = strip({ x: 180, z: 50 }, { x: 103, z: 50 });
+  const dock = islandDocks(rim, [visible]).get('shore')![0]!;
+  assert.deepEqual(dock, { x: 100, z: 50 }, 'the worn path snaps this terminal to the coast');
+
+  const projected = dockedTrailStrips(rim, [visible]);
+  assert.equal(projected.length, 1);
+  const endpoint = projected[0]!.points![projected[0]!.points!.length - 1]!;
+  assert.deepEqual(
+    { x: endpoint.x, z: endpoint.z },
+    dock,
+    'the visible ribbon must finish on the same dock consumed by the worn path',
+  );
+  assert.deepEqual(
+    { x: visible.points![visible.points!.length - 1]!.x, z: visible.points![visible.points!.length - 1]!.z },
+    { x: 103, z: 50 },
+    'projection must not mutate the routed descriptor stream it receives',
+  );
 });
 
 test('islandDocks assigns an end within reach of TWO islands to the NEARER one, on either axis', () => {
