@@ -1179,7 +1179,7 @@ test('r3f-ground-vertices-carry-explicit-island-slots: every merged vertex retai
   };
   Reflect.set(input, 'islandSlot', (island: string | undefined) => (island === 'a' ? 3 : 17));
   const geo = cellGroundGeometry(input);
-  const slots = Reflect.get(geo, 'islandSlots');
+  const slots = geo.islandSlots;
 
   assert.ok(slots instanceof Float32Array, 'the merged geometry exposes one explicit island slot per vertex');
   assert.equal(slots.length, geo.triangles * 3, 'one island slot per merged vertex');
@@ -1187,6 +1187,22 @@ test('r3f-ground-vertices-carry-explicit-island-slots: every merged vertex retai
     const x = geo.positions[v * 3]!;
     assert.equal(slots[v], x >= 100 ? 17 : 3, `vertex ${v} at x=${x} lost its island identity`);
   }
+});
+
+test('r3f-ground-vertices-carry-explicit-island-slots: omitting the resolver leaves an empty slot buffer and unchanged geometry', () => {
+  const input = {
+    cells: [islandCell('a', SQUARE_A), islandCell('b', SQUARE_B)],
+    resolve: resolveWhite,
+    relief: landRelief,
+  };
+  const withoutSlots = cellGroundGeometry(input);
+  const withSlots = cellGroundGeometry({ ...input, islandSlot: () => 3 });
+
+  assert.ok(withoutSlots.triangles > 0, 'the omitted-resolver arm builds real geometry');
+  assert.equal(withoutSlots.islandSlots.length, 0);
+  const { islandSlots: _withoutSlots, ...withoutGeometry } = withoutSlots;
+  const { islandSlots: _withSlots, ...withGeometry } = withSlots;
+  assert.deepEqual(withoutGeometry, withGeometry, 'the resolver changes only its optional slot buffer');
 });
 
 test('a cell with NO island reaches the resolver as undefined, not as some other island', () => {

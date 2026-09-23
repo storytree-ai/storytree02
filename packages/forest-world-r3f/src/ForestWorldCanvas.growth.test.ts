@@ -61,10 +61,58 @@ async function growth(): Promise<ForestWorldGrowth> {
 
 test('fcd-ground-cache-compares-content-without-serializing: equal fresh descriptor content reuses the exact ground input', async () => {
   const compose = await growth();
-  const first = compose(descriptors(), null);
+  const input = descriptors();
+  const first = compose(input, null);
   const equalFresh = compose(descriptors(), null);
 
+  assert.deepEqual(first.ground, { descriptors: input });
   assert.equal(equalFresh.ground, first.ground);
+});
+
+test('fcd-ground-cache-compares-content-without-serializing: a longer equal-prefix input replaces the cached ground', async () => {
+  const compose = await growth();
+  const input = descriptors();
+  const first = compose(input, null);
+  const longer = [...input, { id: 'ground-c', islandId: 'island-c', kind: 'ground' as const, ground: 'mapped' }];
+  const result = compose(longer, null);
+
+  assert.notEqual(result.ground, first.ground);
+  assert.deepEqual(result.ground, { descriptors: longer });
+});
+
+test('fcd-ground-cache-short-circuits-on-first-change: each descriptor identity field distinguishes the cached ground', async () => {
+  const compose = await growth();
+  const changes: Partial<GroundVisibleDescriptor>[] = [
+    { id: 'other-ground' },
+    { islandId: 'other-island' },
+    { kind: 'island' },
+  ];
+  for (const change of changes) {
+    const input = descriptors();
+    const first = compose(input, null);
+    const changed = descriptors();
+    changed[0] = { ...changed[0]!, ...change };
+    const result = compose(changed, null);
+
+    assert.notEqual(result.ground, first.ground, `changing ${Object.keys(change)[0]} invalidates the cache`);
+    assert.deepEqual(result.ground, { descriptors: changed });
+  }
+});
+
+test('fcd-ground-cache-compares-content-without-serializing: sparse arrays on either side are cache misses', async () => {
+  const compose = await growth();
+  const dense = descriptors();
+  const sparse = descriptors();
+  delete sparse[0];
+
+  const first = compose(dense, null);
+  const withHole = compose(sparse, null);
+  assert.notEqual(withHole.ground, first.ground);
+  assert.deepEqual(withHole.ground, { descriptors: sparse });
+
+  const restored = compose(descriptors(), null);
+  assert.notEqual(restored.ground, withHole.ground);
+  assert.deepEqual(restored.ground, { descriptors: dense });
 });
 
 test('fcd-ground-cache-short-circuits-on-first-change: the first ground-visible change replaces the cached ground input', async () => {

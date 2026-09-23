@@ -20,8 +20,8 @@ type Growth = {
   readonly visiblePathwayProgressById: ReadonlyMap<string, { readonly drawn: number; readonly fromEnd: boolean }>;
 };
 
-let cachedDescriptors: readonly GroundVisibleDescriptor[] | undefined;
-let cachedGround: object | undefined;
+// The payload and its comparison input are one cache entry: they can never be initialized apart.
+let cachedGround: { readonly descriptors: readonly GroundVisibleDescriptor[] } | undefined;
 
 function sameGroundContent(
   left: readonly GroundVisibleDescriptor[],
@@ -45,11 +45,10 @@ function sameGroundContent(
 }
 
 function groundFor(descriptors: readonly GroundVisibleDescriptor[]): object {
-  if (cachedDescriptors !== undefined && cachedGround !== undefined && sameGroundContent(cachedDescriptors, descriptors)) {
+  if (cachedGround !== undefined && sameGroundContent(cachedGround.descriptors, descriptors)) {
     return cachedGround;
   }
 
-  cachedDescriptors = descriptors;
   cachedGround = { descriptors };
   return cachedGround;
 }
