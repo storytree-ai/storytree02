@@ -371,10 +371,13 @@ export function packWorld<S extends LayoutStory>(
   const legacy = opts?.spacing?.legacy;
   // ADR-0598 D2 — the nameplate's own room, in ground units, as the CALLER measured it. Absent ⇒ 0,
   // which is the pre-ADR-0598 map; `scale` is the owner's scale-back dial over the same arm.
-  // ⚠ THE LEGACY CONTROL ARM TAKES NO CLEARANCE EITHER. It stands the map as it was before
-  // ADR-0521, and a control silently given a clearance ADR-0521's map never had would be comparing
-  // the ladder against something that has never shipped.
-  const chromeScale = legacy ? 0 : (opts?.chrome?.scale ?? 1);
+  // ⚠ THE LEGACY CONTROL ARM TAKES NO CLEARANCE EITHER — it stands the map as it was before
+  // ADR-0521, and a control silently given room that map never had would be comparing the ladder
+  // against something that has never shipped. That refusal lives in the two `legacy ?` branches
+  // below and NOWHERE ELSE, deliberately: it was written twice at first (here as well, zeroing the
+  // scale), and fault-seeding showed the pair made each other unwitnessed — removing either copy
+  // left the other enforcing it, so no test could tell a working guard from a broken one.
+  const chromeScale = opts?.chrome?.scale ?? 1;
   const rowBand = (opts?.chrome?.rowBand ?? 0) * chromeScale;
   const plateHalfWidth = (id: string): number =>
     (opts?.chrome?.plateHalfWidth.get(id) ?? 0) * chromeScale;
