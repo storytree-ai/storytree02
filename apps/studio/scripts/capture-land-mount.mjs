@@ -115,6 +115,13 @@ async function arm(page, { name, query, note }) {
       flora: n('.garden-flora'),
       nameplates: n('.world-plate-bg'),
       groundLayers: n('.relaxed-land, .hex-coastland'),
+      // ⚠ EDGE IDENTITY, COUNTED WHERE IT IS REAL. jsdom routes no trails, so the gate-side suite
+      // can only assert PLACEMENT; this is the arm where the edges exist. The mount suppresses the
+      // path STROKES with `opacity: 0`, so every one of these must survive — ADR-0380 D6 fence 1
+      // keeps the edge's identity and its hit surface in the DOM even when the canvas draws the
+      // visible path.
+      edgeIds: n('[data-edges]'),
+      trailNodes: n('.trail-net *'),
       canvases: document.querySelectorAll('[data-testid="land-mount"] canvas').length,
     };
   });
@@ -132,6 +139,29 @@ const ARMS = [
   },
 ];
 
+/** ⚠ THE ARMS MUST AGREE ON EVERY COUNT. The mount hides strokes with `opacity`, so it may change
+ *  no element and lose no identity; a count that moved means it took something from the map. This
+ *  is checked HERE rather than only reported, because a table of numbers a human is expected to
+ *  compare by eye is a check nobody runs. */
+function assertArmsAgree(results) {
+  const [control, ...rest] = results;
+  const problems = [];
+  for (const arm of rest) {
+    for (const [key, value] of Object.entries(control.counts)) {
+      if (key === 'canvases') continue; // the control has no canvas, by definition
+      if (arm.counts[key] !== value) {
+        problems.push(`${arm.name}: ${key} ${value} -> ${arm.counts[key]}`);
+      }
+    }
+  }
+  if (problems.length > 0) {
+    throw new Error(
+      `the mount changed what the SVG layer holds, which it must not:\n  ${problems.join('\n  ')}`,
+    );
+  }
+  console.log('\narms agree on every SVG count — the mount took nothing from the map.');
+}
+
 const stamp = await assertServerIsThisTree();
 console.log(`server proved: ${stamp.served} @ ${stamp.branch} ${String(stamp.head).slice(0, 8)} (store ${stamp.store})`);
 mkdirSync(outDir, { recursive: true });
@@ -145,6 +175,7 @@ await page.waitForTimeout(3000);
 const results = [];
 for (const a of ARMS) results.push(await arm(page, a));
 await browser.close();
+assertArmsAgree(results);
 
 writeFileSync(
   path.join(outDir, 'measurements.json'),

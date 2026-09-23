@@ -16,7 +16,7 @@ import { underlayComposition } from './ForestWorldCanvas.js';
 const REGISTERED = { zoom: 0.6528, target: { x: 120, z: -400 } };
 
 test('standalone: the canvas keeps everything it draws, and its own camera controls', () => {
-  const c = underlayComposition(undefined);
+  const c = underlayComposition(undefined, true);
   assert.equal(c.backdrop, true);
   assert.equal(c.props, true);
   assert.equal(c.trails, true);
@@ -50,14 +50,32 @@ test('registered: it draws a TRANSPARENT backdrop, so the host keeps its own', (
   assert.equal(c.canvasProps.gl?.alpha, true);
 });
 
-test('registered: it draws no mark the host already draws', () => {
-  // Trails, caves and wisps all exist in the host's own layer above. Drawing them here is a SECOND
-  // drawing of one mark, and each would be a claim about the work made by a surface that decides
-  // nothing. What is left is the land.
+test('standalone: `showTrails` keeps its old meaning — hidden unless a page opts in', () => {
+  // ADR-0169 §3. It is the ONLY place this prop is read, which is what makes `compose.trails` the
+  // one gate rather than one of two conditions a reader has to find.
+  assert.equal(underlayComposition(undefined).trails, false);
+  assert.equal(underlayComposition(undefined, false).trails, false);
+  assert.equal(underlayComposition(undefined, true).trails, true);
+});
+
+test('registered: it draws no mark the host still draws itself', () => {
+  // Caves and wisps exist in the host's own layer above, so drawing them here is a SECOND drawing
+  // of one mark — a claim about the work made by a surface that decides nothing.
   const c = underlayComposition(REGISTERED);
-  assert.equal(c.trails, false);
   assert.equal(c.caves, false);
   assert.equal(c.wisps, false);
+});
+
+test('registered: THE 3D LAYER OWNS THE PATHWAYS — a product-state rule, not a debug prop', () => {
+  // `pathways-keep-selection-focus-and-accessible-edge-identity`. Under a mount the 3D layer is the
+  // one that can draw a pathway ON the ground it runs over, so mounted ⇒ it draws them. Derived
+  // from the mount itself: there is no field to pass and nothing for a caller to get wrong.
+  assert.equal(underlayComposition(REGISTERED).trails, true);
+  // ⚠ AND `showTrails` CANNOT TURN IT OFF. A host's answer is not a debug choice, and a host that
+  // could accidentally pass `false` would get its own suppressed strokes AND no 3D paths — a map
+  // with no dependency network at all, which is strictly worse than either arm.
+  assert.equal(underlayComposition(REGISTERED, false).trails, true);
+  assert.equal(underlayComposition(REGISTERED, true).trails, true);
 });
 
 test('registered: the props stay OFF unless the host asks, and asks explicitly', () => {

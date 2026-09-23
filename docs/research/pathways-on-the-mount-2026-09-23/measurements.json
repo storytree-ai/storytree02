@@ -1,0 +1,69 @@
+{
+  "takenAt": "2026-09-23T05:33:44.887Z",
+  "served": {
+    "served": "/home/mickh/code/Storytree/.claude/worktrees/laneF2",
+    "branch": "claude/lane-f-pathways-on-the-mount",
+    "head": "05f1af8863859513f2030279e1a3200b4dfea571",
+    "store": "pg"
+  },
+  "viewport": {
+    "width": 2560,
+    "height": 1600
+  },
+  "arms": [
+    {
+      "name": "1-control-map-as-it-ships",
+      "note": "the working map, no flag",
+      "query": "",
+      "file": "1-control-map-as-it-ships.png",
+      "counts": {
+        "parcels": 212,
+        "caves": 0,
+        "trailFills": 114,
+        "crowns": 0,
+        "flora": 0,
+        "nameplates": 36,
+        "groundLayers": 2,
+        "edgeIds": 342,
+        "trailNodes": 537,
+        "canvases": 0
+      }
+    },
+    {
+      "name": "2-land-under-the-map",
+      "note": "the 3D ground under the SVG layer",
+      "query": "?landMount=1",
+      "file": "2-land-under-the-map.png",
+      "counts": {
+        "parcels": 212,
+        "caves": 0,
+        "trailFills": 114,
+        "crowns": 0,
+        "flora": 0,
+        "nameplates": 36,
+        "groundLayers": 2,
+        "edgeIds": 342,
+        "trailNodes": 537,
+        "canvases": 1
+      }
+    },
+    {
+      "name": "3-land-and-props-under-the-map",
+      "note": "the staging arm — land + kit props, so the doubled canopy is visible",
+      "query": "?landMount=1&landMountProps=1",
+      "file": "3-land-and-props-under-the-map.png",
+      "counts": {
+        "parcels": 212,
+        "caves": 0,
+        "trailFills": 114,
+        "crowns": 0,
+        "flora": 0,
+        "nameplates": 36,
+        "groundLayers": 2,
+        "edgeIds": 342,
+        "trailNodes": 537,
+        "canvases": 1
+      }
+    }
+  ]
+}

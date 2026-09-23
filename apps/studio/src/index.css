@@ -1624,6 +1624,27 @@ a.stat:hover {
   opacity: 0;
 }
 
+/* ⚠⚠ THE HOST'S HALF OF THE PATHWAY RULE — the other half is `underlayComposition`'s `trails: true`
+   under a host, and the two are ONE decision that must land together.
+   `pathways-keep-selection-focus-and-accessible-edge-identity`: under the mount the 3D layer draws
+   the pathways, because it is the layer that can draw a path ON the ground it runs over — routed,
+   docked, following the relief. Leaving these strokes visible as well is the DOUBLE-DRAWING that
+   row exists to remove: two path networks for one dependency graph, one flat and one on the land.
+   ⚠ `opacity: 0` AGAIN, AND FOR THE SAME LOAD-BEARING REASON AS THE GROUND. These elements carry
+   the edge's IDENTITY in the DOM — `data-id`, `data-edges`, `data-usage`, `data-spur`, stamped by
+   `SceneView`'s trail branch — and ADR-0380 D6 fence 1 keeps edge interaction and reachability in
+   the DOM/SVG layer rather than trading it for a prettier picture. An invisible element is still
+   hit-testable and still readable by `document.elementFromPoint` and by any future keyboard or
+   screen-reader affordance; `display: none` would delete all of that to save nothing.
+   ⚠ BOTH PASSES, because both draw a visible stroke: `trails-layer` (`.trail-net`, the network) and
+   `trail-edges` (`.trail-edges`, the click-revealed one-hop lit lane). Suppressing only the first
+   would leave the lit lane floating over the 3D paths on every selection — the bug that reads as
+   "the map drew a road nobody asked for". */
+.world-pan-layer.has-land-mount .trail-net,
+.world-pan-layer.has-land-mount .trail-edges {
+  opacity: 0;
+}
+
 /* The generous, invisible per-story hit rect (SceneView hitsLayerToBack): covers a story's crown +
    island + nameplate so node-click stays reliable at the zoomed-out contain fit — the pointer cursor
    advertises the whole region as selectable. */
