@@ -79,7 +79,9 @@ import {
   type SpacingTuning,
 } from '@storytree/forest-layout';
 import { readLandView } from '../lib/landView.js';
+import { readLandMount, readLandMountProps } from '../lib/landViewMount.js';
 import { LandView } from './LandView.js';
+import { LandViewMount } from './LandViewMount.js';
 import { readSceneExport, sceneExportBridge } from '../lib/sceneExport.js';
 import {
   WorldLegend,
@@ -2488,6 +2490,16 @@ export function TreeView({
   // scene it is handed has to be un-projected first.
   const landView = useMemo(() => readLandView(search), [search]);
 
+  // `?landMount=1` — THE LAND UNDER THE MAP (`the-land-sits-under-the-working-map`), which is the
+  // OTHER half of route C and a different claim from the view above: not a second panel beside the
+  // map but the 3D ground beneath this very surface, registered to it to the pixel. The canvas is
+  // mounted as the first child of `.world-pan-layer` below, BEFORE the `<svg>` — so it inherits the
+  // same compositor pan transform and paints underneath every mark the map draws. Without the flag
+  // the branch is absent and the route is byte-for-byte the one that shipped.
+  // `lib/landViewMount.ts` carries why it is ground-only and what it does not deliver.
+  const landMount = useMemo(() => readLandMount(search), [search]);
+  const landMountProps = useMemo(() => readLandMountProps(search), [search]);
+
   // `?sceneExport=1` — the SCENE-EXPORT BRIDGE (ADR-0521's ladder instrument). Behind the flag only,
   // the built scene graph and the layout's own bookkeeping are parked on `window` for a driver to
   // read, so the 3D comparison page renders the REAL forest as this map lays it out rather than a
@@ -3186,7 +3198,7 @@ export function TreeView({
               `<g>` and reset this wrapper in one commit. Ordinary drag folding remains the existing
               useLayoutEffect keyed on `cam`. */}
           <div
-            className="world-pan-layer"
+            className={`world-pan-layer${landMount ? ' has-land-mount' : ''}`}
             ref={panLayerRef}
             style={{
               transform: act2CompositorTransform,
@@ -3194,6 +3206,13 @@ export function TreeView({
               willChange: act2CompositorPromoted ? 'transform' : undefined,
             }}
           >
+          {/* ⚠ FIRST CHILD, BEFORE THE `<svg>` — that ordering IS the z-order settlement. Nothing in
+              this stack sets a `z-index`, so paint order is DOM order and every mark the map draws
+              (nameplates, hit targets, trails, crowns, flora, signposts, all five wisp families,
+              the selection ring) is above the land unconditionally. Inside `.world-pan-layer` so it
+              inherits the drag transform (ADR-0272 D2) and stays registered through a gesture with
+              neither layer re-rasterising. */}
+          {landMount && <LandViewMount scene={scene} camera={presentedCam} drawProps={landMountProps} />}
           <svg
             ref={svgRef}
             className={`world-scene lane-motion-${selectionMotion}${

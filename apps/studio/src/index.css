@@ -1553,6 +1553,55 @@ a.stat:hover {
   height: 100%; /* fill the viewport; the camera handles framing/centring */
 }
 
+/* ?landMount=1 (the-land-sits-under-the-working-map, ADR-0530 route C): THE 3D LAND, UNDER THE MAP.
+   A sibling of `.world-scene` inside `.world-pan-layer`, placed BEFORE it — so it inherits the same
+   compositor pan transform (ADR-0272 D2: both layers move together, neither re-rasterises) and
+   paints UNDERNEATH it.
+   ⚠ NO `z-index`, ON PURPOSE. Nothing in this region sets one, so stacking here is pure DOM order —
+   which is what makes "every SVG mark is above the land" a structural fact rather than a number two
+   rules could disagree about. Adding a z-index anywhere in this stack would take that away.
+   ⚠ `pointer-events: none` IS A FENCE (ADR-0380 D6 fence 3). The app owns picking, focus and the
+   keyboard camera; this layer draws and decides nothing, so it must never intercept a gesture —
+   `.world-viewport`'s handlers and the `elementFromPoint` hit-test both have to reach straight
+   through it. */
+.land-mount {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* ⚠⚠ THE SVG'S OWN GROUND GOES SEE-THROUGH, AND `opacity: 0` IS THE LOAD-BEARING CHOICE — not
+   `display: none` and not `visibility: hidden`. Both of those would remove the element from
+   hit-testing, and `.relaxed-tile` / `.hex-tile` ARE click targets (they carry `cursor: pointer`,
+   and the coordinate fallback walks up from `document.elementFromPoint`). An invisible element still
+   takes a pointer, so picking survives the mount unchanged — which is end-state item 3's first
+   entry.
+   ⚠⚠ IT TARGETS THE TWO LAYER WRAPPERS, AND THOSE TWO ONLY — `coast-layer` (`.hex-coastland`, the
+   sandy shore) and `ground-mesh` (`.relaxed-land`, the status-tinted island land). Both names are
+   `SceneView`'s own class for the scene kind AND the class the legacy inline path writes, so one
+   rule covers both render paths rather than agreeing with one of them today.
+   ⚠ THE PER-ISLAND GROUPS ARE DELIBERATELY NOT LISTED. An earlier cut of this rule named
+   `.coast-fill-group` / `.relaxed-tile` / `.hex-tile`, which are real classes and the WRONG grain:
+   they are the per-island groups INSIDE these layers, so the rule suppressed nothing the layers do
+   not already contain and would have read as working while depending on a second selector staying
+   in step. Hiding the layer is what the scene's own structure offers.
+   ⚠ AND `.hex-coast` (the `empties-layer`, the off-island board hexes) IS NOT SUPPRESSED. Those are
+   the board, not island land; the canvas draws no land there and is transparent, so they stay
+   visible exactly as they were.
+   ⚠⚠ THE LEGEND IS UNAFFECTED BY CONSTRUCTION — the answer to the no-drift question rather than a
+   mitigation of it, and it rests on two facts that were checked rather than assumed. First,
+   `WorldLegend` draws NO ground swatch at all: its whole vocabulary is `story-tree st-*`,
+   `garden-flora st-*` and the four wisp families, so the mount moves only a colour the legend never
+   described. Second, `buildScene` puts the parcel FLORA marks in the flora layer and only the
+   parcel CELLS in the ground layer (`scene.ts`'s parcel builder returns the two separately), so
+   hiding the ground layer cannot take a `garden-flora` mark with it. Everything the legend claims
+   to describe still wears the map's own classes in the SVG layer, so the legend still IS that
+   palette. (The ground tint's own three copies stay pinned by `pnpm check:palette-transcription`.) */
+.world-pan-layer.has-land-mount .hex-coastland,
+.world-pan-layer.has-land-mount .relaxed-land {
+  opacity: 0;
+}
+
 /* The generous, invisible per-story hit rect (SceneView hitsLayerToBack): covers a story's crown +
    island + nameplate so node-click stays reliable at the zoomed-out contain fit — the pointer cursor
    advertises the whole region as selectable. */

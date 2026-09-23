@@ -1229,6 +1229,109 @@ export interface ForestWorldCanvasProps {
    * composition would change what every comparison page in `harness/` measures.
    */
   viewport?: FramingViewport;
+  /**
+   * REGISTERED-UNDERLAY MODE — present ⇒ this canvas is the LAND BENEATH A HOST'S OWN
+   * INTERACTIVE LAYER, and the host owns the camera.
+   *
+   * ⚠⚠ IT IS NOT A SECOND FRAMING RULE, IT IS THE ABSENCE OF ONE. `viewport` and the fit both
+   * DECIDE where the world sits; this prop says the decision was already made upstream, by the
+   * surface whose labels have to land on top of this ground to the pixel. So in this mode the
+   * canvas stops steering itself entirely: no `MapControls` (the host's own pan/zoom is the only
+   * gesture there is — ADR-0380 D6 fence 3, "a renderer draws; it decides nothing"), no fit, and
+   * no re-framing on resize.
+   *
+   * ⚠ THE NUMBERS COME FROM `registrationCamera`, NEVER FROM HERE. The host solves its own
+   * projection against this one and hands over the answer; this canvas applies it. Anything that
+   * recomputed a zoom or a target down here would be a second opinion about where an island is,
+   * and two opinions is exactly the drift the labels cannot survive.
+   *
+   * ⚠ AND THE BACKDROP GOES TRANSPARENT IN THIS MODE, which preserves the host's own backdrop
+   * rather than replacing it. Standalone, this canvas paints `#101418` behind the world; under a
+   * host, that would overpaint the map's own sea and turn a delivery change into a look change.
+   */
+  registered?: RegisteredUnderlay;
+}
+
+/** What a host hands over when it owns the camera — {@link registrationCamera}'s answer, plus the
+ *  one composition choice a host still has. */
+export interface RegisteredUnderlay {
+  /** Delivered CSS px per world unit — the host's own scale, one number for the whole frame. */
+  readonly zoom: number;
+  /** The ground point at the centre of the frame, in this canvas's own ground coordinates. */
+  readonly target: { readonly x: number; readonly z: number };
+  /**
+   * Draw the kit props as well as the ground. **Default false, and the default is the decision.**
+   *
+   * ⚠ A HOST THAT ALREADY DRAWS ITS OWN CANOPY MUST NOT GET A SECOND ONE. The studio's SVG layer
+   * draws a crown per story and a flora bed per capability, and those are the marks its legend
+   * describes and its status vocabulary is read from. Drawing the 3D kit underneath them yields
+   * two canopies for one forest; drawing the 3D kit INSTEAD would move a status signal onto a
+   * channel whose per-prop status-carrying question is explicitly still open (ADR-0530 D3). So the
+   * ground mounts first and the props wait for that answer — which is ADR-0530 D6 staging, stated
+   * rather than smuggled.
+   */
+  readonly props?: boolean;
+}
+
+/** WHAT REGISTERED MODE CHANGES — every one of the canvas's delivery decisions, as one object. */
+export interface UnderlayComposition {
+  /** Extra `<Canvas>` props. `frameloop: 'demand'` + a transparent drawing buffer under a host. */
+  readonly canvasProps: { readonly frameloop?: 'demand'; readonly gl?: { readonly alpha: boolean } };
+  /** Paint this canvas's own dark board behind the world. */
+  readonly backdrop: boolean;
+  /** Draw the kit props. */
+  readonly props: boolean;
+  /** Draw the trail strips. */
+  readonly trails: boolean;
+  /** Draw the cave arches. */
+  readonly caves: boolean;
+  /** Draw the wisp sprites. */
+  readonly wisps: boolean;
+  /** Mount `MapControls` — i.e. let THIS canvas own pan and zoom. */
+  readonly controls: boolean;
+}
+
+/**
+ * THE CANVAS'S DELIVERY DECISIONS, MADE ONCE — standalone, or as a host's underlay.
+ *
+ * ⚠ IT IS A FUNCTION RATHER THAN FIVE TERNARIES IN THE JSX because these are not five independent
+ * switches, they are one decision with six consequences, and the JSX is the one place in this file
+ * a headless test cannot reach (a `<Canvas>` needs a WebGL context). Naming it makes the whole
+ * composition provable without a GPU, which is what `ForestWorldCanvas.underlay.test.ts` does.
+ *
+ * ⚠ `frameloop: 'demand'` IS ALSO THE REDUCED-MOTION ANSWER, and it is a real answer rather than a
+ * convenient one. Nothing on this canvas animates — no `useFrame`, no clock, no asset-owned
+ * timeline (ADR-0380 D6 fence 5) — so under a host it redraws only when its camera or its content
+ * moved. A surface with no motion has none to reduce, and the honest implementation of that is a
+ * render loop that does not run rather than a media query that turns one off. Standalone the canvas
+ * keeps R3F's default loop, because `MapControls` drives its own frames there.
+ *
+ * ⚠ AND EVERY `false` BELOW IS A MARK THE HOST ALREADY DRAWS. Trails, caves and wisps all exist in
+ * the host's own layer above (`forest-world`'s `buildScene` emits them), so drawing them here would
+ * be a SECOND drawing of one mark — two canopies, two wisps, two trail networks. The props are the
+ * one entry a host may ask for, and only to stage a picture.
+ */
+export function underlayComposition(registered: RegisteredUnderlay | undefined): UnderlayComposition {
+  if (!registered) {
+    return {
+      canvasProps: {},
+      backdrop: true,
+      props: true,
+      trails: true,
+      caves: true,
+      wisps: true,
+      controls: true,
+    };
+  }
+  return {
+    canvasProps: { frameloop: 'demand', gl: { alpha: true } },
+    backdrop: false,
+    props: registered.props === true,
+    trails: false,
+    caves: false,
+    wisps: false,
+    controls: false,
+  };
 }
 
 /** Apply the framing to the orthographic camera — and PRESERVE THE VIEWER'S OWN ZOOM across a
@@ -1253,6 +1356,46 @@ function FitOrthographicFraming({ halfHeight }: { halfHeight: number }) {
     appliedFit.current = fit;
     camera.updateProjectionMatrix();
   }, [camera, halfHeight, width, height]);
+  return null;
+}
+
+/**
+ * APPLY THE HOST'S CAMERA — {@link FitOrthographicFraming}'s opposite number, and the whole of
+ * registered-underlay mode's steering.
+ *
+ * ⚠ IT SETS THE CAMERA AND DERIVES NOTHING. `zoom` and `target` arrive solved from
+ * `registrationCamera`; the only thing computed here is the EYE OFFSET, and that is taken from the
+ * framing the standalone canvas would have used rather than written down again — so the view
+ * DIRECTION (and with it the 50° elevation the registration condition is about) is provably the
+ * same one this canvas has always looked from, and the clip range that framing derived still
+ * brackets the world. Distance does not affect an orthographic camera's delivered scale, so
+ * translating the eye with the target is free.
+ *
+ * ⚠ `invalidate()` RATHER THAN A RENDER LOOP. Under a host this canvas runs `frameloop="demand"`:
+ * nothing on it animates, and a map that spends a GPU frame every 16 ms redrawing an identical
+ * still is the shape of the lag that already cost this map a feature (the dependency
+ * hover-highlight, removed July 2026). Demand-driven also IS the reduced-motion answer here — a
+ * surface that only ever redraws when its camera or its content moved has no motion to reduce.
+ */
+function RegisteredCamera({
+  zoom,
+  target,
+  eye,
+}: {
+  zoom: number;
+  target: { readonly x: number; readonly z: number };
+  eye: readonly [number, number, number];
+}) {
+  const camera = useThree((s) => s.camera);
+  const invalidate = useThree((s) => s.invalidate);
+  useLayoutEffect(() => {
+    if (!(camera instanceof OrthographicCamera)) return;
+    camera.zoom = zoom;
+    camera.position.set(target.x + eye[0], eye[1], target.z + eye[2]);
+    camera.lookAt(target.x, 0, target.z);
+    camera.updateProjectionMatrix();
+    invalidate();
+  }, [camera, invalidate, zoom, target.x, target.z, eye]);
   return null;
 }
 
@@ -1315,7 +1458,7 @@ function CalibratedLights() {
  * 2.5D isometric per ADR-0380 D6 fence 4). Client-only
  * (`ssr:false` posture — the site lazy-loads this island after the inflection).
  */
-export function ForestWorldCanvas({ descriptors, showTrails = false, viewport }: ForestWorldCanvasProps) {
+export function ForestWorldCanvas({ descriptors, showTrails = false, viewport, registered }: ForestWorldCanvasProps) {
   // The relaxed-mesh parcels — the ONE ground substrate this canvas draws. A second, classic
   // extruded-hex ground component used to be mounted unconditionally beside this one, filtered
   // off the descriptor stream by its own retired mesh family; both the component and the family
@@ -1357,6 +1500,10 @@ export function ForestWorldCanvas({ descriptors, showTrails = false, viewport }:
   // cannot end up framed by one rule and anchored by another.
   const instances = descriptors.filter((d): d is InstanceDescriptor => d.kind !== 'skipped');
   const frame = viewport ? restingWorldFraming(instances, viewport) : frameWorld(instances);
+  // ⚠ ONE DECISION, SIX CONSEQUENCES — see {@link underlayComposition}. Reading them from one
+  // object is what stops a surface ending up half-registered: a canvas with the host's camera but
+  // its own `MapControls`, or a transparent backdrop but a second canopy.
+  const compose = underlayComposition(registered);
   return (
     /* ⚠ `orthographic` is the fence (ADR-0380 D6 fence 4), and `fov` is GONE rather than merely
        unused: R3F reads the presence of `fov` as a request for a PerspectiveCamera, so leaving it
@@ -1374,27 +1521,60 @@ export function ForestWorldCanvas({ descriptors, showTrails = false, viewport }:
     <Canvas
       orthographic
       {...EXACT_COLOUR_CANVAS_PROPS}
+      {...compose.canvasProps}
       camera={{ position: frame.position, near: frame.near, far: frame.far }}
     >
-      <color attach="background" args={['#101418']} />
+      {/* ⚠ THE BACKDROP IS THE HOST'S IN REGISTERED MODE. Standalone this paints the dark board
+          behind the world; under a host the host has already painted its own (the studio's sea
+          gradient), and overpainting it would make a mount a look change. */}
+      {compose.backdrop && <color attach="background" args={['#101418']} />}
       <CalibratedLights />
       <CellGround ground={ground} />
-      <KitProps placements={ground.placements} />
-      {trails.map((t, i) => (
-        <TrailStrip key={i} strip={t} />
-      ))}
-      {caves.map((c, i) => (
-        <CaveArch key={i} cave={c} />
-      ))}
-      {wisps.map((w, i) => (
-        <WispSprite key={i} wisp={w} />
-      ))}
-      <FitOrthographicFraming halfHeight={frame.halfHeight} />
-      {/* ⚠ `enableRotate={false}` is the second half of fence 4 — an orthographic camera the
-          viewer can still swing around is still a free camera, and the banded land treatment this
-          arc is carrying in is authored against a FIXED light direction that would slide across
-          static geometry under one. Pan (left drag) and zoom (wheel / pinch) are untouched. */}
-      <MapControls makeDefault target={frame.target} enableRotate={false} />
+      {/* ⚠ REGISTERED MODE DRAWS THE LAND AND NOTHING THAT MEANS ANYTHING. The host's own layer
+          already carries every mark that makes a claim about the work — the crowns, the flora, the
+          signposts, all five wisp families, the nameplates, the trails and the hit targets — and
+          ADR-0380 D6 fence 3 keeps those there. So the props are opt-in (see
+          {@link RegisteredUnderlay.props}) and the trails, caves and wisp sprites are off: each
+          would be a SECOND drawing of a mark the host is already responsible for. */}
+      {compose.props && <KitProps placements={ground.placements} />}
+      {compose.trails &&
+        trails.map((t, i) => (
+          <TrailStrip key={i} strip={t} />
+        ))}
+      {compose.caves &&
+        caves.map((c, i) => (
+          <CaveArch key={i} cave={c} />
+        ))}
+      {compose.wisps &&
+        wisps.map((w, i) => (
+          <WispSprite key={i} wisp={w} />
+        ))}
+      {registered && (
+        <RegisteredCamera
+          zoom={registered.zoom}
+          target={registered.target}
+          eye={[
+            frame.position[0] - frame.target[0],
+            frame.position[1] - frame.target[1],
+            frame.position[2] - frame.target[2],
+          ]}
+        />
+      )}
+      {compose.controls && (
+        <>
+          <FitOrthographicFraming halfHeight={frame.halfHeight} />
+          {/* ⚠ `enableRotate={false}` is the second half of fence 4 — an orthographic camera the
+              viewer can still swing around is still a free camera, and the banded land treatment
+              this arc is carrying in is authored against a FIXED light direction that would slide
+              across static geometry under one. Pan (left drag) and zoom (wheel / pinch) are
+              untouched.
+              ⚠ AND IT IS ABSENT ENTIRELY UNDER A HOST — not merely further restricted. A host that
+              owns pan and zoom must be the only thing that owns them; `MapControls` binds its own
+              pointer and wheel listeners to the canvas, so leaving it mounted would give the map
+              two cameras fighting over one gesture. */}
+          <MapControls makeDefault target={frame.target} enableRotate={false} />
+        </>
+      )}
     </Canvas>
   );
 }

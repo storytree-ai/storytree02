@@ -6,7 +6,7 @@
       "apps/studio/src/components/LandView*.tsx": "forest-canvas-delivery",
       "apps/studio/src/lib/canvasRegistration*.ts": "forest-canvas-delivery",
       "apps/studio/src/lib/landView*.ts": "forest-canvas-delivery",
-      "packages/forest-world-r3f/src/ForestWorldCanvas.tsx": "forest-canvas-delivery",
+      "packages/forest-world-r3f/src/ForestWorldCanvas*": "forest-canvas-delivery",
       "packages/forest-world-r3f/src/ground-dependency.ts": "forest-canvas-delivery"
     }
   }
