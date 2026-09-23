@@ -608,7 +608,10 @@ export function kitMeshes(kit: LoadedKit, placements: readonly KitPlacement[]): 
       throw new Error(`kit-mesh: this dressing names the assembly ${placement.assembly}, which the kit does not hold`);
     }
     const scale = placementScale(kit, placement);
-    e.set(KIT_ROLE_TILT[placement.role], placement.yaw, 0, 'YXZ');
+    // ⚠ NO ORDER ARGUMENT. `Euler.set`'s fourth parameter defaults to the euler's OWN order, which
+    // `e` was constructed with and nothing changes — restating it here is a literal no reachable
+    // input can distinguish from its absence, i.e. a mutant `check:mutation-diff` cannot kill.
+    e.set(KIT_ROLE_TILT[placement.role], placement.yaw, 0);
     q.setFromEuler(e);
     m.compose(
       new THREE.Vector3(placement.at.x, placement.y, placement.at.z),

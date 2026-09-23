@@ -116,13 +116,21 @@ const TILES_B = [
 const STORY_A = 'atlas';
 const STORY_B = 'beacon';
 
-/** `signed` criteria proven, the rest pending — so a bloom count is not the criteria count, which
- *  is exactly the distinction ADR-0600 turned into two drawn forms rather than one drawn and one
- *  absent. */
-function criteria(prefix: string, total: number, signed: number) {
+/** `signed` criteria proven, then `failing` witnessed failing, and the rest pending — so a bloom
+ *  count is not the criteria count, which is exactly the distinction ADR-0600 turned into three
+ *  drawn forms rather than one drawn and two absent.
+ *
+ *  ⚠ `failing` DEFAULTS TO ZERO AND ONE TEST BELOW FLIPS IT. The live corpus holds no failing
+ *  criterion today, so a fixture that could not produce one would leave the whole `uat-wilt` path
+ *  — the mapper's case, the count, the placement — standing on a value that is permanently zero,
+ *  which is a path nothing proves rather than a path nothing needs. */
+function criteria(prefix: string, total: number, signed: number, failing = 0) {
   return Array.from({ length: total }, (_, i) => ({
     id: `${prefix}-uat-${i}`,
-    state: (i < signed ? 'proven' : 'pending') as 'proven' | 'pending',
+    state: (i < signed ? 'proven' : i < signed + failing ? 'failing' : 'pending') as
+      | 'proven'
+      | 'pending'
+      | 'failing',
   }));
 }
 
@@ -130,7 +138,7 @@ function territory(
   id: string,
   tiles: readonly { q: number; r: number }[],
   caps: readonly string[],
-  uat: { total: number; signed: number },
+  uat: { total: number; signed: number; failing?: number },
   status: SceneStatus = 'healthy',
 ): SceneTerritoryInput {
   const centres = tiles.map((h) => hexCenter(h, TUNED_LATTICE));
@@ -158,7 +166,7 @@ function territory(
     treeTitle: id,
     wisps: [],
     parcels,
-    uatCriteria: criteria(id, uat.total, uat.signed),
+    uatCriteria: criteria(id, uat.total, uat.signed, uat.failing ?? 0),
     plate: { w: 120, h: 33, rx: 7, idY: 14, subY: 27, idText: id, subText: id, title: id },
   };
 }
@@ -182,10 +190,10 @@ const MAPS = new Map<string, Descriptor3D[]>();
 
 /** The two-story map's descriptors — the shipped relaxed-MESH substrate, the one the studio emits. */
 function twoStoryMap(
-  a: { total: number; signed: number } = { total: 6, signed: 4 },
-  b: { total: number; signed: number } = { total: 5, signed: 2 },
+  a: { total: number; signed: number; failing?: number } = { total: 6, signed: 4 },
+  b: { total: number; signed: number; failing?: number } = { total: 5, signed: 2 },
 ): Descriptor3D[] {
-  const key = `${a.total}/${a.signed}|${b.total}/${b.signed}`;
+  const key = `${a.total}/${a.signed}/${a.failing ?? 0}|${b.total}/${b.signed}/${b.failing ?? 0}`;
   const cached = MAPS.get(key);
   if (cached) return cached;
   const drawTiles = [
@@ -393,13 +401,49 @@ test('⚠ criteriaByIsland answers for ONE state at a time, and a bud is never a
   const map = twoStoryMap({ total: 6, signed: 4 }, { total: 5, signed: 2 });
   assert.deepEqual(Object.fromEntries(criteriaByIsland(map, 'uat-bloom')), { [STORY_A]: 4, [STORY_B]: 2 });
   assert.deepEqual(Object.fromEntries(criteriaByIsland(map, 'uat-bud')), { [STORY_A]: 2, [STORY_B]: 3 });
-  // Nothing on this fixture is failing, and an empty answer is the honest one rather than a hole.
+  // Nothing on THIS fixture is failing, and an empty answer is the honest one rather than a hole.
   assert.equal(criteriaByIsland(map, 'uat-wilt').size, 0);
   // ⚠ AND THE OLD NAME STILL MEANS SIGNATURES — the whole reason the states are separate kinds.
   assert.deepEqual(
     Object.fromEntries(signedCriteriaByIsland(map)),
     Object.fromEntries(criteriaByIsland(map, 'uat-bloom')),
   );
+});
+
+test('⚠⚠ A FAILING CRITERION IS DRAWN TOO, on its own island, and is NEVER counted as a signature', () => {
+  groundSanity();
+  // ⚠⚠ THE STATE THE LIVE CORPUS HAS NO INSTANCE OF, and therefore the one a fixture has to
+  // manufacture or leave unproven. Everything about it runs on a permanent zero otherwise: the
+  // mapper's case, the count, the placement, the role. A criterion the owner watched FAIL reading
+  // as one he signed is the worst misreport on this map, and it is reachable the moment the corpus
+  // holds one.
+  const map = twoStoryMap({ total: 6, signed: 2, failing: 3 }, { total: 5, signed: 0, failing: 1 });
+  assert.deepEqual(Object.fromEntries(criteriaByIsland(map, 'uat-bloom')), { [STORY_A]: 2 });
+  assert.deepEqual(Object.fromEntries(criteriaByIsland(map, 'uat-wilt')), { [STORY_A]: 3, [STORY_B]: 1 });
+  assert.deepEqual(Object.fromEntries(criteriaByIsland(map, 'uat-bud')), { [STORY_A]: 1, [STORY_B]: 4 });
+  // ⚠ THE FENCE: four failing criteria, and `signedCriteriaByIsland` still reports only the two
+  // signed ones. Beacon signed nothing, so it appears in NO signature count at all.
+  assert.deepEqual(Object.fromEntries(signedCriteriaByIsland(map)), { [STORY_A]: 2 });
+
+  const placements = dress(map);
+  assert.equal(placements.filter((p) => p.role === 'wilt').length, 4, 'four failing criteria, four nodding flowers');
+  assert.equal(placements.filter((p) => p.role === 'bloom').length, 2);
+  assert.equal(placements.filter((p) => p.role === 'bud').length, 5);
+  assert.equal(placements.filter((p) => isCriterionRole(p.role)).length, 11, 'eleven criteria, eleven flowers');
+
+  // And each island's wilts stand on its own ground — a failing criterion is a per-story claim
+  // exactly as a signature is.
+  const boundsOf = (story: string) => {
+    const xs = map
+      .filter((d) => d.kind === 'cell-ground' && d.island === story)
+      .flatMap((d) => (d.kind === 'skipped' ? [] : (d.points ?? []).map((p) => p.x)));
+    return { min: Math.min(...xs), max: Math.max(...xs) };
+  };
+  const a = boundsOf(STORY_A);
+  const b = boundsOf(STORY_B);
+  const wilts = placements.filter((p) => p.role === 'wilt');
+  assert.equal(wilts.filter((p) => p.at.x >= a.min && p.at.x <= a.max).length, 3);
+  assert.equal(wilts.filter((p) => p.at.x >= b.min && p.at.x <= b.max).length, 1);
 });
 
 test('the map still grows ONE object per capability, on the capability’s own parcel', () => {

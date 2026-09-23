@@ -214,22 +214,31 @@ function dressMap(
   const failing = criteriaByIsland(descriptors, 'uat-wilt');
   const out: KitPlacement[] = [];
 
-  const dress = (group: readonly LayoutCell[], island: string | null): KitPlacement[] =>
+  // ⚠ THE COUNTS ARE PASSED IN RATHER THAN LOOKED UP HERE, and the unattributed call below states
+  // its own three zeros. Reading them off a nullable island id instead would put three
+  // `island === null ? 0 : …` branches on a path no fixture can take — an unattributed cell set
+  // names no capability and places nothing whatever it is handed, so the branches are unkillable
+  // by construction (measured, on this landing).
+  const dress = (
+    group: readonly LayoutCell[],
+    criteria: { blooms: number; buds: number; wilts: number },
+  ): KitPlacement[] =>
     dressIslandFromKit({
       cells: group,
       facts: capabilityFactsFrom(group),
-      // ⚠ A CELL THE SUBSTRATE COULD NOT ATTRIBUTE BELONGS TO NO STORY, so it draws no criterion
-      // of any state — the same fail-closed rule the blooms alone already followed, now stated
-      // once for all three rather than as a literal `0` at the second call site.
-      blooms: island === null ? 0 : (signed.get(island) ?? 0),
-      buds: island === null ? 0 : (unsigned.get(island) ?? 0),
-      wilts: island === null ? 0 : (failing.get(island) ?? 0),
+      ...criteria,
       relief: opts.relief,
       footprint: opts.footprint,
     });
 
   for (const [island, group] of cellsByIsland(cells)) {
-    out.push(...dress(group, island));
+    out.push(
+      ...dress(group, {
+        blooms: signed.get(island) ?? 0,
+        buds: unsigned.get(island) ?? 0,
+        wilts: failing.get(island) ?? 0,
+      }),
+    );
     if (!cover) continue;
     out.push(
       ...dressCover({
@@ -251,9 +260,15 @@ function dressMap(
   // ⚠ CALLED UNCONDITIONALLY, EVEN WHEN THERE IS NOTHING TO DRESS. An `if (unattributed.length)`
   // guard reads as thrift and is a branch no test can kill: dressing an empty cell set names no
   // capability and places no bloom, so it appends nothing and the two paths are indistinguishable.
-  // ⚠ AND NO COVER: a cell the substrate could not attribute belongs to no STORY, so there is no
-  // story status for it to be healthy IN — the same fail-closed rule the criterion markers follow.
-  out.push(...dress(cells.filter((c) => c.island === undefined), null));
+  // ⚠ AND NO COVER, AND NO CRITERION OF ANY STATE: a cell the substrate could not attribute belongs
+  // to no STORY, so there is no story status for it to be healthy IN and no story whose acceptance
+  // work it could report — the same fail-closed rule the signed criteria alone already followed.
+  out.push(
+    ...dress(
+      cells.filter((c) => c.island === undefined),
+      { blooms: 0, buds: 0, wilts: 0 },
+    ),
+  );
 
   return out;
 }

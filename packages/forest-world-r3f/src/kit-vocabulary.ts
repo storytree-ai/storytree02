@@ -1103,23 +1103,21 @@ export function dressIslandFromKit(opts: KitDressingOptions): KitPlacement[] {
   // would be placed from picked-over ground. Nothing about that is visible in a count, which is
   // why it is stated here rather than left to the test.
   //
-  // ⚠ `Array.from` RATHER THAN A COUNTER LOOP. A `for (let i = 0; i < n; i += 1)` carries mutants
-  // that flip `+=` to `-=` and `<` to `>`; neither fails an assertion, both run forever, and
-  // `check:mutation-diff` scores a hang as UNPROVEN rather than as a survivor.
+  // ⚠ ONE FLAT LIST OF ROLES, THEN `forEach`, exactly as the capabilities above are placed. Two
+  // shapes are avoided here on purpose: a `for (let i = 0; i < n; i += 1)` carries mutants that
+  // flip `+=` to `-=` and `<` to `>` — neither fails an assertion, both run forever, and
+  // `check:mutation-diff` scores a hang as UNPROVEN rather than as a survivor — and an
+  // `Array.from({length}, (_, k) => k)` whose value nobody reads carries a mapper mutant no test
+  // can kill, because the mapped value is discarded either way (measured, on this landing).
   const all = cells.filter((c) => c.parcel !== undefined);
-  const criteria: Array<[KitRole, number]> = [
-    ['bloom', Math.max(0, opts.blooms)],
-    ['bud', Math.max(0, opts.buds)],
-    ['wilt', Math.max(0, opts.wilts)],
+  const criteria: KitRole[] = [
+    ...Array.from<unknown, KitRole>({ length: Math.max(0, opts.blooms) }, () => 'bloom'),
+    ...Array.from<unknown, KitRole>({ length: Math.max(0, opts.buds) }, () => 'bud'),
+    ...Array.from<unknown, KitRole>({ length: Math.max(0, opts.wilts) }, () => 'wilt'),
   ];
-  let marker = 0;
-  for (const [role, count] of criteria) {
-    for (const _slot of Array.from({ length: count }, (_unused, k) => k)) {
-      const at = marker;
-      marker += 1;
-      place(role, 'flower', 'story', null, all, seed0 + 7717 + at * 131, (at * 2.399963) % (Math.PI * 2));
-    }
-  }
+  criteria.forEach((role, i) => {
+    place(role, 'flower', 'story', null, all, seed0 + 7717 + i * 131, (i * 2.399963) % (Math.PI * 2));
+  });
 
   return out;
 }

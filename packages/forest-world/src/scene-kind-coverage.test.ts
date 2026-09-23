@@ -544,7 +544,20 @@ test('4b. the 3D mapper (world-to-3d.ts) maps exactly the pinned kinds and skips
   const cases = [...caseKinds(src)].filter((k) => UNION.includes(k)).sort();
   // `tile` REFUSES, `tree` SKIPS on purpose, the rest map to descriptors; `cell`/`cell-wheat`/
   // `trail-fill`/`trail-ghost` are matched as leaf `kind ===` tests rather than `case` labels.
-  assert.deepEqual(cases, ['cave', 'tall-flower-proven', 'tile', 'tree', 'wisp']);
+  //
+  // ⚠ ALL THREE MARKER WRAPPERS ARE HERE SINCE ADR-0600. Until 2026-09-23 only `tall-flower-proven`
+  // was, and the other two fell to the explicit skip — which counted across the live corpus as one
+  // acceptance criterion in three drawn as nothing. This pin is what would catch the mapper losing
+  // one of them again, so it names them individually rather than matching a prefix.
+  assert.deepEqual(cases, [
+    'cave',
+    'tall-flower-failing',
+    'tall-flower-pending',
+    'tall-flower-proven',
+    'tile',
+    'tree',
+    'wisp',
+  ]);
   const leafMapped = ['cell', 'cell-wheat', 'trail-fill', 'trail-ghost'];
   const stripped = stripComments(src);
   for (const k of leafMapped) assert.ok(stripped.includes(`kind === '${k}'`), `world-to-3d maps the leaf kind ${k}`);
