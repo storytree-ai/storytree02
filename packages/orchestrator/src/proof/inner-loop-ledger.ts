@@ -75,8 +75,19 @@ export function foldInnerLoopLedger(
   let latestReopenedAttempt = -1;
   let remainingGrantCount = 0;
   let activeGrant: AnyGrantEvent | undefined;
-  let consecutiveFailures = 0;
   let terminalRun: string | undefined;
+
+  // Completion records may arrive after another run has already started.  The retry ruler is
+  // start-ordered, so derive its failure suffix from the attempts themselves rather than mutating
+  // a counter as completion events arrive.
+  const consecutiveFailures = (): number => {
+    let count = 0;
+    for (let index = attempts.length - 1; index > latestReopenedAttempt; index--) {
+      if (attempts[index]?.signed === true) break;
+      count++;
+    }
+    return count;
+  };
 
   for (const { doc } of docs) {
     if (doc.event === "attempt") {
@@ -86,7 +97,6 @@ export function foldInnerLoopLedger(
         // starting from here (ADR-0563 D5 / ADR-0575 D2).
         latestReopenedAttempt = attemptIndex.get(terminalRun)!;
         terminalRun = undefined;
-        consecutiveFailures = 0;
         remainingGrantCount = 0;
         activeGrant = undefined;
       }
@@ -97,7 +107,6 @@ export function foldInnerLoopLedger(
       if (attemptIndex.has(doc.runId)) throw new Error(`duplicate attempt run: ${doc.runId}`);
       attemptIndex.set(doc.runId, attempts.length);
       attempts.push({ runId: doc.runId, incrementId: doc.incrementId, signed: false });
-      consecutiveFailures++;
       if (remainingGrantCount > 0) {
         remainingGrantCount--;
         if (remainingGrantCount === 0) activeGrant = undefined;
@@ -115,27 +124,24 @@ export function foldInnerLoopLedger(
     }
 
     if (doc.event === "signed-pass") {
-      if (attempts.at(-1)?.runId !== doc.runId) {
-        throw new Error(`signed pass must bind the latest attempt: ${doc.runId}`);
-      }
       signed.add(doc.runId);
       attempts[index] = { ...boundAttempt, signed: true };
-      consecutiveFailures = 0;
       remainingGrantCount = 0;
       activeGrant = undefined;
       continue;
     }
 
     if (doc.event === "grant" || doc.event === "owner-grant") {
-      if (attempts.at(-1)?.runId !== doc.runId) {
+      if (attempts.at(-1)?.runId !== doc.runId || boundAttempt.signed) {
         throw new Error(`grant must bind the latest failed run: ${doc.runId}`);
       }
-      if (doc.event === "grant" && consecutiveFailures < 3) throw new Error("grant is early: the decision point is three failures");
+      const failures = consecutiveFailures();
+      if (doc.event === "grant" && failures < 3) throw new Error("grant is early: the decision point is three failures");
       if (remainingGrantCount > 0) throw new Error("grant overlaps a live grant");
-      if (doc.event === "grant" && consecutiveFailures >= ATTEMPT_CEILING) {
+      if (doc.event === "grant" && failures >= ATTEMPT_CEILING) {
         throw new Error(`grant exceeds the owner ceiling of ${ATTEMPT_CEILING} failures`);
       }
-      if (doc.event === "owner-grant" && consecutiveFailures < ATTEMPT_CEILING) {
+      if (doc.event === "owner-grant" && failures < ATTEMPT_CEILING) {
         throw new Error(`owner grant is early: the owner ceiling is ${ATTEMPT_CEILING} failures`);
       }
       remainingGrantCount = doc.attempts;
@@ -154,6 +160,7 @@ export function foldInnerLoopLedger(
   }
 
   const policyAttempts = attempts.slice(latestReopenedAttempt + 1);
+  const currentConsecutiveFailures = consecutiveFailures();
   const policyHistory = policyAttempts.map(({ incrementId, signed: attemptSigned }) => ({
     incrementId,
     signed: attemptSigned,
@@ -175,7 +182,7 @@ export function foldInnerLoopLedger(
   const policy: AttemptDecision = activeGrant?.event === "owner-grant"
     ? {
         ...basePolicy,
-        consecutiveFailures,
+        consecutiveFailures: currentConsecutiveFailures,
         remainingBeforeDecision: 0,
         reason: `${basePolicy.reason} — settled authority ${activeGrant.authorityQuestionRef}, ${activeGrant.authorityDecisionRef}`,
       }

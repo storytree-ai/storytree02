@@ -7,7 +7,7 @@ outcome: "The Mintbox supervisor owns detached handles and turns each meaningful
 status: proposed
 proof_mode: integration-test
 depends_on: []
-decisions: [561, 505]
+decisions: [604, 505]
 proof:
   command:
     file: pnpm
@@ -51,6 +51,11 @@ proof:
 
 **Outcome —** The Mintbox supervisor owns detached handles and turns each meaningful programme event
 into at most one fresh compact Astra coordinator launch with bounded digest, recovery, and usage reporting.
+
+> **Current status —** ADR-0604 supersedes ADR-0561 and drops unattended dispatcher delivery; manual
+> lane launch is the current route. This retained legacy component and its walkthrough and contracts
+> document existing proof while `mintbox-dispatcher-retirement` awaits the already-decided code and
+> story retirement. It authorizes no further paid build and does not claim retirement complete.
 
 ## Proof walkthrough first
 

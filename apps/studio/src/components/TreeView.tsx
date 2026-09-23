@@ -3153,6 +3153,7 @@ export function TreeView({
           substrateMode={substrateMode}
           substrateTuning={substrateTuning}
           spriteSheet={spriteSheet}
+          storyStatusFromNameplate={landMount}
           onToggleStatus={toggleStatus}
           onResetHidden={() => setHidden(new Set())}
           onSelectIsland={(id) => selectStory(id, null)}
@@ -4310,6 +4311,7 @@ function SharedIslandsPanel({
   substrateMode,
   substrateTuning,
   spriteSheet,
+  storyStatusFromNameplate = false,
   onToggleStatus,
   onResetHidden,
   onSelectIsland,
@@ -4338,6 +4340,9 @@ function SharedIslandsPanel({
   /** ADR-0230: the active sprite art sheet (or null in vector mode), threaded to the panel's legend
    *  (both the chip bar and the right-flyout drawer) so its icons sprite in sync with the map. */
   spriteSheet: SpriteStyleSheet | null;
+  /** Under `?landMount=1`, the SVG hero tree is suppressed in favour of 3D props; nameplate text
+   *  remains the explicit story-status reading for both legend surfaces. */
+  storyStatusFromNameplate?: boolean;
   onToggleStatus: (st: string) => void;
   onResetHidden: () => void;
   onSelectIsland: (id: string) => void;
@@ -4422,6 +4427,7 @@ function SharedIslandsPanel({
             renderDrawer={false}
             barClassName="legend-bar-panel"
             spriteSheet={spriteSheet}
+            storyStatusFromNameplate={storyStatusFromNameplate}
           />
         </details>
 
@@ -4479,13 +4485,14 @@ function SharedIslandsPanel({
         <div className="panel-flyout" role="dialog" aria-label="panel detail">
           {legendOpen ? (
             <>
-              <div className="panel-flyout-head">{legendRowLabel(legendOpen)}</div>
+              <div className="panel-flyout-head">{legendRowLabel(legendOpen, storyStatusFromNameplate)}</div>
               <surfaces.LegendDrawerBody
                 rowKey={legendOpen}
                 model={model}
                 hidden={hidden}
                 onToggleStatus={onToggleStatus}
                 spriteSheet={spriteSheet}
+                storyStatusFromNameplate={storyStatusFromNameplate}
               />
             </>
           ) : openIsland ? (
