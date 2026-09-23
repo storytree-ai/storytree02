@@ -1,0 +1,23 @@
+{
+  "viewsCompared": 28,
+  "unchangedFlatImages": 8,
+  "errors": [],
+  "flatImageDifferences": {
+    "flat-fit": {
+      "bounds": [
+        854,
+        6,
+        1747,
+        1053
+      ],
+      "channelMaxima": [
+        3,
+        4,
+        6
+      ],
+      "changedPixels": 2686,
+      "forestPixelsIdentical": true
+    }
+  },
+  "snapshotSha256": "44a4278d80fce6aec57b76f54ebefe11b4348b0abd448535b02e1706d5648bb9"
+}
