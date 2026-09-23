@@ -226,7 +226,12 @@ test("a vitest pre-flight listing MORE than was named refuses before ANY package
 
 test("a vitest pre-flight listing FEWER than named refuses, and so does a failed pre-flight", () => {
   assert.equal(preflightRefusal("\n", 0).body, [...PREFLIGHT_HEAD(0), "  would ALSO run: -", "  would NOT run: src/zz.test.ts"].join("\n"));
-  assert.equal(preflightRefusal("src/zz.test.ts\n", 1).body, [...PREFLIGHT_HEAD(1), "  would ALSO run: -", "  would NOT run: -"].join("\n"));
+  const both = testCommand(
+    ["apps/studio/src/zz.test.ts", "apps/studio/src/other.test.ts"],
+    fakeIo(WORLD, { capture: () => ({ status: 0, stdout: "" }) }),
+  );
+  assert.equal(both.body.split("\n")[3], "  would NOT run: src/other.test.ts, src/zz.test.ts");
+  assert.equal(preflightRefusal("src/zz.test.ts\n", 1).body,[...PREFLIGHT_HEAD(1), "  would ALSO run: -", "  would NOT run: -"].join("\n"));
 });
 
 test("an exact pre-flight lets every run go, and the report names each package's exit", () => {
