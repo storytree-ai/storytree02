@@ -7,7 +7,7 @@ outcome: "A fresh Astra coordinator dispatches sustained Terra lane drivers only
 status: proposed
 proof_mode: integration-test
 depends_on: [mintbox-supervisor-events, mintbox-protected-driver-transition]
-decisions: [561, 505]
+decisions: [604, 505]
 proof:
   command:
     file: pnpm
@@ -40,6 +40,11 @@ proof:
 **Outcome —** A fresh Astra coordinator dispatches sustained Terra lane drivers only into safely
 claimed lanes, verifies their model/effort and detached handles, and enforces the three-lane and GPU
 serialisation fences.
+
+> **Current status —** ADR-0604 supersedes ADR-0561 and drops unattended dispatcher delivery; manual
+> lane launch is the current route. This retained legacy component and its walkthrough and contracts
+> document existing proof while `mintbox-dispatcher-retirement` awaits the already-decided code and
+> story retirement. It authorizes no further paid build and does not claim retirement complete.
 
 ## Proof walkthrough first
 
