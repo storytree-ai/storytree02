@@ -410,7 +410,12 @@ test("under skipIsFailure the reserved skip code is a FAIL carrying why, and the
   assert.equal(land.exitCode, GATE_SKIP_EXIT_CODE);
   assert.equal(land.note, REFUSED_SKIP_NOTE);
   assert.equal(gateExitCode(results), 1);
-  assert.match(REFUSED_SKIP_NOTE, /^declared a SKIP \(exit 3\), which a CI run does not accept/);
+  // The whole sentence, because the WHY is the half a reader of a red CI step needs.
+  assert.equal(
+    REFUSED_SKIP_NOTE,
+    "declared a SKIP (exit 3), which a CI run does not accept — CI supplies every input a " +
+      "skip-capable check needs, so a skip there means an input never arrived",
+  );
 });
 
 test("without skipIsFailure the same exit is a SKIP with no refusal note — the local protocol is unchanged", async () => {
