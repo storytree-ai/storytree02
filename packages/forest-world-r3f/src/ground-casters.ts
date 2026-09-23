@@ -68,6 +68,9 @@ import {
  *   deadTree     the same trunk, a sparser crown
  *   bloom        the leaf rosette at the foot (the footprint IS the leaves, 4 units), a thread
  *                of a stem, a small head — the over-wide pool goes with the cylinder
+ *   bud / wilt   the bloom's own profile — they are the same object (ADR-0600), and the wilt's
+ *                LEAN is not in this table: a silhouette is read upright, and the size of that
+ *                approximation is computed in `KIT_ROLE_TILT`
  *   bush / tuft / flowerPatch   a low dome: full width at the foot, rounding to the top
  */
 export const ROLE_SILHOUETTE = {
@@ -85,18 +88,30 @@ export const ROLE_SILHOUETTE = {
     [0.35, 1],
     [1, 0.04],
   ],
-  bloom: [
+  // ⚠ THE THREE CRITERION ROLES SHARE ONE FORM BECAUSE THEY SHARE ONE OBJECT (ADR-0600) — a
+  // function call each rather than one array referenced three times, for the reason `DOME_PROFILE`
+  // is one below: three roles aliasing one literal is three roles a caller could mutate through
+  // any of them.
+  bloom: FLOWER_PROFILE(),
+  bud: FLOWER_PROFILE(),
+  wilt: FLOWER_PROFILE(),
+  bush: DOME_PROFILE(),
+  tuft: DOME_PROFILE(),
+  flowerPatch: DOME_PROFILE(),
+} as const satisfies Readonly<Record<KitRole, SilhouetteProfile>>;
+
+/** The flower's silhouette — the leaf rosette at the foot, a thread of a stem, a small head. The
+ *  three criterion roles are one object at three sizes (ADR-0600), so they cast one form. */
+export function FLOWER_PROFILE(): SilhouetteProfile {
+  return [
     [0, 1],
     [0.12, 1],
     [0.12, 0.06],
     [0.78, 0.06],
     [0.78, 0.28],
     [1, 0.15],
-  ],
-  bush: DOME_PROFILE(),
-  tuft: DOME_PROFILE(),
-  flowerPatch: DOME_PROFILE(),
-} as const satisfies Readonly<Record<KitRole, SilhouetteProfile>>;
+  ];
+}
 
 /** A low dome — the quarter-circle `sqrt(1 − t²)`, sampled at five heights. A function rather
  *  than a shared literal so the three cover roles cannot alias one array a caller could mutate. */

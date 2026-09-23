@@ -757,6 +757,8 @@ test('⚠⚠ ADDING THE COVER CANNOT MOVE A SINGLE THING THAT REPORTS', () => {
     cells: HEALTHY,
     facts: capabilityFactsFrom(HEALTHY),
     blooms: 3,
+    buds: 0,
+    wilts: 0,
     relief: 0,
     footprint: FOOT,
   });
@@ -766,7 +768,7 @@ test('⚠⚠ ADDING THE COVER CANNOT MOVE A SINGLE THING THAT REPORTS', () => {
     // Nothing in the cover pass takes the standing list at all, so this is a structural fact
     // rather than a coincidence — and asserting it end to end is what makes the structure a claim.
     assert.deepEqual(
-      dressIslandFromKit({ cells: HEALTHY, facts: capabilityFactsFrom(HEALTHY), blooms: 3, relief: 0, footprint: FOOT }),
+      dressIslandFromKit({ cells: HEALTHY, facts: capabilityFactsFrom(HEALTHY), blooms: 3, buds: 0, wilts: 0, relief: 0, footprint: FOOT }),
       standing,
     );
   }
@@ -782,6 +784,8 @@ test('⚠ THE DETECTOR DOES NOT REPORT A BUSH AT A PINE’S FOOT — a carpet ca
     cells: HEALTHY,
     facts: capabilityFactsFrom(HEALTHY),
     blooms: 3,
+    buds: 0,
+    wilts: 0,
     relief: 0,
     footprint: FOOT,
   });

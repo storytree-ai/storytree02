@@ -38,10 +38,15 @@ import {
   candidatePoints,
   capabilityFactsFrom,
   clearanceFactor,
+  BUD_MAX_SHARE_OF_BLOOM,
+  BUD_MIN_MULTIPLE_OF_COVER_FLOWER,
   COVER_SCALE,
+  CRITERION_ROLES,
   DRESSING_ROLES,
   FLOWER_PATCH_MAX_SHARE_OF_BLOOM,
+  KIT_ROLE_TILT,
   SCENE_ROLES,
+  isCriterionRole,
   clearsObjectFloor,
   isDressingRole,
   deliveredHeightPx,
@@ -114,12 +119,21 @@ const ALL_HEALTHY = island(Array.from({ length: 6 }, () => 'healthy'));
 
 function dress(
   cells: readonly LayoutCell[],
-  over: { blooms?: number; relief?: number; seed?: number; footprint?: Record<KitRole, number> } = {},
+  over: {
+    blooms?: number;
+    buds?: number;
+    wilts?: number;
+    relief?: number;
+    seed?: number;
+    footprint?: Record<KitRole, number>;
+  } = {},
 ): KitPlacement[] {
   const opts = {
     cells,
     facts: capabilityFactsFrom(cells),
     blooms: over.blooms ?? 0,
+    buds: over.buds ?? 0,
+    wilts: over.wilts ?? 0,
     relief: over.relief ?? 0,
     footprint: over.footprint ?? FOOT,
   };
@@ -178,7 +192,9 @@ test('the two kinds of role partition the vocabulary — no role is both, none i
   // and report nothing, and a role in both would be scenery the map also read a state off.
   assert.deepEqual([...SCENE_ROLES, ...DRESSING_ROLES].sort(), [...KIT_ROLES].sort());
   for (const role of SCENE_ROLES) assert.ok(!DRESSING_ROLES.includes(role), `${role} is both kinds`);
-  assert.deepEqual([...SCENE_ROLES], ['tree', 'deadTree', 'bloom']);
+  // ⚠ FIVE SINCE ADR-0600, not three: an unsigned criterion and a failing one report as much as a
+  // signed one does, so all three criterion forms are `scene` roles.
+  assert.deepEqual([...SCENE_ROLES], ['tree', 'deadTree', 'bloom', 'bud', 'wilt']);
   assert.deepEqual([...DRESSING_ROLES], ['bush', 'tuft', 'flowerPatch']);
 });
 
@@ -412,6 +428,11 @@ test('one bloom per SIGNED criterion, and none when there are none', () => {
   // a caller's arithmetic error, and an island that refused to draw at all over one would take
   // the whole map down for a criterion tally.
   assert.equal(dress(ALL_HEALTHY, { blooms: -3 }).filter((p) => p.role === 'bloom').length, 0);
+  // ⚠ AND THE SAME FOR THE OTHER TWO STATES since ADR-0600 — a clamp that covered only the state it
+  // was written for would leave two counts able to do what this one may not.
+  assert.equal(dress(ALL_HEALTHY, { buds: -3 }).filter((p) => isCriterionRole(p.role)).length, 0);
+  assert.equal(dress(ALL_HEALTHY, { wilts: -3 }).filter((p) => isCriterionRole(p.role)).length, 0);
+  assert.equal(dress(ALL_HEALTHY, { blooms: 2, buds: -3, wilts: 1 }).filter((p) => isCriterionRole(p.role)).length, 3);
 });
 
 test('a bloom belongs to the STORY and stands anywhere on the island', () => {
@@ -454,6 +475,8 @@ test('a capability with no cells grows nothing rather than standing at the origi
       { capId: 'cap-ghost', status: 'healthy' },
     ],
     blooms: 0,
+    buds: 0,
+    wilts: 0,
     relief: 0,
     footprint: FOOT,
   });
@@ -934,6 +957,8 @@ test('a capability whose cells are ALL degenerate grows nothing, rather than sta
     cells: flat,
     facts: [{ capId: 'cap-flat', status: 'healthy' }],
     blooms: 0,
+    buds: 0,
+    wilts: 0,
     relief: 0,
     footprint: FOOT,
   });
@@ -1278,4 +1303,110 @@ test('every object the vocabulary stands is at scale 1 — nothing that reports 
   const placements = dress(island(['healthy', 'mapped', 'unhealthy', 'proposed']), { blooms: 3 });
   assert.ok(placements.length >= 7);
   for (const p of placements) assert.equal(p.scale, 1, `${p.role}:${p.capId} is at scale ${p.scale}`);
+});
+
+// ---------------------------------------------------------------------------
+// ADR-0600 — every UAT criterion is drawn, and signing changes its FORM
+// ---------------------------------------------------------------------------
+
+test('⚠⚠ AN ISLAND STANDS ONE FLOWER PER CRITERION, not one per SIGNATURE', () => {
+  // ⚠⚠ THE PLACEMENT HALF OF ADR-0600 D1. Until 2026-09-23 `dressIslandFromKit` took a single
+  // `blooms` count, so an island holding five unsigned criteria stood NO flower and read as a
+  // story with no acceptance criteria at all — measured over the live corpus, nine islands did
+  // exactly that and three more drew only their signed subset with nothing saying the count was
+  // partial (`docs/research/chapter2-uat-silence-2026-09-23/`).
+  const placements = dress(ALL_HEALTHY, { blooms: 2, buds: 3, wilts: 1 });
+  const criteria = placements.filter((p) => isCriterionRole(p.role));
+  assert.equal(criteria.length, 6, 'six criteria, six flowers — the count is the CRITERION count');
+  assert.deepEqual(
+    [criteria.filter((p) => p.role === 'bloom').length, criteria.filter((p) => p.role === 'bud').length, criteria.filter((p) => p.role === 'wilt').length],
+    [2, 3, 1],
+    'each state stands its own number',
+  );
+  // Every one of them belongs to the STORY rather than to any capability, as the signed ones
+  // always did — a criterion is a claim about the island, not about a parcel.
+  for (const p of criteria) assert.equal(p.capId, 'story');
+
+  // ⚠ AND NONE OF THEM IS STACKED ON ANOTHER. Three states placed from one seed stream is one
+  // scatter; the detector is what says so, and it is the same detector the signed-only placement
+  // was already held to.
+  assert.deepEqual(dressingOverlaps(placements, FOOT), []);
+
+  // ⚠ A ZERO IN ONE STATE IS NOT A ZERO IN THE OTHERS — the arm that would pass if the three
+  // counts were secretly one.
+  assert.equal(dress(ALL_HEALTHY, { blooms: 0, buds: 4, wilts: 0 }).filter((p) => p.role === 'bud').length, 4);
+  assert.equal(dress(ALL_HEALTHY, { blooms: 0, buds: 4, wilts: 0 }).filter((p) => p.role === 'bloom').length, 0);
+  assert.equal(dress(ALL_HEALTHY, { blooms: 0, buds: 0, wilts: 0 }).filter((p) => isCriterionRole(p.role)).length, 0);
+});
+
+test('⚠ THE THREE CRITERION FORMS ARE ONE OBJECT AT TWO SIZES AND TWO ATTITUDES', () => {
+  // The committed kit has ONE flower mesh reachable by a criterion marker and it wears a material
+  // shared with the grass and the ground cover, so neither a second shape nor a per-state tint is
+  // available (`KIT_ROLE_ASSEMBLIES`'s note). What the three forms use instead is stated here so a
+  // reader meets the constraint rather than inferring a preference.
+  for (const role of CRITERION_ROLES) {
+    assert.deepEqual([...KIT_ROLE_ASSEMBLIES[role]], ['flower'], `${role} does not stand the flower`);
+    assert.equal(KIT_ROLE_CLASS[role], 'scene', `${role} must report something`);
+  }
+  assert.deepEqual([...CRITERION_ROLES], ['bloom', 'bud', 'wilt']);
+  assert.ok(CRITERION_ROLES.every((r) => SCENE_ROLES.includes(r)), 'a criterion role is not scenery');
+  assert.ok(!CRITERION_ROLES.some((r) => DRESSING_ROLES.includes(r)));
+  for (const role of KIT_ROLES) assert.equal(isCriterionRole(role), CRITERION_ROLES.includes(role), role);
+
+  // ⚠⚠ EACH PAIR IS TOLD APART BY EXACTLY ONE LEVER, and both are asserted because a table edit
+  // that collapsed either one would draw two states identically with nothing failing.
+  assert.notEqual(KIT_ROLE_SIZE.bud.units, KIT_ROLE_SIZE.bloom.units, 'a bud is the bloom, NARROWER');
+  assert.equal(KIT_ROLE_SIZE.wilt.units, KIT_ROLE_SIZE.bloom.units, 'a failing criterion is not a smaller claim');
+  assert.notEqual(KIT_ROLE_TILT.wilt, KIT_ROLE_TILT.bloom, 'a wilt is the bloom, NODDING');
+  assert.equal(KIT_ROLE_TILT.bud, 0, 'a bud stands up — it is NOT YET, never WENT WRONG (ADR-0600 D3)');
+
+  // Everything else on the map stands upright; the lean is the wilt's and nothing else's.
+  for (const role of KIT_ROLES) {
+    if (role !== 'wilt') assert.equal(KIT_ROLE_TILT[role], 0, `${role} leans`);
+  }
+  assert.ok(KIT_ROLE_TILT.wilt > 0 && KIT_ROLE_TILT.wilt < Math.PI / 2, 'a wilt nods; it does not lie down');
+});
+
+test('⚠⚠ THE BUD SITS INSIDE BOTH OF ITS BOUNDS — narrower than the bloom, wider than the ground cover', () => {
+  // ⚠⚠ TWO DIFFERENT CONFUSIONS, AND EACH HAS ITS OWN BOUND BECAUSE THEY PULL OPPOSITE WAYS. Too
+  // wide and "how many have opened" is unreadable; too narrow and a criterion nobody has signed is
+  // indistinguishable from the scenery. Both are computed from the tables rather than restated, so
+  // an edit to ANY of the four — the bud's width, the bloom's, the cover flower's, the cover's
+  // scale spread — is what fails here.
+  const bloom = KIT_ROLE_SIZE.bloom.units;
+  const bud = KIT_ROLE_SIZE.bud.units;
+  assert.ok(bud <= bloom * BUD_MAX_SHARE_OF_BLOOM, `a bud of ${bud} is not clearly narrower than a bloom of ${bloom}`);
+
+  // The cover flower at the SHIPPED rung, which is also the boldest the ladder reaches — the same
+  // arithmetic `FLOWER_PATCH_MAX_SHARE_OF_BLOOM` is derived through, read off the same tables.
+  const boldestCoverFlower = KIT_ROLE_SIZE.flowerPatch.units * COVER_SCALE.flowerPatch.max * Math.max(...COVER_SIZE_RUNGS);
+  assert.ok(
+    bud >= boldestCoverFlower * BUD_MIN_MULTIPLE_OF_COVER_FLOWER,
+    `a bud of ${bud} is not clearly wider than the widest cover flower of ${boldestCoverFlower.toFixed(3)}`,
+  );
+
+  // ⚠ AND THE BLOOM'S OWN HALF-WIDTH GUARANTEE IS UNTOUCHED. The bud is held to the weaker bound
+  // above and is NOT held to this one — widening it to cover the bud would force the bud to the
+  // bloom's own width and destroy the signal it exists to carry.
+  assert.ok(boldestCoverFlower <= bloom * FLOWER_PATCH_MAX_SHARE_OF_BLOOM);
+  assert.ok(
+    boldestCoverFlower > bud * FLOWER_PATCH_MAX_SHARE_OF_BLOOM,
+    'the bud now clears the half-width bound too, so this test no longer says anything — re-read ADR-0600',
+  );
+
+  // What separates a bud from a cover flower in the end is the ASSET, not the size: one is the
+  // kit's red flower and the other its white one, and they can never be the same object.
+  assert.notDeepEqual([...KIT_ROLE_ASSEMBLIES.bud], [...KIT_ROLE_ASSEMBLIES.flowerPatch]);
+  assert.deepEqual([...KIT_ASSEMBLIES[KIT_ROLE_ASSEMBLIES.bud[0]!]], ['Red_Flower_01']);
+  assert.deepEqual([...KIT_ASSEMBLIES[KIT_ROLE_ASSEMBLIES.flowerPatch[0]!]], ['White_Flower_01']);
+});
+
+test('⚠ THE CENSUS TELLS THE THREE CRITERION STATES APART — an island reports what it is waiting on', () => {
+  // `dressingCensus` keys on the role, so the three states are three rows without any edit. That is
+  // what makes "five criteria, one opened" READABLE off a dressed island rather than only visible
+  // in the picture.
+  const census = dressingCensus(dress(ALL_HEALTHY, { blooms: 1, buds: 4, wilts: 2 }));
+  assert.equal(census['bloom'], 1);
+  assert.equal(census['bud'], 4);
+  assert.equal(census['wilt'], 2);
 });

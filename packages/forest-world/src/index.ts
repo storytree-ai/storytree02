@@ -122,6 +122,11 @@ export {
 export {
   type SceneStatus,
   type SceneKind,
+  // The three states a UAT criterion's marker can be in. Exported because the 3D mapper
+  // (`@storytree/forest-world-r3f`'s `world-to-3d.ts`) derives its marker-kind table from it, so
+  // a fourth state added here reds that package's typecheck instead of silently reaching the map
+  // undrawn (ADR-0600 D2).
+  type MarkerState,
   type BuildPhase,
   type WispPhaseBand,
   type ClaimColourState,

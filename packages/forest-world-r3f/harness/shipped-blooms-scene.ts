@@ -40,6 +40,7 @@ import { dressMapFromKit } from '../src/map-dressing.js';
 import {
   capabilityFactsFrom,
   dressIslandFromKit,
+  isCriterionRole,
   type KitPlacement,
   type RoleFootprints,
 } from '../src/kit-vocabulary.js';
@@ -128,6 +129,11 @@ export function bloomPlacements(footprint: RoleFootprints, dressing: BloomDressi
             cells,
             facts: capabilityFactsFrom(cells),
             blooms: dressing === 'none' ? 0 : crowdBlooms(SIZE).length,
+            // ⚠ THIS PAGE IS ABOUT SIGNATURE ATTRIBUTION AND STANDS NOTHING ELSE. Its crowd fixture
+            // signs every criterion it carries, so there are no unsigned or failing ones to draw
+            // — stated out loud because `KitDressingOptions` requires it to be (ADR-0600).
+            buds: 0,
+            wilts: 0,
             relief: LAND_RELIEF_AMPLITUDE,
             footprint,
           });
@@ -204,7 +210,9 @@ export function bloomCensus(footprint: RoleFootprints, dressing: BloomDressing):
   for (const island of list) drawn.set(island.id, 0);
   let total = 0;
   for (const placement of bloomPlacements(footprint, dressing)) {
-    if (placement.role !== 'bloom') continue;
+    // This page is about SIGNATURE attribution and its fixture stands signed criteria only, but
+    // the filter asks the general question so it stays true if that ever changes (ADR-0600).
+    if (!isCriterionRole(placement.role)) continue;
     total += 1;
     const id = nearestIsland(placement.at, list);
     drawn.set(id, (drawn.get(id) ?? 0) + 1);
@@ -302,7 +310,7 @@ export function buildBloomScene(
   if (kit !== null) {
     const placements = bloomPlacements(roleFootprints(kit), dressing);
     placed = placements.length;
-    for (const placement of placements) if (placement.role === 'bloom') blooms += 1;
+    for (const placement of placements) if (isCriterionRole(placement.role)) blooms += 1;
     for (const mesh of kitMeshes(kit, placements)) {
       land.scene.add(mesh);
       meshes += 1;

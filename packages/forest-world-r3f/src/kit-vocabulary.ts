@@ -58,9 +58,18 @@ import type { GPoint, LayoutCell } from './parcel-cells.js';
  * is now "every entry is a signal OR is declared dressing", which is a check a reader can still
  * fail, where an unclassified role would have quietly widened what a prop is allowed to mean.
  */
-export type KitRole = 'tree' | 'deadTree' | 'bloom' | 'bush' | 'tuft' | 'flowerPatch';
+export type KitRole = 'tree' | 'deadTree' | 'bloom' | 'bud' | 'wilt' | 'bush' | 'tuft' | 'flowerPatch';
 
-export const KIT_ROLES: readonly KitRole[] = ['tree', 'deadTree', 'bloom', 'bush', 'tuft', 'flowerPatch'];
+export const KIT_ROLES: readonly KitRole[] = [
+  'tree',
+  'deadTree',
+  'bloom',
+  'bud',
+  'wilt',
+  'bush',
+  'tuft',
+  'flowerPatch',
+];
 
 /** What a role IS: a claim about the work, or scenery that asserts nothing. */
 export type KitRoleClass = 'scene' | 'dressing';
@@ -79,6 +88,8 @@ export const KIT_ROLE_CLASS = {
   tree: 'scene',
   deadTree: 'scene',
   bloom: 'scene',
+  bud: 'scene',
+  wilt: 'scene',
   bush: 'dressing',
   tuft: 'dressing',
   flowerPatch: 'dressing',
@@ -94,6 +105,26 @@ export const SCENE_ROLES: readonly KitRole[] = KIT_ROLES.filter((r) => !isDressi
 
 /** The roles that assert nothing — the ground cover. */
 export const DRESSING_ROLES: readonly KitRole[] = KIT_ROLES.filter(isDressingRole);
+
+/**
+ * THE ROLES THAT STAND FOR ONE UAT CRITERION — the same flower in its three states (ADR-0600 D1).
+ *
+ * ⚠ IT EXISTS SO NO READER HAS TO SPELL THE SET, and the reason is measured rather than stylistic:
+ * before ADR-0600 a criterion marker was the single role `bloom`, so every consumer that wanted
+ * "the capability props" wrote `role !== 'bloom'` — a filter that is silently WRONG the moment a
+ * second criterion role exists, and wrong in the flattering direction (a story's unsigned criteria
+ * counted as capabilities). Two such filters were in the repo on the day this landed.
+ *
+ * ⚠ IT IS NOT THE SAME QUESTION AS {@link isDressingRole}. All three criterion roles are `scene`
+ * roles — they report something — so a reader asking "does this assert anything" must keep asking
+ * that, and a reader asking "is this one of the story's criteria" asks this.
+ */
+export const CRITERION_ROLES: readonly KitRole[] = ['bloom', 'bud', 'wilt'];
+
+/** Does this role stand for one of the story's UAT criteria, in any of its three states? */
+export function isCriterionRole(role: KitRole): boolean {
+  return CRITERION_ROLES.includes(role);
+}
 
 /**
  * WHAT EACH ROLE ASSERTS. One line each, and each one is a claim about the work rather than a
@@ -115,6 +146,8 @@ export const KIT_ROLE_SIGNAL = {
   tree: "SCENE — one tree per capability; its leaf tint is that capability's own state",
   deadTree: 'SCENE — this capability is unhealthy: the work stands, and it is standing dead wood',
   bloom: 'SCENE — a UAT criterion the owner has signed (ADR-0226 D4, one flower per criterion)',
+  bud: 'SCENE — a UAT criterion NOBODY HAS SIGNED YET: the same flower, not yet opened (ADR-0600 D1)',
+  wilt: 'SCENE — a UAT criterion witnessed FAILING: the same flower, nodding over (ADR-0600 D2)',
   bush: 'DRESSING — undergrowth on a healthy island, asserting nothing (build_land.py:1087, 70 per recipe island)',
   tuft: 'DRESSING — a clump of grass on a healthy island, asserting nothing (build_land.py:1088, 120 per recipe island)',
   flowerPatch:
@@ -228,6 +261,19 @@ export const KIT_ROLE_ASSEMBLIES = {
   tree: ['pine-a', 'pine-b'],
   deadTree: ['pine-dead'],
   bloom: ['flower'],
+  // ⚠⚠ THE THREE CRITERION FORMS ARE ONE ASSEMBLY, and that is a MEASURED CONSTRAINT rather than
+  // a preference. The committed kit carries two flowers, `Red_Flower_01` and `White_Flower_01`,
+  // and BOTH wear `Pine_Forest_Foliage` — the same atlas as the grass clumps, the leafy plants and
+  // the ground cover. So the tint route is closed: `tintedMaterial` rotates a material's MEAN
+  // chromaticity, and this material's mean is mostly green foliage rather than the flower's own
+  // petals, so a per-state tint would be unpredictable on the petals AND would repaint whatever
+  // else shared the bucket. A new bud object is closed too — the repo holds the exported `.glb`
+  // and no `.blend` behind it. What is left is SIZE and ATTITUDE, which is what the three forms
+  // use ({@link KIT_ROLE_SIZE}, {@link KIT_ROLE_TILT}), and white is NOT among them: the ground
+  // cover already owns the white flower, so a white criterion marker would be the one collision
+  // the vocabulary has always refused (see {@link clearanceFactor}'s closing note).
+  bud: ['flower'],
+  wilt: ['flower'],
   // ⚠ TWO SHAPES FOR THE BUSH FOR THE REASON THE PINE HAS TWO, and it binds HARDER here: the
   // recipe stands 70 undergrowth per island against 13 stands, so one silhouette repeated is a
   // defect five times over. The tuft has the recipe's own three clumps. The flower has one shape,
@@ -266,6 +312,31 @@ export const KIT_ROLE_SIZE = {
   tree: { axis: 'height', units: 18 },
   deadTree: { axis: 'height', units: 15 },
   bloom: { axis: 'width', units: 4 },
+  // ⚠⚠ THE BUD IS THE BLOOM, NARROWER — the open/closed read is carried by SIZE, because it is the
+  // only axis this kit leaves open (see {@link KIT_ROLE_ASSEMBLIES}'s note). 2.6 is not a taste
+  // pick; it is the value inside BOTH bounds below, each of which is a different confusion:
+  //
+  //   against the BLOOM it must be clearly narrower, or "how many have opened" is unreadable —
+  //     {@link BUD_MAX_SHARE_OF_BLOOM} 0.7 x 4 = 2.8, and 2.6 is 65% of the bloom's width, which
+  //     is 42% of its delivered area.
+  //   against the GROUND COVER's white flowers it must be clearly WIDER, or a criterion nobody has
+  //     signed is speckle — the widest delivered cover flower is `KIT_ROLE_SIZE.flowerPatch 0.34 x
+  //     COVER_SCALE.flowerPatch.max 1.304 x COVER_SIZE 4.5 = 1.995` units, which SHIPS (4.5 is the
+  //     shipped rung, not just the boldest the ladder can reach), so
+  //     {@link BUD_MIN_MULTIPLE_OF_COVER_FLOWER} 1.25 x 1.995 = 2.494 is the floor.
+  //
+  // ⚠ IT DOES NOT INHERIT THE BLOOM'S HALF-WIDTH GUARANTEE, and saying so is the point.
+  // {@link FLOWER_PATCH_MAX_SHARE_OF_BLOOM} is anchored on the BLOOM and stays exactly where it
+  // was — the bud is held to the weaker, separately-named bound above, and what carries the rest
+  // is the ASSET: a bud is `Red_Flower_01` and a cover flower is `White_Flower_01`, never the
+  // same object. Widening the half-width rule to cover the bud instead would have forced the bud
+  // to the bloom's own width and destroyed the signal it exists to carry — the shape
+  // `a-distinctness-bound-belongs-to-what-it-distinguishes-from` warns about.
+  bud: { axis: 'width', units: 2.6 },
+  // The wilt is the bloom's own width: a criterion witnessed FAILING is not a smaller claim than
+  // one witnessed passing, and shrinking it would say it were. What tells them apart is
+  // {@link KIT_ROLE_TILT}.
+  wilt: { axis: 'width', units: 4 },
   // ⚠⚠ THE BUSH AND THE TUFT ARE THE RECIPE'S OWN DELIVERED WIDTHS — the ROLE size, which
   // `cover-dressing.ts`'s size rung then multiplies. Each is the WIDEST assembly serving the role,
   // at its native kit width, times the MEAN of the scale `build_land.py` sprinkles it at, so rung 1
@@ -319,6 +390,54 @@ export const COVER_SCALE = {
  *  bloom's own width — the row's "under half the bloom's width", stated once so the test reads it
  *  rather than restating a number the tables could drift away from. */
 export const FLOWER_PATCH_MAX_SHARE_OF_BLOOM = 0.5;
+
+/** How wide an unopened bud may be as a fraction of the OPENED bloom's width — the bound that
+ *  keeps "how many have opened" readable at all (ADR-0600 D1). Stated once so
+ *  `kit-vocabulary.test.ts` reads it rather than restating a number the size table could drift
+ *  away from. */
+export const BUD_MAX_SHARE_OF_BLOOM = 0.7;
+
+/** How many times the WIDEST DELIVERED ground-cover flower a bud must be — the other side of the
+ *  bud's size, and a different confusion from the one above: too narrow and a criterion nobody has
+ *  signed is indistinguishable from scenery. The cover's own width is measured at the SHIPPED
+ *  rung, which is also the boldest the ladder reaches. */
+export const BUD_MIN_MULTIPLE_OF_COVER_FLOWER = 1.25;
+
+/**
+ * HOW FAR OFF VERTICAL EACH ROLE STANDS, in radians — zero for everything that stands up, and the
+ * ONE thing that tells a failing criterion from a signed one.
+ *
+ * ⚠⚠ ATTITUDE RATHER THAN COLOUR OR SHAPE, and it is not a free choice: the committed kit has one
+ * flower mesh on a shared material atlas ({@link KIT_ROLE_ASSEMBLIES}), so colour is closed and a
+ * second shape is closed. It is also the 2D map's OWN form for this state, not something invented
+ * here — `scene.ts`'s marker painter draws `tall-flower-failing` as *"a wilting, drooping deep-red
+ * bloom"* and has since ADR-0226 D4. A nodding flower reads as *went wrong*; a SMALLER one would
+ * have read as *less*, which is not what failing means.
+ *
+ * ⚠ IT IS A PROPERTY OF THE ROLE, NOT OF THE PLACEMENT, deliberately. Every placement in the repo
+ * is built by one of two placers, and a per-placement field would have had to be spelled at every
+ * literal in both — including the ones that mean nothing by it — so the commonest value would be
+ * the one nobody was thinking about when they wrote it. Read off the role, a prop's attitude is
+ * whatever its role says and cannot be set wrong at a call site.
+ *
+ * ⚠ THE FOOTPRINT AND THE CAST SHADOW ARE BOTH READ UPRIGHT, and the size of that approximation is
+ * stated rather than waved at: the flower delivers 4 units of width over 2.445 of height, so at
+ * 60° off vertical its ground extent is `4 x cos60 + 2.445 x sin60 = 4.12` units against the 4 the
+ * tables declare — 3% wide, inside {@link FOOTPRINT_TOLERANCE}'s own neighbourhood and far inside
+ * the clearance it feeds. The cast shadow keeps the bloom's upright silhouette
+ * (`ROLE_SILHOUETTE` in `ground-casters.ts`), which is a shape approximation on the one role the
+ * live corpus currently has no instances of at all.
+ */
+export const KIT_ROLE_TILT = {
+  tree: 0,
+  deadTree: 0,
+  bloom: 0,
+  bud: 0,
+  wilt: Math.PI / 3,
+  bush: 0,
+  tuft: 0,
+  flowerPatch: 0,
+} as const satisfies Record<KitRole, number>;
 
 /** Ground units a HEIGHT-sized prop needs to clear the ~10px object floor at the overview. */
 export const MIN_PROP_HEIGHT = 7.8;
@@ -603,6 +722,11 @@ export const KIT_FOOTPRINTS_2026_08_29 = {
   tree: 10.13,
   deadTree: 7.33,
   bloom: 4,
+  // The bud and the wilt are the same assembly at their own declared widths — a width-sized role's
+  // footprint IS its declared width (see the next note). The wilt's is read UPRIGHT; what that
+  // costs is computed in {@link KIT_ROLE_TILT}.
+  bud: 2.6,
+  wilt: 4,
   // ⚠ A WIDTH-SIZED ROLE'S FOOTPRINT IS ITS DECLARED WIDTH EXACTLY, by construction — every
   // assembly serving it is scaled TO that width, so the widest is that width. These three restate
   // `KIT_ROLE_SIZE` for the same reason the two pines' heights do, and the test holds them to it.
@@ -640,6 +764,12 @@ export const KIT_HEIGHTS_2026_08_29 = {
   tree: 18,
   deadTree: 15,
   bloom: 2.445,
+  // The bud and the wilt are `Red_Flower_01` at their own widths, so their heights fall out of the
+  // same proportion the bloom's does: `width x 0.599 / 0.980`.
+  //   bud   2.6 x 0.599 / 0.980 = 1.589
+  //   wilt  4   x 0.599 / 0.980 = 2.445, the bloom's own — they are the same size upright
+  bud: 1.589,
+  wilt: 2.445,
   // ⚠ THE THREE GROUND-COVER HEIGHTS FALL OUT OF THEIR PROPORTIONS, exactly as the bloom's does —
   // `declared width x (assembly height / assembly width)`, the TALLEST assembly winning, off the
   // 2026-09-03 re-export's own world bounds:
@@ -862,9 +992,26 @@ export interface KitDressingOptions {
    *  different routes and only one of them has a fixture. `capabilityFactsFrom(cells)` is the
    *  shipped route; the harness passes its own `capabilityFacts(island)`. */
   facts: readonly CapabilityFacts[];
-  /** How many UAT criteria the owner has signed — one bloom each, scattered over the whole
+  /** How many UAT criteria the owner has signed — one OPEN bloom each, scattered over the whole
    *  island rather than over any one parcel (ADR-0226 D4). Zero draws none. */
   blooms: number;
+  /** How many of the island's UAT criteria NOBODY HAS SIGNED YET — one unopened bud each, placed
+   *  exactly as the blooms are (ADR-0600 D1: every criterion is drawn, and signing changes the
+   *  flower's state rather than its existence).
+   *
+   *  ⚠ REQUIRED RATHER THAN DEFAULTING TO ZERO, and the direction is the point. The whole defect
+   *  ADR-0600 corrects is an island quietly drawing fewer criteria than it holds; an optional
+   *  field would have let any caller reproduce it by saying nothing, which is precisely how the
+   *  first thirty-five went missing. A caller that genuinely draws none says `0` out loud. */
+  buds: number;
+  /** How many of the island's UAT criteria were witnessed FAILING — one nodding flower each. Same
+   *  placement, same requiredness, same reason.
+   *
+   *  ⚠ ALL THREE ARE CLAMPED AT ZERO rather than refused, and that is this module's standing call
+   *  rather than a new one: a nonsense count is a caller's arithmetic error, and an island that
+   *  threw over one would take the WHOLE MAP down — every capability unreported, which ADR-0392 D5
+   *  / ADR-0398 D7 rank worse than a degraded island. Same reasoning as `roleDrift`'s two callers. */
+  wilts: number;
   /** The relief amplitude the ground is built at, so props sit ON the land rather than through it. */
   relief: number;
   /**
@@ -881,11 +1028,13 @@ export interface KitDressingOptions {
 }
 
 /**
- * DRESS THE WHOLE ISLAND. One object per capability, plus one bloom per signed UAT criterion.
+ * DRESS THE WHOLE ISLAND. One object per capability, plus ONE FLOWER PER UAT CRITERION — opened
+ * where the owner signed it, closed where he has not, nodding where it was witnessed failing
+ * (ADR-0600 D1).
  *
  * The order is deliberate and is part of the placement: capabilities first, in the fixture's own
- * order, then the blooms — so a bloom is placed around the trees rather than a tree around the
- * blooms. A criterion marker moved a few units is a smaller loss than a capability's own tree
+ * order, then the criterion markers — so a flower is placed around the trees rather than a tree
+ * around the flowers. A criterion marker moved a few units is a smaller loss than a capability's own tree
  * moved off the middle of its parcel.
  */
 export function dressIslandFromKit(opts: KitDressingOptions): KitPlacement[] {
@@ -916,7 +1065,7 @@ export function dressIslandFromKit(opts: KitDressingOptions): KitPlacement[] {
     if (!at) return;
     occupied.push({ x: at.x, z: at.z, radius });
     // ⚠ `scale: 1` BY STATEMENT. Everything this function stands REPORTS something — a
-    // capability's state, a story's signature — and stands at its role's full size; the only
+    // capability's state, one of a story's UAT criteria — and stands at its role's full size; the only
     // placements not at 1 are the ground cover's (`cover-dressing.ts`), which report nothing and
     // are placed after this.
     out.push({ role, assembly, capId, tint, at, y: heightAt(at.x, at.z), yaw, scale: 1 });
@@ -942,17 +1091,38 @@ export function dressIslandFromKit(opts: KitDressingOptions): KitPlacement[] {
     );
   });
 
-  // The blooms belong to the STORY's UAT criteria, not to any one capability, so they are
-  // scattered over the whole island — the same claim the procedural flower markers make
+  // The criterion markers belong to the STORY's UAT criteria, not to any one capability, so they
+  // are scattered over the whole island — the same claim the procedural flower markers make
   // (ADR-0226 D4, one flower per criterion), wearing the kit's vocabulary instead.
   //
-  // ⚠ `Array.from` RATHER THAN A COUNTER LOOP. A `for (let i = 0; i < n; i += 1)` carries mutants
-  // that flip `+=` to `-=` and `<` to `>`; neither fails an assertion, both run forever, and
-  // `check:mutation-diff` scores a hang as UNPROVEN rather than as a survivor.
+  // ⚠⚠ ALL THREE STATES ARE PLACED, AND THE ISLAND'S FLOWER COUNT IS ITS CRITERION COUNT
+  // (ADR-0600 D1). Until 2026-09-23 only the signed ones were, so an island with five unsigned
+  // criteria stood no flower and read as a story with no acceptance criteria at all.
+  //
+  // ⚠ THE THREE RUNS SHARE ONE SEED STREAM rather than restarting it per state, so the island's
+  // criteria are ONE scatter of N markers and not three overlaid scatters of the same shape.
+  // Restarting per state would hand the k-th bloom and the k-th bud the same candidate points;
+  // `bestCandidate` would still separate them, because the first is already `occupied` by the time
+  // the second is placed, but the second would be choosing from a set it has already lost most of
+  // — so the more evenly an island's criteria were split across states, the more of its markers
+  // would be placed from picked-over ground. Nothing about that is visible in a count, which is
+  // why it is stated here rather than left to the test.
+  //
+  // ⚠ ONE FLAT LIST OF ROLES, THEN `forEach`, exactly as the capabilities above are placed. Two
+  // shapes are avoided here on purpose: a `for (let i = 0; i < n; i += 1)` carries mutants that
+  // flip `+=` to `-=` and `<` to `>` — neither fails an assertion, both run forever, and
+  // `check:mutation-diff` scores a hang as UNPROVEN rather than as a survivor — and an
+  // `Array.from({length}, (_, k) => k)` whose value nobody reads carries a mapper mutant no test
+  // can kill, because the mapped value is discarded either way (measured, on this landing).
   const all = cells.filter((c) => c.parcel !== undefined);
-  for (const i of Array.from({ length: Math.max(0, opts.blooms) }, (_, k) => k)) {
-    place('bloom', 'flower', 'story', null, all, seed0 + 7717 + i * 131, (i * 2.399963) % (Math.PI * 2));
-  }
+  const criteria: KitRole[] = [
+    ...Array.from<unknown, KitRole>({ length: Math.max(0, opts.blooms) }, () => 'bloom'),
+    ...Array.from<unknown, KitRole>({ length: Math.max(0, opts.buds) }, () => 'bud'),
+    ...Array.from<unknown, KitRole>({ length: Math.max(0, opts.wilts) }, () => 'wilt'),
+  ];
+  criteria.forEach((role, i) => {
+    place(role, 'flower', 'story', null, all, seed0 + 7717 + i * 131, (i * 2.399963) % (Math.PI * 2));
+  });
 
   return out;
 }
