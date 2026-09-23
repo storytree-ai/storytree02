@@ -5,12 +5,16 @@ import { CLAIM_STALE_RECLAIM_MS } from "@storytree/notice-board";
 import { PgClaimStore } from "@storytree/notice-board/store";
 import { applySchema, closePool, createTestPool } from "@storytree/library/store";
 
-import { acquireBuildGuard } from "./build-guard.js";
+import { acquireBuildGuard, type AcquireBuildGuardInput } from "./build-guard.js";
 
 const RUN_A = "run:00000000-0000-4000-8000-000000000001";
 const RUN_B = "run:00000000-0000-4000-8000-000000000002";
 const RUN_C = "run:00000000-0000-4000-8000-000000000003";
 const sessionFor = (runId: string) => `build:${runId}`;
+
+// This suite proves shared-store atomicity and runs only against the disposable DB injected for
+// declared real proof. The offline package suite must never infer or select a database.
+const DB = process.env["STORYTREE_DB_NAME"];
 
 async function withLiveTestDatabase<T>(body: () => Promise<T>): Promise<T> {
   const previous = process.env.STORYTREE_DB_LIVE;
@@ -41,10 +45,12 @@ async function withStores(
 }
 
 async function acquire(store: PgClaimStore, runId: string, unitIds: readonly string[], readActivity?: () => Date | undefined) {
-  return acquireBuildGuard({ store, runId, unitIds, ...(readActivity === undefined ? {} : { readActivity }) });
+  const input: AcquireBuildGuardInput = { store, runId, unitIds };
+  if (readActivity !== undefined) input.readActivity = readActivity;
+  return acquireBuildGuard(input);
 }
 
-test("same-unit-claim-is-an-atomic-pre-spend-refusal: two pools admit exactly one spender and name the live holder", async () => {
+test("same-unit-claim-is-an-atomic-pre-spend-refusal: two pools admit exactly one spender and name the live holder", { skip: !DB }, async () => {
   await withStores(async ({ first, second, query }) => {
     let firstSpent = 0;
     let secondSpent = 0;
@@ -58,7 +64,7 @@ test("same-unit-claim-is-an-atomic-pre-spend-refusal: two pools admit exactly on
     if (winner.runId === RUN_A) firstSpent += 1;
     else secondSpent += 1;
     assert.deepEqual([firstSpent, secondSpent].sort(), [0, 1], "only the acquired guard reaches its first spend");
-    assert.equal(loser.refusal.unitId, "vegetation");
+    assert.equal(loser.refusal.unitId, "build:vegetation");
     assert.equal(loser.refusal.holderRunId, winner.runId);
     assert.equal(loser.refusal.classification, "LIVE");
     assert.ok(loser.refusal.startAgeMs >= 0);
@@ -69,7 +75,7 @@ test("same-unit-claim-is-an-atomic-pre-spend-refusal: two pools admit exactly on
   });
 });
 
-test("distinct-build-units-may-run-together: independent unit namespaces admit both callers", async () => {
+test("distinct-build-units-may-run-together: independent unit namespaces admit both callers", { skip: !DB }, async () => {
   await withStores(async ({ first, second }) => {
     const [vegetation, canopy] = await Promise.all([acquire(first, RUN_A, ["vegetation"]), acquire(second, RUN_B, ["canopy"])]);
     assert.equal(vegetation.ok, true);
@@ -79,7 +85,7 @@ test("distinct-build-units-may-run-together: independent unit namespaces admit b
   });
 });
 
-test("multi-unit-claim-sorts-deduplicates-and-unwinds-partials: a later collision releases every earlier lease", async () => {
+test("multi-unit-claim-sorts-deduplicates-and-unwinds-partials: a later collision releases every earlier lease", { skip: !DB }, async () => {
   await withStores(async ({ first, second }) => {
     const blocker = await acquire(first, RUN_A, ["canopy"]);
     assert.equal(blocker.ok, true);
@@ -88,7 +94,7 @@ test("multi-unit-claim-sorts-deduplicates-and-unwinds-partials: a later collisio
     const refused = await acquire(second, RUN_B, ["vegetation", "canopy", "vegetation"]);
     assert.equal(refused.ok, false);
     if (refused.ok) return;
-    assert.equal(refused.refusal.unitId, "canopy", "ids are sorted before claims are taken");
+    assert.equal(refused.refusal.unitId, "build:canopy", "ids are sorted before claims are taken");
     const releasedPartial = await acquire(first, RUN_C, ["vegetation"]);
     assert.equal(releasedPartial.ok, true, "the refused multi-unit caller left no partial vegetation lease");
     if (releasedPartial.ok) await releasedPartial.guard.release();
@@ -96,7 +102,7 @@ test("multi-unit-claim-sorts-deduplicates-and-unwinds-partials: a later collisio
   });
 });
 
-test("a-stale-build-lease-is-reclaimed-by-the-existing-clock: a two-hour-old holder is atomically replaced", async () => {
+test("a-stale-build-lease-is-reclaimed-by-the-existing-clock: a two-hour-old holder is atomically replaced", { skip: !DB }, async () => {
   await withStores(async ({ first, second, query }) => {
     const old = await acquire(first, RUN_A, ["vegetation"]);
     assert.equal(old.ok, true);
@@ -108,7 +114,7 @@ test("a-stale-build-lease-is-reclaimed-by-the-existing-clock: a two-hour-old hol
 });
 
 // test-updated (refactor): observed-activity-alone-renews-a-build-lease uses ordered past observations and observes the store's no-write future refusal.
-test("observed-activity-alone-renews-a-build-lease: only a newer observed timestamp moves the heartbeat", async () => {
+test("observed-activity-alone-renews-a-build-lease: only a newer observed timestamp moves the heartbeat", { skip: !DB }, async () => {
   await withStores(async ({ first, query }) => {
     const guard = await acquire(first, RUN_A, ["vegetation"], () => undefined);
     assert.equal(guard.ok, true);
@@ -131,7 +137,7 @@ test("observed-activity-alone-renews-a-build-lease: only a newer observed timest
   });
 });
 
-test("run-scoped-cleanup-cannot-release-a-successor-or-an-ordinary-session-claim: delayed old cleanup leaves both intact", async () => {
+test("run-scoped-cleanup-cannot-release-a-successor-or-an-ordinary-session-claim: delayed old cleanup leaves both intact", { skip: !DB }, async () => {
   await withStores(async ({ first, second, query }) => {
     const old = await acquire(first, RUN_A, ["vegetation"]);
     assert.equal(old.ok, true);
@@ -145,14 +151,14 @@ test("run-scoped-cleanup-cannot-release-a-successor-or-an-ordinary-session-claim
     await old.guard.release();
     const rows = await query("SELECT unit_id, session_id FROM events.node_claim ORDER BY unit_id");
     assert.deepEqual((rows as { rows: Array<{ unit_id: string; session_id: string }> }).rows, [
+      { unit_id: "build:vegetation", session_id: sessionFor(RUN_B) },
       { unit_id: "ordinary", session_id: "session-ordinary" },
-      { unit_id: "vegetation", session_id: sessionFor(RUN_B) },
     ]);
     await successor.guard.release();
   });
 });
 
-test("assert-held-stops-the-next-guard-controlled-step-after-lease-loss: the old holder cannot start a second step", async () => {
+test("assert-held-stops-the-next-guard-controlled-step-after-lease-loss: the old holder cannot start a second step", { skip: !DB }, async () => {
   await withStores(async ({ first, second, query }) => {
     const old = await acquire(first, RUN_A, ["vegetation"]);
     assert.equal(old.ok, true);

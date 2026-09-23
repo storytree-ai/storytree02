@@ -63,15 +63,12 @@ export async function acquireBuildGuard(input: AcquireBuildGuardInput): Promise<
   const held: string[] = [];
 
   for (const unitId of unitIds) {
-    const result = await input.store.claim(
-      {
-        unitId,
-        sessionId,
-        branch: `build-lease:${input.runId}`,
-        intent: "build lease",
-      },
-      { queueOnRefusal: false },
-    );
+    const result = await input.store.claim({
+      unitId,
+      sessionId,
+      branch: `build-lease:${input.runId}`,
+      intent: "build lease",
+    });
     if (!result.acquired) {
       await Promise.all(held.map(async (heldUnit) => input.store.release(heldUnit, sessionId)));
       return { ok: false, refusal: refusal(unitId, result.heldBy, new Date()) };
