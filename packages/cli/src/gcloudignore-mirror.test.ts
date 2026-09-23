@@ -120,6 +120,35 @@ test("a mirrored file passes; a missing line is reported with its rule, and comm
   );
 });
 
+test("⚠⚠ LAST MATCH WINS — a later `!x` undoes `x`, so appended negations RED the mirror and name the negating line", () => {
+  // The seeded escape: the set-based matcher still saw `.env` and `users.json` and passed, while
+  // gitignore semantics would have re-included both secrets in the upload.
+  const negated = [MIRRORED, "!.env", "!apps/studio/data/users.json"].join("\n");
+  const verdict = judgeGcloudignoreMirror(GITIGNORE, negated);
+  assert.deepEqual(
+    verdict.missing.map((m) => [m.pattern, m.undoneBy?.line, m.undoneBy?.text]),
+    [
+      [".env", 9, "!.env"],
+      ["apps/studio/data/users.json", 10, "!apps/studio/data/users.json"],
+    ],
+  );
+  const report = formatMirrorVerdict(verdict);
+  assert.match(report, /^check:gcloudignore-mirror FAIL — 2 of 5 line\(s\)/);
+  assert.match(report, /\.env   \(env-secrets-block\) — present, but UNDONE by later line 9: `!\.env`/);
+
+  // The reverse polarity: a `!x` subject followed by a plain `x` re-ignores the file again.
+  const reignored = judgeGcloudignoreMirror(GITIGNORE, [MIRRORED, ".env.example"].join("\n"));
+  assert.deepEqual(
+    reignored.missing.map((m) => [m.pattern, m.undoneBy?.text]),
+    [["!.env.example", ".env.example"]],
+  );
+});
+
+test("a negation BEFORE the subject line is overridden by it — order resolves green", () => {
+  const before = ["!.env", "!apps/studio/data/users.json", MIRRORED].join("\n");
+  assert.deepEqual(judgeGcloudignoreMirror(GITIGNORE, before).missing, []);
+});
+
 test("⚠⚠ IT REFUSES rather than reporting a clean mirror when it cannot find its subject — three ways", () => {
   // 1. the header renamed
   assert.throws(

@@ -2204,6 +2204,104 @@ test("formatNarrowingLines: the ordinary line says the drop was deliberate, and 
   assert.match(line, /Dropped on purpose\./);
 });
 
+// ── production code the rung cannot mutate because of its EXTENSION ──────────
+//
+// Measured 2026-09-24: a branch changing only `apps/studio/src/components/Act2IntroControl.tsx`
+// returned zero targets, NO narrowing, and the bare "changes no mutable source" skip — so the
+// production file went unmutated with nothing printed to say so.
+
+test("mutation-diff: a production .tsx under src/ is reported as an unmutated-extension narrowing", () => {
+  const file = "apps/studio/src/components/Act2IntroControl.tsx";
+  const selection = selectMutationTargets({
+    changed: [{ file, ranges: [{ start: 1, end: 3 }] }],
+    projects: PROJECTS,
+    existingFiles: existing(file),
+  });
+  assert.deepEqual(selection.targets, [], "not admitted into mutation — that is a separate decision");
+  assert.deepEqual(selection.narrowed, [{ file, kind: "unmutated-extension", project: "studio" }]);
+  assert.equal(
+    selection.skipReason,
+    `${SKIP_HEAD} — 1 changed production .tsx/.mts/.cts file(s) under a project's src/ were NOT ` +
+      "mutated — their extension is outside this rung's reach (only .ts is mutated)",
+  );
+});
+
+test("mutation-diff: .mts and .cts under src/ narrow too; declarations and tests do not", () => {
+  const files = [
+    "packages/cli/src/a.mts",
+    "packages/cli/src/b.cts",
+    "packages/cli/src/c.d.mts",
+    "packages/cli/src/d.d.cts",
+    "packages/cli/src/e.test.mts",
+    "packages/cli/src/f.test.cts",
+  ];
+  const selection = selectMutationTargets({
+    changed: files.map((file) => ({ file, ranges: [{ start: 1, end: 1 }] })),
+    projects: PROJECTS,
+    existingFiles: existing(...files),
+  });
+  assert.deepEqual(
+    selection.narrowed.map((n) => [n.file, n.kind]),
+    [
+      ["packages/cli/src/a.mts", "unmutated-extension"],
+      ["packages/cli/src/b.cts", "unmutated-extension"],
+    ],
+  );
+  assert.match(String(selection.skipReason), /2 changed production \.tsx\/\.mts\/\.cts file\(s\)/);
+});
+
+test("mutation-diff: a .test.tsx-only change produces no narrowing and the bare skip reason", () => {
+  const file = "apps/studio/src/components/Act2IntroControl.test.tsx";
+  const selection = selectMutationTargets({
+    changed: [{ file, ranges: [{ start: 1, end: 1 }] }],
+    projects: PROJECTS,
+    existingFiles: existing(file),
+  });
+  assert.deepEqual(selection.narrowed, []);
+  assert.deepEqual(selection.changedTestFiles, [file]);
+  assert.equal(selection.skipReason, SKIP_HEAD);
+});
+
+test("mutation-diff: a .tsx OUTSIDE src/ is not an unmutated-extension narrowing", () => {
+  const file = "apps/studio/scripts/tool.tsx";
+  const selection = selectMutationTargets({
+    changed: [{ file, ranges: [{ start: 1, end: 1 }] }],
+    projects: PROJECTS,
+    existingFiles: existing(file),
+  });
+  assert.deepEqual(selection.narrowed, []);
+  assert.equal(selection.skipReason, SKIP_HEAD);
+});
+
+test("mutation-diff: an unmutated-extension narrowing is reported alongside real targets", () => {
+  // The narrowing must be visible on EVERY run, not only when nothing else was mutated.
+  const selection = selectMutationTargets({
+    changed: [
+      { file: "apps/studio/src/a.ts", ranges: [{ start: 1, end: 1 }] },
+      { file: "apps/studio/src/b.tsx", ranges: [{ start: 1, end: 1 }] },
+    ],
+    projects: PROJECTS,
+    existingFiles: existing("apps/studio/src/a.ts", "apps/studio/src/b.tsx"),
+  });
+  assert.equal(selection.targets.length, 1);
+  assert.equal(selection.skipReason, null);
+  assert.deepEqual(selection.narrowed, [
+    { file: "apps/studio/src/b.tsx", kind: "unmutated-extension", project: "studio" },
+  ]);
+});
+
+test("formatNarrowingLines: an unmutated-extension line names the file, project and the extension reason", () => {
+  const [line] = formatNarrowingLines([
+    { file: "apps/studio/src/components/Act2IntroControl.tsx", kind: "unmutated-extension", project: "studio" },
+  ]);
+  assert.equal(
+    line,
+    "NARROWED: apps/studio/src/components/Act2IntroControl.tsx was NOT mutated — it is production " +
+      "code under `studio`'s src/, but its extension is outside this rung's reach (only .ts is " +
+      "mutated). Nothing on this branch proves those lines.",
+  );
+});
+
 
 // ── the cross-package blind spot: a mutant no test in the run could witness ──
 //

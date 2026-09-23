@@ -129,6 +129,14 @@ export const REFUSED_SKIP_NOTE =
   "declared a SKIP (exit 3), which a CI run does not accept — CI supplies every input a " +
   "skip-capable check needs, so a skip there means an input never arrived";
 
+/**
+ * The note on a step that exited {@link GATE_SKIP_EXIT_CODE} WITHOUT being declared skip-capable
+ * ({@link RunGateInput.maySkip}; the declaration is `SKIP_CAPABLE_CHECKS` in `gate-order.ts`).
+ */
+export const UNDECLARED_SKIP_NOTE =
+  "exit 3 from a step not declared skip-capable (SKIP_CAPABLE_CHECKS, gate-order.ts) — only a " +
+  "declared check may opt out, so an undeclared exit 3 is a failure, not a skip";
+
 /** What one executed step reported. */
 export interface GateExecution {
   /** The process exit code; `null` when the step could not be spawned at all. */
@@ -179,6 +187,16 @@ export interface RunGateInput {
    * `web/` clone that never happened — the vacuous-green shape the old workflow comments warned of.
    */
   readonly skipIsFailure?: boolean;
+  /**
+   * Whether a step is ALLOWED to declare a skip. A step exiting {@link GATE_SKIP_EXIT_CODE} for which
+   * this answers false is a FAIL carrying {@link UNDECLARED_SKIP_NOTE}, never a SKIP.
+   *
+   * FAIL-CLOSED DEFAULT: absent, NOTHING may skip. The exit code alone used to be enough, so any step
+   * — `check:boundaries`, the typecheck leg — that happened to exit 3 read as a legitimate opt-out and
+   * printed GATE GREEN, NARROWED over a check that never declared it could opt out. The declaration
+   * lives in data (`SKIP_CAPABLE_CHECKS`); `gate-run.ts` passes it in, so this module stays pure.
+   */
+  readonly maySkip?: (step: GateStep) => boolean;
   /** Checked before each step; `true` stops the walk and reports the remainder `not-run`. */
   readonly shouldStop?: () => boolean;
   /**
@@ -248,13 +266,15 @@ export async function runGate(input: RunGateInput): Promise<GateStepResult[]> {
     const started = now();
     const exec = await execute(step, index);
     const durationMs = now() - started;
-    const declaredSkip = exec.exitCode === GATE_SKIP_EXIT_CODE;
+    const exitedSkip = exec.exitCode === GATE_SKIP_EXIT_CODE;
+    // Only a step DECLARED skip-capable may skip; the exit code alone is not a declaration.
+    const skipDeclared = exitedSkip && input.maySkip?.(step) === true;
     const status: GateStepStatus =
       exec.unverified === true
         ? "not-run"
         : exec.exitCode === 0
           ? "pass"
-          : declaredSkip && input.skipIsFailure !== true
+          : skipDeclared && input.skipIsFailure !== true
             ? "skip"
             : "fail";
     const stepResult: Omit<GateStepResult, "note"> = {
@@ -265,8 +285,11 @@ export async function runGate(input: RunGateInput): Promise<GateStepResult[]> {
     };
     const notes = [
       ...(exec.note !== undefined ? [exec.note] : []),
-      // Only a skip this run REFUSED carries the note; an ordinary red never does.
-      ...(status === "fail" && declaredSkip ? [REFUSED_SKIP_NOTE] : []),
+      // Only a skip this run REFUSED carries a note; an ordinary red never does. An undeclared exit 3
+      // is named as such even under --ci — "never declared" is the truer reason than "CI refuses".
+      ...(status === "fail" && exitedSkip
+        ? [skipDeclared ? REFUSED_SKIP_NOTE : UNDECLARED_SKIP_NOTE]
+        : []),
     ];
     const result: GateStepResult =
       notes.length > 0 ? { ...stepResult, note: notes.join("; ") } : stepResult;

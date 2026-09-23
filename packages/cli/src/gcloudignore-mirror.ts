@@ -60,12 +60,21 @@ export interface MirrorSubject {
   readonly reason: "env-secrets-block" | "studio-runtime-data";
 }
 
+/** A subject `.gcloudignore` does not hold in force. */
+export interface MirrorGap extends MirrorSubject {
+  /**
+   * Set when the subject IS present but a LATER line of the opposite polarity (`!x` after `x`, or
+   * `x` after `!x`) undoes it — gitignore semantics are last-match-wins. Absent: the line is missing.
+   */
+  readonly undoneBy?: { readonly line: number; readonly text: string };
+}
+
 /** What the judge found. */
 export interface MirrorVerdict {
   /** Every `.gitignore` line the mirror covers. */
   readonly subjects: readonly MirrorSubject[];
-  /** Those with no twin in `.gcloudignore` — empty is the mirror holding. */
-  readonly missing: readonly MirrorSubject[];
+  /** Those `.gcloudignore` does not hold in force (absent, or undone later) — empty is the mirror holding. */
+  readonly missing: readonly MirrorGap[];
 }
 
 /** The `.gitignore` section header this reads. Changing it means changing {@link requiredMirror}. */
@@ -126,7 +135,10 @@ export function requiredMirror(gitignore: string): MirrorSubject[] {
   return out;
 }
 
-/** Every meaningful line of an ignore file, trimmed — the set a subject is looked up in. */
+/**
+ * Every meaningful line of an ignore file, trimmed. ⚠ A SET, so it forgets order — the judge no
+ * longer looks subjects up in it (last-match-wins needs the ordered lines; see the judge).
+ */
 export function ignorePatterns(text: string): Set<string> {
   return new Set(
     text
@@ -137,11 +149,36 @@ export function ignorePatterns(text: string): Set<string> {
   );
 }
 
-/** The reconciliation: every subject from `.gitignore`, and the ones `.gcloudignore` does not repeat. */
+/** A pattern with any leading `!` removed — the path it speaks about, regardless of polarity. */
+function unnegated(pattern: string): string {
+  return pattern.startsWith("!") ? pattern.slice(1) : pattern;
+}
+
+/**
+ * The reconciliation: every subject from `.gitignore`, and the ones `.gcloudignore` does not hold
+ * in force.
+ *
+ * ⚠ ORDER MATTERS. gitignore syntax is last-match-wins, so a set-membership test passed a file that
+ * listed `.env` and then, further down, `!.env` — the secret would be uploaded again with this rung
+ * green. A subject therefore counts only if the LAST line naming its path (in either polarity) is
+ * the subject itself. This reads exact same-path lines only; a broader re-include (`!*`, `!.env*`)
+ * is outside what this judge compares.
+ */
 export function judgeGcloudignoreMirror(gitignore: string, gcloudignore: string): MirrorVerdict {
   const subjects = requiredMirror(gitignore);
-  const present = ignorePatterns(gcloudignore);
-  return { subjects, missing: subjects.filter((s) => !present.has(s.pattern)) };
+  const lines = gcloudignore
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((text, i) => ({ line: i + 1, text: text.trim() }))
+    .filter((l) => isPattern(l.text));
+  const missing: MirrorGap[] = [];
+  for (const subject of subjects) {
+    const path = unnegated(subject.pattern);
+    const last = lines.findLast((l) => unnegated(l.text) === path);
+    if (last === undefined) missing.push(subject);
+    else if (last.text !== subject.pattern) missing.push({ ...subject, undoneBy: last });
+  }
+  return { subjects, missing };
 }
 
 /** The report — a PASS naming what it compared, or a FAIL naming each gap and what it costs. */
@@ -149,9 +186,16 @@ export function formatMirrorVerdict(verdict: MirrorVerdict): string {
   if (verdict.missing.length === 0) {
     return `check:gcloudignore-mirror PASS — all ${verdict.subjects.length} credential/runtime line(s) in .gitignore are repeated in .gcloudignore.`;
   }
-  const rows = verdict.missing.map((m) => `  ${m.pattern}   (${m.reason})`).join("\n");
+  const rows = verdict.missing
+    .map((m) => {
+      const row = `  ${m.pattern}   (${m.reason})`;
+      return m.undoneBy === undefined
+        ? row
+        : `${row} — present, but UNDONE by later line ${m.undoneBy.line}: \`${m.undoneBy.text}\` (remove it)`;
+    })
+    .join("\n");
   return [
-    `check:gcloudignore-mirror FAIL — ${verdict.missing.length} of ${verdict.subjects.length} line(s) are in .gitignore and NOT in .gcloudignore:`,
+    `check:gcloudignore-mirror FAIL — ${verdict.missing.length} of ${verdict.subjects.length} line(s) are in .gitignore and NOT in force in .gcloudignore:`,
     rows,
     "",
     "`.gcloudignore` BYPASSES `.gitignore` (its own first lines say so), and apps/studio/Dockerfile",

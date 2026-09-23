@@ -1,11 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 import type { GateStep } from "./gate-order.js";
 import {
   GATE_PARTIAL_EXIT_CODE,
   GATE_SKIP_EXIT_CODE,
   REFUSED_SKIP_NOTE,
+  UNDECLARED_SKIP_NOTE,
   type GateExecution,
   type GateStepResult,
   gateExitCode,
@@ -28,6 +31,15 @@ function scripted(codes: Record<string, number>) {
     return { exitCode: codes[step.command] ?? 0 };
   };
   return { ran, execute };
+}
+
+/**
+ * A `maySkip` declaring exactly the named checks skip-capable — the test-side stand-in for
+ * `SKIP_CAPABLE_CHECKS`. Every skip test names its declaration: the runner accepts no undeclared skip.
+ */
+function declares(...checks: string[]): (step: GateStep) => boolean {
+  const set = new Set(checks);
+  return (step) => set.has(step.check ?? "");
 }
 
 /** A monotonic fake clock — never a real timer (ADR-0276: wall clock is not a gate-tier assertion). */
@@ -99,7 +111,7 @@ test("a step exiting the reserved code reports SKIP, never PASS — the measured
   const { execute } = scripted({ "pnpm check:web-grounding": GATE_SKIP_EXIT_CODE });
   const plan = steps("check:web-grounding", "check:boundaries");
 
-  const results = await runGate({ steps: plan, execute, now: fakeClock() });
+  const results = await runGate({ steps: plan, execute, maySkip: declares("check:web-grounding"), now: fakeClock() });
 
   assert.equal(byCommand(results, "pnpm check:web-grounding").status, "skip");
   assert.notEqual(
@@ -112,7 +124,12 @@ test("a step exiting the reserved code reports SKIP, never PASS — the measured
 
 test("a SKIP does not red the gate, and the summary says green is NARROWED", async () => {
   const { execute } = scripted({ "pnpm check:web-grounding": GATE_SKIP_EXIT_CODE });
-  const results = await runGate({ steps: steps("check:web-grounding", "check:boundaries"), execute, now: fakeClock() });
+  const results = await runGate({
+    steps: steps("check:web-grounding", "check:boundaries"),
+    execute,
+    maySkip: declares("check:web-grounding"),
+    now: fakeClock(),
+  });
 
   assert.equal(gateExitCode(results), 0, "a legitimate opt-out must not train sessions to ignore reds");
 
@@ -126,7 +143,7 @@ test("SKIP and NOT RUN stay distinct — same epistemic class, different cause",
   const { execute } = scripted({ "pnpm check:a": GATE_SKIP_EXIT_CODE, "pnpm check:b": 1 });
   const plan = steps("check:a", "check:b", "check:c");
 
-  const results = await runGate({ steps: plan, execute, failFast: true, now: fakeClock() });
+  const results = await runGate({ steps: plan, execute, failFast: true, maySkip: declares("check:a"), now: fakeClock() });
 
   assert.equal(byCommand(results, "pnpm check:a").status, "skip", "asked, and answered 'nothing to check'");
   assert.equal(byCommand(results, "pnpm check:c").status, "not-run", "never asked at all");
@@ -137,7 +154,7 @@ test("a SKIP never stops the walk — only a real failure can, and only under --
   const { ran, execute } = scripted({ "pnpm check:a": GATE_SKIP_EXIT_CODE });
   const plan = steps("check:a", "check:b", "check:c");
 
-  const results = await runGate({ steps: plan, execute, failFast: true, now: fakeClock() });
+  const results = await runGate({ steps: plan, execute, failFast: true, maySkip: declares("check:a"), now: fakeClock() });
 
   assert.deepEqual(ran, ["pnpm check:a", "pnpm check:b", "pnpm check:c"], "a skip is not a red");
   assert.equal(gateExitCode(results), 0);
@@ -153,6 +170,71 @@ test("the reserved skip code is not a value any ordinary failure produces", asyn
   const results = await runGate({ steps: steps("check:a", "check:b"), execute, now: fakeClock() });
   assert.equal(byCommand(results, "pnpm check:a").status, "fail");
   assert.equal(byCommand(results, "pnpm check:b").status, "fail");
+});
+
+// ── only a DECLARED skip-capable step may skip ───────────────────────────────
+//
+// The escape these close: the runner used to read the exit code alone, so ANY step exiting 3 —
+// `check:boundaries`, or the typecheck/test legs, which carry no `check` at all — became a SKIP and the
+// gate printed GATE GREEN, NARROWED over a check that never declared it could opt out.
+
+test("an exit 3 from a step NOT declared skip-capable is a FAIL naming why, and the gate is red", async () => {
+  const { execute } = scripted({ "pnpm check:boundaries": GATE_SKIP_EXIT_CODE });
+  const results = await runGate({
+    steps: steps("check:web-grounding", "check:boundaries"),
+    execute,
+    maySkip: declares("check:web-grounding"),
+    now: fakeClock(),
+  });
+  const boundaries = byCommand(results, "pnpm check:boundaries");
+  assert.equal(boundaries.status, "fail");
+  assert.equal(boundaries.exitCode, GATE_SKIP_EXIT_CODE);
+  assert.equal(boundaries.note, UNDECLARED_SKIP_NOTE);
+  assert.equal(gateExitCode(results), 1);
+  assert.doesNotMatch(renderGateSummary(results).join("\n"), /GATE GREEN/);
+});
+
+test("a step with no check (the typecheck/test legs) exiting 3 is a FAIL, never a SKIP", async () => {
+  const results = await runGate({
+    steps: steps("-r typecheck", "-r test"),
+    execute: () => ({ exitCode: GATE_SKIP_EXIT_CODE }),
+    maySkip: declares("check:web-grounding"),
+    now: fakeClock(),
+  });
+  for (const r of results) {
+    assert.equal(r.status, "fail", r.command);
+    assert.equal(r.note, UNDECLARED_SKIP_NOTE, r.command);
+  }
+  assert.equal(gateExitCode(results), 1);
+});
+
+test("with no maySkip at all NOTHING may skip — the default is fail-closed", async () => {
+  const results = await runGate({
+    steps: steps("check:web-grounding"),
+    execute: () => ({ exitCode: GATE_SKIP_EXIT_CODE }),
+    now: fakeClock(),
+  });
+  assert.equal(byCommand(results, "pnpm check:web-grounding").status, "fail");
+  assert.equal(gateExitCode(results), 1);
+});
+
+test("under skipIsFailure an UNDECLARED exit 3 names the truer reason — it was never declared", async () => {
+  const results = await runGate({
+    steps: steps("check:boundaries"),
+    execute: () => ({ exitCode: GATE_SKIP_EXIT_CODE }),
+    skipIsFailure: true,
+    maySkip: declares("check:web-grounding"),
+    now: fakeClock(),
+  });
+  assert.equal(byCommand(results, "pnpm check:boundaries").note, UNDECLARED_SKIP_NOTE);
+});
+
+test("gate-run.ts wires the runner's maySkip to SKIP_CAPABLE_CHECKS", () => {
+  // gate-run.ts is a script (top-level await main), so its wiring is asserted on its source — the
+  // runner's fail-closed default means a dropped line would red every web/-less local gate, but a
+  // wrong predicate (e.g. `() => true`) would silently re-open the escape.
+  const source = readFileSync(fileURLToPath(new URL("./gate-run.ts", import.meta.url)), "utf8");
+  assert.match(source, /maySkip: \(step\) => SKIP_CAPABLE_CHECKS\.has\(step\.check \?\? ""\)/);
 });
 
 // ── NOT RUN is a third status, never collapsed into a neighbour ──────────────
@@ -403,6 +485,7 @@ test("ci-green-means-every-ci-step-passed: under skipIsFailure the reserved skip
     steps: steps("check:a", "check:land-art"),
     execute,
     skipIsFailure: true,
+    maySkip: declares("check:land-art"),
     now: fakeClock(),
   });
   const land = byCommand(results, "pnpm check:land-art");
@@ -422,12 +505,14 @@ test("ci-green-means-every-ci-step-passed: without skipIsFailure the same exit i
   const unset = await runGate({
     steps: steps("check:land-art"),
     execute: scripted({ "pnpm check:land-art": GATE_SKIP_EXIT_CODE }).execute,
+    maySkip: declares("check:land-art"),
     now: fakeClock(),
   });
   const off = await runGate({
     steps: steps("check:land-art"),
     execute: scripted({ "pnpm check:land-art": GATE_SKIP_EXIT_CODE }).execute,
     skipIsFailure: false,
+    maySkip: declares("check:land-art"),
     now: fakeClock(),
   });
   for (const results of [unset, off]) {
@@ -456,6 +541,7 @@ test("ci-green-means-every-ci-step-passed: a refused skip keeps the step's own n
     steps: steps("check:web-engine"),
     execute: () => ({ exitCode: GATE_SKIP_EXIT_CODE, note: "web/ absent" }),
     skipIsFailure: true,
+    maySkip: declares("check:web-engine"),
     now: fakeClock(),
   });
   assert.equal(byCommand(results, "pnpm check:web-engine").note, `web/ absent; ${REFUSED_SKIP_NOTE}`);

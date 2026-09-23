@@ -84,11 +84,18 @@ export interface MutationTarget {
  * `apps/desktop`, whose `test` script is `bun test … src/ electron/`: 2,140 lines across four
  * `electron/` files, 45% of the app's non-test TypeScript and the whole 931-line sidecar route
  * table, sat outside the rung with no line ever printed about it.
+ *
+ * `unmutated-extension` is the third, and it sits INSIDE `src/`: a production `.tsx` / `.mts` /
+ * `.cts` file the rung never mutates because {@link isMutableSource} admits `.ts` alone. Until
+ * 2026-09-24 it was dropped with no record at all — a branch changing only
+ * `apps/studio/src/components/Act2IntroControl.tsx` skipped with "this branch changes no mutable
+ * source", a sentence that read as "nothing here needed proving". Whether to ADMIT those extensions
+ * is a separate policy decision; this kind only makes the drop visible.
  */
 export interface NarrowedFile {
   /** Repo-root-relative posix path. */
   readonly file: string;
-  readonly kind: "untested-root" | "declared-test-root";
+  readonly kind: "untested-root" | "declared-test-root" | "unmutated-extension";
   /** The project that owns it, for the human-facing line. */
   readonly project: string;
 }
@@ -471,6 +478,17 @@ function isMutableSource(file: string): boolean {
   return !isTestFile(file);
 }
 
+/**
+ * A production TypeScript file this rung does NOT mutate purely because of its extension: `.tsx`,
+ * `.mts` or `.cts`, not a declaration (`.d.mts` / `.d.cts`) and not a test. Such a file is reported
+ * as an `unmutated-extension` narrowing rather than dropped in silence — see {@link NarrowedFile}.
+ */
+function isUnmutatedExtensionSource(file: string): boolean {
+  if (!/\.(tsx|mts|cts)$/.test(file)) return false;
+  if (/\.d\.(mts|cts)$/.test(file)) return false;
+  return !/\.test\.(tsx|mts|cts)$/.test(file);
+}
+
 /** A test file, by this repo's convention (`*.test.ts`, including `*.e2e.test.ts`). */
 /**
  * Can this rung's test runner actually EXECUTE a project's suite?
@@ -656,14 +674,21 @@ function mergeRanges(ranges: readonly LineRange[]): LineRange[] {
  * would red the desktop app's most-edited file until that coverage is written.
  */
 export function formatNarrowingLines(narrowed: readonly NarrowedFile[]): readonly string[] {
-  return narrowed.map((entry) =>
-    entry.kind === "declared-test-root"
+  return narrowed.map((entry) => {
+    if (entry.kind === "unmutated-extension") {
+      return (
+        `NARROWED: ${entry.file} was NOT mutated — it is production code under \`${entry.project}\`'s ` +
+        "src/, but its extension is outside this rung's reach (only .ts is mutated). Nothing on " +
+        "this branch proves those lines."
+      );
+    }
+    return entry.kind === "declared-test-root"
       ? `NARROWED (GAP): ${entry.file} was NOT mutated — this rung only mutates a project's src/, ` +
         `but \`${entry.project}\`'s own test script runs that directory, so its tests do execute ` +
         "there. Nothing on this branch proves those lines."
       : `NARROWED: ${entry.file} was NOT mutated — it sits outside \`${entry.project}\`'s src/, ` +
-        "which no unit test is written against. Dropped on purpose.",
-  );
+        "which no unit test is written against. Dropped on purpose.";
+  });
 }
 
 /**
@@ -770,6 +795,7 @@ export function selectMutationTargets(args: {
   const changedTestFiles: string[] = [];
   const exempted: string[] = [];
   let droppedOutsideSrc = 0;
+  let unmutatedExtension = 0;
 
   // Longest dir first, so `packages/library` never claims a file inside a hypothetical
   // `packages/library-store`. `startsWith(dir + "/")` already prevents that, but ordering keeps the
@@ -790,7 +816,16 @@ export function selectMutationTargets(args: {
       changedTestFiles.push(file);
       continue;
     }
-    if (!isMutableSource(file)) continue;
+    if (!isMutableSource(file)) {
+      // Production code under src/ that this rung cannot mutate only because of its extension. It
+      // is NOT admitted (that is a separate policy call) — it is reported, so the skip reason and
+      // the NARROWED lines stop implying the branch changed nothing that needed proving.
+      if (isUnmutatedExtensionSource(file) && file.startsWith(`${owner.dir}/src/`)) {
+        unmutatedExtension += 1;
+        narrowed.push({ file, kind: "unmutated-extension", project: owner.name });
+      }
+      continue;
+    }
     if (!file.startsWith(`${owner.dir}/src/`)) {
       droppedOutsideSrc += 1;
       // Stryker disable next-line ArrayDeclaration: EQUIVALENT — the fallback stands for "this
@@ -848,6 +883,12 @@ export function selectMutationTargets(args: {
   const detail: string[] = [];
   if (droppedOutsideSrc > 0) {
     detail.push(`${droppedOutsideSrc} changed .ts file(s) sit outside any project's src/`);
+  }
+  if (unmutatedExtension > 0) {
+    detail.push(
+      `${unmutatedExtension} changed production .tsx/.mts/.cts file(s) under a project's src/ ` +
+        "were NOT mutated — their extension is outside this rung's reach (only .ts is mutated)",
+    );
   }
   if (sortedExempt.length > 0) {
     detail.push(`${sortedExempt.length} are executable entry points (${sortedExempt.join(", ")})`);
