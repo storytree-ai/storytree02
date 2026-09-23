@@ -6,7 +6,7 @@
       "app-surface": "studio-app-surface-adapter hosted in studio (apps/studio) as the directed first-consumer seam under ADR-0237",
       "binding-staleness": "hosted in cli (packages/cli) + drive-machinery (packages/orchestrator)",
       "desktop": "hosted in studio (apps/studio)",
-      "drive-machinery": "hosted in library (packages/library)",
+      "drive-machinery": "hosted in cli (packages/cli) + proof-protocol (packages/proof-protocol)",
       "embedded-terminal": "hosted in desktop (apps/desktop) + studio (apps/studio)",
       "library-review": "hosted in library (packages/library) + studio (apps/studio)",
       "library-tech-tree-overlay": "hosted in library (packages/library) + studio (apps/studio)",

@@ -18,7 +18,7 @@ proof_mode: UAT
 # the wrong rung (`human-witness-is-a-judgment-gap-not-cost`). Independently, `uat_witness: machine`
 # drives the story-level structural gate-as-proof node; it does not claim every leg is gate-bound.
 uat_witness: machine
-capabilities: [library-schema-and-write-validation, migrate-on-write-upcaster, event-sourced-store-seam, hydrated-store-dialing-root, eager-batch-migrate, seed-corpus-scripts, library-health-gate, library-cli, graduation-park-lease, library-dag-acyclic-core, work-hierarchy-store-projection, work-hierarchy-drift-gate]
+capabilities: [library-schema-and-write-validation, uat-machine-proof-binding, uat-machine-gate-resolution, migrate-on-write-upcaster, event-sourced-store-seam, hydrated-store-dialing-root, eager-batch-migrate, seed-corpus-scripts, library-health-gate, library-cli, graduation-park-lease, library-dag-acyclic-core, work-hierarchy-store-projection, work-hierarchy-drift-gate]
 # Consumer-side outbound edge (ADR-0075): the library validates/upcasts every doc against the verdict
 # vocabulary's Tier/Status, so it imports the proof-protocol ROOT port — now a declared edge (was an
 # exempt substrate dependency before ADR-0075 collapsed that class). library is no longer the graph
@@ -88,29 +88,36 @@ Lineage of the v2 capabilities to their V1 ancestors (reference only — the V1 
 
 What deliberately does **not** carry: V1's Rust crates and `Cargo.toml` dependency-floor mechanics (v2 is TS + pnpm workspaces), the SurrealDB/surrealkv embedded engine (replaced by Cloud SQL Postgres, ADR-0017), and V1's per-build `runs`/`test_runs` evidence grain (this tier persists history-as-events + a current projection, not run rows).
 
-## Capabilities (10)
+## Capabilities (14)
 
 Listed roots-first (a capability appears after everything it depends on). The `status` column records provenance and current signed-proof posture, not test-registration order: every greenfield capability without a current signed pass is `proposed` (ADR-0395). Each Proof note separately distinguishes real passing coverage from would-be pockets.
 
 | # | capability | outcome | status | depends on |
 |---|---|---|---|---|
 | 1 | [`library-schema-and-write-validation`](library-schema-and-write-validation.md) | Every library artifact is zod-validated at the write boundary against a single per-kind schema source of truth. | proposed | — |
-| 2 | [`migrate-on-write-upcaster`](migrate-on-write-upcaster.md) | A library doc authored against an older schema is forward-migrated and version-stamped at the write boundary rather than rejected. | proposed | `library-schema-and-write-validation` |
-| 3 | [`event-sourced-store-seam`](event-sourced-store-seam.md) | A narrow Store seam appends every write as a history event and updates a current-state projection atomically, over one keyless-IAM events schema. | proposed | `library-schema-and-write-validation`, `migrate-on-write-upcaster` |
-| 4 | [`eager-batch-migrate`](eager-batch-migrate.md) | A lagging library doc is bulk forward-migrated in place non-destructively at the store boundary. | proposed | `event-sourced-store-seam`, `migrate-on-write-upcaster` |
-| 5 | [`seed-corpus-scripts`](seed-corpus-scripts.md) | The store seeds every studio knowledge unit and template through the validated write boundary. | proposed | `event-sourced-store-seam`, `migrate-on-write-upcaster` |
-| 6 | [`library-health-gate`](library-health-gate.md) | Four health checks classify every stored doc into PASS, WARN, or FAIL. | proposed | `library-schema-and-write-validation`, `migrate-on-write-upcaster` |
-| 7 | [`library-cli`](library-cli.md) | An agent curates library artifacts through guidance-enveloped, `--pg`-gated commands. | proposed | `event-sourced-store-seam`, `eager-batch-migrate`, `seed-corpus-scripts`, `library-health-gate`, `library-schema-and-write-validation`, `migrate-on-write-upcaster` |
-| 8 | [`graduation-park-lease`](graduation-park-lease.md) | A librarian's parked-memory verdict becomes a lease — a content-hash + review-date + lease-length record whose worklist projection counts only new, changed, or lease-expired candidates. | proposed | — |
-| 9 | [`library-dag-acyclic-core`](library-dag-acyclic-core.md) | A pure detector returns no cycles for an acyclic authored `standsOn` graph and concrete closed paths for cycles, without treating `references` as dependency edges. | proposed | — |
-| 10 | [`hydrated-store-dialing-root`](hydrated-store-dialing-root.md) | `createPool` resolves the database credential before raw Cloud SQL or pg construction, while a source fence prevents any production bypass. | proposed | — |
+| 2 | [`uat-machine-proof-binding`](uat-machine-proof-binding.md) | The Story UAT parser carries each explicit proof-gate annotation into the strict per-leg model without dropping or inventing a binding. | proposed | — |
+| 3 | [`uat-machine-gate-resolution`](uat-machine-gate-resolution.md) | Each parsed machine UAT leg resolves only to its named command-bearing observe gate, with every missing or ineligible binding refused. | proposed | `uat-machine-proof-binding` |
+| 4 | [`migrate-on-write-upcaster`](migrate-on-write-upcaster.md) | A library doc authored against an older schema is forward-migrated and version-stamped at the write boundary rather than rejected. | proposed | `library-schema-and-write-validation` |
+| 5 | [`event-sourced-store-seam`](event-sourced-store-seam.md) | A narrow Store seam appends every write as a history event and updates a current-state projection atomically, over one keyless-IAM events schema. | proposed | `library-schema-and-write-validation`, `migrate-on-write-upcaster` |
+| 6 | [`eager-batch-migrate`](eager-batch-migrate.md) | A lagging library doc is bulk forward-migrated in place non-destructively at the store boundary. | proposed | `event-sourced-store-seam`, `migrate-on-write-upcaster` |
+| 7 | [`seed-corpus-scripts`](seed-corpus-scripts.md) | The store seeds every studio knowledge unit and template through the validated write boundary. | proposed | `event-sourced-store-seam`, `migrate-on-write-upcaster` |
+| 8 | [`library-health-gate`](library-health-gate.md) | Four health checks classify every stored doc into PASS, WARN, or FAIL. | proposed | `library-schema-and-write-validation`, `migrate-on-write-upcaster` |
+| 9 | [`library-cli`](library-cli.md) | An agent curates library artifacts through guidance-enveloped, `--pg`-gated commands. | proposed | `event-sourced-store-seam`, `eager-batch-migrate`, `seed-corpus-scripts`, `library-health-gate`, `library-schema-and-write-validation`, `migrate-on-write-upcaster` |
+| 10 | [`graduation-park-lease`](graduation-park-lease.md) | A librarian's parked-memory verdict becomes a lease — a content-hash + review-date + lease-length record whose worklist projection counts only new, changed, or lease-expired candidates. | proposed | — |
+| 11 | [`library-dag-acyclic-core`](library-dag-acyclic-core.md) | A pure detector returns no cycles for an acyclic authored `standsOn` graph and concrete closed paths for cycles, without treating `references` as dependency edges. | proposed | — |
+| 12 | [`hydrated-store-dialing-root`](hydrated-store-dialing-root.md) | `createPool` resolves the database credential before raw Cloud SQL or pg construction, while a source fence prevents any production bypass. | proposed | — |
+| 13 | [`work-hierarchy-store-projection`](work-hierarchy-store-projection.md) | A loader mirrors authored stories, capabilities, criteria, and gates into a stamped live-store projection without changing the disk-canonical authoring surface. | proposed | `event-sourced-store-seam` |
+| 14 | [`work-hierarchy-drift-gate`](work-hierarchy-drift-gate.md) | A fail-closed check makes a stale or disagreeing live-store work-hierarchy mirror loud. | proposed | `work-hierarchy-store-projection` |
 
 ## Dependency graph (code-derived)
 
-These are **within-story** edges, **read off the real source** (static analysis of the imports / calls between capabilities), never hand-drawn from UAT need (ADR-0010 §3): A → B means A's code actually couples to B's code inside the one organism. The graph is acyclic; `library-schema-and-write-validation`, the independent `library-dag-acyclic-core`, and `hydrated-store-dialing-root` are its three roots. One **cross-story** edge applies: `library → proof-protocol` (the schema validates docs against the verdict vocabulary's Tier/Status), declared `depends_on: [proof-protocol]` since ADR-0075 made the ports root organisms rather than an exempt substrate class.
+These are **within-story** edges, **read off the real source** (static analysis of the imports / calls between capabilities), never hand-drawn from UAT need (ADR-0010 §3): A → B means A's code actually couples to B's code inside the one organism. The graph is acyclic; `library-schema-and-write-validation`, `uat-machine-proof-binding`, the independent `library-dag-acyclic-core`, and `hydrated-store-dialing-root` are its four roots. One **cross-story** edge applies: `library → proof-protocol` (the schema validates docs against the verdict vocabulary's Tier/Status), declared `depends_on: [proof-protocol]` since ADR-0075 made the ports root organisms rather than an exempt substrate class.
 
 - `migrate-on-write-upcaster` → `library-schema-and-write-validation`
   - `migrations.ts:1` imports `KIND_SPECS` from `knowledge.ts` (`isStructuredKnowledge`, `migrations.ts:104-107`, gates on whether the kind is a structured key), and `library-doc.ts:67-69` composes `upcast` INTO the validator: `upcastAndValidate = validateLibraryDoc(upcast(...))` — a genuine code call, not a UAT inference.
+- `uat-machine-gate-resolution` → `uat-machine-proof-binding`
+  - `witness-resolution.ts` consumes the parser's exact `proofGateId` and returns only its named
+    command-bearing observe gate or an explicit refusal; it never reparses prose or infers a fallback.
 - `event-sourced-store-seam` → `library-schema-and-write-validation`
   - `PgLibraryStore.upsertDoc` (`packages/library/src/store/pg-store.ts:75-126`) validates the doc at its write boundary (`pg-store.ts:84`) before persisting; the in-memory parity contract is the same `validateLibraryDoc` seam.
 - `event-sourced-store-seam` → `migrate-on-write-upcaster`

@@ -4,8 +4,7 @@
       "apps/studio/src/components/AssetEditor.tsx": "author-library-artifact",
       "apps/studio/src/lib/kindDisplay.ts": "author-library-artifact",
       "apps/studio/src/lib/knowledgeFields.ts": "author-library-artifact",
-      "apps/studio/src/lib/templates.ts": "author-library-artifact",
-      "packages/library/src/templates.ts": "author-library-artifact"
+      "apps/studio/src/lib/templates.ts": "author-library-artifact"
     }
   }
 }

@@ -1,7 +1,7 @@
 ---
 id: "uat-machine-proof-binding"
 tier: capability
-story: drive-machinery
+story: library
 title: "Per-UAT-leg proof-gate parsing"
 outcome: "The Story UAT parser carries each explicit proof-gate annotation into the strict per-leg model without dropping or inventing a binding."
 status: proposed
