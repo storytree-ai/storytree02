@@ -1,0 +1,179 @@
+{
+  "generatedAt": "2026-09-23T03:42:45.704Z",
+  "studio": {
+    "url": "http://127.0.0.1:5291",
+    "head": "8e2b53b9ef43c44342dbef6b360dac78aa6f31bf",
+    "branch": "claude/lane-d-map-spacing"
+  },
+  "shippedRatio": 1,
+  "viewport": {
+    "width": 2560,
+    "height": 1600
+  },
+  "arms": [
+    {
+      "id": "before",
+      "query": "spacing=0.1&plateRoom=0",
+      "caption": "the map as it stands on main: the 2026-09-06 gap, no label clearance",
+      "views": {
+        "fit": {
+          "islands": 36,
+          "world": {
+            "width": 835,
+            "height": 1038
+          },
+          "trails": {
+            "edges": 95,
+            "dropped": 0
+          },
+          "cameraScale": 1.1736526946107784,
+          "drawnPx": {
+            "w": 922,
+            "h": 1168
+          },
+          "png": "docs/research/map-room-2026-09-23/2d-before-fit.png"
+        },
+        "resting": {
+          "islands": 36,
+          "world": {
+            "width": 835,
+            "height": 1038
+          },
+          "trails": {
+            "edges": 95,
+            "dropped": 0
+          },
+          "cameraScale": 2.9470274502499856,
+          "drawnPx": {
+            "w": 2314,
+            "h": 2934
+          },
+          "png": "docs/research/map-room-2026-09-23/2d-before-resting.png"
+        }
+      }
+    },
+    {
+      "id": "room-only",
+      "query": "spacing=0.1",
+      "caption": "the label clearance alone, at the old gap — the overlap fix on its own",
+      "views": {
+        "fit": {
+          "islands": 36,
+          "world": {
+            "width": 854,
+            "height": 1355
+          },
+          "trails": {
+            "edges": 95,
+            "dropped": 0
+          },
+          "cameraScale": 1.1158671586715867,
+          "drawnPx": {
+            "w": 898,
+            "h": 1465
+          },
+          "png": "docs/research/map-room-2026-09-23/2d-room-only-fit.png"
+        },
+        "resting": {
+          "islands": 36,
+          "world": {
+            "width": 854,
+            "height": 1355
+          },
+          "trails": {
+            "edges": 95,
+            "dropped": 0
+          },
+          "cameraScale": 2.9470274502499865,
+          "drawnPx": {
+            "w": 2371,
+            "h": 3870
+          },
+          "png": "docs/research/map-room-2026-09-23/2d-room-only-resting.png"
+        }
+      }
+    },
+    {
+      "id": "shipped",
+      "query": "",
+      "caption": "the landing: clearance + the re-derived gap (1)",
+      "views": {
+        "fit": {
+          "islands": 36,
+          "world": {
+            "width": 950,
+            "height": 1444
+          },
+          "trails": {
+            "edges": 95,
+            "dropped": 0
+          },
+          "cameraScale": 1.0315789473684212,
+          "drawnPx": {
+            "w": 929,
+            "h": 1446
+          },
+          "png": "docs/research/map-room-2026-09-23/2d-shipped-fit.png"
+        },
+        "resting": {
+          "islands": 36,
+          "world": {
+            "width": 950,
+            "height": 1444
+          },
+          "trails": {
+            "edges": 95,
+            "dropped": 0
+          },
+          "cameraScale": 2.9470274502499865,
+          "drawnPx": {
+            "w": 2653,
+            "h": 4132
+          },
+          "png": "docs/research/map-room-2026-09-23/2d-shipped-resting.png"
+        }
+      }
+    },
+    {
+      "id": "wider",
+      "query": "spacing=1.5",
+      "caption": "one rung wider, if the shipped one still reads tight",
+      "views": {
+        "fit": {
+          "islands": 36,
+          "world": {
+            "width": 1123,
+            "height": 1661
+          },
+          "trails": {
+            "edges": 95,
+            "dropped": 0
+          },
+          "cameraScale": 0.8726625111308994,
+          "drawnPx": {
+            "w": 936,
+            "h": 1412
+          },
+          "png": "docs/research/map-room-2026-09-23/2d-wider-fit.png"
+        },
+        "resting": {
+          "islands": 36,
+          "world": {
+            "width": 1123,
+            "height": 1661
+          },
+          "trails": {
+            "edges": 95,
+            "dropped": 0
+          },
+          "cameraScale": 2.7790918312700748,
+          "drawnPx": {
+            "w": 2981,
+            "h": 4498
+          },
+          "png": "docs/research/map-room-2026-09-23/2d-wider-resting.png"
+        }
+      }
+    }
+  ]
+}
