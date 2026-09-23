@@ -16,7 +16,8 @@
     "capture:unwatched": "node --import ../../scripts/tsx-cache-off.mjs --import tsx scripts/capture-unwatched-regrow.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "test": "vitest run src/ server/",
-    "uat": "playwright test"
+    "uat": "playwright test",
+    "capture:land-mount": "node scripts/capture-land-mount.mjs"
   },
   "dependencies": {
     "@dagrejs/dagre": "^1.1.4",

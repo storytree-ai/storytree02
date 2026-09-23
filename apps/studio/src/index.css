@@ -1553,6 +1553,77 @@ a.stat:hover {
   height: 100%; /* fill the viewport; the camera handles framing/centring */
 }
 
+/* ?landMount=1 (the-land-sits-under-the-working-map, ADR-0530 route C): THE 3D LAND, UNDER THE MAP.
+   A sibling of `.world-scene` inside `.world-pan-layer`, placed BEFORE it — so it inherits the same
+   compositor pan transform (ADR-0272 D2: both layers move together, neither re-rasterises) and
+   paints UNDERNEATH it.
+   ⚠⚠ THE Z-ORDER IS STATED EXPLICITLY, AND "DOM ORDER IS ENOUGH" IS A MEASURED FALSEHOOD. This rule
+   first set no `z-index` at all, on the reasoning that the land layer is the FIRST child of
+   `.world-pan-layer` so the `<svg>` after it must paint on top. It does not. The land layer has to
+   be `position: absolute` to overlay the frame, the `<svg>` is `position: static`, and CSS painting
+   order puts POSITIONED descendants (step 8) above non-positioned in-flow content (steps 4 and 7)
+   regardless of which came first. So the canvas painted OVER the map: measured 2026-09-23 on the
+   real forest, the whole SVG flora layer — 1,996 flora marks, 8,781 grass blades, 78 flower
+   markers, every tree — vanished under the land while remaining perfectly present in the DOM. A
+   jsdom test cannot see it (jsdom paints nothing), and the element counts were identical across
+   both arms, so ONLY the staged picture caught it.
+   ⚠ BOTH SIBLINGS ARE THEREFORE POSITIONED AND NUMBERED, and it is deliberately NOT `z-index: -1`
+   on the land alone. That would work only while `.world-pan-layer` happens to be a stacking context
+   — which it is when it carries a transform and is NOT when the transform is `none` — and a
+   negative index that escapes its parent lands behind `.world-frame`'s own gradient, i.e. the land
+   silently disappears depending on whether a drag is in flight. Two explicit indices in one parent
+   cannot do that.
+   ⚠ AND IT IS SCOPED TO `.has-land-mount`, so the flag-off route keeps a static `<svg>` and no new
+   stacking context — byte-for-byte the map that shipped.
+   ⚠ `pointer-events: none` IS A FENCE (ADR-0380 D6 fence 3). The app owns picking, focus and the
+   keyboard camera; this layer draws and decides nothing, so it must never intercept a gesture —
+   `.world-viewport`'s handlers and the `elementFromPoint` hit-test both have to reach straight
+   through it. */
+.land-mount {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.world-pan-layer.has-land-mount > .land-mount {
+  z-index: 0;
+}
+.world-pan-layer.has-land-mount > .world-scene {
+  position: relative;
+  z-index: 1;
+}
+
+/* ⚠⚠ THE SVG'S OWN GROUND GOES SEE-THROUGH, AND `opacity: 0` IS THE LOAD-BEARING CHOICE — not
+   `display: none` and not `visibility: hidden`. Both of those would remove the element from
+   hit-testing, and `.relaxed-tile` / `.hex-tile` ARE click targets (they carry `cursor: pointer`,
+   and the coordinate fallback walks up from `document.elementFromPoint`). An invisible element still
+   takes a pointer, so picking survives the mount unchanged — which is end-state item 3's first
+   entry.
+   ⚠⚠ IT TARGETS THE TWO LAYER WRAPPERS, AND THOSE TWO ONLY — `coast-layer` (`.hex-coastland`, the
+   sandy shore) and `ground-mesh` (`.relaxed-land`, the status-tinted island land). Both names are
+   `SceneView`'s own class for the scene kind AND the class the legacy inline path writes, so one
+   rule covers both render paths rather than agreeing with one of them today.
+   ⚠ THE PER-ISLAND GROUPS ARE DELIBERATELY NOT LISTED. An earlier cut of this rule named
+   `.coast-fill-group` / `.relaxed-tile` / `.hex-tile`, which are real classes and the WRONG grain:
+   they are the per-island groups INSIDE these layers, so the rule suppressed nothing the layers do
+   not already contain and would have read as working while depending on a second selector staying
+   in step. Hiding the layer is what the scene's own structure offers.
+   ⚠ AND `.hex-coast` (the `empties-layer`, the off-island board hexes) IS NOT SUPPRESSED. Those are
+   the board, not island land; the canvas draws no land there and is transparent, so they stay
+   visible exactly as they were.
+   ⚠⚠ THE LEGEND IS UNAFFECTED BY CONSTRUCTION — the answer to the no-drift question rather than a
+   mitigation of it, and it rests on two facts that were checked rather than assumed. First,
+   `WorldLegend` draws NO ground swatch at all: its whole vocabulary is `story-tree st-*`,
+   `garden-flora st-*` and the four wisp families, so the mount moves only a colour the legend never
+   described. Second, `buildScene` puts the parcel FLORA marks in the flora layer and only the
+   parcel CELLS in the ground layer (`scene.ts`'s parcel builder returns the two separately), so
+   hiding the ground layer cannot take a `garden-flora` mark with it. Everything the legend claims
+   to describe still wears the map's own classes in the SVG layer, so the legend still IS that
+   palette. (The ground tint's own three copies stay pinned by `pnpm check:palette-transcription`.) */
+.world-pan-layer.has-land-mount .hex-coastland,
+.world-pan-layer.has-land-mount .relaxed-land {
+  opacity: 0;
+}
+
 /* The generous, invisible per-story hit rect (SceneView hitsLayerToBack): covers a story's crown +
    island + nameplate so node-click stays reliable at the zoomed-out contain fit — the pointer cursor
    advertises the whole region as selectable. */
