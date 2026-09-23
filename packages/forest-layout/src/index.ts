@@ -32,7 +32,10 @@ export {
   PRE_ADR0521_SPACING,
   SPACING_CONTROL_ARM,
   gapBetween,
+  inRowGapWithChrome,
   loneSwing,
+  rankGapWithChrome,
   spacingArmId,
+  type ChromeClearance,
   type LegacySpacing,
 } from './spacing.js';

@@ -68,6 +68,7 @@ import { useNowTick } from '../lib/poll';
 import { useSessionClaimGroups } from '../lib/sessionClaims';
 import { assetHref, docHref, navigate, treeFocusHref, treeHref } from '../lib/route';
 import { presentStories } from '../lib/worldStatus.js';
+import { mapChromeClearance, nameplateLayout, type NameplateLayout } from '../lib/nameplate.js';
 import {
   packWorld,
   groundHeroTile,
@@ -307,55 +308,10 @@ export type DecorSpot = LayoutDecorSpot;
 export type Territory = LayoutTerritory<TreeStory>;
 export type HexWorld = LayoutHexWorld<TreeStory>;
 
-/** A nameplate's resolved box + text/glyph anchors (px, plate-local). */
-export interface NameplateLayout {
-  /** Plate width. */
-  w: number;
-  /** Plate height. */
-  h: number;
-  /** Corner radius. */
-  rx: number;
-  /** Baseline y of the id (the bigger top line). */
-  idY: number;
-  /** Baseline y of the sub line. */
-  subY: number;
-  /** Leading bookshelf-glyph anchor (building plates only; ignored otherwise). */
-  glyphX: number;
-  glyphY: number;
-  glyphScale: number;
-}
-
-/**
- * Nameplate geometry (owner ask 2026-06-22 — bigger name cards + bigger leading bookshelf).
- * A pure function of the id length and the building flag, so the box and its anchors are
- * unit-testable (Stage-1 of ADR-0070; the final look is owner-attested). Two sizes:
- *   • NORMAL — a modest global bump over the old 30px plate (height 33, id ~12px), leaving the
- *     positioning geometry (still centred on the centroid, drawn below the island) unchanged.
- *   • BUILDING — a distinctly larger landmark card (taller, wider min, larger id) with a big
- *     leading bookshelf glyph, so the root library reads as a landmark on the foundation row.
- * Building plates reserve a left gutter for the glyph and widen to keep the centred id clear
- * of it.
- */
-export function nameplateLayout(idLen: number, building: boolean): NameplateLayout {
-  if (building) {
-    const glyphGutter = 30; // left band the enlarged bookshelf occupies
-    const w = Math.max(132, idLen * 8.6 + 36 + glyphGutter);
-    const h = 42;
-    return {
-      w,
-      h,
-      rx: 9,
-      idY: 18,
-      subY: 32,
-      glyphX: 16,
-      glyphY: h - 6,
-      glyphScale: 0.92,
-    };
-  }
-  const w = Math.max(100, idLen * 7.4 + 30);
-  const h = 33;
-  return { w, h, rx: 7, idY: 14, subY: 27, glyphX: 0, glyphY: 0, glyphScale: 1 };
-}
+// `nameplateLayout` + `NameplateLayout` MOVED to `../lib/nameplate.js` (ADR-0598 D2) so the packer's
+// chrome clearance can be derived from the same function the plate is drawn from without importing
+// this React module. Re-exported here so every existing importer is unchanged.
+export { nameplateLayout, type NameplateLayout };
 
 /**
  * The panel bookshelf-landmark anchor (ADR-0088 follow-on, owner 2026-06-22): a shared-island
@@ -438,8 +394,16 @@ export function buildWorld(
      *  the shipped `LAND_CAMERA_ELEVATION_DEG`, so every current caller is byte-unchanged. It
      *  re-projects the drawing and re-decides nothing: the packer takes every layout decision at
      *  `PLAN_VIEW_ELEVATION_DEG` and those are camera-independent. It exists so the registration
-     *  work can RENDER a second camera's arm; it does not pick one, which is an owner look. */
+     *  work can RENDER a second camera's arm; it does not pick one, which is an owner look.
+     *
+     *  ⚠ IT DOES NOT MOVE THE NAMEPLATE CLEARANCE EITHER (ADR-0598 D2). The clearance is taken at
+     *  the DECLARED camera in `mapChromeClearance`, never at this one, which is what keeps an
+     *  elevation arm a re-projection of one layout rather than a second layout. */
     elevationDeg?: number;
+    /** ADR-0598 D2's scale-back dial (ADR-0503) — `?plateRoom=` on the map. Multiplies the nameplate
+     *  clearance the packer is given; absent ⇒ 1 (the full clearance), 0 ⇒ the pre-ADR-0598 map,
+     *  which is the control arm a comparison page stands on. */
+    chromeScale?: number;
   },
 ): HexWorld {
   const buildings = opts?.buildings ?? false;
@@ -462,6 +426,10 @@ export function buildWorld(
   // `spacing` and one present-and-undefined are different things, and the packer's default depends
   // on the difference.
   const packOpts: PackOptions = { plantsScatter: opts?.plantsScatter ?? false, carriedIcons };
+  // ADR-0598 D2 — tell the packer how much ground THIS surface's nameplates need, so a plate never
+  // lands on a neighbouring story's land. Derived from `nameplateLayout` (the same function the
+  // plate is drawn from) at the DECLARED camera, over the ids that actually reach the map.
+  packOpts.chrome = mapChromeClearance(stories.map((s) => s.id), opts?.chromeScale);
   if (opts?.spacing) packOpts.spacing = opts.spacing;
   // By statement for the reason `spacing` is: under `exactOptionalPropertyTypes` an absent key and
   // one present-and-undefined are different inputs, and only the first leaves the packer on its own
@@ -1004,6 +972,26 @@ export function parseSpacingTuning(q: URLSearchParams): Partial<SpacingTuning> {
     out.legacy = { rankGap, islandGap, rankSwing };
   }
   return out;
+}
+
+/**
+ * ADR-0598 D2's scale-back dial — `?plateRoom=<factor>` on the map, the same grammar as `?spacing=`.
+ *
+ * It multiplies the nameplate clearance `buildWorld` hands the packer, so the owner can look at a
+ * ladder rather than at one arm (ADR-0503). **0 is the pre-ADR-0598 map** — the control arm a
+ * comparison sheet stands, reachable from the running studio without a second build. Absent ⇒ 1,
+ * the full clearance. Negative and non-numeric are ignored, exactly as `?spacing=` ignores them.
+ */
+export function parseChromeScale(q: URLSearchParams): number | null {
+  const raw = q.get('plateRoom');
+  if (raw === null) return null;
+  const v = Number(raw);
+  return Number.isFinite(v) && v >= 0 ? v : null;
+}
+
+function readChromeScale(): number | null {
+  if (typeof window === 'undefined') return null;
+  return parseChromeScale(new URLSearchParams(window.location.search));
 }
 
 /** `?restingView=fit` restores the PRE-ADR-0471 fitted framing, for an in-app side-by-side against
@@ -1598,6 +1586,7 @@ export function TreeView({
   // (`?rankGap=`/`?islandGap=`/`?rankSwing=`), same shape as `substrateTuning` above. Absent ⇒
   // `buildWorld`'s own (now tighter) defaults.
   const spacingTuning = useMemo(() => readSpacingTuning(), [search]);
+  const chromeScale = useMemo(() => readChromeScale(), [search]);
   const artRungs = useMemo(() => readArtRungs(), [search]);
   // `the-two-layers-share-one-elevation`: `?elevation=<deg>` draws the map at another camera for the
   // owner look. Absent ⇒ `buildWorld`'s own default, so the shipped map is untouched.
@@ -1609,8 +1598,11 @@ export function TreeView({
     // `packWorld` on its own default — the same reason `buildWorld` guards its own forward below.
     const opts: NonNullable<Parameters<typeof buildWorld>[1]> = { plantsScatter, buildings, spacing: spacingTuning };
     if (mapElevation !== null) opts.elevationDeg = mapElevation;
+    // By statement for the same `exactOptionalPropertyTypes` reason as `elevationDeg` above: an
+    // absent key leaves the clearance at full, a present-and-undefined one would not.
+    if (chromeScale !== null) opts.chromeScale = chromeScale;
     return buildWorld(stories, opts);
-  }, [stories, plantsScatter, buildings, spacingTuning, mapElevation]);
+  }, [stories, plantsScatter, buildings, spacingTuning, mapElevation, chromeScale]);
   // ADR-0088: the building-class stories that fill the permanent Shared Islands panel. Generic
   // over `story.building === true` (sharedIslandStories). Empty when `?buildings=off` (the
   // buildings render as normal islands then, so the panel has nothing to lift off the map).

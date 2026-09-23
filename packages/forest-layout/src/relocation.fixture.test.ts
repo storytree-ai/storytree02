@@ -26,8 +26,16 @@
 // chrome — and the studio's own `buildWorld.relocation.test.ts` proves the other half, that its
 // chrome computes exactly these values. Neither half is the whole proof; together they are.
 
+import {
+  LAND_CAMERA_ELEVATION_DEG,
+  PLATE_SCALE,
+  TILE_DEPTH,
+  tileUnits,
+  unprojectGround,
+} from '@storytree/forest-world';
+
 import type { LayoutStory, PackOptions } from './pack.js';
-import { PRE_ADR0521_SPACING } from './spacing.js';
+import { PRE_ADR0521_SPACING, type ChromeClearance } from './spacing.js';
 
 interface FixtureCapability {
   readonly id: string;
@@ -109,6 +117,31 @@ export const CARRIED_ICONS: ReadonlyMap<string, readonly string[]> = new Map([
   ['mid-c', ['lib', 'toolbelt']],
 ]);
 
+/** THE STUDIO'S NAMEPLATE OVER THIS CORPUS, stated as data for the same reason `CARRIED_ICONS` is
+ *  — the packer is chrome-free and cannot work out how much room a plate needs (ADR-0598 D2).
+ *
+ *  Every id in this corpus is eight characters or fewer, so every plate takes the studio's minimum
+ *  width of 100 and its one height of 33, both in the plate's own frame before `PLATE_SCALE`. Two
+ *  literals rather than thirteen: the studio's `buildWorld.relocation.test.ts` is what proves its
+ *  chrome computes exactly this, and a per-id table here would be twelve copies of one fact. */
+const GOLDEN_PLATE = { w: 100, h: 33 } as const;
+
+/** The same plate turned into the GROUND distances `packWorld` takes.
+ *
+ *  ⚠ AT THE DECLARED CAMERA, NOT AT `GOLDEN_CAPTURE_ELEVATION_DEG`, and that asymmetry is the
+ *  invariant rather than an oversight (ADR-0598 D2). A plate is fixed-size SCREEN chrome, so the
+ *  ground it needs depends on a camera — and if it depended on the REQUESTED one, asking the map
+ *  for a second camera would re-decide the layout, which ADR-0527 D1 and ADR-0546 D1 both forbid.
+ *  The studio converts at `LAND_CAMERA_ELEVATION_DEG` and so does this, which is why these arms
+ *  can pin a 20° camera and still get the 50° clearance. */
+export function goldenChrome(ids: readonly string[]): ChromeClearance {
+  const screenBand = TILE_DEPTH + tileUnits(8) + GOLDEN_PLATE.h * PLATE_SCALE;
+  return {
+    rowBand: unprojectGround({ x: 0, y: screenBand }, LAND_CAMERA_ELEVATION_DEG).y,
+    plateHalfWidth: new Map(ids.map((id) => [id, (GOLDEN_PLATE.w * PLATE_SCALE) / 2])),
+  };
+}
+
 /** The corpus as the studio hands it over with `buildings: true` — the buildings dropped, order
  *  preserved, which is itself load-bearing: the packer's row ordering breaks ties on input order. */
 export function laidOutCorpus(): FixtureStory[] {
@@ -147,17 +180,37 @@ export function relocationArms() {
   return {
     shipped: {
       stories: laidOutCorpus(),
-      opts: { carriedIcons: CARRIED_ICONS, elevationDeg: GOLDEN_CAPTURE_ELEVATION_DEG },
+      opts: {
+        carriedIcons: CARRIED_ICONS,
+        chrome: goldenChrome(laidOutCorpus().map((st) => st.id)),
+        elevationDeg: GOLDEN_CAPTURE_ELEVATION_DEG,
+      },
     },
     scatter: {
       stories: laidOutCorpus(),
-      opts: { plantsScatter: true, carriedIcons: CARRIED_ICONS, elevationDeg: GOLDEN_CAPTURE_ELEVATION_DEG },
+      opts: {
+        plantsScatter: true,
+        carriedIcons: CARRIED_ICONS,
+        chrome: goldenChrome(laidOutCorpus().map((st) => st.id)),
+        elevationDeg: GOLDEN_CAPTURE_ELEVATION_DEG,
+      },
     },
-    bare: { stories: relocationCorpus(), opts: { elevationDeg: GOLDEN_CAPTURE_ELEVATION_DEG } },
+    bare: {
+      stories: relocationCorpus(),
+      opts: {
+        chrome: goldenChrome(relocationCorpus().map((st) => st.id)),
+        elevationDeg: GOLDEN_CAPTURE_ELEVATION_DEG,
+      },
+    },
     legacy: {
       stories: laidOutCorpus(),
       opts: {
         carriedIcons: CARRIED_ICONS,
+        // The control arm is handed the clearance and MUST ignore it — `legacy` stands the map as
+        // it was before ADR-0521, and a control quietly given room ADR-0521's map never had would
+        // be comparing the ladder against something that has never shipped. Passing it here is
+        // what makes that refusal witnessed rather than merely written down.
+        chrome: goldenChrome(laidOutCorpus().map((st) => st.id)),
         spacing: { legacy: PRE_ADR0521_SPACING },
         elevationDeg: GOLDEN_CAPTURE_ELEVATION_DEG,
       },
@@ -166,6 +219,7 @@ export function relocationArms() {
       stories: laidOutCorpus(),
       opts: {
         carriedIcons: CARRIED_ICONS,
+        chrome: goldenChrome(laidOutCorpus().map((st) => st.id)),
         spacing: { ratio: 0 },
         elevationDeg: GOLDEN_CAPTURE_ELEVATION_DEG,
       },

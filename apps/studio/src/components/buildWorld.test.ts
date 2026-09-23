@@ -193,12 +193,14 @@ describe('buildWorld — ADR-0521: the gaps derive from island size', () => {
   });
   /** Two independent big islands on the foundation row, and one lone island above them. */
   const fixture = (): TreeStory[] => [story('left', 11), story('right', 11), story('lone', 11, ['left', 'right'])];
-  const centroid = (stories: TreeStory[], id: string, ratio: number) => {
-    const w = buildWorld(stories, { spacing: { ratio } });
+  const centroidAt = (stories: TreeStory[], id: string, ratio: number, chromeScale: number) => {
+    const w = buildWorld(stories, { spacing: { ratio }, chromeScale });
     const t = w.territories.find((x) => x.story.id === id);
     if (!t) throw new Error(`no territory ${id}`);
     return t.centroid;
   };
+  /** The shipped map's centroid at a rung — the nameplate clearance ON, as a member sees it. */
+  const centroid = (stories: TreeStory[], id: string, ratio: number) => centroidAt(stories, id, ratio, 1);
 
   it('same-row neighbours sit FURTHER apart at a larger ratio — the in-row gap is a fraction of their radii', () => {
     const near = Math.abs(centroid(fixture(), 'left', 0).x - centroid(fixture(), 'right', 0).x);
@@ -287,9 +289,41 @@ describe('buildWorld — ADR-0521: the gaps derive from island size', () => {
   });
 
   it('adjacent ranks sit FURTHER apart at a larger ratio — the row gap is the same fraction', () => {
+    // ⚠ MEASURED WITH THE NAMEPLATE CLEARANCE TURNED OFF (`chromeScale: 0`), and that is the point
+    // rather than a convenience. Since ADR-0598 D2 the row gap is the LARGER of the ratio's
+    // fraction and an absolute floor sized to the nameplate, and on a fixture of small islands the
+    // floor is what stands at every rung this test can reach — so measured against the shipped map
+    // this assertion would be comparing two arms the ratio never touched. Turning the floor off
+    // isolates the rule this test is named for; the rule the floor adds gets its own test below.
     const rows = (ratio: number) =>
-      Math.abs(centroid(fixture(), 'lone', ratio).y - (centroid(fixture(), 'left', ratio).y + centroid(fixture(), 'right', ratio).y) / 2);
+      Math.abs(
+        centroidAt(fixture(), 'lone', ratio, 0).y -
+          (centroidAt(fixture(), 'left', ratio, 0).y + centroidAt(fixture(), 'right', ratio, 0).y) / 2,
+      );
     expect(rows(0.6)).toBeGreaterThan(rows(0));
+  });
+
+  it('…but below the crossing the NAMEPLATE FLOOR is what stands, and a smaller ratio cannot shrink it', () => {
+    // The other half of the same rule (ADR-0598 D2). On small islands a gap that is a fraction of
+    // island size is a fraction of very little, while the plate is the size it always is — so
+    // between two rungs that are both under the floor, the rows must not move at all. Measured on
+    // the real forest before this landed: at the shipped rung the smallest islands were handed
+    // about a twentieth of what their own plate needs, and 12 plates sat on a neighbour's land.
+    // Read off `groundSeed` rather than `centroid`: the seed is exactly where the row arithmetic put
+    // the island, BEFORE the hex lattice quantised it. A centroid also moves when the IN-ROW gap
+    // changes (different x ⇒ a different tile set ⇒ a different centre of mass), which would make
+    // this assertion fail for a reason that has nothing to do with the row gap it is about.
+    const rows = (ratio: number, chromeScale: number) => {
+      const w = buildWorld(fixture(), { spacing: { ratio }, chromeScale });
+      const seed = (id: string) => w.territories.find((t) => t.story.id === id)?.groundSeed.y ?? NaN;
+      return Math.abs(seed('lone') - (seed('left') + seed('right')) / 2);
+    };
+    expect(rows(0, 1)).toBe(rows(0.1, 1));
+    // Non-vacuity, twice over: the floor must actually be holding the rows further apart than the
+    // ratio alone would, and a rung ABOVE the crossing must still move them — otherwise the
+    // equality above is satisfied by a layout that ignores the ratio entirely.
+    expect(rows(0, 1)).toBeGreaterThan(rows(0, 0));
+    expect(rows(3, 1)).toBeGreaterThan(rows(0, 1));
   });
 
   it('the legacy triple stands the pre-ADR-0521 map and IGNORES the ratio — a control arm cannot be one of its own rungs', () => {

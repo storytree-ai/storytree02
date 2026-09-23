@@ -32,7 +32,7 @@ import {
 } from '@storytree/forest-world';
 
 import { packWorld, type LayoutStory } from './pack.js';
-import { ISLAND_SPACING_RATIO, gapBetween, loneSwing } from './spacing.js';
+import { ISLAND_SPACING_RATIO, PRE_ADR0521_SPACING, gapBetween, loneSwing } from './spacing.js';
 
 const caps = (prefix: string, n: number, dependsOn: readonly string[] = []) =>
   Array.from({ length: n }, (_, i) => ({ id: `${prefix}-${i + 1}`, dependsOn: i === 0 ? dependsOn : [] }));
@@ -622,12 +622,23 @@ test('a carried STAMP is seated against the camera that was ASKED FOR, not the s
   // gamma:beta -26.63,-66.70`. Note the y magnitudes roughly HALVE, which is the fix visible in
   // one number: the old snap divided ground y by `sin 20° = 0.342` before rounding, stretching the
   // layout ~2.9x down the rank axis, and the seating rows followed it down.
+  //
+  // ⚠ RE-RECORDED AGAIN, 2026-09-23 (ADR-0598 D2), and again the walk's arithmetic is untouched.
+  // The island spacing ratio was re-derived 0.1 → 1 — the gaps the old value named had never
+  // actually been seen, because the seed-snap defect above was inflating every one of them by
+  // 1.31x — so `beta` and `gamma` sit a full island-radius further from `alpha` and grow onto
+  // different tiles. The previous record was `alpha:beta -7.47,-9.95 | alpha:gamma 7.47,-9.95 |
+  // beta:gamma 11.69,-21.30 | gamma:beta -26.63,-21.30`. Note `alpha`'s OWN two stamps do not move
+  // at all: it is the foundation row, nothing is packed below it, and a rank gap can only move the
+  // ranks above — which is the change's signature and what says the walk itself did not move.
+  // ⚠ The nameplate clearance ADR-0598 also added is NOT what moved this: this corpus passes no
+  // `chrome`, so it takes none. Measured both ways before re-recording.
   const digest = world.territories
     .flatMap((t) => t.stamps.map((st) => `${t.story.id}:${st.icon} ${st.spot.x.toFixed(2)},${st.spot.y.toFixed(2)}`))
     .join(' | ');
   assert.equal(
     digest,
-    'alpha:beta -7.47,-9.95 | alpha:gamma 7.47,-9.95 | beta:gamma 11.69,-21.30 | gamma:beta -26.63,-21.30',
+    'alpha:beta -7.47,-9.95 | alpha:gamma 7.47,-9.95 | beta:gamma 21.27,-26.97 | gamma:beta -36.21,-26.97',
   );
 });
 
@@ -788,4 +799,99 @@ test('a garden REACHES OUT across its island — the keep-in walk corrects the f
         'is firing on spots that were already on owned soil',
     );
   }
+});
+
+// ---------------------------------------------------------------------------------------------
+// THE NAMEPLATE CLEARANCE (ADR-0598 D2) — the layout leaves room for chrome it cannot see
+// ---------------------------------------------------------------------------------------------
+//
+// The owner's complaint was two faults in one picture: the map read squished, and nameplates sat on
+// top of neighbouring islands. The second is NOT a spacing rung — a gap that is a FRACTION of island
+// size shrinks with the island while a plate does not, so on the real forest the smallest islands
+// were handed about a twentieth of what their own plate needs. The packer cannot work the amount out
+// (it is chrome-free by construction), so it takes it as ground distances and holds them as floors.
+
+/** A chain of one-capability stories, one per rank — the shape the clearance is FOR. Small islands
+ *  are what separate the two rules: at this size the ratio's gap is a couple of ground units and the
+ *  plate band is tens, so the floor is the only thing standing. On big islands the two agree and no
+ *  corpus could tell them apart. */
+const chainCorpus = (): LayoutStory[] => [
+  story('root', 1),
+  story('mid', 1, ['root']),
+  story('leaf', 1, ['mid']),
+];
+
+const chromeOf = (rowBand: number, halfWidth: number, ids: readonly string[]) => ({
+  rowBand,
+  plateHalfWidth: new Map(ids.map((id) => [id, halfWidth])),
+});
+
+test('NO chrome and a chrome scaled to ZERO are the same map — the control arm is composable', () => {
+  const ids = chainCorpus().map((s) => s.id);
+  const none = packWorld(chainCorpus());
+  const zeroed = packWorld(chainCorpus(), { chrome: { ...chromeOf(500, 500, ids), scale: 0 } });
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(zeroed)),
+    JSON.parse(JSON.stringify(none)),
+    'a clearance scaled to 0 must reproduce the map that was never given one — otherwise a ' +
+      'comparison page cannot stand its control arm from inside a single run',
+  );
+  // Non-vacuity: the same clearance at full scale HAS to move the map, or the line above is free.
+  const full = packWorld(chainCorpus(), { chrome: chromeOf(500, 500, ids) });
+  assert.notDeepEqual(JSON.parse(JSON.stringify(full)), JSON.parse(JSON.stringify(none)));
+});
+
+test('the declared row band survives the seed jitter — a reserved gap that the wobble eats is not a gap', () => {
+  const ids = chainCorpus().map((s) => s.id);
+  const band = 400; // far above anything the ratio asks of three one-tile islands
+  const world = packWorld(chainCorpus(), { chrome: chromeOf(band, 0, ids) });
+  const seedOf = new Map(world.territories.map((t) => [t.story.id, t.groundSeed]));
+  const r = estRadius(tileQuota(1));
+
+  // `groundSeed` is where the row/gap arithmetic put the island INCLUDING its jitter and before the
+  // lattice quantised it — which is the right place to read this, because the jitter is exactly what
+  // a reservation has to survive. Measured on the real forest before the reserve existed: the band
+  // held on average and a plate still landed on a neighbour, and WHICH plate moved with the rung
+  // rather than with the spacing — the signature of a lottery, not of a gap that is too small.
+  for (const [below, above] of [['root', 'mid'], ['mid', 'leaf']] as const) {
+    const gap = Math.abs((seedOf.get(above)?.y ?? 0) - (seedOf.get(below)?.y ?? 0)) - 2 * r;
+    assert.ok(
+      gap >= band,
+      `${below} → ${above} was left ${gap.toFixed(2)} of water where ${band} was declared`,
+    );
+  }
+});
+
+test('the row band does NOT move with the camera the map is ASKED for — a clearance is not a re-decision', () => {
+  // ⚠ THE INVARIANT THE WHOLE INJECTED SHAPE EXISTS TO PROTECT (ADR-0527 D1 / ADR-0546 D1). A plate
+  // is fixed-size SCREEN chrome, so the GROUND it needs genuinely depends on a camera — and that is
+  // the one dependency the packer may not have. Keeping the conversion on the caller's side means
+  // the packer only ever sees a ground number, so asking the map for a second camera re-PROJECTS it
+  // and cannot re-DECIDE it. This is the test that says so rather than the comment.
+  const ids = chainCorpus().map((s) => s.id);
+  const chrome = chromeOf(400, 60, ids);
+  const at20 = packWorld(chainCorpus(), { chrome, elevationDeg: 20 });
+  const at70 = packWorld(chainCorpus(), { chrome, elevationDeg: 70 });
+  assert.notEqual(20, 70);
+  for (const t of at20.territories) {
+    const other = at70.territories.find((o) => o.story.id === t.story.id);
+    assert.deepEqual(other?.tiles, t.tiles, `${t.story.id} grew onto different tiles at another camera`);
+    assert.deepEqual(other?.groundSeed, t.groundSeed, `${t.story.id}'s ground seed moved with the camera`);
+  }
+  // …and the SCREEN half must still move, or the two arms are equal for the boring reason.
+  assert.notDeepEqual(at70.territories[0]?.centroid, at20.territories[0]?.centroid);
+});
+
+test('the legacy control arm REFUSES the clearance — it stands a map that never had one', () => {
+  const ids = chainCorpus().map((s) => s.id);
+  const bare = packWorld(chainCorpus(), { spacing: { legacy: PRE_ADR0521_SPACING } });
+  const dressed = packWorld(chainCorpus(), {
+    spacing: { legacy: PRE_ADR0521_SPACING },
+    chrome: chromeOf(500, 500, ids),
+  });
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(dressed)),
+    JSON.parse(JSON.stringify(bare)),
+    'the pre-ADR-0521 control arm took no nameplate clearance, so one handed to it must be ignored',
+  );
 });

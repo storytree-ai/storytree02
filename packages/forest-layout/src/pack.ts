@@ -65,7 +65,15 @@ import {
   type TrailIsland,
   type TrailNetwork,
 } from '@storytree/forest-world';
-import { ISLAND_SPACING_RATIO, gapBetween, loneSwing, type LegacySpacing } from './spacing.js';
+import {
+  ISLAND_SPACING_RATIO,
+  gapBetween,
+  inRowGapWithChrome,
+  loneSwing,
+  rankGapWithChrome,
+  type ChromeClearance,
+  type LegacySpacing,
+} from './spacing.js';
 
 // ---------- the input contract this package owns ----------
 //
@@ -114,6 +122,13 @@ export interface PackOptions {
    *  owns the other half of that rule: a story it does not want laid out at all is one it does not
    *  pass in. */
   carriedIcons?: ReadonlyMap<string, readonly string[]>;
+  /** THE OTHER HALF OF THE CHROME SEAM (ADR-0598 D2) — how much GROUND this surface's own nameplate
+   *  needs, so a plate never lands on a neighbouring island's land. Injected for the same reason
+   *  `carriedIcons` is: this package is chrome-free and does not know what a nameplate looks like,
+   *  and (unlike an icon) the conversion from a fixed pixel plate to ground is CAMERA-DEPENDENT,
+   *  which is the one dependency the packer may not have. Absent ⇒ no clearance and the map is
+   *  byte-unchanged — the control arm. See {@link ChromeClearance}. */
+  chrome?: ChromeClearance;
   /** WHICH CAMERA THE SCREEN HALF OF THIS LAYOUT IS PROJECTED AT (ADR-0527 D1 item 1); absent ⇒
    *  the shipped {@link LAND_CAMERA_ELEVATION_DEG}, so every existing caller is byte-unchanged.
    *
@@ -268,6 +283,18 @@ const MARGIN = tileUnits(60); // authored as 60 on the radius-27 tile (ADR-0528)
  *  its centre and wears a coast outset, so touching tiles overlap in 3D and one hex apart does not. */
 const MOAT_HEXES = 1;
 
+/** The PEAK-TO-PEAK seed jitter, in ground units — the wobble `packWorld` adds to each seed after
+ *  the row/gap arithmetic has placed it, so a rank does not read as a ruled line. Named rather than
+ *  inline because the chrome clearance has to RESERVE it (ADR-0598 D2): a gap sized exactly to fit a
+ *  nameplate and then handed two islands that each wander half a jitter toward each other is a gap
+ *  that does not fit a nameplate. Reserving it is the difference between a clearance that holds and
+ *  one that holds on average — and "on average" is what the measured residue looked like: with the
+ *  band reserved but the jitter not, the real forest still showed a plate on a neighbour's land, and
+ *  WHICH plate moved with the rung rather than with the spacing, which is the signature of a
+ *  lottery rather than of a gap that is too small. */
+const SEED_JITTER_X = tileUnits(44);
+const SEED_JITTER_Y = tileUnits(30);
+
 
 /**
  * The island's HERO TILE — the tile the story's own tree stands on: the one nearest the island's
@@ -342,10 +369,27 @@ export function packWorld<S extends LayoutStory>(
   // The `legacy` triple is the pre-ADR-0521 map, for a comparison page's control arm only.
   const spacingRatio = opts?.spacing?.ratio ?? ISLAND_SPACING_RATIO;
   const legacy = opts?.spacing?.legacy;
+  // ADR-0598 D2 — the nameplate's own room, in ground units, as the CALLER measured it. Absent ⇒ 0,
+  // which is the pre-ADR-0598 map; `scale` is the owner's scale-back dial over the same arm.
+  // ⚠ THE LEGACY CONTROL ARM TAKES NO CLEARANCE EITHER. It stands the map as it was before
+  // ADR-0521, and a control silently given a clearance ADR-0521's map never had would be comparing
+  // the ladder against something that has never shipped.
+  const chromeScale = legacy ? 0 : (opts?.chrome?.scale ?? 1);
+  const rowBand = (opts?.chrome?.rowBand ?? 0) * chromeScale;
+  const plateHalfWidth = (id: string): number =>
+    (opts?.chrome?.plateHalfWidth.get(id) ?? 0) * chromeScale;
+  // The jitter is reserved ON TOP of whatever the caller asked for, and only when it asked for
+  // something: a zero clearance stays exactly zero, which is what keeps the control arm byte-exact.
+  const reserve = (band: number, jitter: number): number => (band > 0 ? band + jitter : 0);
   const rankGapFor = (below: number, tallest: number): number =>
-    legacy ? legacy.rankGap : gapBetween(below, tallest, spacingRatio);
-  const islandGapFor = (left: number, right: number): number =>
-    legacy ? legacy.islandGap : gapBetween(left, right, spacingRatio);
+    legacy
+      ? legacy.rankGap
+      : rankGapWithChrome(below, tallest, spacingRatio, reserve(rowBand, SEED_JITTER_Y));
+  const islandGapFor = (left: number, right: number, idLeft: string, idRight: string): number => {
+    if (legacy) return legacy.islandGap;
+    const halves = plateHalfWidth(idLeft) + plateHalfWidth(idRight);
+    return inRowGapWithChrome(left, right, spacingRatio, reserve(halves, SEED_JITTER_X), 0);
+  };
   const rankSwingFor = (lone: number): number => (legacy ? legacy.rankSwing : loneSwing(lone, spacingRatio));
 
   // Hubs are sized like any other island (owner call 2026-06-19 — "make them like any
@@ -488,7 +532,11 @@ export function packWorld<S extends LayoutStory>(
     const gapAfter = (k: number): number => {
       const here = sequence[k];
       const next = sequence[k + 1];
-      return here && next ? islandGapFor(here.w, next.w) : 0;
+      // The two ids are what the clearance is looked up by — a plate's width follows its story's
+      // NAME, so the pair's gap is the pair's own, exactly as its water already is.
+      return here && next
+        ? islandGapFor(here.w, next.w, stories[here.idx]?.id ?? '', stories[next.idx]?.id ?? '')
+        : 0;
     };
     const total = sequence.reduce((sum, s, k) => sum + 2 * s.w + gapAfter(k), 0);
     // A lone island would otherwise sit directly on top of its dependencies,
