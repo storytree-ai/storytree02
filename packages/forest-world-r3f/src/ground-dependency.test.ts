@@ -40,6 +40,7 @@ import { groundCasters, placementCasters } from './ground-casters.js';
 import { KIT_FOOTPRINTS_2026_08_29, KIT_HEIGHTS_2026_08_29, isDressingRole } from './kit-vocabulary.js';
 import { LAND_RELIEF_AMPLITUDE } from './land-relief.js';
 import { dressMapWithCover } from './map-dressing.js';
+import { islandGrowthLayout } from './ForestWorldCanvas.causal.js';
 import { worldTo3D, type Descriptor3D, type InstanceDescriptor } from './world-to-3d.js';
 
 const TUNED = { hexR: PRE_ADR0528_TILE.hexR } as const;
@@ -355,6 +356,19 @@ test('ONE PLACEMENT, TWO READERS: the casters are made from the same list KitPro
     ],
     'the ground’s casters are the descriptor families UNIONED with one caster per placement',
   );
+  assert.deepEqual(
+    built.growthLayout,
+    islandGrowthLayout(built.cells),
+    'the immutable ground build carries the same stable slots and anchors delivery reads',
+  );
+  assert.equal(
+    built.islandByPlacement.size,
+    built.placements.length,
+    'every map placement retains the exact producing island through delivery; no geometry inference is needed',
+  );
+  for (const placement of built.placements) {
+    assert.ok(built.islandByPlacement.has(placement), 'the sidecar is keyed by the exact returned placement object');
+  }
   // ⚠ THE COVERED DRESSING, NOT THE VOCABULARY ALONE. `dressMapFromKit` would pass the shape of
   // every assertion above while quietly reverting every healthy island's ground cover.
   assert.ok(

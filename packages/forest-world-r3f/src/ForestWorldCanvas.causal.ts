@@ -1,4 +1,4 @@
-import type { ForestRegrowPresentation } from './ForestWorldCanvas.regrow.js';
+import type { ForestRegrowPresentation, ForestRegrowSegmentGrowth } from './ForestWorldCanvas.regrow.js';
 import type { InstanceDescriptor, Transform3D } from './world-to-3d.js';
 
 export interface IslandGrowthLayout {
@@ -78,13 +78,12 @@ function prefixAt(points: readonly Transform3D[], fraction: number): readonly Tr
   const target = fraction * total;
   const result: Transform3D[] = [points[0]!];
   let travelled = 0;
-  for (let index = 1; index < points.length; index += 1) {
-    const start = points[index - 1]!;
-    const end = points[index]!;
+  for (const [offset, end] of points.slice(1).entries()) {
+    const start = points[offset]!;
     const length = distance(start, end);
     if (travelled + length >= target) {
       if (travelled + length === target) result.push(end);
-      else if (length > 0) {
+      else {
         const ratio = (target - travelled) / length;
         result.push({
           x: start.x + (end.x - start.x) * ratio,
@@ -106,10 +105,15 @@ export function regrowTrailPoints(
   presentation: ForestRegrowPresentation | null,
 ): readonly Transform3D[] | undefined {
   const points = strip.points;
-  if (presentation === null || strip.segment === undefined || points === undefined) return points;
-  if (presentation.hiddenSegmentIds.has(strip.segment)) return [];
+  if (presentation === null || points === undefined) return points;
+  // A readonly lookup can accept a missing key: the source collections contain only string IDs,
+  // so undefined naturally misses. Widen only the lookup domain, without copying or mutating data.
+  const hidden: ReadonlySet<string | undefined> = presentation.hiddenSegmentIds;
+  const fronts: ReadonlyMap<string | undefined, Pick<ForestRegrowSegmentGrowth, 'drawn' | 'fromEnd'>> =
+    presentation.drawingSegmentProgressById;
+  if (hidden.has(strip.segment)) return [];
 
-  const drawing = presentation.drawingSegmentProgressById.get(strip.segment);
+  const drawing = fronts.get(strip.segment);
   if (drawing === undefined || drawing.drawn >= 1) return points;
   if (drawing.drawn <= 0) return [];
   if (!drawing.fromEnd) return prefixAt(points, drawing.drawn);

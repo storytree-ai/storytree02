@@ -560,7 +560,7 @@ test('THE KIT CASTS: one placement, made before the ground, read by the casters 
     /const SHIPPED_GROUND_INPUT: GroundInputOptions = \{\s*relief: LAND_RELIEF_AMPLITUDE,\s*footprint: KIT_FOOTPRINTS_2026_08_29,\s*height: KIT_HEIGHTS_2026_08_29,\s*\}/,
     'and the frozen tables it is derived against are still the canvas’s own shipped pick',
   );
-  assert.match(src, /<KitProps placements=\{ground\.placements\} \/>/, 'and KitProps draws that same list');
+  assert.match(src, /<KitProps\b[^>]*\bplacements=\{ground\.placements\}[^>]*\/>/, 'and KitProps draws that same list');
   assert.ok(
     !/useMemo\(\(\) => groundCasters\(descriptors\), \[descriptors\]\)/.test(src),
     'groundCasters(descriptors) alone is no longer the whole caster list',
@@ -583,7 +583,7 @@ test('THE KIT CASTS: one placement, made before the ground, read by the casters 
   // And the loaded kit is still held to the frozen tables, loudly, where it is loaded.
   assert.match(kitProps, /footprintDriftOf\(roleFootprints\(loaded\)\)/);
   assert.match(kitProps, /heightDriftOf\(roleHeights\(loaded\)\)/);
-  assert.match(kitProps, /kitMeshes\(loaded, placements\)/);
+  assert.match(kitProps, /kitMeshes\(loaded, placements(?:,|\))/);
 });
 
 test('⚠⚠ THE PLACEHOLDER STORY TREE IS GONE FROM THE SHIPPED CANVAS — the mesh AND its caster', () => {

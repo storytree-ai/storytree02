@@ -198,6 +198,11 @@ export function dressMapWithCover(
   return dressMap(descriptors, opts, true);
 }
 
+export interface AttributedMapDressing {
+  placements: KitPlacement[];
+  islandByPlacement: ReadonlyMap<KitPlacement, string>;
+}
+
 /**
  * EVERYTHING THE SHIPPED MAP STANDS, together with the island that produced each placement.
  *
@@ -210,7 +215,7 @@ export function dressMapWithCover(
 export function dressMapWithCoverAttribution(
   descriptors: readonly Descriptor3D[],
   opts: MapDressingOptions,
-): { placements: KitPlacement[]; islandByPlacement: ReadonlyMap<KitPlacement, string> } {
+): AttributedMapDressing {
   const islandByPlacement = new Map<KitPlacement, string>();
   const placements = dressMap(descriptors, opts, true, islandByPlacement);
   return { placements, islandByPlacement };

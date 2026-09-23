@@ -63,11 +63,19 @@ function cell(island: string, points: Transform3D[]): InstanceDescriptor {
 }
 
 function strip(segment: string | undefined, points: Transform3D[]): InstanceDescriptor {
+  if (segment === undefined) {
+    return {
+      kind: 'trail-strip',
+      group: 'trail-strip',
+      transform: points[0] ?? { x: 0, y: 0, z: 0 },
+      points,
+    };
+  }
   return {
     kind: 'trail-strip',
     group: 'trail-strip',
     transform: points[0] ?? { x: 0, y: 0, z: 0 },
-    ...(segment === undefined ? {} : { segment }),
+    segment,
     points,
   };
 }
@@ -103,6 +111,16 @@ test('fcd-ground-cache-compares-content-without-serializing: equal fresh ground 
     { islandId: 'island-a', slot: 0, anchor: { x: 1, y: 2, z: 1 } },
     { islandId: 'island-b', slot: 1, anchor: { x: 12, y: 2, z: 2 } },
   ]);
+});
+
+test('the layout ignores every descriptor that cannot name a real grounded island', async () => {
+  const { islandGrowthLayout } = await causal();
+  const malformed: InstanceDescriptor[] = [
+    { kind: 'trail-strip', group: 'trail-strip', island: 'wrong-kind', transform: { x: 0, y: 0, z: 0 }, points: [{ x: 0, y: 0, z: 0 }] },
+    { kind: 'cell-ground', group: 'cell-ground', transform: { x: 0, y: 0, z: 0 }, points: [{ x: 0, y: 0, z: 0 }] },
+    { kind: 'cell-ground', group: 'cell-ground', island: 'no-points', transform: { x: 0, y: 0, z: 0 } },
+  ];
+  assert.deepEqual([...islandGrowthLayout(malformed)], []);
 });
 
 test('fcd-ground-cache-short-circuits-on-first-change: a changed first cell vertex changes only that island anchor', async () => {
@@ -169,4 +187,31 @@ test('fcd-regrow-pathways-clip-at-physical-fronts: strips retain physical prefix
   assert.equal(regrowTrailPoints(trail, null), sourcePoints);
   assert.equal(regrowTrailPoints(unnamed, state), sourcePoints);
   assert.deepEqual(sourcePoints, [{ x: 0, y: 0, z: 0 }, { x: 3, y: 0, z: 0 }, { x: 3, y: 0, z: 4 }]);
+});
+
+test('trail clipping preserves the three-dimensional physical front, including exact vertices and zero-length strips', async () => {
+  const { regrowTrailPoints } = await causal();
+  const points = [{ x: 0, y: 0, z: 0 }, { x: 3, y: 4, z: 0 }, { x: 3, y: 4, z: 12 }];
+  const state = presentation({
+    drawingSegmentProgressById: new Map([
+      ['exact', { drawn: 5 / 17, fromEnd: false }],
+      ['first-interior', { drawn: 2.5 / 17, fromEnd: false }],
+      ['interior', { drawn: 11 / 17, fromEnd: false }],
+      ['flat', { drawn: 0.5, fromEnd: false }],
+    ]),
+  });
+  assert.deepEqual(regrowTrailPoints(strip('exact', points), state), [points[0], points[1]]);
+  assert.equal(regrowTrailPoints(strip('exact', points), state)?.[1], points[1], 'an exact physical front retains the source vertex identity');
+  assert.deepEqual(regrowTrailPoints(strip('first-interior', points), state), [points[0], { x: 1.5, y: 2, z: 0 }]);
+  assert.deepEqual(regrowTrailPoints(strip('interior', points), state), [points[0], points[1], { x: 3, y: 4, z: 6 }]);
+  const flat = [{ x: 2, y: 3, z: 4 }, { x: 2, y: 3, z: 4 }];
+  assert.deepEqual(regrowTrailPoints(strip('flat', flat), state), [flat[0]]);
+  const noDrawing = strip('no-drawing', points);
+  assert.equal(regrowTrailPoints(noDrawing, state), points, 'a named road with no cursor entry stays fully drawn');
+  const noPoints: InstanceDescriptor = { kind: 'trail-strip', group: 'trail-strip', segment: 'missing-points', transform: { x: 0, y: 0, z: 0 } };
+  assert.equal(
+    regrowTrailPoints(noPoints, presentation({ drawingSegmentProgressById: new Map([['missing-points', { drawn: 0.5, fromEnd: false }]]) })),
+    undefined,
+    'a cursor cannot manufacture geometry for a strip that supplied no physical points',
+  );
 });

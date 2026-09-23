@@ -273,7 +273,7 @@ test('ForestWorldCanvas mounts exactly ONE <CellGround>, over the whole cell sli
   );
   assert.match(
     CANVAS_SRC,
-    /<CellGround ground=\{ground\} \/>/,
+    /<CellGround\b[^>]*\bground=\{ground\}[^>]*\/>/,
     'and the one mount must be handed the whole derived ground, not a slice of it',
   );
 });
