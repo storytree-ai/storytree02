@@ -63,6 +63,7 @@
       "packages/cli/src/session-cost.ts": "cli",
       "packages/cli/src/story-completeness.ts": "cli",
       "packages/cli/src/test-slop-*.ts": "cli",
+      "packages/cli/src/test-verb*.ts": "cli",
       "packages/cli/src/verdict-contradiction*.ts": "cli",
       "packages/cli/src/verify-manifest-edge-effect.ts": "cli",
       "packages/cli/src/verify-panel-decision-depth.ts": "cli",
