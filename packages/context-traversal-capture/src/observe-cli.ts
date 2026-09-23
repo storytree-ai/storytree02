@@ -483,6 +483,7 @@ export const AREAS_WITHOUT_CORPUS_READS = {
   dispatch: "reads a backgrounded job's exit sentinel",
   context: "reads this window's own occupancy from host transcripts",
   vocabulary: "reads host transcripts for term usage",
+  test: "runs named test files under their packages' own runners",
   "lint-panel": "assembles a judge-panel packet from disk",
   own: "this session's background-work registry",
   guide: "prints static guidance",
