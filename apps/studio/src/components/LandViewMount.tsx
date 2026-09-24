@@ -158,11 +158,9 @@ export interface LandViewMountProps {
   regrowCursor?: ForestRegrowCursor | null;
   /** The route's existing active state, forwarded without changing regrow ownership. */
   active?: boolean;
-  /** Draw the kit props as well as the ground — the staging arm, off by default. */
-  drawProps?: boolean;
   /**
-   * Receives the native plants' click targets while the props arm is drawn (and an empty list when
-   * it stops), for the host to render into its OWN hit layer. The canvas stays inert: this is data,
+   * Receives the native plants' click targets once the props are drawn (and an empty list when
+   * they stop), for the host to render into its OWN hit layer. The canvas stays inert: this is data,
    * never a second picker. Must be a stable function.
    */
   onNativePropTargets?: (targets: readonly NativePropHitEnvelope[]) => void;
@@ -228,7 +226,6 @@ export function LandViewMount({
   camera,
   regrowCursor = null,
   active = true,
-  drawProps = false,
   onNativePropTargets,
   onStatus,
   renderCanvas = renderDefaultCanvas,
@@ -252,19 +249,18 @@ export function LandViewMount({
     if (frame === null) return { state: 'waiting-for-frame' as const, node: null };
     if (registration === null) return { state: 'waiting-for-camera' as const, node: null };
     if (!registration.ok) return { state: 'refused' as const, reason: registration.reason, node: null };
-    // ⚠ `props` IS ADDED ONLY WHEN ASKED FOR, as a separate statement rather than a conditional
-    // spread — `exactOptionalPropertyTypes` is on, so an explicit `props: undefined` and an absent
-    // `props` are different types, and the canvas's own default is what should decide the absent
-    // case rather than a value passed down meaning "no".
-    const registeredProps: RegisteredUnderlay = {
+    // The kit props are always drawn: the mounted land IS the forest (ADR-0608 D1), so its trees,
+    // coverage plants and UAT flowers are the map's picture, not a staging arm (`?landMountProps`
+    // retired with the flat look).
+    const registered: RegisteredUnderlay = {
       zoom: registration.camera.zoom,
       target: { x: registration.camera.target.x, z: registration.camera.target.z },
+      props: true,
     };
-    const withProps: RegisteredUnderlay = drawProps ? { ...registeredProps, props: true } : registeredProps;
     const canvasProps: LandMountCanvasProps = {
       descriptors: stream.descriptors,
       hiddenStatuses,
-      registered: withProps,
+      registered,
       regrow,
       active,
       onPhase: setPhase,

@@ -172,7 +172,6 @@ describe('the land under the working map', () => {
       const container = await renderTreeAt(search, surfaces);
       expect(container.querySelector('[data-testid="land-mount"]'), `mounted at ${search || '(clean)'}`).toBeTruthy();
       expect(mountInputs.length).toBeGreaterThan(0);
-      expect(mountInputs.at(-1)!.drawProps, `props drawn at ${search || '(clean)'}`).toBe(true);
       const pan = container.querySelector('.world-pan-layer')!;
       // The retired flag's scoping class is gone: the pan layer carries no mode.
       expect(pan.className).toBe('world-pan-layer');
@@ -551,6 +550,55 @@ describe('the land under the working map', () => {
     // the land would vanish depending on whether a drag was in flight.
     expect(landZ).toBeGreaterThanOrEqual(0);
     expect(svgZ).toBeGreaterThanOrEqual(0);
+  });
+
+  it('puts the loading notice in the middle of the map, clear of the growth control', () => {
+    // ⚠ The notice used to sit top-centre — the growth control's own slot (`.act2-intro`, drawn
+    // above it) — and the two overlapped into garbled text. While the notice is up the map below
+    // is empty by construction, so the centre is the one place that collides with nothing.
+    const css = readStudioCss();
+    const notice = /\n\.land-view-notice\s*\{([^}]*)\}/.exec(css)![1]!;
+    const control = /\n\.act2-intro\s*\{([^}]*)\}/.exec(css)![1]!;
+    expect(control).toMatch(/top:\s*10px/);
+    expect(notice).toMatch(/top:\s*50%/);
+    expect(notice).toMatch(/left:\s*50%/);
+    expect(notice).toMatch(/transform:\s*translate\(-50%,\s*-50%\)/);
+  });
+
+  it('hit-tests the invisible hit geometry without painting it, only on an unparked map', () => {
+    // ⚠⚠ ~2,800 painted-transparent rects made every repaint of the SVG cost ~250 ms of compositor
+    // layerisation — the growth's last fifth played at 3–4 frames a second. Unpainted, they cost
+    // nothing; `pointer-events: all` keeps them hittable. The island ground has been the same kind of
+    // unpainted hit geometry since the flat look retired (ADR-0608), so the rule covers it too. But
+    // `all` also ignores visibility and overrides the parked route's `pointer-events: none`, so the
+    // rule MUST NOT reach a parked map: hidden targets there would catch clicks meant for the page.
+    const css = readStudioCss();
+    const at = css.indexOf('.native-prop-targets rect');
+    expect(at, 'the native-target rule must exist').toBeGreaterThan(0);
+    const selector = css.slice(Math.max(css.lastIndexOf('}', at), css.lastIndexOf('*/', at)) + 2, css.indexOf('{', at));
+    const body = css.slice(css.indexOf('{', at) + 1, css.indexOf('}', at));
+    // Split at TOP-LEVEL commas only — `:is(path, polygon)` carries its own.
+    const parts: string[] = [];
+    let depth = 0;
+    let cur = '';
+    for (const ch of selector) {
+      if (ch === '(') depth += 1;
+      if (ch === ')') depth -= 1;
+      if (ch === ',' && depth === 0) {
+        parts.push(cur.trim());
+        cur = '';
+      } else cur += ch;
+    }
+    parts.push(cur.trim());
+    expect(parts).toHaveLength(3);
+    for (const part of parts) expect(part.startsWith(".tree-route:not([data-parked='true'])")).toBe(true);
+    expect(parts.some((x) => x.endsWith('.native-prop-targets rect'))).toBe(true);
+    expect(parts.some((x) => x.includes('.relaxed-land'))).toBe(true);
+    expect(parts.some((x) => x.includes('.hex-land'))).toBe(true);
+    expect(body).toMatch(/visibility:\s*hidden/);
+    expect(body).toMatch(/pointer-events:\s*all/);
+    // And the parked route really is the thing it must stay out of.
+    expect(/\.tree-route\[data-parked='true'\]\s*\{([^}]*)\}/.exec(css)![1]!).toMatch(/pointer-events:\s*none/);
   });
 });
 

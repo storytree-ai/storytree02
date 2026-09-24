@@ -141,13 +141,13 @@ describe('the land layer under the map', () => {
       drawingSegments: [],
     };
     const hidden = new Set(['healthy']);
-    const { rerender } = mount({ hiddenStatuses: hidden, drawProps: true, active: false, regrowCursor: cursor });
+    const { rerender } = mount({ hiddenStatuses: hidden, active: false, regrowCursor: cursor });
     const dimmed = handed!;
     expect(dimmed.hiddenStatuses).toBe(hidden);
     expect(dimmed.descriptors.some((descriptor) => descriptor.kind === 'cell-ground')).toBe(true);
 
     const shown = new Set<string>();
-    rerender(<LandViewMount scene={SCENE} camera={CAMERA} hiddenStatuses={shown} drawProps active={false} regrowCursor={cursor} renderCanvas={capture} />);
+    rerender(<LandViewMount scene={SCENE} camera={CAMERA} hiddenStatuses={shown} active={false} regrowCursor={cursor} renderCanvas={capture} />);
     expect(handed!.hiddenStatuses).toBe(shown);
     expect(handed!.descriptors).toBe(dimmed.descriptors);
     expect(handed!.registered).toEqual(dimmed.registered);
@@ -167,17 +167,12 @@ describe('the land layer under the map', () => {
     expect(layer.getAttribute('tabindex')).toBeNull();
   });
 
-  it('draws the GROUND ONLY by default — the host already draws its own canopy', () => {
-    // The SVG layer draws a crown per story and a flora bed per capability, and those are the marks
-    // the legend describes. A second canopy underneath them is a finding, not a delivery, and
-    // ADR-0530 D3's per-prop status question is still open — so the props arm must be asked for.
+  it('always draws the kit props — the mounted land IS the forest (ADR-0608 D1)', () => {
+    // The flat SVG canopy and flora beds retired with the flat look, so the 3D trees, coverage
+    // plants and UAT flowers are the only picture of them: there is no ground-only arm left to ask for.
     mount();
-    expect(handed!.registered.props).toBeUndefined();
-    expect(handed!.hiddenStatuses.size).toBe(0);
-    cleanup();
-    handed = null;
-    mount({ drawProps: true });
     expect(handed!.registered.props).toBe(true);
+    expect(handed!.hiddenStatuses.size).toBe(0);
   });
 
   it('draws NOTHING while the world is still resolving', () => {

@@ -2988,7 +2988,6 @@ export function TreeView({
             scene={scene}
             hiddenStatuses={hidden}
             camera={presentedCam}
-            drawProps
             regrowCursor={act2Player.regrowing ? act2Player.state : null}
             active={active}
             onNativePropTargets={setNativePropTargets}

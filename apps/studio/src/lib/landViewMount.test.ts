@@ -16,7 +16,7 @@ import { describe, it, expect } from 'vitest';
 
 import { canvasScreenOf, groundOfDrawing, type RegistrationFrame } from './canvasRegistration.js';
 import { LAND_CAMERA_ELEVATION_DEG, SHIPPED_ELEVATION_DEG } from './canvasRegistration.constants.js';
-import { LAND_MOUNT_PARAM, mountedLandCamera, readLandMount, readLandMountProps } from './landViewMount.js';
+import { mountedLandCamera } from './landViewMount.js';
 import { worldToScreen, type Camera } from './worldCamera.js';
 
 const FRAME: RegistrationFrame = { width: 1600, height: 900 };
@@ -29,40 +29,6 @@ const DRAWING_POINTS = [
   { x: 200, y: 3664 },
   { x: -50, y: -20 },
 ];
-
-describe('the mount reader', () => {
-  it('opens on the three affirmative spellings and nothing else', () => {
-    for (const on of ['on', '1', 'true']) {
-      expect(readLandMount(`?${LAND_MOUNT_PARAM}=${on}`)).toBe(true);
-    }
-    // ⚠ THE NEAR MISSES MATTER AS MUCH AS THE HITS: each one that opened the mount by accident
-    // would pull three.js and the bought kit onto the ordinary map's path.
-    for (const off of ['', '?landMount=0', '?landMount=', '?landmount=1', '?landMount=yes', '?landView=1']) {
-      expect(readLandMount(off)).toBe(false);
-    }
-  });
-
-  it('keeps the props arm a SEPARATE flag, so the shipped mount is ground-only', () => {
-    // The mount being on must never imply the props arm — that arm draws a second canopy over the
-    // SVG's own crowns and exists to be looked at, not to ship (ADR-0530 D3 is still open).
-    expect(readLandMountProps('?landMount=1')).toBe(false);
-    expect(readLandMountProps('?landMount=1&landMountProps=1')).toBe(true);
-  });
-
-  it('reads the props arm with the SAME three spellings, and no others', () => {
-    // ⚠ EVERY SPELLING IS ASSERTED SEPARATELY BECAUSE THE MUTATION RUNG PROVED THE LOOSE VERSION
-    // EMPTY. With only the `1` case covered, four mutants survived on this one line
-    // (`check:mutation-diff`, 2026-09-23): `v === 'on'` → `false`, `'on'` → `""`,
-    // `v === 'true'` → `false`, `'true'` → `""`. Nothing noticed, because nothing asked. A reader
-    // who copies the mount's own reader and tests one spelling has the same hole.
-    for (const on of ['on', '1', 'true']) {
-      expect(readLandMountProps(`?landMountProps=${on}`)).toBe(true);
-    }
-    for (const off of ['', '?landMountProps=0', '?landMountProps=', '?landmountprops=1', '?landMountProps=yes', '?landMountProps=On', '?landMountProps=TRUE', '?landMount=1']) {
-      expect(readLandMountProps(off)).toBe(false);
-    }
-  });
-});
 
 describe('the mounted land camera', () => {
   // ⚠ THIS IS THE CONDITION THE WHOLE MOUNT RESTS ON, asserted on the live constants rather than
