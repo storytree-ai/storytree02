@@ -51,7 +51,7 @@ import {
   kitObjectNames,
 } from './kit-vocabulary.js';
 import type { KitAssembly, KitPlacement, KitRole } from './kit-vocabulary.js';
-import { leafTintGainFor } from './leaf-tint.js';
+import { leafTintGain, leafTintGainFor } from './leaf-tint.js';
 import type { DecodedMap, TexelCanvas } from './map-texels.js';
 import { RAW_COLOUR_SPACE } from './texture-convention.js';
 import type { Rgb } from './texture-convention.js';
@@ -1076,4 +1076,130 @@ test('a role’s HEIGHT is measured at its role scale, tallest arm winning, and 
   const flat = { ...KIT, assemblies: new Map(KIT.assemblies) };
   flat.assemblies.set('pine-a', { ...assembly(3, 12, 3), height: 0 });
   assert.throws(() => roleHeights(flat), /height/);
+});
+
+
+test('coverage measurements include both leafy forms at their own width scale', () => {
+  const kit = kitFixture();
+  const expectedRoles = [
+    'tree', 'deadTree', 'bloom', 'bud', 'wilt', 'bush', 'tuft', 'flowerPatch', 'coverageFlora',
+  ];
+  assert.deepEqual(Object.keys(roleFootprints(kit)), expectedRoles);
+  assert.deepEqual(Object.keys(roleHeights(kit)), expectedRoles);
+  assert.equal(roleFootprints(kit).coverageFlora, 8);
+  assert.ok(Math.abs(roleHeights(kit).coverageFlora - 6.4) < 1e-9);
+
+  for (const [name, height] of [['plant-a', 4], ['plant-b', 6.4]] as const) {
+    const extent = placementExtent(kit, placement({ role: 'coverageFlora', assembly: name }));
+    assert.equal(extent.width, 8);
+    assert.ok(Math.abs(extent.height - height) < 1e-9);
+  }
+
+  // Either arm may become the tallest after a re-export; its height cannot come from the other.
+  kit.assemblies.set('plant-a', assembly(2, 6, 2));
+  assert.equal(roleFootprints(kit).coverageFlora, 8);
+  assert.equal(roleHeights(kit).coverageFlora, 24);
+});
+
+test('coverage hex tints use the foliage map mean and cache separately from pine state tints', () => {
+  const kit = kitFixture();
+  const foliageMean = { r: 35, g: 105, b: 70 };
+  kit.leafMeans.set('Pine_Forest_Foliage', foliageMean);
+  const foliage = texturedMaterial('Pine_Forest_Foliage', { map: { width: 3, height: 2 } });
+  const pine = kit.assemblies.get('pine-a')!.objects[1]!;
+  const trunk = kit.assemblies.get('pine-a')!.objects[0]!;
+  const cache = new Map<string, THREE.MeshStandardMaterial>();
+
+  const first = tintedMaterial(kit, foliage, 'Pine_Forest_Foliage', '#89b56b', cache);
+  const again = tintedMaterial(kit, foliage, 'Pine_Forest_Foliage', '#89b56b', cache);
+  assert.notEqual(first, foliage);
+  assert.equal(first, again);
+  assert.equal(first.map, foliage.map, 'the tint must retain the bought texture');
+  assert.deepEqual(foliage.color.toArray(), [1, 1, 1], 'tinting must not repaint the shared base');
+  assert.ok(first.version > 0, 'the coverage clone must be uploaded');
+  const expected = leafTintGain({ r: 137, g: 181, b: 107 }, foliageMean);
+  for (const channel of ['r', 'g', 'b'] as const) {
+    assert.ok(Math.abs(first.color[channel] - expected[channel]) < 1e-9, channel);
+  }
+
+  const otherTint = tintedMaterial(kit, foliage, 'Pine_Forest_Foliage', '#a08355', cache);
+  assert.notEqual(otherTint, first);
+  assert.notDeepEqual(otherTint.color.toArray(), first.color.toArray());
+  const pineTint = tintedMaterial(kit, pine.material, 'Pine_Branches', 'proposed', cache);
+  const pineGain = leafTintGainFor('proposed', kit.leafMeans.get('Pine_Branches')!)!;
+  assert.deepEqual(pineTint.color.toArray(), [pineGain.r, pineGain.g, pineGain.b]);
+  assert.equal(cache.size, 3);
+
+  assert.equal(tintedMaterial(kit, foliage, 'Pine_Forest_Foliage', null, cache), foliage);
+  assert.equal(tintedMaterial(kit, trunk.material, 'Pine_Trunks', '#89b56b', cache), trunk.material);
+  assert.equal(cache.size, 3, 'untinted foliage and bark must not create tint buckets');
+});
+
+test('coverage and untinted ground cover sharing an atlas keep separate merged materials', () => {
+  const kit = kitFixture();
+  const foliage = texturedMaterial('Pine_Forest_Foliage', { map: { width: 3, height: 2 } });
+  kit.leafMeans.set('Pine_Forest_Foliage', { r: 35, g: 105, b: 70 });
+  const plant = kit.assemblies.get('plant-a')!;
+  plant.objects[1]!.material = foliage;
+  plant.objects[1]!.materialName = 'Pine_Forest_Foliage';
+  const meshes = kitMeshes(kit, [
+    placement({ role: 'coverageFlora', assembly: 'plant-a', tint: '#89b56b' }),
+    placement({ role: 'coverageFlora', assembly: 'plant-a', tint: '#89b56b', at: { x: 10, z: 0 } }),
+    placement({ role: 'coverageFlora', assembly: 'plant-a', tint: '#a08355', at: { x: 20, z: 0 } }),
+    placement({ role: 'bush', assembly: 'plant-a', at: { x: 30, z: 0 } }),
+  ]);
+  assert.equal(meshes.length, 4, 'shared bark, two coverage tints, and the untinted foliage atlas');
+  const foliageMeshes = meshes.filter((mesh) => mesh.material instanceof THREE.MeshStandardMaterial
+    && mesh.material.name === 'Pine_Forest_Foliage');
+  assert.equal(foliageMeshes.length, 3);
+  assert.deepEqual(foliageMeshes.map((mesh) => geometryTriangles(mesh.geometry)).sort((a, b) => a - b), [12, 12, 24]);
+  assert.equal(foliageMeshes.filter((mesh) => mesh.material === foliage).length, 1);
+  assert.equal(new Set(foliageMeshes.map((mesh) => mesh.material)).size, 3);
+});
+
+test('the scene load reads each foliage material mean once from its own map', () => {
+  const scene = fixtureScene();
+  const pine = scene.getObjectByName('Pine_Leaves_01');
+  assert.ok(pine instanceof THREE.Mesh && pine.material instanceof THREE.MeshStandardMaterial);
+  const pineImage = pine.material.map!.image as DecodedMap;
+  const firstImage = { width: 6, height: 2 };
+  const duplicateImage = { width: 5, height: 3 };
+  for (const [name, image] of [['plant-a', firstImage], ['plant-b', duplicateImage]] as const) {
+    const plant = scene.getObjectByName(KIT_ASSEMBLIES[name][0]);
+    assert.ok(plant instanceof THREE.Mesh);
+    plant.material = texturedMaterial('Pine_Forest_Foliage', { map: image });
+    // Put the two forms last, in a known order, so the first map owns the cached mean.
+    scene.remove(plant);
+    scene.add(plant);
+  }
+  const pineMean = { r: 70, g: 90, b: 69 };
+  const coverageMean = { r: 35, g: 105, b: 70 };
+  const reads: DecodedMap[] = [];
+  const loaded = kitFromScene(scene, 123, 'coverage-fixture', (image) => {
+    reads.push(image);
+    if (image === pineImage) return pineMean;
+    if (image === firstImage) return coverageMean;
+    assert.fail('a duplicate foliage map or an unrelated material was read');
+  });
+  assert.deepEqual(reads, [pineImage, firstImage]);
+  assert.deepEqual([...loaded.leafMeans], [
+    ['Pine_Branches', pineMean],
+    ['Pine_Forest_Foliage', coverageMean],
+  ]);
+});
+
+test('the scene load refuses coverage foliage with no map or an undecoded image', () => {
+  for (const material of [
+    texturedMaterial('Pine_Forest_Foliage', {}),
+    texturedMaterial('Pine_Forest_Foliage', { map: null }),
+  ]) {
+    const scene = fixtureScene();
+    const plant = scene.getObjectByName(KIT_ASSEMBLIES['plant-a'][0]);
+    assert.ok(plant instanceof THREE.Mesh);
+    plant.material = material;
+    assert.throws(
+      () => kitFromScene(scene, 0, 'coverage-fixture', () => ({ r: 70, g: 90, b: 69 })),
+      { message: 'kit-mesh: coverage foliage Pine_Forest_Foliage carries no base-colour map' },
+    );
+  }
 });

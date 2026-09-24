@@ -41,7 +41,7 @@ import { KIT_FOOTPRINTS_2026_08_29, KIT_HEIGHTS_2026_08_29, isDressingRole } fro
 import { LAND_RELIEF_AMPLITUDE } from './land-relief.js';
 import { dressMapWithCover } from './map-dressing.js';
 import { islandGrowthLayout } from './ForestWorldCanvas.causal.js';
-import { worldTo3D, type Descriptor3D, type InstanceDescriptor } from './world-to-3d.js';
+import { worldTo3D, type CoverageFloraDescriptor, type Descriptor3D, type InstanceDescriptor } from './world-to-3d.js';
 
 const TUNED = { hexR: PRE_ADR0528_TILE.hexR } as const;
 
@@ -647,4 +647,116 @@ test('a descriptor edited in place after the cache saw it is still a ground chan
     assert.notEqual(next, first, `${part}, edited in place, came back as the stale ground`);
     assert.equal(next.revision, first.revision + 1, `${part}, edited in place, must rebuild exactly once`);
   }
+});
+
+
+const COVERAGE = {
+  kind: 'coverage-flora',
+  group: 'coverage-flora',
+  transform: { x: 10, y: 0, z: 20 },
+  capability: 'atlas-parse',
+  island: 'atlas',
+  material: 'healthy',
+  theme: 'meadow',
+  floraScale: 0.4,
+} satisfies CoverageFloraDescriptor;
+
+test('coverage dependencies keep every common field and every native payload field, while equal copies remain equal', () => {
+  const fullCoverage = { ...FULL, ...COVERAGE };
+  const changes = {
+    ...OTHER,
+    capability: { capability: 'atlas-store' },
+    theme: { theme: 'woodland' },
+    floraScale: { floraScale: 0.8 },
+  };
+  const baseKey = groundDependencyKey([fullCoverage]);
+  const copy = structuredClone(fullCoverage);
+  assert.equal(groundDependencyKey([copy]), baseKey);
+  assert.equal(groundDependency.sameGroundDependencies([fullCoverage], [copy]), true);
+
+  for (const [field, patch] of Object.entries(changes)) {
+    const changed = { ...fullCoverage, ...patch };
+    assert.notEqual(groundDependencyKey([changed]), baseKey, `${field} remains part of a coverage record`);
+    assert.equal(groundDependency.sameGroundDependencies([fullCoverage], [changed]), false, `${field} invalidates equality`);
+    assert.equal(groundDependency.sameGroundDependencies([changed], [fullCoverage]), false, `${field} invalidates equality in reverse`);
+  }
+});
+
+test('only a complete coverage payload on the coverage kind contributes native cache fields', () => {
+  // InstanceDescriptor admits this kind without a coverage payload. Its common fields still
+  // matter, but incomplete metadata must not turn it into a complete coverage record.
+  const base = {
+    kind: 'coverage-flora',
+    group: 'coverage-flora',
+    transform: { x: 10, y: 0, z: 20 },
+  } satisfies InstanceDescriptor;
+  const incomplete = [
+    { name: 'capability only', descriptor: { ...base, capability: 'atlas-parse' } },
+    { name: 'theme only', descriptor: { ...base, theme: 'meadow' } },
+    { name: 'scale only', descriptor: { ...base, floraScale: 0.4 } },
+    { name: 'no capability', descriptor: { ...base, theme: 'meadow', floraScale: 0.4 } },
+    { name: 'no theme', descriptor: { ...base, capability: 'atlas-parse', floraScale: 0.4 } },
+    { name: 'no scale', descriptor: { ...base, capability: 'atlas-parse', theme: 'meadow' } },
+  ];
+  for (const { name, descriptor } of incomplete) {
+    assert.equal(groundDependencyKey([descriptor]), groundDependencyKey([base]), `${name} has no complete native payload`);
+    assert.equal(groundDependency.sameGroundDependencies([base], [descriptor]), true, `${name} keeps common-field equality`);
+    assert.equal(groundDependency.sameGroundDependencies([descriptor], [base]), true, `${name} keeps equality in reverse`);
+  }
+
+  const nonCoverage = { ...base, kind: 'cave-arch' } satisfies InstanceDescriptor;
+  const withMetadata = { ...nonCoverage, capability: 'atlas-parse', theme: 'meadow', floraScale: 0.4 };
+  assert.equal(groundDependencyKey([withMetadata]), groundDependencyKey([nonCoverage]), 'metadata alone cannot make a cave into coverage');
+  assert.equal(groundDependency.sameGroundDependencies([nonCoverage], [withMetadata]), true);
+  assert.equal(groundDependency.sameGroundDependencies([withMetadata], [nonCoverage]), true);
+
+  const complete = { ...base, capability: 'atlas-parse', theme: 'meadow', floraScale: 0.4 };
+  assert.notEqual(groundDependencyKey([complete]), groundDependencyKey([base]), 'the complete payload does contribute its native fields');
+});
+
+test('in-place coverage edits rebuild the cached placements once, and fresh equal copies reuse them', () => {
+  const edits: [string, (descriptor: CoverageFloraDescriptor) => void][] = [
+    ['position', (descriptor) => { descriptor.transform.x += 1; }],
+    ['capability', (descriptor) => { descriptor.capability = 'atlas-store'; }],
+    ['island', (descriptor) => { descriptor.island = 'beacon'; }],
+    ['status', (descriptor) => { descriptor.material = 'unhealthy'; }],
+    ['theme', (descriptor) => { descriptor.theme = 'woodland'; }],
+    ['scale', (descriptor) => { descriptor.floraScale = 0.8; }],
+  ];
+  for (const [field, edit] of edits) {
+    const descriptor = structuredClone(COVERAGE);
+    const cache = createGroundInputCache(OPTS);
+    const first = cache([descriptor]);
+    assert.equal(first.placements.length, 1, 'the fixture stands one native plant');
+    assert.equal(first.placements[0]!.role, 'coverageFlora');
+    assert.equal(first.revision, 0);
+    edit(descriptor);
+    const changed = cache([descriptor]);
+    assert.notEqual(changed, first, `${field} must not serve stale placements`);
+    assert.equal(changed.revision, 1, `${field} rebuilds once`);
+    assert.deepEqual(changed, groundInput([descriptor], OPTS, 1), `${field} reaches the actual ground input`);
+    assert.equal(cache([structuredClone(descriptor)]), changed, `${field} is stable after the rebuild`);
+  }
+});
+
+test('coverage order and removal invalidate the cache even when the common descriptor fields match', () => {
+  const first = structuredClone(COVERAGE);
+  const second = { ...COVERAGE, capability: 'atlas-store' };
+  const forward = [first, second];
+  const reverse = [second, first];
+  assert.notEqual(groundDependencyKey(forward), groundDependencyKey(reverse));
+  assert.equal(groundDependency.sameGroundDependencies(forward, reverse), false);
+  assert.equal(groundDependency.sameGroundDependencies(reverse, forward), false);
+  assert.equal(groundDependency.sameGroundDependencies(forward, [first]), false);
+  assert.equal(groundDependency.sameGroundDependencies([first], forward), false);
+
+  const cache = createGroundInputCache(OPTS);
+  assert.deepEqual(cache(forward).placements.map((placement) => placement.capId), ['atlas-parse', 'atlas-store']);
+  const reordered = cache(reverse);
+  assert.equal(reordered.revision, 1);
+  assert.deepEqual(reordered.placements.map((placement) => placement.capId), ['atlas-store', 'atlas-parse']);
+  assert.equal(cache(structuredClone(reverse)), reordered);
+  const removed = cache([first]);
+  assert.equal(removed.revision, 2);
+  assert.deepEqual(removed.placements.map((placement) => placement.capId), ['atlas-parse']);
 });

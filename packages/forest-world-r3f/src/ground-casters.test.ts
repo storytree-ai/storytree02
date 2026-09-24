@@ -354,3 +354,41 @@ test('DOME_PROFILE is the quarter circle, sampled, and a fresh array each call',
   assert.equal(a.length, 5);
   for (const [t, r] of a) assert.ok(Math.abs(r - Math.sqrt(1 - t * t)) < 1e-12);
 });
+
+
+test('native coverage keeps its own hidden dome through tree narrowing and placement casting', () => {
+  const profile = ROLE_SILHOUETTE.coverageFlora;
+  assert.deepEqual(profile, DOME_PROFILE(), 'coverage casts the low dome');
+  for (const role of ['bush', 'tuft', 'flowerPatch'] as const) {
+    assert.notEqual(profile, ROLE_SILHOUETTE[role], 'the native profile cannot alias a dressing role');
+  }
+
+  for (const table of [ROLE_SILHOUETTE, roleSilhouettes(), roleSilhouettes(0.5), roleSilhouettes(1)]) {
+    assert.equal(table.coverageFlora, profile, 'tree narrowing retains the native profile by identity');
+    assert.deepEqual(Object.getOwnPropertyDescriptor(table, 'coverageFlora'), {
+      value: profile,
+      enumerable: false,
+      writable: false,
+      configurable: false,
+    }, 'coverage stays directly readable without joining the legacy enumerable role table');
+    assert.deepEqual(Object.keys(table).sort(), [...KIT_ROLES].sort());
+    assert.deepEqual(Object.getOwnPropertyNames(table).sort(), [...KIT_ROLES, 'coverageFlora'].sort());
+  }
+
+  const coverage = { ...placed('coverageFlora', 6, -7, 0.5), assembly: 'plant-a' } satisfies KitPlacement;
+  const caster = placementCaster(coverage, FOOT, HEIGHTS, roleSilhouettes(0.5));
+  assert.deepEqual(caster, {
+    x: 6,
+    z: -7,
+    radius: FOOT.coverageFlora / 4,
+    height: HEIGHTS.coverageFlora / 2,
+    profile,
+    pool: true,
+  });
+  assert.equal(caster.profile, profile, 'the placement consumes the same native silhouette');
+  assert.deepEqual(
+    placementCasters([placed('bush', 0, 0, 1), coverage], FOOT, HEIGHTS, false),
+    [caster],
+    'turning decorative cover off retains the native coverage caster',
+  );
+});
