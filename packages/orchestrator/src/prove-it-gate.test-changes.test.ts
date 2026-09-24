@@ -2,7 +2,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 
 import { InMemoryStore } from "@storytree/storage-protocol";
-import type { AuthorResult, AuthoringPhase, PhaseAuthor } from "@storytree/agent";
+import type { AuthorResult, AuthoringPhase, AuthoringRepairAdmission, PhaseAuthor } from "@storytree/agent";
 
 import { RecordingTestExecutor } from "./phase-machine.js";
 import type { TestObservation } from "./phase-machine.js";
@@ -55,6 +55,24 @@ class CountingAuthor implements PhaseAuthor {
   readonly calls: { phase: AuthoringPhase; prompt: string }[] = [];
   async author(phase: AuthoringPhase, prompt: string): Promise<{ ok: true }> {
     this.calls.push({ phase, prompt });
+    return { ok: true };
+  }
+}
+
+/** Captures the repair admission passed to production's sole PhaseAuthor dispatch point. */
+class AdmissionRecordingAuthor implements PhaseAuthor {
+  readonly calls: {
+    phase: AuthoringPhase;
+    prompt: string;
+    admission: AuthoringRepairAdmission | undefined;
+  }[] = [];
+
+  async author(
+    phase: AuthoringPhase,
+    prompt: string,
+    admission?: AuthoringRepairAdmission,
+  ): Promise<{ ok: true }> {
+    this.calls.push({ phase, prompt, admission });
     return { ok: true };
   }
 }
@@ -192,6 +210,126 @@ describe("an-existing-test-change-is-recorded-with-its-reason: the gate records 
     if (!result.ok) return;
     assert.equal(result.testChanges, undefined);
     assert.deepEqual(result.phasesVisited, ["AUTHOR_TEST", "CONFIRM_RED", "IMPLEMENT", "CONFIRM_GREEN", "GATE"]);
+  });
+});
+
+describe("c8-repair-paths-reach-the-pending-author-test-slice: only machine-derived C8 paths reach the repair author", () => {
+  test("passes sorted unique workspace-relative C8 targets only to the pending AUTHOR_TEST repair", async () => {
+    const author = new AdmissionRecordingAuthor();
+    const zebra: TestChange = { ...UNEXPLAINED, file: "packages/unit/src/zebra.test.ts", test: ["zebra"] };
+    const ant: TestChange = { ...UNEXPLAINED, file: "packages/unit/src/ant.test.ts", test: ["ant"] };
+    const hyena: TestChange = { ...UNEXPLAINED, file: "packages/unit/src/hyena.test.ts", test: ["hyena"] };
+    const explained: TestChange = { ...EXPLAINED, file: "packages/unit/src/explained.test.ts", test: ["explained"] };
+    const { spec: s } = spec({
+      author,
+      repair: alwaysRepairs,
+      testChanges: scriptedChanges(
+        [
+          {
+            changes: [zebra, explained, hyena, ant, zebra],
+            findings: [
+              { check: "C8", test: zebra.test, detail: "no stated reason", testSide: true },
+              { check: "C8", test: ant.test, detail: "no stated reason", testSide: true },
+              { check: "C7", test: hyena.test, detail: "another repair", testSide: true },
+            ],
+          },
+          { changes: [EXPLAINED], findings: [] },
+        ],
+        { n: 0 },
+      ),
+      observations: [RED, RED, GREEN],
+    });
+
+    const result = await proveUnit(s);
+
+    assert.equal(result.ok, true, "the second machine review, not the admission, clears C8");
+    assert.deepEqual(author.calls.map((call) => [call.phase, call.admission]), [
+      ["AUTHOR_TEST", undefined],
+      [
+        "AUTHOR_TEST",
+        {
+          kind: "c8-existing-test-reason",
+          targets: ["packages/unit/src/ant.test.ts", "packages/unit/src/zebra.test.ts"],
+        },
+      ],
+      ["IMPLEMENT", undefined],
+    ]);
+  });
+});
+
+describe("c8-repair-admission-is-not-general-repair-context: repair admissions do not escape their C8 slice", () => {
+  test("does not pass an admission to initial, non-C8, later repair, or IMPLEMENT author calls", async () => {
+    const author = new AdmissionRecordingAuthor();
+    const c8: TestChange = { ...UNEXPLAINED, file: "packages/unit/src/c8.test.ts", test: ["C8 test"] };
+    const other: TestChange = { ...UNEXPLAINED, file: "packages/unit/src/other.test.ts", test: ["other test"] };
+    const { spec: s } = spec({
+      author,
+      repair: alwaysRepairs,
+      testChanges: scriptedChanges(
+        [
+          { changes: [c8], findings: [{ check: "C8", test: c8.test, detail: "no stated reason", testSide: true }] },
+          { changes: [other], findings: [{ check: "C7", test: other.test, detail: "other repair", testSide: true }] },
+          { changes: [EXPLAINED], findings: [] },
+        ],
+        { n: 0 },
+      ),
+      observations: [RED, RED, RED, GREEN],
+    });
+
+    const result = await proveUnit(s);
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(author.calls.map((call) => call.admission), [
+      undefined,
+      { kind: "c8-existing-test-reason", targets: ["packages/unit/src/c8.test.ts"] },
+      undefined,
+      undefined,
+    ]);
+  });
+});
+
+describe("c8-repair-admission-leaves-c8-observation-in-force: an admission never resolves the C8 record itself", () => {
+  test("refuses an unresolved C8 finding after dispatching its author admission", async () => {
+    const author = new AdmissionRecordingAuthor();
+    const unresolved: TestChange = { ...UNEXPLAINED, file: "packages/unit/src/unresolved.test.ts", test: ["unresolved"] };
+    const { spec: s, store } = spec({
+      author,
+      repair: alwaysRepairs,
+      testChanges: scriptedChanges(
+        [
+          { changes: [unresolved], findings: [{ check: "C8", test: unresolved.test, detail: "no stated reason", testSide: true }] },
+          { changes: [unresolved], findings: [{ check: "C8", test: unresolved.test, detail: "still no reason", testSide: true }] },
+        ],
+        { n: 0 },
+      ),
+      observations: [RED, RED],
+    });
+    let repairAttempts = 0;
+    const refusingRepair: RepairPolicy = {
+      ...alwaysRepairs,
+      budget: {
+        mayRepair: () => {
+          repairAttempts += 1;
+          return Promise.resolve(
+            repairAttempts === 1
+              ? { ok: true }
+              : { ok: false, reason: "repair budget spent" },
+          );
+        },
+      },
+    };
+    s.repair = refusingRepair;
+
+    const result = await proveUnit(s);
+
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.equal(result.failedAt, "CONFIRM_RED");
+    assert.deepEqual(author.calls.map((call) => call.admission), [
+      undefined,
+      { kind: "c8-existing-test-reason", targets: ["packages/unit/src/unresolved.test.ts"] },
+    ]);
+    assert.equal((await store.readEvents()).filter((event) => event.kind === "signing").length, 0);
   });
 });
 
