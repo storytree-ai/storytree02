@@ -27,13 +27,14 @@
 // nothing focused, nothing shown; opting in draws the whole network. Ghost
 // (under-island) strips are never drawn here — the cave props carry that story.
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useThree } from '@react-three/fiber';
 import { Line, MapControls } from '@react-three/drei';
 import { BufferAttribute, Color, OrthographicCamera, type BufferGeometry, type Mesh, type Texture } from 'three';
 import type { InstanceDescriptor, Descriptor3D } from './world-to-3d.js';
 import type { ForestRegrowPresentation } from './ForestWorldCanvas.regrow.js';
 import { islandGrowthProgress, regrowTrailPoints } from './ForestWorldCanvas.causal.js';
+import { canvasReady } from './ForestWorldCanvas.readiness.js';
 import {
   SHIPPED_ELEVATION_DEG,
   frameWorld,
@@ -1167,6 +1168,7 @@ function KitProps({
   growth,
   targets,
   onTargets,
+  onSettled,
 }: {
   placements: readonly KitPlacement[];
   alphaByPlacement: ReadonlyMap<KitPlacement, number>;
@@ -1175,6 +1177,8 @@ function KitProps({
   growth: GrowthTexture;
   targets: readonly NativePropHitEnvelope[] | null;
   onTargets: ((targets: readonly NativePropHitEnvelope[]) => void) | undefined;
+  /** Called once the kit's meshes are committed, or once it has failed and none will be. Stable. */
+  onSettled: () => void;
 }) {
   const [loaded, setLoaded] = useState<LoadedKit | null>(null);
   // THE TARGETS ARE OFFERED ONLY WHILE THE PLANTS THEY STAND FOR ARE DRAWN: not before the kit has
@@ -1198,12 +1202,13 @@ function KitProps({
       },
       (err: unknown) => {
         console.error('ForestWorldCanvas: the bought kit did not load, so no props are drawn', err);
+        if (live) onSettled();
       },
     );
     return () => {
       live = false;
     };
-  }, []);
+  }, [onSettled]);
 
   const meshes = useMemo(() => {
     if (!loaded) return [];
@@ -1245,6 +1250,11 @@ function KitProps({
     },
     [meshes],
   );
+  // The meshes are in the scene once this commit lands, so the renderer's next frame draws them
+  // (and pays their shader compile): that is when the canvas may call itself ready.
+  useEffect(() => {
+    if (loaded !== null) onSettled();
+  }, [loaded, meshes, onSettled]);
 
   return (
     <>
@@ -1354,8 +1364,9 @@ export interface ForestWorldCanvasProps {
   onNativePropTargets?: (targets: readonly NativePropHitEnvelope[]) => void;
   /**
    * WHETHER THE RENDERER IS DRAWING, for a host that must never leave a silent blank (ADR-0608 D5):
-   * `ready` once the WebGL context exists and the canvas is created, `lost` if the browser takes
-   * the context away afterwards. A context that cannot be created at all throws into the host's
+   * `ready` once the WebGL context exists, the canvas is created AND — when it draws the kit props —
+   * the kit has loaded and its meshes are committed (or it failed; `ForestWorldCanvas.readiness.ts`),
+   * `lost` if the browser takes the context away afterwards. A context that cannot be created at all throws into the host's
    * error boundary instead — R3F's own behaviour, not something this prop reports.
    */
   onRendererState?: (state: 'ready' | 'lost') => void;
@@ -1684,6 +1695,10 @@ export function ForestWorldCanvas({
   // synchronous off the frozen footprints — the SAME list reaching the casters (the ground darkens
   // under every placement, cover included since 2026-09-06) and `KitProps` (which draws exactly
   // these). A tree and its shadow are still one list, not two that agree today.
+  // `ready` waits for everything this canvas was asked to draw — see `ForestWorldCanvas.readiness.ts`.
+  const [created, setCreated] = useState(false);
+  const [propsSettled, setPropsSettled] = useState(false);
+  const onPropsSettled = useCallback(() => setPropsSettled(true), []);
   const cacheRef = useRef<((d: readonly Descriptor3D[]) => GroundInput) | null>(null);
   cacheRef.current ??= createGroundInputCache(SHIPPED_GROUND_INPUT);
   const ground = cacheRef.current(descriptors);
@@ -1757,6 +1772,13 @@ export function ForestWorldCanvas({
   // This read is intentional: the app-owned presentation drives ground, pathways and vegetation
   // without a renderer-owned clock or schedule.
   const hasRegrowPresentation = regrow !== null && regrow !== undefined;
+  const ready = canvasReady({ created, drawsProps: compose.props, propsSettled });
+  const reportedReady = useRef(false);
+  useEffect(() => {
+    if (!ready || reportedReady.current || onRendererState === undefined) return;
+    reportedReady.current = true;
+    onRendererState('ready');
+  }, [ready, onRendererState]);
   return (
     /* ⚠ `orthographic` is the fence (ADR-0380 D6 fence 4), and `fov` is GONE rather than merely
        unused: R3F reads the presence of `fov` as a request for a PerspectiveCamera, so leaving it
@@ -1782,7 +1804,7 @@ export function ForestWorldCanvas({
         : {
             onCreated: ({ gl }: { gl: { domElement: HTMLCanvasElement } }) => {
               gl.domElement.addEventListener('webglcontextlost', () => onRendererState('lost'), { once: true });
-              onRendererState('ready');
+              setCreated(true);
             },
           })}
     >
@@ -1808,6 +1830,7 @@ export function ForestWorldCanvas({
           growth={growth}
           targets={targets}
           onTargets={onNativePropTargets}
+          onSettled={onPropsSettled}
         />
       )}
       {compose.trails &&
