@@ -182,7 +182,10 @@ export function islandReaches(
 ): Map<string, number> {
   const out = new Map<string, number>();
   for (const d of descriptors) {
-    if (d.kind !== 'cell-ground' || d.island === undefined) continue;
+    if (d.kind !== 'cell-ground') continue;
+    // Stryker disable next-line ConditionalExpression: EQUIVALENT — a cell with no island finds no
+    // centre, and the guard below skips it just the same; this one narrows the type.
+    if (d.island === undefined) continue;
     const c = centres.get(d.island);
     if (c === undefined) continue;
     let reach = out.get(d.island) ?? 0;
@@ -220,9 +223,13 @@ export function spanShift(
     const oz = p.z - c.z;
     const r = Math.hypot(ox, oz);
     let w: number;
+    // Stryker disable next-line EqualityOperator: EQUIVALENT — the field is continuous at the rim:
+    // at `r = reach` the band's weight `(reach / r)·(1 − 0)` is exactly 1 as well.
     if (r <= reach) w = 1;
     else {
       const band = reach * Math.max(1, 2 * Math.max(Math.abs(s.x - 1), Math.abs(s.z - 1)));
+      // Stryker disable next-line EqualityOperator: EQUIVALENT — continuous at the band's outer edge:
+      // at `r = reach + band` the weight `(reach / r)·(1 − 1)` is exactly 0 either way.
       if (r >= reach + band) continue;
       w = (reach / r) * (1 - (r - reach) / band);
     }

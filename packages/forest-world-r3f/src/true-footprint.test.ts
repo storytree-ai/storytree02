@@ -19,7 +19,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { islandCentres, nearestCentre, scaleAboutIslands, scaledBearing, type GroundShift } from './true-footprint.js';
+import { islandCentres, islandReaches, nearestCentre, scaleAboutIslands, scaledBearing, type GroundShift } from './true-footprint.js';
 import type { Descriptor3D, InstanceDescriptor } from './world-to-3d.js';
 
 /** The z-only stretch the module used to export: the same plane scaled along z alone. */
@@ -405,4 +405,21 @@ test('scaledBearing: the rim normal turns with an anisotropic scale and not with
   assert.ok(Math.abs(scaledBearing(0.7, { x: 2, z: 2 }) - 0.7) < 1e-12);
   assert.ok(Math.abs(scaledBearing(0.7, { x: 1, z: 3 }) - stretchedBearing(0.7, 3)) < 1e-12);
   assert.ok(Math.abs(scaledBearing(0.7, { x: 3, z: 1 }) - Math.atan2(Math.sin(0.7), Math.cos(0.7) / 3)) < 1e-12);
+});
+
+test('islandReaches reads each island\'s CELLS only: a bloom carrying the island id and far points is not ground, an island with no centre is skipped, and a pointless cell reaches nothing', () => {
+  const a = square('a', 0, 0); // farthest corner at 10√2
+  const impostor: InstanceDescriptor = {
+    kind: 'uat-bloom',
+    transform: { x: 500, y: 0, z: 500 },
+    group: 'uat-bloom',
+    island: 'a',
+    points: [{ x: 500, y: 0, z: 500 }],
+  };
+  const stray = square('ghost', 900, 900); // a cell of an island the caller has no centre for
+  const bare: InstanceDescriptor = { kind: 'cell-ground', transform: { x: 50, y: 0, z: 0 }, group: 'cell-ground', island: 'b' };
+  const reaches = islandReaches([a, impostor, stray, bare], new Map([['a', { x: 0, z: 0 }], ['b', { x: 50, z: 0 }]]));
+  assert.ok(Math.abs((reaches.get('a') as number) - Math.hypot(10, 10)) < 1e-12, `${reaches.get('a')}`);
+  assert.equal(reaches.has('ghost'), false);
+  assert.equal(reaches.get('b'), 0);
 });
