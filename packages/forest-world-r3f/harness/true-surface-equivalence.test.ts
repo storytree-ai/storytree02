@@ -61,11 +61,13 @@ function arm(elevationDeg: number): Descriptor3D[] {
 }
 
 /**
- * The DRAWN descriptors of one arm, narrowed through the union's own discriminant — see the
- * header's last paragraph for why this is never an assertion.
+ * The historical projected geometry descriptors of one arm. Coverage descriptors added under
+ * ADR-0608 carry the core's semantic groundAnchor, not projected SVG geometry; their direct
+ * anchor transport is proved in world-to-3d.test.ts. Keep that new family out of this older
+ * drawing-projection comparison without dropping it from the census below.
  */
 function drawn(descriptors: readonly Descriptor3D[]): InstanceDescriptor[] {
-  return descriptors.filter((d): d is InstanceDescriptor => d.kind !== 'skipped');
+  return descriptors.filter((d): d is InstanceDescriptor => d.kind !== 'skipped' && d.kind !== 'coverage-flora');
 }
 
 function extent(ds: readonly InstanceDescriptor[], axis: 'x' | 'z'): number {
@@ -91,10 +93,16 @@ function extent(ds: readonly InstanceDescriptor[], axis: 'x' | 'z'): number {
 const TOLERANCE = Math.hypot(0.05, 0.05 / groundFlattening());
 
 test('⚠⚠ THE MAPPER UN-PROJECTS NOTHING (ADR-0546 D1): the plan-view arm IS the drawing with z divided by sin(land camera)', () => {
-  const trueGround = drawn(arm(PLAN_VIEW_ELEVATION_DEG));
-  const drawing = drawn(arm(LAND_CAMERA_ELEVATION_DEG));
+  const groundArm = arm(PLAN_VIEW_ELEVATION_DEG);
+  const drawingArm = arm(LAND_CAMERA_ELEVATION_DEG);
+  for (const descriptors of [groundArm, drawingArm]) {
+    assert.equal(descriptors.filter((d) => d.kind === 'coverage-flora').length, 144, 'coverage wrappers moved from skips to semantic descriptors');
+    assert.equal(descriptors.filter((d) => d.kind !== 'skipped').length, 318, '174 geometry plus 144 coverage descriptors, none lost');
+  }
+  const trueGround = drawn(groundArm);
+  const drawing = drawn(drawingArm);
 
-  assert.equal(trueGround.length, 174, 'the fixture draws 174 descriptors');
+  assert.equal(trueGround.length, 174, 'the historical projected geometry census is unchanged');
   assert.equal(drawing.length, trueGround.length, 'and both arms draw the same number');
 
   const kinds = (ds: readonly InstanceDescriptor[]): string => [...ds.map((d) => d.kind)].sort().join(',');

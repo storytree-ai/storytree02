@@ -594,8 +594,11 @@ test('4b. the 3D mapper (world-to-3d.ts) maps exactly the pinned kinds and skips
   // was, and the other two fell to the explicit skip — which counted across the live corpus as one
   // acceptance criterion in three drawn as nothing. This pin is what would catch the mapper losing
   // one of them again, so it names them individually rather than matching a prefix.
+  // Coverage wrappers now transport their own semantic placement (ADR-0608); their SVG children
+  // remain explicit skips until the drawing switches as one complete transition.
   assert.deepEqual(cases, [
     'cave',
+    'parcel-flora',
     'tall-flower-failing',
     'tall-flower-pending',
     'tall-flower-proven',

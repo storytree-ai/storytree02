@@ -298,7 +298,7 @@ test('the ramp ROWS and the ramp TOKENS agree, status for status', () => {
   assert.notEqual(GROUND_ROWS.get('unknown'), 0);
 });
 
-test('THE CENSUS: the shipped map draws ten signatures and skips 1,063 more', () => {
+test('THE CENSUS: ten signatures and 144 coverage descriptors leave 919 named skips', () => {
   groundSanity();
   // ⚠ THIS WAS THE INCREMENT'S FINDING, and it bounded what a shadow could do here.
   // `contact-shade.ts` was ranked FIRST of ten mechanisms separating the owner's references from
@@ -353,13 +353,17 @@ test('THE CENSUS: the shipped map draws ten signatures and skips 1,063 more', ()
   // The retired story tree, now on the skipped side of the ledger — counted BY NAME so that the
   // total below stays legible as a move rather than a loss.
   const trees = descriptors.filter((d) => d.kind === 'skipped' && d.sceneKind === 'tree');
-  assert.equal(standing.length + flowers.length, 1062, 'the skipped ground-standing census moved');
+  // ADR-0608: 144 coverage wrappers now carry semantic placement; their leaf art still skips.
+  // This is transport, not proof that the kit draws coverage plants yet.
+  const coverage = descriptors.filter((d) => d.kind === 'coverage-flora');
+  assert.equal(coverage.length, 144, 'every coverage wrapper crossed into the semantic descriptor column');
+  assert.equal(standing.length + flowers.length, 918, 'the skipped census fell by exactly those 144 wrappers');
   assert.equal(blooms.length, 10, 'the fixture signs ten criteria and the map now draws all ten');
   assert.equal(trees.length, 1, 'the one story tree is still SEEN by the mapper — skipped, not dropped');
   assert.equal(
-    standing.length + flowers.length + blooms.length + trees.length,
+    standing.length + flowers.length + blooms.length + trees.length + coverage.length,
     1073,
-    'eleven drawables have crossed columns over this arc; none may have left the scene besides the ' +
+    'coverage wrappers, signatures and the retired tree changed columns; none may have left the scene besides the ' +
       'camera-sensitive `standing` count documented above (1,089 at the retired 20-degree camera)',
   );
   // ⚠ AND NOW NOTHING IN THE STREAM CASTS. The tree was the one descriptor on this island that

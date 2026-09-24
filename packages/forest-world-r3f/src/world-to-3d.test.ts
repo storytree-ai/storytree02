@@ -282,6 +282,27 @@ test('r3f-coverage-flora-preserves-grounded-capability-semantics: every core cov
   assert.deepEqual(worldTo3D(malformed), [{ kind: 'skipped', sceneKind: 'parcel-flora' }]);
 });
 
+// The mutation rung observed that one wrapper missing everything did not witness any individual
+// required-field guard. Remove one fact at a time, retaining every other valid fact.
+for (const missing of ['id', 'status', 'theme', 'groundAnchor', 'floraScale', 'island'] as const) {
+  test(`r3f-coverage-flora-preserves-grounded-capability-semantics: missing ${missing} skips visibly on its own`, () => {
+    const node: SceneG = {
+      el: 'g', kind: 'parcel-flora', id: 'cap-coverage', status: 'healthy', theme: 'woodland',
+      groundAnchor: { x: 12, y: 34 }, floraScale: 0.4,
+      transform: 'translate(999 999)', children: [],
+    };
+    if (missing !== 'island') delete node[missing];
+    const root: SceneG = { el: 'g', kind: 'territory', children: [node] };
+    if (missing !== 'island') root.id = 'island-coverage';
+    const result = worldTo3D(root, { landAreaPerCapability: null });
+    assert.equal(result.some((d) => d.kind === 'coverage-flora'), false, `${missing} must not be invented`);
+    assert.deepEqual(
+      result.filter((d) => d.kind === 'skipped' && d.sceneKind === 'parcel-flora'),
+      [{ kind: 'skipped', sceneKind: 'parcel-flora' }],
+    );
+  });
+}
+
 // ---------------------------------------------------------------------------
 // contract: r3f-semantic-layer-maps-faithfully
 // ---------------------------------------------------------------------------
