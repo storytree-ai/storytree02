@@ -9,7 +9,7 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "bun test --timeout 300000 src/"
+    "test": "bun test --preload ../../scripts/tsx-cache-off.mjs --timeout 300000 src/"
   },
   "devDependencies": {
     "@types/node": "^22.10.7",

@@ -53,10 +53,13 @@ proof:
 scene-graph (`buildScene` over the core's own `SceneInput`) turn story data into byte-identical typed
 drawables — the one deterministic look both the studio and the website render.
 
-**Current producer unit —** `parcel-flora` groups already preserve their exact generated count,
-SVG geometry, capability id, folded status and theme. Add only typed `groundAnchor` and `floraScale`
-metadata to each one. This is a core semantic producer for a later 3D consumer, not a change to the
-current flat rendering, density or plant vocabulary.
+**Current producer unit —** a parcels-present scene may carry capability ground when its public
+consumer does not publish the capability's declared contract count. Make `SceneParcelInput.testCount`
+optional: absence means **coverage unreported**, not zero. Keep that capability's exact parcel ground,
+capability id and folded status, but append no `parcel-flora` for it. Numeric counts, including `0`,
+keep the frozen numeric surface behavior. The source is a core semantic producer for the later public
+3D adapter; it does not publish a new field, infer a count, alter the current studio rendering, or
+choose an appearance.
 
 **Depends on —** nothing in-story; this capability IS the render core, the story's within-story root
 (ADR-0010 §3). The three thin mappers (studio React, website string-SVG, R3F) live with their
@@ -78,7 +81,9 @@ dependency ranking (`ranking.ts`), the hex math (`hex.ts`), the seeded RNG (`rng
 territory sizing (`sizing.ts`), and the deterministic cost-grid trail router (`routing.ts`, ADR-0169).
 The **scene-graph** (`scene.ts`): `buildScene` folds the core's own minimal `SceneInput` contract into
 a tree of typed drawables (kind / variant / already-folded visual status) that every thin mapper walks,
-and the per-parcel SURFACES emit a parcel's flora with density ∝ its `testCount`.
+and the per-parcel SURFACES emit a parcel's flora with density ∝ its published numeric `testCount`.
+When that count is unreported, the parcel surface still carries ground identity and status without
+inventing coverage flora.
 
 Determinism is the load-bearing property, and the suite asserts it directly: same input → byte-identical
 mesh, coast, scene, and trail network; no store, no React, no live data, no `node:*` import. Keep the
@@ -88,8 +93,11 @@ offline: `pnpm --filter @storytree/forest-world test`.
 **Active proof boundary —** the only implementation source is `scene.ts`. The real test fence also
 includes the existing geometry, routing and scene suites so their unchanged regression predicates can
 name their declared contracts; this is binding follow-through, not an implementation expansion. The
-only new behavioural test is `rc-coverage-flora-carries-semantic-ground-anchor-and-scale`; this arm
-does not change the existing geometry, density, status folding or flat rendering.
+current red→green behavioural test is `rc-unreported-parcel-coverage-emits-no-flora`. It invokes the
+actual package compiler over a naturally typed omitted-count client fixture, then proves the runtime
+surface: status-tinted capability ground remains, parcel flora is suppressed, and numeric density
+(including zero) remains numeric. It does not add public data, infer coverage, change status folding,
+or alter a flat/published appearance.
 
 ## Integration test
 
@@ -103,40 +111,31 @@ would build a `SceneInput` from a small story graph, assert `buildScene` produce
 drawables with folded status, ranking places a dependent strictly above every dependency (cycle-safe),
 the trail router emits a deterministic shared-segment network, and a second run is byte-identical.
 
-## Proof walkthrough
+## Current real-arm proof walkthrough
 
-The current `parcelFloraItem` renderer creates its SVG transform as
-`translate(p) scale(s) translate(-p)`: `p` is the scale pivot, so the first `translate` is not a
-general group displacement. It is presentation syntax, and a downstream consumer that treats it as
-a simple transform silently misplaces a plant. The scene graph must therefore carry the values in
-typed semantic fields instead.
+1. In the named Bun test, declare the two omitted-count parcels as ordinary `SceneParcelInput`
+   literals — no cast, `@ts-expect-error`, source-text match or separate shadow interface. Invoke the
+   actual `pnpm --filter @storytree/forest-world typecheck` command and assert its process exits zero.
+   On the old required field, the compiler rejects this real client fixture and makes this test red;
+   making the field optional is the green change.
+2. Give the same real `buildScene` input plan view / `anchorSpace: 'ground'`, distinct ids, folded
+   statuses, themes and true-ground seeds. Keep relaxed cells, `decor` and `plants` present so both
+   the parcel surface and the legacy fallback are observable.
+3. The result has a non-empty, status-carrying `parcel` ground group for each capability and is
+   byte-identical on a second identical build. It has no `parcel-flora` for either unreported parcel.
+4. It has no decorative `conifer` or one-plant `flora`: coverage absence keeps the parcel surface;
+   it must never mean parcels absent. The same otherwise-identical fixture with `testCount: 0` emits
+   its existing numeric baseline `parcel-flora`. This distinguishes zero from unreported. The
+   existing positive-count density contract remains unchanged.
 
-1. On each `parcel-flora` item, emit `groundAnchor: { x, y }` and `floraScale: s` from the same
-   `pivot` and tile-art scale that produce the SVG transform. `groundAnchor` is an absolute point in
-   the scene's coordinate space, never child-local SVG geometry and never the transform's net
-   translation. In the production studio path, territory inputs declare `anchorSpace: 'ground'` and
-   `buildScene` is requested at plan view, so this is already the real ground point a 3D mapper can
-   map as `x → x`, `y → z` without projection, re-anchoring or another clock.
-2. Preserve the existing item count, painter ordering, child mark geometry, transform string, id,
-   theme and folded status byte-for-byte. The metadata belongs to `parcel-flora` only; decorative
-   conifer cover and the retired one-plant-per-cap ring stay distinct and gain none of it.
-3. Make `rc-coverage-flora-carries-semantic-ground-anchor-and-scale` red by inspecting real
-   `buildScene` output for multiple generated coverage items, then prove every item has its own
-   typed anchor and scale equal to its existing pivot transform. Use parcels with different ids,
-   themes, statuses and test counts so the assertion detects an omitted item or metadata copied
-   from another parcel. The test also compares the current scene with its metadata-free expectation
-   after removing only the new fields, proving no existing count, geometry or ordinary rendering
-   semantic changed.
-4. Bind contracts 1–8 by adding their existing ids to the titles of their current substantive
-   regression tests in `forest-world.test.ts`, `routing.test.ts` and `scene.test.ts`. Preserve every
-   assertion and fixture; title-only binding must not turn an existing predicate into a new red/green
-   claim. The coverage-flora test above is the one and only newly authored red test in this arm.
+The prior anchor-and-scale producer proof remains contract 9 and its named regression test. It is
+not reimplemented by this arm.
 
-## Contracts (9)
+## Contracts (10)
 
 The test-proven leaf behaviours — each **one isolated automated test** in the
-`@storytree/forest-world` suite; the new proof arm binds the existing predicates by their declared
-ids without changing them, then earns a fresh red→green verdict on the coverage-flora producer.
+`@storytree/forest-world` suite; the current proof arm keeps the existing predicates as regressions
+and earns a fresh red→green verdict on the unreported-count producer boundary.
 
 1. **`rc-mesh-substrate-deterministic`** — the relaxed mesh substrate is deterministic from a seed
    - **asserts —** `substrate.ts` builds the relaxed Townscaper mesh byte-identically for the same seed
@@ -214,8 +213,9 @@ ids without changing them, then earns a fresh red→green verdict on the coverag
      suite that `forest-world#gate-1` observes.
    - **note — cited contract, retained in the active proof surface.** This contract exists so a
      lower-tier citation of the wall (the ADR-0294 D2 deletion of `wisp-as-story-claim#uat-7`) can
-     name a contract id instead of a free-form test title. The new `real:` arm is deliberately
-     narrower: it can build only the coverage-flora producer in `scene.ts` / `scene.test.ts`.
+     name a contract id instead of a free-form test title. The current `real:` arm is deliberately
+     narrower: it can build only the unreported-count producer boundary in `scene.ts` /
+     `scene.test.ts`.
      `real.testFile` keeps this named scene test in the active surface, so the new arm does not
      silently erase its existing proof reference.
 9. **`rc-coverage-flora-carries-semantic-ground-anchor-and-scale`** — every generated capability
@@ -227,3 +227,17 @@ ids without changing them, then earns a fresh red→green verdict on the coverag
      themes, statuses and test counts so copied or omitted metadata cannot pass.
    - **covers —** `packages/forest-world/src/scene.ts` (`parcelFloraItem` and its typed scene-node
      fields) — test: `packages/forest-world/src/scene.test.ts` (new named test).
+10. **`rc-unreported-parcel-coverage-emits-no-flora`** — an absent capability count is unreported
+    coverage, not zero or the legacy no-parcels path
+    - **asserts —** the actual package compiler accepts ordinary typed `SceneParcelInput` client
+      literals whose `testCount` property is omitted (no cast or expected-error); on that same
+      true-ground, parcels-present input, `buildScene` retains every capability's non-empty parcel
+      ground, cap id and folded status deterministically, but emits no `parcel-flora`; it also emits
+      neither legacy decorative conifers nor the one-plant ring. An otherwise identical explicit
+      `testCount: 0` control keeps its current numeric baseline flora, proving zero differs from
+      absent.
+    - **covers —** `packages/forest-world/src/scene.ts` (`SceneParcelInput` and
+      `buildTerritorySurface`).
+    - **proven by —** `packages/forest-world/src/scene.test.ts` in the one named test carrying this
+      contract id, which invokes the declared package `typecheck` command and checks its exit code
+      before exercising the real runtime scene.
