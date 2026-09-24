@@ -621,10 +621,17 @@ test('4c. the website painter (web/src/lib/worldSvg.ts) names every kind it draw
   const src = readPainter(WEB_PAINTER);
   const named = namedKinds(src, UNION);
   const unnamed = setMinus(UNION, named);
-  // The website never receives these (the studio-only coordination / parcel / marker / garden / baked
+  // The website never receives these (the studio-only coordination / parcel / garden / baked
   // families and the classic ground), and its painter renders an unnamed kind as an unclassed
   // element — so this list is the website's OWN starved set, pinned. It is wider than the studio's
-  // because the website's folds send fewer inputs (no parcels, criteria, claims, garden, vegetation).
+  // because the website's folds send fewer inputs (no parcels, claims, garden, vegetation).
+  //
+  // ⚠ THE CRITERION MARKERS LEFT THIS LIST ON 2026-09-24 (storytree-web#170), AND THE WAY THEY SAT
+  // IN IT IS THE LESSON. The comment above used to say the website receives no criteria. It did —
+  // its snapshot carries every story's UAT legs, so every criterion drew a `tall-flower-*` marker —
+  // and because the painter named none of them they rendered as SVG's default BLACK fill, floating
+  // over the public 3D land. This pin recorded the starvation as intended and stayed green. A kind
+  // the website DOES draw must be named there, not added here.
   const UNNAMED_ON_WEB: readonly string[] = [
     'baked-art', 'baked-defs',
     'claim-wisp', 'claim-wisp-dot', 'claim-wisp-glow', 'claim-wisp-hit', 'claim-wisps',
@@ -634,8 +641,6 @@ test('4c. the website painter (web/src/lib/worldSvg.ts) names every kind it draw
     'queue-wisp', 'queue-wisp-dot', 'queue-wisp-glow', 'queue-wisp-hit',
     'garden-grass-blade', 'garden-lavender-head', 'garden-lavender-stem',
     'parcel', 'parcel-blade', 'parcel-flora', 'parcel-flower', 'parcel-shrub', 'parcel-stem',
-    'tall-flower-bud', 'tall-flower-center', 'tall-flower-failing', 'tall-flower-glow', 'tall-flower-leaf',
-    'tall-flower-pending', 'tall-flower-petal', 'tall-flower-proven', 'tall-flower-stem',
     'tile-side', 'tile-top', 'tile-top-wheat',
   ];
   assert.deepEqual(unnamed, [...UNNAMED_ON_WEB].sort(), 'the set of kinds the website painter never names moved');

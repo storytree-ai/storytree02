@@ -1,0 +1,352 @@
+{
+  "capturedAt": "2026-09-24T10:53:18.364Z",
+  "viewport": "1600x1000",
+  "arms": {
+    "flat": {
+      "dist": "/tmp/laneR/arm-flat/dist",
+      "hasLand": false,
+      "errors": [],
+      "tellOverlaps": {
+        "binary": [],
+        "turn": [],
+        "islands": [],
+        "proven": [],
+        "loop": [],
+        "derived": [],
+        "edges": [
+          "storage-protocol under storm-land-stamp (VISIBLE)",
+          "uat-criterion-detail under storm-land-stamp (VISIBLE)",
+          "context-traversal-transcript under storm-land-stamp (VISIBLE)",
+          "app-guide under tell-figure is-on (VISIBLE)"
+        ],
+        "self": [
+          "app-surface under storm-land-stamp (VISIBLE)",
+          "drive-machinery under tell-line (VISIBLE)"
+        ],
+        "handoff": [
+          "art-factory under storm-land-stamp (VISIBLE)",
+          "forest-world under storm-land-stamp (VISIBLE)"
+        ]
+      },
+      "clickAfterTell": {
+        "x": 751.9908447265625,
+        "y": 633.4015808105469,
+        "id": "storage-protocol",
+        "panelOpen": true,
+        "locked": "storm-land roam-open"
+      }
+    },
+    "deployed": {
+      "dist": "/tmp/laneR/arm-deployed/dist",
+      "hasLand": true,
+      "errors": [],
+      "tellOverlaps": {
+        "binary": [
+          "art-factory under storm-land-stamp (VISIBLE)",
+          "agent under storm-land-stamp (VISIBLE)",
+          "proof-protocol under storm-land-stamp (VISIBLE)",
+          "forest-world under storm-land-stamp (VISIBLE)",
+          "context-traversal-capture under tell-line (VISIBLE)"
+        ],
+        "turn": [
+          "art-factory under storm-land-stamp (VISIBLE)",
+          "agent under storm-land-stamp (VISIBLE)",
+          "proof-protocol under storm-land-stamp (VISIBLE)",
+          "forest-world under storm-land-stamp (VISIBLE)",
+          "context-traversal-capture under tell-line (VISIBLE)"
+        ],
+        "islands": [
+          "art-factory under storm-land-stamp (VISIBLE)",
+          "agent under storm-land-stamp (VISIBLE)",
+          "proof-protocol under storm-land-stamp (VISIBLE)",
+          "forest-world under storm-land-stamp (VISIBLE)"
+        ],
+        "proven": [
+          "art-factory under storm-land-stamp (VISIBLE)",
+          "agent under storm-land-stamp (VISIBLE)",
+          "proof-protocol under storm-land-stamp (VISIBLE)",
+          "forest-world under storm-land-stamp (VISIBLE)",
+          "context-traversal-capture under tell-line (VISIBLE)"
+        ],
+        "loop": [
+          "art-factory under storm-land-stamp (VISIBLE)",
+          "agent under storm-land-stamp (VISIBLE)",
+          "proof-protocol under storm-land-stamp (VISIBLE)",
+          "forest-world under storm-land-stamp (VISIBLE)",
+          "context-traversal-telemetry under tell-figure is-on (VISIBLE)",
+          "context-traversal-capture under tell-figure is-on (VISIBLE)"
+        ],
+        "derived": [
+          "art-factory under storm-land-stamp (VISIBLE)",
+          "agent under storm-land-stamp (VISIBLE)",
+          "proof-protocol under storm-land-stamp (VISIBLE)",
+          "forest-world under storm-land-stamp (VISIBLE)",
+          "context-traversal-capture under tell-line (VISIBLE)"
+        ],
+        "edges": [
+          "art-factory under storm-land-stamp (VISIBLE)",
+          "agent under storm-land-stamp (VISIBLE)",
+          "proof-protocol under storm-land-stamp (VISIBLE)",
+          "forest-world under storm-land-stamp (VISIBLE)",
+          "context-traversal-capture under tell-line (VISIBLE)"
+        ],
+        "self": [
+          "uat-criterion-detail under storm-land-stamp (VISIBLE)",
+          "app-surface under storm-land-stamp (VISIBLE)",
+          "drive-machinery under tell-line (VISIBLE)"
+        ],
+        "handoff": [
+          "storage-protocol under storm-land-key (VISIBLE)",
+          "uat-criterion-detail under storm-land-stamp (VISIBLE)",
+          "art-factory under storm-land-stamp (VISIBLE)",
+          "agent under storm-land-stamp (VISIBLE)",
+          "proof-protocol under storm-land-stamp (VISIBLE)",
+          "forest-world under storm-land-stamp (VISIBLE)",
+          "context-traversal-capture under tell-line (VISIBLE)"
+        ]
+      },
+      "clickAfterTell": {
+        "x": 751.9182434082031,
+        "y": 695.733642578125,
+        "id": "storage-protocol",
+        "panelOpen": true,
+        "locked": "storm-land roam-open"
+      }
+    },
+    "fixed": {
+      "dist": "/home/mickh/code/Storytree/.claude/worktrees/laneR-public-truth/web/dist",
+      "hasLand": true,
+      "errors": [],
+      "tellOverlaps": {
+        "binary": [
+          "context-traversal-capture under tell-line (cleared)"
+        ],
+        "turn": [
+          "context-traversal-capture under tell-line (cleared)"
+        ],
+        "islands": [],
+        "proven": [],
+        "loop": [
+          "context-traversal-telemetry under tell-figure is-on (cleared)",
+          "context-traversal-capture under tell-figure is-on (cleared)"
+        ],
+        "derived": [
+          "context-traversal-capture under tell-line (cleared)"
+        ],
+        "edges": [
+          "storage-protocol under storm-land-stamp (cleared)",
+          "uat-criterion-detail under storm-land-stamp (cleared)",
+          "context-traversal-capture under tell-figure is-on (cleared)"
+        ],
+        "self": [
+          "context-traversal-telemetry under storm-land-stamp (cleared)",
+          "proof-binding-integrity under storm-land-stamp (cleared)",
+          "arc under storm-land-stamp (cleared)",
+          "context-traversal-capture under storm-land-key (cleared)",
+          "wisp-as-story-claim under tell-line (cleared)",
+          "uat-criterion-detail under storm-land-stamp (cleared)",
+          "app-surface under storm-land-stamp (cleared)",
+          "drive-machinery under tell-line (cleared)"
+        ],
+        "handoff": [
+          "art-factory under storm-land-key (cleared)",
+          "art-factory under storm-land-stamp (cleared)",
+          "forest-world under storm-land-stamp (cleared)",
+          "context-traversal-capture under tell-line (cleared)"
+        ]
+      },
+      "clickAfterTell": {
+        "x": 755.4265747070312,
+        "y": 644.8688049316406,
+        "id": "storage-protocol",
+        "panelOpen": true,
+        "locked": "storm-land roam-open"
+      }
+    }
+  },
+  "shots": [
+    {
+      "arm": "flat",
+      "surface": "/forest/",
+      "file": "forest-poster-flat.png",
+      "sha256": "3a311a0264e4c0a61bb74fa22b3c56a94507c2a6658668932766e118f01bba6f",
+      "land": "none"
+    },
+    {
+      "arm": "flat",
+      "surface": "/forest/ (crop around notice-board)",
+      "file": "forest-poster-crop-flat.png",
+      "sha256": "d666b8815001ebc1a689d0ff518e29121efea2ea22eb8853cb362c4424c1ffbe"
+    },
+    {
+      "arm": "flat",
+      "surface": "/ (growing, ~1 s after skip)",
+      "file": "entry-growing-flat.png",
+      "sha256": "da0118058110c7a4ab0cf0818900ae851608e5e2b6714885042f54072e668957"
+    },
+    {
+      "arm": "flat",
+      "surface": "/ (settled, ~14 s after skip)",
+      "file": "entry-settled-flat.png",
+      "sha256": "13872a5ee494b07ff4be8ab8b0d4f4ac5df3b9427cd2b74e4ed3260ad78e4950",
+      "land": "none",
+      "overlaps": {
+        "beat": "binary",
+        "holes": 0,
+        "hits": []
+      }
+    },
+    {
+      "arm": "flat",
+      "surface": "/ (TELL proven beat)",
+      "file": "entry-tell-proven-flat.png",
+      "sha256": "109b1e1b4fa6f40ba2bc5d5f101f2d23c897ea0ef7f674dc839750a7d49a4590"
+    },
+    {
+      "arm": "flat",
+      "surface": "/ (island clicked after TELL)",
+      "file": "entry-click-flat.png",
+      "sha256": "b48aa7af66f30c4bfe7ee3f6c533a4ae42698e0435f92b575559b36745e41899",
+      "click": {
+        "x": 751.9908447265625,
+        "y": 633.4015808105469,
+        "id": "storage-protocol",
+        "panelOpen": true,
+        "locked": "storm-land roam-open"
+      }
+    },
+    {
+      "arm": "deployed",
+      "surface": "/forest/",
+      "file": "forest-poster-deployed.png",
+      "sha256": "53caefe419b742654cef5230e830f96283af5548e3b5d6e77cd2f0b87b09989b",
+      "land": "drawn"
+    },
+    {
+      "arm": "deployed",
+      "surface": "/forest/ (crop around notice-board)",
+      "file": "forest-poster-crop-deployed.png",
+      "sha256": "6e92da31839dcec35b0645c4b7929aaf17a820819e9e99998b75b6d2fdd99d77"
+    },
+    {
+      "arm": "deployed",
+      "surface": "/ (growing, ~1 s after skip)",
+      "file": "entry-growing-deployed.png",
+      "sha256": "2bfdf304abaf9f809098902bbdd2923453b03c1a1927adb5382f49c504a84f8a"
+    },
+    {
+      "arm": "deployed",
+      "surface": "/ (settled, ~14 s after skip)",
+      "file": "entry-settled-deployed.png",
+      "sha256": "d35b659bd0581881471ffdcc0a4bedef4dd1d40c9a393a12ce2ff6ec85ff1c3d",
+      "land": "drawn",
+      "overlaps": {
+        "beat": "binary",
+        "holes": 0,
+        "hits": [
+          {
+            "plate": "art-factory",
+            "under": "storm-land-stamp",
+            "cleared": false
+          },
+          {
+            "plate": "agent",
+            "under": "storm-land-stamp",
+            "cleared": false
+          },
+          {
+            "plate": "proof-protocol",
+            "under": "storm-land-stamp",
+            "cleared": false
+          },
+          {
+            "plate": "forest-world",
+            "under": "storm-land-stamp",
+            "cleared": false
+          },
+          {
+            "plate": "context-traversal-capture",
+            "under": "tell-line",
+            "cleared": false
+          }
+        ]
+      }
+    },
+    {
+      "arm": "deployed",
+      "surface": "/ (TELL proven beat)",
+      "file": "entry-tell-proven-deployed.png",
+      "sha256": "829313d6d86605e46471e1beab6f7b6556137bfe7ed088d34ed7b84c96f0c18a"
+    },
+    {
+      "arm": "deployed",
+      "surface": "/ (island clicked after TELL)",
+      "file": "entry-click-deployed.png",
+      "sha256": "4d87592c9a39604994d1267d7dcff28b79707f23855ed719bdafdc7881acff95",
+      "click": {
+        "x": 751.9182434082031,
+        "y": 695.733642578125,
+        "id": "storage-protocol",
+        "panelOpen": true,
+        "locked": "storm-land roam-open"
+      }
+    },
+    {
+      "arm": "fixed",
+      "surface": "/forest/",
+      "file": "forest-poster-fixed.png",
+      "sha256": "2da74219e9c06dba12a91c4b10d7fbd07d23e73d03a2fd34dfe859624f8763a3",
+      "land": "drawn"
+    },
+    {
+      "arm": "fixed",
+      "surface": "/forest/ (crop around notice-board)",
+      "file": "forest-poster-crop-fixed.png",
+      "sha256": "eb2f015cba874e83543cf70176da4dc03f1fa1bc7610d3c44126b9cb782ea88c"
+    },
+    {
+      "arm": "fixed",
+      "surface": "/ (growing, ~1 s after skip)",
+      "file": "entry-growing-fixed.png",
+      "sha256": "8f009c0b6392f560ab02367bd287e80333e435acdad2c9eb869115fa8fdbc541"
+    },
+    {
+      "arm": "fixed",
+      "surface": "/ (settled, ~14 s after skip)",
+      "file": "entry-settled-fixed.png",
+      "sha256": "104119485413b28219b3b988730b53286d8f0491e81483b60aa26824ac61dbc9",
+      "land": "drawn",
+      "overlaps": {
+        "beat": "binary",
+        "holes": 3,
+        "hits": [
+          {
+            "plate": "context-traversal-capture",
+            "under": "tell-line",
+            "cleared": true
+          }
+        ]
+      }
+    },
+    {
+      "arm": "fixed",
+      "surface": "/ (TELL proven beat)",
+      "file": "entry-tell-proven-fixed.png",
+      "sha256": "934a0d6f6536fd6a4cac41bcecd6ea17378836e370a41d09f8337cb0bc176464"
+    },
+    {
+      "arm": "fixed",
+      "surface": "/ (island clicked after TELL)",
+      "file": "entry-click-fixed.png",
+      "sha256": "3a7ad8e2847ee50186834718efbfc025411840a2090aae0597f51ead774efd94",
+      "click": {
+        "x": 755.4265747070312,
+        "y": 644.8688049316406,
+        "id": "storage-protocol",
+        "panelOpen": true,
+        "locked": "storm-land roam-open"
+      }
+    }
+  ],
+  "browser": "148.0.7778.96"
+}
