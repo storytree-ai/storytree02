@@ -1053,6 +1053,98 @@ export function changedLinesAreCodeFree(
   return true;
 }
 
+/** One mutant's line extent, 1-based and inclusive — the instrumenter's 0-based location, shifted. */
+export interface MutantLineSpan {
+  readonly startLine: number;
+  readonly endLine: number;
+}
+
+/** One changed span of a zero-mutant run, and how many whole-file mutants overlap it. */
+export interface ZeroMutantSpan {
+  readonly file: string;
+  readonly start: number;
+  readonly end: number;
+  /** Mutants that touch the span without fitting inside it. */
+  readonly overlapping: number;
+}
+
+/**
+ * Why a run over REAL code counted no mutant — or that it cannot say.
+ *
+ * `explained`: an independent whole-file instrumentation confirms that no mutant fits inside any
+ * changed span, so there was nothing here any test could prove. `lost`: the instrumenter finds a
+ * mutant that DOES fit inside a changed span, so the run should have counted it and did not. That is
+ * the unexplained vacuous run, and it stays red.
+ */
+export type ZeroMutantExplanation =
+  | { readonly kind: "explained"; readonly spans: readonly ZeroMutantSpan[] }
+  | { readonly kind: "lost"; readonly lost: readonly ZeroMutantSpan[] };
+
+/**
+ * Account for a zero-mutant run whose changed lines are real code.
+ *
+ * THE DEMONSTRATED SHAPE (friction `a-changed-line-too-tight-to-contain-a-mutant-reds-the-rung-as-vacuous`,
+ * reproduced 2026-09-24). Stryker keeps a mutant only when the WHOLE mutated expression lies inside a
+ * mutate span, and this rung's spans are the changed lines. So a one-line edit inside a multi-line
+ * expression, such as one row of a frozen table or one entry of an object literal, contributes no
+ * mutant. A line Stryker never mutates at all (a numeric `as const` array) contributes none either.
+ * The run then counted zero, and the rung told the author their tests were weak. The file itself is
+ * richly mutable: 464 mutants in the reproduced one, one of which OVERLAPS the changed line.
+ *
+ * ⚠ TWO SIGNALS, AS FOR THE COMMENT-ONLY SKIP, AND THIS IS THE SECOND. A report counting zero cannot
+ * alone tell "nothing fits" from "the run silently lost the file", because Stryker's report omits a
+ * file with no mutant: measured, the reproduced run's `files` was EMPTY. So the shell instruments
+ * each selected file whole, with no span, through Stryker's own instrumenter, and hands the mutant
+ * extents here. The skip is licensed only when that reading AGREES that nothing fits. A file the
+ * shell could not instrument is absent from `mutantsByFile` and makes the answer `lost`, never
+ * `explained`: "I could not read it" is not "there was nothing in it".
+ *
+ * Line-granular on purpose. The rung's mutate globs are line ranges, so containment is decided the
+ * way Stryker decides it for them.
+ */
+export function explainZeroMutantRun(
+  changed: readonly ChangedRanges[],
+  mutantsByFile: ReadonlyMap<string, readonly MutantLineSpan[]>,
+): ZeroMutantExplanation {
+  const spans: ZeroMutantSpan[] = [];
+  const lost: ZeroMutantSpan[] = [];
+  for (const entry of changed) {
+    const file = normalise(entry.file);
+    const mutants = mutantsByFile.get(file);
+    for (const range of entry.ranges) {
+      const span = { file, start: range.start, end: range.end };
+      if (mutants === undefined) {
+        lost.push({ ...span, overlapping: 0 });
+        continue;
+      }
+      const fits = mutants.some((m) => m.startLine >= range.start && m.endLine <= range.end);
+      const overlapping = mutants.filter((m) => m.startLine <= range.end && m.endLine >= range.start).length;
+      (fits ? lost : spans).push({ ...span, overlapping });
+    }
+  }
+  return lost.length > 0 ? { kind: "lost", lost } : { kind: "explained", spans };
+}
+
+/** The report lines for a {@link ZeroMutantExplanation}, one per span, after the caller's own lead. */
+export function formatZeroMutantExplanation(tag: string, explanation: ZeroMutantExplanation): string[] {
+  if (explanation.kind === "lost") {
+    return [
+      `${tag} UNEXPLAINED — Stryker's own instrumenter, run over each whole file, finds a mutant that fits inside ` +
+        `these changed spans, yet the run counted none, so the run lost it: ${explanation.lost.map((s) => `${s.file}:${s.start}-${s.end}`).join(", ")}`,
+    ];
+  }
+  return [
+    ...explanation.spans.map(
+      (s) =>
+        `${tag}   ${s.file}:${s.start}-${s.end} — ` +
+        (s.overlapping === 0
+          ? "no mutant touches these lines at all"
+          : `${s.overlapping} mutant(s) span these lines but none fits inside them, because each mutated expression runs past the change`),
+    ),
+    `${tag} This is not a test-strength finding: a mutant must fit wholly inside a changed span, and no test can kill a mutant that does not exist.`,
+  ];
+}
+
 /**
  * How one mutant was accounted for. Only `"proven"` passes; `"excluded"` and `"unwitnessable"` are
  * not counted at all — and they are not the same absence. `"excluded"` is a status this rung has no

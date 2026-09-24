@@ -40,6 +40,8 @@ import {
   selectMutationTargets,
   siblingTestFor,
   skipDisposition,
+  explainZeroMutantRun,
+  formatZeroMutantExplanation,
   referencesPackage,
   unquoteGitPath,
   unwitnessedTargets,
@@ -3345,6 +3347,98 @@ test("auditSuppressionDirectives accepts a line in ANY of one hunk's ranges", ()
     mutants: [mutantAt({ file: "a.ts", line: 3, mutator: "ConditionalExpression", status: "Survived" })],
   });
   assert.deepEqual([audit.audited, audit.findings.map((f) => f.kind)], [1, ["inert"]]);
+});
+
+// ── instrument-escape-repair-arc: a real-code span no mutant fits inside ──────────────────────────
+
+/**
+ * THE REPRODUCED SHAPE (2026-09-24): `packages/app-surface/src/organic-pose-to-pose-track.ts`, one
+ * value changed on line 96, the `holdMs` row of a frozen policy object. The run counted 0 mutants
+ * and told the author to strengthen their tests. Stryker's instrumenter over the whole file found
+ * 464 mutants, and exactly one touches line 96: the policy's `ObjectLiteral`, lines 93-97.
+ */
+const POLICY_FILE = "packages/app-surface/src/organic-pose-to-pose-track.ts";
+
+test("mutation-diff: a changed line inside a multi-line literal is EXPLAINED, not vacuous (the reproduced fault)", () => {
+  const explanation = explainZeroMutantRun(
+    [{ file: POLICY_FILE, ranges: [{ start: 96, end: 96 }] }],
+    new Map([[POLICY_FILE, [{ startLine: 93, endLine: 97 }, { startLine: 60, endLine: 61 }]]]),
+  );
+  assert.deepEqual(explanation, {
+    kind: "explained",
+    spans: [{ file: POLICY_FILE, start: 96, end: 96, overlapping: 1 }],
+  });
+  assert.deepEqual(formatZeroMutantExplanation("[mutation]", explanation), [
+    `[mutation]   ${POLICY_FILE}:96-96 — 1 mutant(s) span these lines but none fits inside them, because each mutated expression runs past the change`,
+    "[mutation] This is not a test-strength finding: a mutant must fit wholly inside a changed span, and no test can kill a mutant that does not exist.",
+  ]);
+});
+
+test("mutation-diff: a line no mutant touches at all says so", () => {
+  const explanation = explainZeroMutantRun(
+    [{ file: POLICY_FILE, ranges: [{ start: 90, end: 90 }] }],
+    new Map([[POLICY_FILE, [{ startLine: 93, endLine: 97 }, { startLine: 89, endLine: 89 }, { startLine: 91, endLine: 91 }]]]),
+  );
+  assert.deepEqual(explanation, { kind: "explained", spans: [{ file: POLICY_FILE, start: 90, end: 90, overlapping: 0 }] });
+  assert.equal(
+    formatZeroMutantExplanation("[mutation]", explanation)[0],
+    `[mutation]   ${POLICY_FILE}:90-90 — no mutant touches these lines at all`,
+  );
+});
+
+test("mutation-diff: a mutant that FITS inside a changed span makes the zero-mutant run LOST — it stays red", () => {
+  // Fits exactly at both edges, and one fits strictly inside: either alone must convict the run.
+  for (const fitting of [{ startLine: 10, endLine: 12 }, { startLine: 11, endLine: 11 }]) {
+    const explanation = explainZeroMutantRun(
+      [{ file: POLICY_FILE, ranges: [{ start: 10, end: 12 }, { start: 30, end: 30 }] }],
+      new Map([[POLICY_FILE, [fitting, { startLine: 29, endLine: 31 }]]]),
+    );
+    assert.deepEqual(explanation, { kind: "lost", lost: [{ file: POLICY_FILE, start: 10, end: 12, overlapping: 1 }] });
+  }
+  assert.deepEqual(
+    formatZeroMutantExplanation("[mutation]", {
+      kind: "lost",
+      lost: [
+        { file: "a.ts", start: 1, end: 2, overlapping: 1 },
+        { file: "b.ts", start: 3, end: 3, overlapping: 0 },
+      ],
+    }),
+    [
+      "[mutation] UNEXPLAINED — Stryker's own instrumenter, run over each whole file, finds a mutant that fits inside these changed spans, yet the run counted none, so the run lost it: a.ts:1-2, b.ts:3-3",
+    ],
+  );
+});
+
+test("mutation-diff: a mutant one line past either edge does not fit, and one ending before or starting after does not overlap", () => {
+  const explanation = explainZeroMutantRun(
+    [{ file: POLICY_FILE, ranges: [{ start: 10, end: 12 }] }],
+    new Map([
+      [
+        POLICY_FILE,
+        [
+          { startLine: 9, endLine: 12 },
+          { startLine: 10, endLine: 13 },
+          { startLine: 12, endLine: 14 },
+          { startLine: 8, endLine: 10 },
+          { startLine: 5, endLine: 9 },
+          { startLine: 13, endLine: 20 },
+        ],
+      ],
+    ]),
+  );
+  assert.deepEqual(explanation, { kind: "explained", spans: [{ file: POLICY_FILE, start: 10, end: 12, overlapping: 4 }] });
+});
+
+test("mutation-diff: a file the instrumenter could not read is LOST, never an empty explanation", () => {
+  assert.deepEqual(
+    explainZeroMutantRun([{ file: `./${POLICY_FILE}`, ranges: [{ start: 1, end: 1 }] }], new Map()),
+    { kind: "lost", lost: [{ file: POLICY_FILE, start: 1, end: 1, overlapping: 0 }] },
+  );
+  // Read by its normalised name: a `./`-prefixed diff path still finds its reading.
+  assert.equal(
+    explainZeroMutantRun([{ file: `./${POLICY_FILE}`, ranges: [{ start: 1, end: 1 }] }], new Map([[POLICY_FILE, []]])).kind,
+    "explained",
+  );
 });
 
 // ── instrument-escape-repair-arc: the per-project witness (escape 11) and quoted paths (escape 12) ──
