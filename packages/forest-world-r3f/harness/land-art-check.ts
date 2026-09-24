@@ -97,7 +97,7 @@ const PKG = join(HERE, '..');
 const REPO = join(HERE, '../../..');
 const SCRATCH_REL = '.capture-scratch/land-art';
 
-/** Reserved by the gate runner: "this step ran and had nothing to check" (see `SKIP_CAPABLE_CHECKS`). */
+/** Reserved by the gate runner: "this step ran and had nothing to check" (declared in this file's own `skip:` header). */
 const EXIT_SKIP = 3;
 
 function refuse(lines: readonly string[]): never {

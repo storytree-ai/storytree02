@@ -1,34 +1,27 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import { discoverWorkspaceProjects } from "./ci-affected.js";
+import { discoverChecks, loadGatePlan } from "./gate-checks.js";
 import {
+  BUILT_IN_LEGS,
   EXIT_CODE_COLLAPSING_INVOCATION,
-  EXPENSIVE_STEPS,
   GATE_AUTHORITY_PHRASES,
-  GATE_PLAN,
   GATE_VOICE_EXEMPTIONS,
   GATE_VOICE_SCAN_ROOTS,
-  type GateStep,
-  LIVE_STORE_READING_CHECKS,
+  type GatePlanStep,
   LOAD_BEARING_MARKER,
-  NON_GATE_CHECK_SCRIPTS,
-  PRE_EXPENSIVE_CHECKS,
-  RETIRED_CHECKS,
   RETIRED_TEST_COMPANIONS,
-  SHARED_ENVIRONMENT_CHECKS,
-  SKIP_CAPABLE_CHECKS,
+  STUDIO_UAT_STEP,
   UNWIRED_MARKER,
-  ciIdentityFor,
   companionFileFor,
   evaluateGateOrder,
   findGateVoice,
-  firstExpensiveIndex,
   gateVoiceKey,
-  isExpensiveStep,
-  lastExpensiveIndex,
   readsLiveStore,
   stepsFor,
 } from "./gate-order.js";
@@ -45,338 +38,162 @@ function rootScripts(): Record<string, string> {
   return scripts;
 }
 
-/** Terse fixture builder for the evaluator's unit tests. */
-function chain(spec: string): GateStep[] {
-  return spec
-    .split("&&")
-    .map((raw) => raw.trim())
-    .filter((command) => command !== "")
-    .map((command) => {
-      const name = /\bpnpm\s+(check:[\w-]+)/.exec(command)?.[1];
-      return { command, check: name ?? undefined };
-    });
+/**
+ * The real checkout, asked of git: under `check:mutation-diff` this suite runs from a copy inside the
+ * git-ignored `.stryker-tmp/`, where discovery rooted at the copy would find nothing.
+ */
+function checkoutRoot(): string {
+  const res = spawnSync("git", ["rev-parse", "--show-toplevel"], { cwd: repoRoot, encoding: "utf8" });
+  assert.equal(res.status, 0, `git rev-parse --show-toplevel: ${res.stderr}`);
+  return res.stdout.trim();
 }
 
-// ── the walls ────────────────────────────────────────────────────────────────
+/** The REAL plan, found exactly as `pnpm gate` finds it. */
+function realPlan(): readonly GatePlanStep[] {
+  const root = checkoutRoot();
+  const loaded = loadGatePlan(root, discoverWorkspaceProjects(root).map((p) => p.dir), BUILT_IN_LEGS);
+  assert.ok(loaded.ok, loaded.ok ? "" : loaded.reasons.join("\n"));
+  return loaded.plan;
+}
 
-test("firstExpensiveIndex finds the earliest minutes-cost leg, lastExpensiveIndex the latest", () => {
-  const steps = chain("pnpm check:boundaries && pnpm -r typecheck && pnpm -r test && pnpm check:late");
-  assert.equal(firstExpensiveIndex(steps), 1);
-  assert.equal(lastExpensiveIndex(steps), 2);
-});
+/** A synthetic plan step for the evaluator's unit tests. */
+function planStep(
+  command: string,
+  subject: GatePlanStep["subject"],
+  cost: GatePlanStep["cost"],
+  check: string | undefined = command.startsWith("check:") ? command : undefined,
+): GatePlanStep {
+  return { command, check, runs: "both", subject, cost, why: "a synthetic step" };
+}
 
-// ── axis 1: cheap-first ──────────────────────────────────────────────────────
+// ── the fixed legs ───────────────────────────────────────────────────────────────────────────
+//
+// The only steps the gate names itself (ADR-0606 D1: "the gate's built-ins, not a list anyone
+// extends"). Every CHECK is found from its own file; these five are pinned here because nothing else
+// declares them.
 
-test("evaluateGateOrder passes a plan whose cheap checks all precede the expensive legs", () => {
-  const v = evaluateGateOrder({
-    steps: chain("pnpm check:boundaries && pnpm -r typecheck && pnpm -r test && pnpm check:late"),
-    earlyChecks: new Set(["check:boundaries"]),
-  });
-  assert.equal(v.verdict, "ok");
-  assert.deepEqual(v.misordered, []);
-});
-
-test("evaluateGateOrder FAILS a cheap check stranded behind the expensive legs, naming the fix", () => {
-  const v = evaluateGateOrder({
-    steps: chain("pnpm check:boundaries && pnpm -r typecheck && pnpm -r test && pnpm check:agents"),
-    earlyChecks: new Set(["check:boundaries", "check:agents"]),
-  });
-  assert.equal(v.verdict, "fail");
-  assert.deepEqual(v.misordered, ["check:agents"]);
-  assert.match(v.message, /run AFTER/);
-  assert.match(v.message, /GATE_PLAN/);
-});
-
-// ── axis 2: the session's own work before the shared environment ─────────────
-
-test("evaluateGateOrder FAILS a shared-environment check that runs before the expensive legs", () => {
-  // The axis-2 regression: a check that can red on a sibling's state, ahead of the session's own answer.
-  const v = evaluateGateOrder({
-    steps: chain("pnpm check:verification-decay && pnpm -r typecheck && pnpm -r test"),
-    earlyChecks: new Set<string>(),
-    lateChecks: new Set(["check:verification-decay"]),
-  });
-  assert.equal(v.verdict, "fail");
-  assert.deepEqual(v.premature, ["check:verification-decay"]);
-  assert.match(v.message, /may be a sibling session's/);
-});
-
-test("evaluateGateOrder measures axis 2 against the LAST expensive leg, not the first", () => {
-  // Between typecheck and test is still ahead of the session's own answer.
-  const v = evaluateGateOrder({
-    steps: chain("pnpm -r typecheck && pnpm check:verification-decay && pnpm -r test"),
-    earlyChecks: new Set<string>(),
-    lateChecks: new Set(["check:verification-decay"]),
-  });
-  assert.equal(v.verdict, "fail");
-  assert.deepEqual(v.premature, ["check:verification-decay"]);
-});
-
-// ── fail-closed ──────────────────────────────────────────────────────────────
-
-test("evaluateGateOrder fails CLOSED on a plan with no recognised expensive leg", () => {
-  // "nothing is on the wrong side of the wall" is vacuously true when the wall was never found.
-  const v = evaluateGateOrder({
-    steps: chain("pnpm check:boundaries && pnpm check:verification-decay"),
-    earlyChecks: new Set(["check:boundaries"]),
-  });
-  assert.equal(v.verdict, "fail");
-  assert.match(v.message, /expensive legs were not recognised/);
-});
-
-test("evaluateGateOrder fails CLOSED on a declared check the plan no longer runs — either set", () => {
-  const early = evaluateGateOrder({
-    steps: chain("pnpm -r typecheck && pnpm -r test"),
-    earlyChecks: new Set(["check:boundaries"]),
-  });
-  assert.equal(early.verdict, "fail");
-  assert.deepEqual(early.missing, ["check:boundaries"]);
-  assert.match(early.message, /not in the plan at all/);
-
-  const late = evaluateGateOrder({
-    steps: chain("pnpm -r typecheck && pnpm -r test"),
-    earlyChecks: new Set<string>(),
-    lateChecks: new Set(["check:verification-decay"]),
-  });
-  assert.equal(late.verdict, "fail");
-  assert.deepEqual(late.missing, ["check:verification-decay"]);
-});
-
-// ── the REAL plan ────────────────────────────────────────────────────────────
-
-test("the REAL gate plan honours BOTH ordering axes", () => {
-  const v = evaluateGateOrder({
-    steps: GATE_PLAN,
-    earlyChecks: PRE_EXPENSIVE_CHECKS,
-    lateChecks: SHARED_ENVIRONMENT_CHECKS,
-  });
-  assert.equal(v.verdict, "ok", v.message);
-});
-
-test("the REAL gate plan still runs both expensive legs (the wall the axes are measured against)", () => {
-  for (const leg of EXPENSIVE_STEPS) {
-    assert.ok(
-      GATE_PLAN.some((s) => s.command.includes(leg)),
-      `the gate plan must still run \`${leg}\``,
-    );
+test("the fixed legs are lint, the two `-r` legs, the studio build and its UAT journey — each in its slot, placement and class", () => {
+  const summary = (legs: readonly GatePlanStep[]) =>
+    legs.map((leg) => [leg.command, leg.check, leg.runs, leg.subject, leg.cost]);
+  assert.deepEqual(summary(BUILT_IN_LEGS.lead), [["pnpm lint", undefined, "both", "own-work", "seconds"]]);
+  assert.deepEqual(summary(BUILT_IN_LEGS.wall), [
+    ["pnpm -r --no-bail typecheck", undefined, "both", "own-work", "minutes"],
+    ["pnpm -r --no-bail test", undefined, "both", "own-work", "minutes"],
+  ]);
+  // CI-only by placement (ADR-0606 D4): only CI's clean checkout is asked to prove the studio build.
+  // The studio journey is the one fixed leg a check could not be: a package script, CI-only because it
+  // pins a port the shared dev box would collide on, and minutes-cost, so the shared environment
+  // stays after it (`studio-uat-journey-is-green-then-wired`).
+  assert.deepEqual(summary(BUILT_IN_LEGS.trail), [
+    ["pnpm -r build", undefined, "ci", "own-work", "seconds"],
+    ["pnpm --filter studio uat", undefined, "ci", "own-work", "minutes"],
+  ]);
+  assert.equal(BUILT_IN_LEGS.trail[1]?.command, STUDIO_UAT_STEP);
+  for (const leg of [...BUILT_IN_LEGS.lead, ...BUILT_IN_LEGS.wall, ...BUILT_IN_LEGS.trail]) {
+    assert.ok(leg.why.trim().length > 40, `\`${leg.command}\` gives no reason it is in the gate`);
+    assert.equal(leg.invocation, undefined, `a fixed leg runs its own command: ${leg.command}`);
+    assert.equal(leg.ciIdentity, undefined, `a fixed leg reads no store: ${leg.command}`);
+    assert.equal(leg.skip, undefined, `a fixed leg never skips: ${leg.command}`);
   }
 });
 
-test("the REAL gate plan is exactly the nine ADR-0311 survivors plus the ADR-0336, ADR-0454, ADR-0223, ADR-0317, ADR-0403, ADR-0445, ADR-0458, ADR-0459, ADR-0556, ADR-0606, ground-space, land-art, palette-transcription, desktop-route-coverage, reliability-gate-parity, control-bytes and anti-slop additions, in order", () => {
-  assert.deepEqual(
-    GATE_PLAN.map((step) => step.command),
-    [
-      // `pnpm lint` leads block A: it is the cheapest step in the gate (2.7 s over the whole repo,
-      // measured) and it is what stops the anti-slop ratchet slipping back — twenty fresh
-      // violations of already-adopted rules reached `main` in the two days before it existed
-      // (anti-slop-adoption-arc inc-07).
-      "pnpm lint",
-      // Added 2026-09-22 alongside `pnpm lint`, and for the same shape of reason: a whole-repo text
-      // property, sub-second, that no reader can enforce by looking. A heredoc-written control byte
-      // is invisible to tsc, oxlint, grep, `git diff` and the Read tool alike — it had already made
-      // one assertion unfalsifiable in `land-sand.test.ts` and put a raw NUL in a harness source
-      // that grep could not even list.
-      "pnpm check:control-bytes",
-      // ADR-0556 D4, added 2026-09-15 (`repo-manifest-aggregate-leaves-git`): the fragment tree is the
-      // manifest's only bytes once the aggregate left Git. It runs before the three rungs that read the
-      // composed manifest, so a refused set is named once, under the manifest's own name.
-      "pnpm check:manifest-fragments",
-      "pnpm check:boundaries",
-      "pnpm check:ownership-totality",
-      // The ADR-0445 D1 camp fence, added 2026-08-26: offline, disk-only and this branch's to fix,
-      // so it sits with its two declared-ownership neighbours rather than beside the store-reading
-      // `check:hierarchy-drift` it shares an arc with.
-      "pnpm check:hierarchy-camps",
-      // ADR-0544 D5, added 2026-09-08: `.gcloudignore` must repeat every credential- or
-      // runtime-state-shaped line in `.gitignore`, because it BYPASSES `.gitignore` and the studio
-      // Dockerfile is `COPY . .`. Two file reads and this branch's to fix, so it sits with its
-      // offline, disk-only neighbours rather than near the deploy it protects — the point is to fire
-      // on the branch that introduces the drift, not when the image is already published.
-      "pnpm check:gcloudignore-mirror",
-      // The ADR-0459 contract-line grammar, added 2026-08-27: disk-and-git only and charged strictly
-      // to this branch's own added/edited contracts, so it belongs with its `check:ownership-totality`
-      // neighbour, whose `chooseBaseRef` anchor it reuses.
-      "pnpm check:contract-grammar",
-      // `declared-reliability-gate-is-run-by-a-rung` (verification-integrity-arc), added
-      // 2026-09-22: a story's declared `## Reliability Gates` command, held to something that
-      // actually runs it. Disk-only and no git, so it sits with its offline neighbours; it is on
-      // the CI wall as well as in the gate, because the escape it catches is CI-shaped — 3ea9c3cc
-      // retired a pane, updated every unit test it broke, and left the `studio` UAT journey red
-      // precisely because nothing runs it.
-      "pnpm check:reliability-gate-parity",
-      "pnpm check:mirror-conformance",
-      // The ABSENCE half of the line above (`traversal-panel-arc`, increment
-      // `desktop-route-coverage-is-unasked`, 2026-08-29): conformance compares the payloads of
-      // routes the desktop ALREADY serves, so a route it never mirrored has no payload to be
-      // unequal and the rung is vacuously green on it. Placed immediately after its neighbour
-      // because it completes that neighbour's question and costs the same order of nothing.
-      "pnpm check:desktop-route-coverage",
-      "pnpm check:web-engine",
-      "pnpm check:web-experience-closure",
-      // ADR-0454, added 2026-08-26: the marker-presence third of the retired check:web-experience,
-      // narrowing ADR-0336 D2 on the corrected premise that it needs no network fetch either.
-      "pnpm check:web-experience-markers",
-      // `ground-space-truth-arc-inc-01`, added 2026-08-27: the ADR-0367 screen-space-distance guard.
-      // Last in block A because it belongs with the `check:web-*` family — it is the only other rung
-      // that reads `web/src`, and `web/src` is where the instance that survived PR #1356 lived. It
-      // is NOT skip-capable, unlike its three neighbours: the parent's own surfaces are always
-      // scannable, so an absent submodule narrows what it covers rather than excusing the run.
-      "pnpm check:ground-space",
-      // The art rung. ADR-0418 D4's replacement for the lifted palette fence existed and was
-      // mutation-tested (PR #1673) but no build ever ran it, so nothing could red for the art
-      // being wrong. Browser-backed, but SwiftShader-only and ~29 s, so it sits in block A with
-      // the other own-work checks rather than beside the two expensive legs.
-      "pnpm check:land-art",
-      // The palette guard runs beside its `check:land-art` neighbour and for the same reason:
-      // both defend what the map REPORTS rather than how it looks. This one is the cheaper and
-      // the wider — pure fs reads over the three copies of the status vocabulary, and it is the
-      // only step that can see a retune of `apps/studio/src/index.css` at all, since that package
-      // does not depend on the one whose tests would otherwise catch it.
-      "pnpm check:palette-transcription",
-      "pnpm -r --no-bail typecheck",
-      "pnpm -r --no-bail test",
-      // ADR-0458's diff-scoped mutation rung. Own-work, but the third MINUTES-cost leg, and placed
-      // after `test` on purpose: mutation results gathered over a red suite describe the breakage,
-      // not the strength of the tests, so running it before the suite is green would produce a
-      // confident answer to a question nobody asked.
-      "pnpm check:mutation-diff",
-      // ADR-0606, added 2026-09-23: the studio build, which CI ran as its own workflow step and the
-      // local gate never did. It is in the ONE plan now, placed `runs: "ci"`, in the slot it held in
-      // `ci.yml` — after the mutation rung and ahead of the shared environment.
-      "pnpm -r build",
-      // Added 2026-09-24 (`studio-uat-journey-is-green-then-wired`): the studio's whole-journey UAT,
-      // its story's declared reliability gate, which nothing ran before. CI-only beside the build it
-      // shares a package with; the fourth minutes-cost leg, so the shared environment stays after it.
-      "pnpm --filter studio uat",
-      // Both of these read the DECISION LOG, which is shared live state since ADR-0403 dec 1, so both
-      // sit in block C. `check:adr-health` is an ADDITION to the plan and a MOVE overall (it was a
-      // case inside `pnpm -r test`); `check:web-grounding` did not move in or out of the plan — its
-      // SUBJECT moved, from files in this diff to a shared store, and its position followed.
-      "pnpm check:web-grounding",
-      "pnpm check:adr-health",
-      "pnpm check:guidance",
-      "pnpm check:agents",
-      "pnpm check:verification-decay",
-      "pnpm check:library-dag-acyclic",
-      // ADR-0468 D5, added 2026-08-28: the `definition` tier's adjudication rung. Beside its
-      // acyclicity neighbour and for the same reason — the tier it judges is live state, so any
-      // session's artifact edit can red a branch that touched no corpus.
-      "pnpm check:definition-adjudication",
-      // ADR-0496 D1/D2, added 2026-09-01: the LIVE half of the mirror harness — the same instrument
-      // its block-A sibling runs, over a snapshot of the real `events.node_claim` ledger instead of
-      // a fixture. Down here because a sibling's landing moves that ledger, which is what makes it
-      // shared-environment; splitting it out is what keeps the nine fixture rows in block A.
-      "pnpm check:mirror-conformance-live",
-      // ADR-0445 D1 (`map-freshness-arc` inc-02): the live store's mirror of `stories/**` is
-      // regenerated by whichever PR last merged, so it is shared state exactly like the two
-      // projection checks above — a sibling's landing can move it under this branch.
-      "pnpm check:hierarchy-drift",
-      // ADR-0560 D3/D4: a changed existing criterion revision must carry an exact current signed
-      // pass. Its candidate hierarchy belongs to this branch, but its verdict stream is shared live
-      // state, so it sits beside the mirror check in block C.
-      "pnpm check:uat-revision-continuity",
-    ],
+// ── the ordering invariant, judged from declarations ─────────────────────────────────────────
+
+test("evaluateGateOrder passes a plan in the derived shape, and says so", () => {
+  const v = evaluateGateOrder([
+    planStep("check:first", "own-work", "seconds"),
+    planStep("pnpm lint", "own-work", "seconds"),
+    planStep("check:cheap", "own-work", "seconds"),
+    planStep("pnpm -r test", "own-work", "minutes"),
+    planStep("check:slow", "own-work", "minutes"),
+    planStep("pnpm -r build", "own-work", "seconds"),
+    planStep("check:shared", "shared-environment", "seconds"),
+    planStep("check:shared-last", "shared-environment", "minutes"),
+  ]);
+  assert.deepEqual(v, { verdict: "ok", message: "both ordering axes hold.", misordered: [], premature: [] });
+});
+
+test("evaluateGateOrder fails CLOSED on a plan with no minutes-cost step", () => {
+  const v = evaluateGateOrder([planStep("check:a", "own-work", "seconds"), planStep("check:b", "shared-environment", "seconds")]);
+  assert.deepEqual(v, {
+    verdict: "fail",
+    message:
+      "the gate plan runs no minutes-cost step — the ordering invariant cannot be judged against a " +
+      "plan whose `-r` legs never arrived.",
+    misordered: [],
+    premature: [],
+  });
+});
+
+test("axis 1: only an own-work, seconds-cost CHECK after a minutes step is misordered", () => {
+  const v = evaluateGateOrder([
+    planStep("pnpm -r test", "own-work", "minutes"),
+    planStep("check:late", "own-work", "seconds"),
+    planStep("pnpm -r build", "own-work", "seconds"),
+    planStep("check:slow", "own-work", "minutes"),
+    planStep("check:shared", "shared-environment", "seconds"),
+  ]);
+  assert.deepEqual(v.misordered, ["check:late"]);
+  assert.deepEqual(v.premature, []);
+  assert.equal(v.verdict, "fail");
+  assert.equal(
+    v.message,
+    "1 own-work, seconds-cost check(s) run AFTER a minutes-cost step: check:late. A session waits the " +
+      "whole run to read a verdict that was available in seconds.\n" +
+      "The plan is derived from each check's declaration (packages/cli/src/gate-checks.ts), so this is a " +
+      "defect in the derivation, not in any one check.",
   );
 });
 
-test("every step DECLARES a subject, and the declaration matches the order axis 2 asserts", () => {
-  // AXIS 2 is stated in this module's header as a fact about the plan, and each step's `subject` is
-  // the plan's own record of which side of it that step is on. Nothing else reads the field, so
-  // without this the two can disagree — a step could sit in block A carrying `shared-environment`,
-  // or carry no subject at all, and the header would go on describing a partition that had stopped
-  // being true. This holds the declared subject to the position.
-  const subjects = GATE_PLAN.map((s) => s.subject);
-  for (const [i, subject] of subjects.entries()) {
-    assert.ok(
-      subject === "own-work" || subject === "shared-environment",
-      `step ${i + 1} (${GATE_PLAN[i]?.command}) declares no recognised subject: ${JSON.stringify(subject)}`,
-    );
-  }
-  const lastOwnWork = subjects.lastIndexOf("own-work");
-  const firstShared = subjects.indexOf("shared-environment");
-  assert.ok(firstShared > lastOwnWork, "every own-work step must precede every shared-environment one");
-  // …and both sides are non-empty, so the assertion above is not satisfied by a plan that lost one.
-  assert.ok(lastOwnWork >= 0 && firstShared >= 0);
-  // Every step also says WHY, in a sentence — the field exists so a subject call is auditable
-  // rather than asserted, and an empty one turns the classification back into a bare claim.
-  for (const step of GATE_PLAN) {
-    assert.ok(step.why.trim().length > 20, `step \`${step.command}\` gives no reason for its subject`);
-  }
+test("axis 2: a shared-environment step with own work still to run after it is premature", () => {
+  const v = evaluateGateOrder([
+    planStep("check:early-shared", "shared-environment", "seconds"),
+    planStep("pnpm -r test", "own-work", "minutes"),
+    planStep("check:shared", "shared-environment", "seconds"),
+    planStep("check:also-shared", "shared-environment", "seconds"),
+  ]);
+  assert.deepEqual(v.premature, ["check:early-shared"]);
+  assert.deepEqual(v.misordered, []);
+  assert.equal(
+    v.message,
+    "1 shared-environment step(s) run BEFORE the session's own work is done: check:early-shared. A red " +
+      "there may be a sibling session's, and it must not precede the session's own answer.\n" +
+      "The plan is derived from each check's declaration (packages/cli/src/gate-checks.ts), so this is a " +
+      "defect in the derivation, not in any one check.",
+  );
 });
 
-test("the ten live/shared checks are pinned LATE", () => {
-  for (const check of [
-    // Both of these are shared-environment for the same reason as their neighbours: another
-    // session's `adr new` or status flip can red them, so neither may run ahead of this branch's
-    // own work (ADR-0311's ordering axis).
-    "check:web-grounding",
-    "check:adr-health",
-    "check:guidance",
-    "check:agents",
-    "check:verification-decay",
-    "check:library-dag-acyclic",
-    "check:definition-adjudication",
-    "check:mirror-conformance-live",
-    "check:hierarchy-drift",
-    "check:uat-revision-continuity",
-  ]) {
-    assert.ok(SHARED_ENVIRONMENT_CHECKS.has(check));
-    assert.ok(!PRE_EXPENSIVE_CHECKS.has(check));
-    const at = GATE_PLAN.findIndex((s) => s.check === check);
-    assert.notEqual(at, -1, `the gate plan must still run ${check}`);
-    assert.ok(at > lastExpensiveIndex(GATE_PLAN), `${check} must run after the expensive legs`);
-  }
+test("both axes are reported together when both break, every breach named in plan order", () => {
+  const v = evaluateGateOrder([
+    planStep("check:shared-a", "shared-environment", "seconds"),
+    planStep("check:shared-b", "shared-environment", "seconds"),
+    planStep("pnpm -r test", "own-work", "minutes"),
+    planStep("check:late-a", "own-work", "seconds"),
+    planStep("check:late-b", "own-work", "seconds"),
+  ]);
+  assert.deepEqual(v.misordered, ["check:late-a", "check:late-b"]);
+  assert.deepEqual(v.premature, ["check:shared-a", "check:shared-b"]);
+  const [axisOne, axisTwo, cause] = v.message.split("\n");
+  assert.match(axisOne ?? "", /^2 own-work, seconds-cost check\(s\) run AFTER a minutes-cost step: check:late-a, check:late-b\. /);
+  assert.match(axisTwo ?? "", /^2 shared-environment step\(s\) run BEFORE the session's own work is done: check:shared-a, check:shared-b\. /);
+  assert.match(cause ?? "", /a defect in the derivation, not in any one check\.$/);
 });
 
-test("the two ordering sets are disjoint — no check may be pinned both early and late", () => {
-  const both = [...PRE_EXPENSIVE_CHECKS].filter((n) => SHARED_ENVIRONMENT_CHECKS.has(n));
-  assert.deepEqual(both, [], "a check pinned to both sides makes the invariant unsatisfiable");
+test("the REAL plan honours both ordering axes", () => {
+  const v = evaluateGateOrder(realPlan());
+  assert.equal(v.verdict, "ok", v.message);
 });
 
-test("every step in the plan carries a subject, a cost, and a stated reason", () => {
-  for (const step of GATE_PLAN) {
-    assert.ok(step.why.length > 0, `${step.command} must record WHY it is ${step.subject}`);
-    assert.equal(
-      step.cost,
-      EXPENSIVE_STEPS.some((leg) => step.command.includes(leg)) ? "minutes" : "seconds",
-      `${step.command}: declared cost must match whether it is an expensive leg`,
-    );
-  }
-});
-
-test("the mutation rung is declared own-work and minutes-cost, past the expensive wall", () => {
-  // It is the one check in neither pinned set: own-work (only this branch's diff can red it) but
-  // AFTER the expensive legs, so its subject and cost have to be asserted directly.
-  const step = GATE_PLAN.find((s) => s.check === "check:mutation-diff");
-  assert.ok(step !== undefined, "the plan must run check:mutation-diff");
-  assert.equal(step.subject, "own-work");
-  assert.equal(step.cost, "minutes");
-  assert.equal(PRE_EXPENSIVE_CHECKS.has("check:mutation-diff"), false);
-  assert.equal(SHARED_ENVIRONMENT_CHECKS.has("check:mutation-diff"), false);
-  assert.ok(SKIP_CAPABLE_CHECKS.has("check:mutation-diff"), "it declares a skip and must say so");
-});
-
-test("the plan's subject classification agrees with the two pinned sets", () => {
-  for (const step of GATE_PLAN) {
-    if (step.check === undefined) continue;
-    if (SHARED_ENVIRONMENT_CHECKS.has(step.check)) {
-      assert.equal(step.subject, "shared-environment", `${step.check} is pinned late`);
-    } else if (PRE_EXPENSIVE_CHECKS.has(step.check)) {
-      assert.equal(step.subject, "own-work", `${step.check} is pinned cheap-first`);
-    }
-  }
-});
-
-// ── where each step runs, and as whom (ADR-0606 D3/D4) ───────────────────────
+// ── where each step runs (ADR-0606 D3/D4) ────────────────────────────────────────────────────
 //
-// ONE list drives both runs now: `pnpm gate` walks `both` + `local`, `pnpm gate --ci` (the CI
-// `verify` job) walks `both` + `ci`. There is no second list to hold this one to, so the placements
-// themselves are pinned — a step moving sides is then a visible, reasoned edit here, which is the
-// whole of what ADR-0486's two-list parity check used to buy, at the cost of one literal instead of
-// two lists and a comparator. (ADR-0606 D1's discovery step replaces even this literal.)
+// ONE plan drives both runs: `pnpm gate` walks `both` + `local`, `pnpm gate --ci` walks `both` + `ci`.
+// Which checks sit on which side is each check's own declaration; nothing here pins them by name,
+// because that would be a list. What is pinned is the two DECIDED placements.
 
-test("placement-selects-each-run: every step declares where it runs, with no default to fall back on", () => {
-  for (const step of GATE_PLAN) {
+test("placement-selects-each-run: every step of the real plan declares a placement, with no default to fall back on", () => {
+  const plan = realPlan();
+  assert.ok(plan.length > 20, "the real plan is not vacuous");
+  for (const step of plan) {
     assert.ok(
       step.runs === "both" || step.runs === "local" || step.runs === "ci",
       `\`${step.command}\` declares no recognised placement: ${JSON.stringify(step.runs)}`,
@@ -384,38 +201,14 @@ test("placement-selects-each-run: every step declares where it runs, with no def
   }
 });
 
-test("placement-selects-each-run: the local-only and CI-only steps are exactly the ones decided, and everything else runs on both", () => {
-  const placed = (runs: string): string[] =>
-    GATE_PLAN.filter((s) => s.runs === runs).map((s) => s.command);
-  // LOCAL — session discipline, never a merge barrier (ADR-0252 D3 for the decay ceiling; ADR-0486
-  // D2(b)'s class for the other two, which ADR-0606 D8 leaves where they are).
-  assert.deepEqual(placed("local"), [
-    "pnpm check:desktop-route-coverage",
-    "pnpm check:verification-decay",
-    "pnpm check:definition-adjudication",
-  ]);
-  // CI — environmental: only CI's clean checkout is asked to prove the studio build.
-  assert.deepEqual(placed("ci"), ["pnpm -r build", "pnpm --filter studio uat"]);
-  assert.equal(placed("both").length, GATE_PLAN.length - 5);
-});
-
 test("placement-selects-each-run: a local run walks both + local and a CI run walks both + ci, each in plan order", () => {
-  const local = stepsFor(GATE_PLAN, "local").map((s) => s.command);
-  const ci = stepsFor(GATE_PLAN, "ci").map((s) => s.command);
-  assert.deepEqual(
-    local,
-    GATE_PLAN.filter((s) => s.runs !== "ci").map((s) => s.command),
-    "the local run is the plan minus its CI-only steps, order untouched",
-  );
-  assert.deepEqual(
-    ci,
-    GATE_PLAN.filter((s) => s.runs !== "local").map((s) => s.command),
-    "the CI run is the plan minus its local-only steps, order untouched",
-  );
+  const plan = realPlan();
+  const local = stepsFor(plan, "local").map((s) => s.command);
+  const ci = stepsFor(plan, "ci").map((s) => s.command);
+  assert.deepEqual(local, plan.filter((s) => s.runs !== "ci").map((s) => s.command));
+  assert.deepEqual(ci, plan.filter((s) => s.runs !== "local").map((s) => s.command));
   assert.ok(!local.includes("pnpm -r build"));
   assert.ok(ci.includes("pnpm -r build"));
-  assert.ok(local.includes("pnpm check:verification-decay"));
-  assert.ok(!ci.includes("pnpm check:verification-decay"));
 });
 
 test("placement-selects-each-run: stepsFor keeps `both` on both sides and never reorders", () => {
@@ -430,122 +223,39 @@ test("placement-selects-each-run: stepsFor keeps `both` on both sides and never 
 });
 
 test("placement-selects-each-run: the ordering invariant holds on each side's run, not only on the whole plan", () => {
-  // `gate-run.ts` judges the WHOLE plan (the declared sets name steps from both sides) and then
-  // filters it. That is only sound if filtering cannot break the order — checked here by judging
-  // each side's run against the sets narrowed to the steps that side actually runs.
+  const plan = realPlan();
   for (const mode of ["local", "ci"] as const) {
-    const run = stepsFor(GATE_PLAN, mode);
-    const runs = new Set(run.map((s) => s.check).filter((c) => c !== undefined));
-    const v = evaluateGateOrder({
-      steps: run,
-      earlyChecks: new Set([...PRE_EXPENSIVE_CHECKS].filter((c) => runs.has(c))),
-      lateChecks: new Set([...SHARED_ENVIRONMENT_CHECKS].filter((c) => runs.has(c))),
-    });
+    const v = evaluateGateOrder(stepsFor(plan, mode));
     assert.equal(v.verdict, "ok", `${mode}: ${v.message}`);
   }
 });
 
-test("ci-step-gets-only-its-declared-identity: every store-reading step signs in in CI, and the verdict-history reader signs in as itself (ADR-0560)", () => {
-  for (const step of stepsFor(GATE_PLAN, "ci")) {
-    const identity = ciIdentityFor(step);
-    if (step.check === "check:uat-revision-continuity") {
-      assert.equal(identity, "ci-webverdict", "ADR-0560's split: presence cannot read verdict history");
-    } else if (readsLiveStore(step)) {
-      assert.equal(identity, "ci-presence", `${step.command} reads the store, so it needs the presence identity`);
-    } else {
-      assert.equal(identity, undefined, `${step.command} reads no store and must run with NO credential`);
-    }
-  }
+test("placement-selects-each-run: check:verification-decay stays LOCAL — moving it into CI would reverse ADR-0252 D3", () => {
+  // A drain obligation on the session, never a merge barrier: these instruments run at a measured
+  // ~75% false-positive rate, and a CI step is a merge barrier. The placement is one word in the
+  // check's own declaration, which is exactly why the decision is pinned here.
+  const decay = realPlan().find((s) => s.check === "check:verification-decay");
+  assert.ok(decay !== undefined, "check:verification-decay must still be a gate check");
+  assert.equal(decay.runs, "local");
 });
 
-test("ci-step-gets-only-its-declared-identity: an identity is DECLARED only to override, and only on a step that reads the store", () => {
-  // The derived default already covers every store reader; a declaration on any other step would
-  // hand a credential to a step whose verdict needs none.
-  const declared = GATE_PLAN.filter((s) => s.ciIdentity !== undefined);
-  assert.deepEqual(declared.map((s) => s.check), ["check:uat-revision-continuity"]);
-  for (const step of declared) {
-    assert.ok(step.check !== undefined && LIVE_STORE_READING_CHECKS.has(step.check), `${step.command}`);
-  }
+// ── which identity each step signs in as (ADR-0560, ADR-0606 D3) ──────────────────────────────
+
+test("ci-step-gets-only-its-declared-identity: a step reads the live store exactly when it declares an identity", () => {
+  assert.equal(readsLiveStore({ ciIdentity: "ci-presence" }), true);
+  assert.equal(readsLiveStore({ ciIdentity: "ci-webverdict" }), true);
+  assert.equal(readsLiveStore({}), false);
 });
 
-test("ci-step-gets-only-its-declared-identity: ciIdentityFor: an override wins, a store reader defaults to presence, anything else gets none", () => {
-  assert.equal(
-    ciIdentityFor({ command: "pnpm check:adr-health", check: "check:adr-health", ciIdentity: "ci-webverdict" }),
-    "ci-webverdict",
-  );
-  assert.equal(ciIdentityFor({ command: "pnpm check:adr-health", check: "check:adr-health" }), "ci-presence");
-  assert.equal(ciIdentityFor({ command: "pnpm check:boundaries", check: "check:boundaries" }), undefined);
-  assert.equal(ciIdentityFor({ command: "pnpm -r build", check: undefined }), undefined);
+test("ci-step-gets-only-its-declared-identity: the verdict-history reader signs in as ci-webverdict, as ADR-0560's split requires", () => {
+  const plan = realPlan();
+  const continuity = plan.find((s) => s.check === "check:uat-revision-continuity");
+  assert.ok(continuity !== undefined, "check:uat-revision-continuity must still be a gate check");
+  assert.equal(continuity.ciIdentity, "ci-webverdict");
 });
 
-// ── the plan vs. the real package.json ───────────────────────────────────────
-
-test("every step the plan names is a script the root package.json actually declares", () => {
-  const scripts = rootScripts();
-  for (const step of GATE_PLAN) {
-    if (step.check === undefined) continue;
-    assert.ok(
-      Object.hasOwn(scripts, step.check),
-      `GATE_PLAN runs \`${step.check}\`, which the root package.json does not declare`,
-    );
-  }
-});
-
-test("every check:* script the repo declares is IN the plan, or excluded with a reason", () => {
-  // THE LOAD-BEARING ONE. Without it, adding a check to package.json and forgetting the plan makes
-  // the gate silently never run it — a new instance of the exact defect class this arc guards
-  // (`asset:unrun-check-is-unverified-not-refuted`). A silent skip must be impossible to introduce.
-  const planned = new Set(GATE_PLAN.map((s) => s.check).filter((c) => c !== undefined));
-  const unplanned = Object.keys(rootScripts())
-    .filter((name) => name.startsWith("check:"))
-    .filter((name) => !planned.has(name) && !NON_GATE_CHECK_SCRIPTS.has(name));
-
-  assert.deepEqual(
-    unplanned,
-    [],
-    `these check:* scripts exist but the gate never runs them: ${unplanned.join(", ")}. ` +
-      `Add each to GATE_PLAN, or to NON_GATE_CHECK_SCRIPTS with the reason it is deliberately out.`,
-  );
-});
-
-test("every deliberate exclusion still names a real script — a stale exemption is removed, not kept", () => {
-  const scripts = rootScripts();
-  for (const [name, reason] of NON_GATE_CHECK_SCRIPTS) {
-    assert.ok(Object.hasOwn(scripts, name), `NON_GATE_CHECK_SCRIPTS excludes \`${name}\`, which no longer exists`);
-    assert.ok(reason.length > 0, `${name} must record why it is out of the gate`);
-  }
-});
-
-// ── the skip protocol vs. the invocation form that silently destroys it ──────
-
-test("every skip-capable check is invoked through a form that PRESERVES its exit code", () => {
-  // MEASURED 2026-08-08: `pnpm --filter <pkg> exec node -e "process.exit(3)"` exits 1, while
-  // `pnpm -C <dir> exec …` exits 3. pnpm's recursive exec normalises any non-zero child code, so a
-  // skip-capable check on that form would deliver its declared SKIP to the runner as a FAILURE and
-  // red the gate for every checkout that legitimately opts out. Harmless for the other checks (they
-  // only ever mean pass or fail); silently destructive for these.
-  const scripts = rootScripts();
-  for (const [name] of SKIP_CAPABLE_CHECKS) {
-    const script = scripts[name] ?? "";
-    assert.ok(script.length > 0, `SKIP_CAPABLE_CHECKS names \`${name}\`, which no longer exists`);
-    assert.ok(
-      !script.includes(EXIT_CODE_COLLAPSING_INVOCATION),
-      `\`${name}\` may declare a SKIP, but is invoked via \`${EXIT_CODE_COLLAPSING_INVOCATION}\`, ` +
-        `which collapses its exit code to 1 — the skip would arrive as a FAILURE. ` +
-        `Use \`pnpm -C <dir> exec …\`. Script: ${script}`,
-    );
-  }
-});
-
-test("a skip-capable check is a step the gate actually runs, and records why it may opt out", () => {
-  const planned = new Set(GATE_PLAN.map((s) => s.check).filter((c) => c !== undefined));
-  for (const [name, condition] of SKIP_CAPABLE_CHECKS) {
-    assert.ok(planned.has(name), `${name} is declared skip-capable but is not a gate step`);
-    assert.ok(condition.length > 0, `${name} must record the condition under which it verifies nothing`);
-  }
-});
-
-test("the root `gate` script invokes the runner, so GATE_PLAN is what actually runs", () => {
+// ── the root `gate` script ───────────────────────────────────────────────────────────────────
+test("the root `gate` script invokes the runner, so the found plan is what actually runs", () => {
   // The plan is only the source of truth while the script points at the runner that walks it. If the
   // `gate` script is ever reverted to an `&&` chain, every assertion above becomes decoration.
   assert.match(rootScripts()["gate"] ?? "", /gate-run\.ts/);
@@ -573,44 +283,32 @@ test("the root `gate` script itself PRESERVES exit codes — it now carries a pr
   );
 });
 
-// ── the tombstone vs. the real source tree (ADR-0311 D2/D5) ──────────────────
+// ── the tombstone, declared in the files themselves (ADR-0606 D6, ADR-0311 D2/D5) ──────────────
 //
-// The three tests above guard a check that EXISTS but never runs. These guard the mirror image: a
-// check that RUNS NOWHERE but still exists. ADR-0311 kept the retired implementations deliberately
-// and named the cost in its Consequences — "discoverable code whose unwired status must not be
-// mistaken for a forgotten gate rung" — without paying it. These pay it, mechanically, so the
-// status cannot rot back into prose.
+// A retired check keeps its file so re-wiring stays cheap, and says it is retired in its own
+// declaration; the gate lists it and never runs it. These guard what that declaration cannot say
+// about the files AROUND it: that the helpers it left behind still exist and still read as dead code.
 
-/** Every distinct file the tombstone claims survived, deduped across checks that shared one. */
+/** Every distinct file the retired checks left behind — each entry, and the helpers it names. */
 function retiredSources(): string[] {
-  return [...new Set([...RETIRED_CHECKS.values()].flatMap((entry) => entry.sources))].sort();
+  const root = checkoutRoot();
+  const discovery = discoverChecks(root, discoverWorkspaceProjects(root).map((p) => p.dir));
+  const files = discovery.retired.flatMap((check) => [
+    path.posix.basename(check.path),
+    ...check.declaration.sources,
+  ]);
+  return [...new Set(files)].sort();
 }
 
-/** The `src/<name>.ts` entrypoints the root `check:*` scripts actually invoke. */
-function wiredEntrypoints(): Set<string> {
-  const wired = new Set<string>();
-  for (const [name, command] of Object.entries(rootScripts())) {
-    if (!name.startsWith("check:")) continue;
-    for (const [, file] of command.matchAll(/\bsrc\/([\w.-]+\.ts)\b/g)) {
-      if (file !== undefined) wired.add(file);
-    }
+test("every retired check lives beside the helpers it declares, in packages/cli/src", () => {
+  // The companion inventory below is keyed by bare file name under this directory; a retired check
+  // declared anywhere else would be invisible to it, so say so rather than letting it slip past.
+  const root = checkoutRoot();
+  const discovery = discoverChecks(root, discoverWorkspaceProjects(root).map((p) => p.dir));
+  assert.ok(discovery.retired.length > 0, "no retired check found — the tombstone would be vacuous");
+  for (const check of discovery.retired) {
+    assert.equal(path.posix.dirname(check.path), "packages/cli/src", `${check.name} lives elsewhere`);
   }
-  return wired;
-}
-
-test("no retired check has quietly returned as a root script", () => {
-  // A retired name reappearing in package.json is either a deliberate re-wiring — which ADR-0311 D5
-  // says needs fresh production-catch evidence and an ADR, not just a script line — or an
-  // accident. Either way the tombstone above is then lying, and this is where that surfaces.
-  const resurrected = [...RETIRED_CHECKS.keys()].filter((name) => Object.hasOwn(rootScripts(), name));
-
-  assert.deepEqual(
-    resurrected,
-    [],
-    `these checks are declared RETIRED but the root package.json declares them: ${resurrected.join(", ")}. ` +
-      "Re-wiring a retired rung needs new evidence and an ADR (ADR-0311 D5); if that happened, remove " +
-      "it from RETIRED_CHECKS, add it to GATE_PLAN, and drop its UNWIRED banner.",
-  );
 });
 
 test("every surviving retired source exists and carries the UNWIRED banner", () => {
@@ -634,15 +332,15 @@ test("every surviving retired source exists and carries the UNWIRED banner", () 
   assert.deepEqual(
     missing,
     [],
-    `RETIRED_CHECKS names ${missing.join(", ")}, which no longer exist. A deleted source is fine — ` +
-      "drop it from the inventory so the tombstone keeps describing the real tree.",
+    `a retired declaration names ${missing.join(", ")}, which no longer exist. A deleted helper is ` +
+      "fine — drop it from the declaration's `sources` so the tombstone keeps describing the real tree.",
   );
   assert.deepEqual(
     unmarked,
     [],
     `these retired sources do not carry the \`${UNWIRED_MARKER}\` banner: ${unmarked.join(", ")}. ` +
       "Each still compiles and its own tests still pass, so without the banner a reader has no way " +
-      "to tell it enforces nothing. Add the banner, or — if it was re-wired — update RETIRED_CHECKS.",
+      "to tell it enforces nothing. Add the banner, or — if it was re-wired — make its declaration live.",
   );
 });
 
@@ -650,7 +348,7 @@ test("every surviving retired source exists and carries the UNWIRED banner", () 
 //
 // The tests above judge the retired PRODUCTION sources, which is the half that was tracked. Their
 // `.test.ts` companions were not — and three of them are not leftovers at all: they run inside
-// `pnpm -r test` (GATE_PLAN step 6, and a CI step) and assert invariants over the real tree. A
+// `pnpm -r test` (the test leg, which the gate and CI both run) and assert invariants over the real tree. A
 // tidy-up deleting "the unwired ADR-0311 leftovers" would have taken them along and dropped those
 // invariants in silence. These make that impossible to do quietly.
 
@@ -702,7 +400,7 @@ test("every companion carries the banner its ROLE demands, and no inert one clai
     assert.ok(companion.cost.length > 0, `${file} must record what deleting it would cost`);
     assert.ok(
       retiredSources().includes(companion.of),
-      `${file} claims to companion \`${companion.of}\`, which RETIRED_CHECKS does not list`,
+      `${file} claims to companion \`${companion.of}\`, which no retired declaration names`,
     );
     assert.equal(
       companionFileFor(companion.of),
@@ -737,7 +435,7 @@ test("every companion carries the banner its ROLE demands, and no inert one clai
 });
 
 test("the load-bearing companions are pinned BY NAME, so dropping one is a visible edit", () => {
-  // Derived by hand rather than read off the map — the same reason PRE_EXPENSIVE_CHECKS is. A set
+  // Derived by hand rather than read off the map — the same reason a decision is pinned rather than derived. A set
   // computed from the map would agree with it by construction and could never contradict it, which
   // is precisely the contradiction this exists to force: quietly deleting a load-bearing entry has
   // to fail a literal that spells out the three files.
@@ -766,7 +464,7 @@ test("each load-bearing companion's banner NAMES the invariant, not just the mar
     const paragraph = body.split(/\r?\n/).slice(banner, banner + 12).join("\n");
     assert.match(
       paragraph,
-      /pnpm -r|GATE_PLAN|do not delete|DO NOT DELETE/i,
+      /pnpm -r|test leg|do not delete|DO NOT DELETE/i,
       `${file}'s ${LOAD_BEARING_MARKER} banner must say where it runs and that it must survive a ` +
         "leftover sweep — a bare marker is decoration",
     );
@@ -822,7 +520,7 @@ test("a mention of merging that claims no blocking authority is NOT a hit", () =
 });
 
 test("no source claims merge-blocking authority unless it is exempted with a reason", () => {
-  // THE LOAD-BEARING ONE, and the mirror of `every check:* script is IN the plan`: that test stops a
+  // THE LOAD-BEARING ONE, and the mirror of discovery REFUSING an undeclared check file: that stops a
   // check from existing unrun, this one stops a command from SOUNDING enforced while unrun. Both
   // refuse the same conclusion — that something is watching when nothing is.
   const unexplained: string[] = [];
@@ -839,12 +537,12 @@ test("no source claims merge-blocking authority unless it is exempted with a rea
     `these assert merge-blocking authority: ${unexplained.join(" | ")}. Either the claim is FALSE — ` +
       "reword it to report rather than to refuse (ADR-0311 D5: wiring a rung needs new " +
       "production-catch evidence and an ADR, never merely the wiring) — or it is true, in which case " +
-      "trace it to its GATE_PLAN step and add it to GATE_VOICE_EXEMPTIONS with that reason.",
+      "trace it to the gate step that runs it and add it to GATE_VOICE_EXEMPTIONS with that reason.",
   );
 });
 
 test("every gate-voice exemption still names a real, still-claiming sentence", () => {
-  // A stale exemption is removed, not kept — the same rule the NON_GATE_CHECK_SCRIPTS test applies,
+  // A stale exemption is removed, not kept — the same rule a retired declaration's `sources` obeys,
   // and the reason a reworded sentence cannot leave a permanent licence behind for the next author.
   const live = new Set<string>();
   for (const file of gateVoiceFiles()) {
@@ -863,88 +561,44 @@ test("every declared phrase is a distinct claim of blocking authority", () => {
   assert.equal(new Set(GATE_AUTHORITY_PHRASES).size, GATE_AUTHORITY_PHRASES.length);
 });
 
-test("every check-shaped source file is either wired into the gate or declared retired", () => {
-  // The completeness half: the two tests above only judge files someone remembered to inventory.
-  // This one judges the DIRECTORY, so a newly orphaned check cannot slip in unlisted and a session
-  // reading `RETIRED_CHECKS` can trust it to be the whole tombstone rather than a sample.
-  const wired = wiredEntrypoints();
-  const retired = new Set(retiredSources());
-  const unaccounted = readdirSync(cliSrc)
-    .filter((file) => /^check-.+\.ts$|.+-check\.ts$/.test(file) && !file.endsWith(".test.ts"))
-    .filter((file) => !wired.has(file) && !retired.has(file))
-    .sort();
-
-  assert.deepEqual(
-    unaccounted,
-    [],
-    `these files look like gate checks but are neither invoked by a root check:* script nor listed ` +
-      `in RETIRED_CHECKS: ${unaccounted.join(", ")}. Wire it, or declare it retired and banner it — ` +
-      "an unaccounted check-shaped file is exactly the ambiguity this inventory exists to remove.",
-  );
-});
-
-
 test("a rung promoted to a merge wall does not keep describing itself as local-only", () => {
   // ADR-0547 D1 moved `check:gcloudignore-mirror` from gate-only onto the CI merge wall. Its own
-  // `why` prose said "LOCAL-ONLY today", which the promotion made false — and prose inside a plan
-  // entry is exactly the kind of claim nothing else reads, so nothing else would have caught it.
-  // This asserts the CORRECTED state rather than the edit: the entry must name the promotion and
+  // reason said "LOCAL-ONLY today", which the promotion made false — and prose inside a declaration
+  // is exactly the kind of claim nothing else reads, so nothing else would have caught it. This
+  // asserts the CORRECTED state rather than the edit: the declaration must name the promotion and
   // must not still be advertising the credential limit that was lifted.
-  const step = GATE_PLAN.find((entry) => entry.command === "pnpm check:gcloudignore-mirror");
-  assert.ok(step, "check:gcloudignore-mirror must still be in the gate plan — CI is the wall, the gate is the habit, and ADR-0547 D1 put it on BOTH");
+  const step = realPlan().find((entry) => entry.check === "check:gcloudignore-mirror");
+  assert.ok(step, "check:gcloudignore-mirror must still be a gate check — CI is the wall, the gate is the habit, and ADR-0547 D1 put it on BOTH");
 
   assert.match(
     step.why,
     /MERGE WALL AS WELL AS A GATE RUNG/,
-    "the entry must say it runs at the merge as well as in the gate (ADR-0547 D1)",
+    "the declaration must say it runs at the merge as well as in the gate (ADR-0547 D1)",
   );
   assert.doesNotMatch(
     step.why,
     /LOCAL-ONLY today/,
-    "the entry still claims to be local-only, which ADR-0547 D1 made false",
+    "the declaration still claims to be local-only, which ADR-0547 D1 made false",
   );
-  // Since ADR-0606 the placement is a FIELD, so the claim is checked against the field — the prose
-  // may not say one thing while the step is placed another.
+  // The placement is a DECLARED value, so the claim is checked against it — the prose may not say one
+  // thing while the check is placed another.
   assert.equal(step.runs, "both", "the merge wall runs on both sides");
   assert.match(
     step.why,
     /placed `runs: "both"`/,
-    "the entry must name its placement, which is the thing a reader cross-checks",
+    "the declaration must name its placement, which is the thing a reader cross-checks",
   );
 });
 
-test("the manifest's own rung runs before every rung that reads the manifest — a refused fragment tree is named once, under its own name", () => {
-  // ADR-0556 D4 (`repo-manifest-aggregate-leaves-git`): the committed aggregate left Git, so the fragments are the
-  // manifest's only bytes. Three rungs read the composed manifest and each stands down on a refused set; this one
-  // judges the set itself, so its verdict has to arrive first.
-  const at = (command: string) => GATE_PLAN.findIndex((entry) => entry.command === command);
-  const step = GATE_PLAN[at("pnpm check:manifest-fragments")];
-  assert.ok(step, "check:manifest-fragments must be in the gate plan");
-  assert.deepEqual(
-    { command: step.command, check: step.check, subject: step.subject, cost: step.cost },
-    { command: "pnpm check:manifest-fragments", check: "check:manifest-fragments", subject: "own-work", cost: "seconds" },
-  );
-  for (const reader of ["pnpm check:boundaries", "pnpm check:ownership-totality", "pnpm check:hierarchy-camps"]) {
-    assert.ok(at("pnpm check:manifest-fragments") < at(reader), `the manifest's rung must run before ${reader}`);
+test("no found check is run through an invocation that collapses its exit code", () => {
+  // A declared SKIP only survives as 3 through `pnpm -C <dir> exec`; `--filter … exec` turns it into 1,
+  // i.e. into a failure, on every checkout that legitimately opts out (measured 2026-08-08). The gate
+  // builds each check's invocation itself now, so this holds that construction to the measured form.
+  for (const step of realPlan()) {
+    if (step.invocation === undefined) continue;
+    assert.ok(
+      !step.invocation.includes(EXIT_CODE_COLLAPSING_INVOCATION),
+      `\`${step.command}\` would run through ${EXIT_CODE_COLLAPSING_INVOCATION}: ${step.invocation}`,
+    );
   }
-  assert.ok(
-    PRE_EXPENSIVE_CHECKS.has("check:manifest-fragments"),
-    "it costs seconds and a red there is this branch's, so it runs ahead of the expensive legs",
-  );
-  assert.match(
-    step.why,
-    /does not compose, when a fragment is not written exactly as the composer writes it .*when a `repo-manifest\.json` sits beside the tree \(ADR-0556 D4\)/,
-  );
-});
-
-test("the studio UAT leg's scoped form is recognised exactly — anchored at both ends, any run of whitespace between tokens", () => {
-  // The rewrite emits `pnpm <--filter ...x>+ --if-present uat`; that form must stay on the expensive
-  // side of the wall, or the ordering invariant judges a plan whose last leg it cannot see.
-  assert.ok(isExpensiveStep("pnpm --filter ...studio --if-present uat"));
-  assert.ok(isExpensiveStep("pnpm --filter ...a --filter ...b --if-present uat"));
-  // Whitespace runs are tolerated at every separator, as the `-r` legs' matcher tolerates them.
-  assert.ok(isExpensiveStep("pnpm  --filter  ...studio  --if-present  uat"));
-  // Anchored: a longer script, or a command that merely CONTAINS the form, is not the leg.
-  assert.ok(!isExpensiveStep("pnpm --filter ...studio --if-present uat:smoke"));
-  assert.ok(!isExpensiveStep("npx pnpm --filter ...studio --if-present uat"));
 });

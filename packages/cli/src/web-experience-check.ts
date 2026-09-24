@@ -2,13 +2,13 @@
 retired: ADR-0311 D2
 */
 // ⚠ UNWIRED — `check:web-experience` was RETIRED from the gate by ADR-0311 D2 (2026-08-05), and no
-// root `package.json` script, `GATE_PLAN` step, or CI job invokes THIS FILE'S OWN `main()`. Its own
+// root `package.json` script, gate step, or CI job invokes THIS FILE'S OWN `main()`. Its own
 // unit tests still run under `pnpm -r test`, so they stay GREEN while this file's own combined
 // `main()` enforces NOTHING — a passing test here is not evidence that rule is enforced anywhere.
 //
 // KEPT DELIBERATELY, not forgotten (ADR-0311 D5 — the implementations stay so re-wiring is
 // cheap). Re-adding the WHOLE rung under this file's own name needs fresh production-catch evidence
-// AND an ADR, never just the wiring. Tombstone: `RETIRED_CHECKS` in `gate-order.ts`, pinned by
+// AND an ADR, never just the wiring. Tombstone: its own `retired:` declaration (ADR-0606 D6), held by
 // `gate-order.test.ts`.
 //
 // ALL THREE PROPERTIES ARE NOW RE-WIRED, SPLIT ACROSS TWO NARROWER RUNGS THAT REUSE THIS FILE'S
@@ -19,7 +19,7 @@ retired: ADR-0311 D2
 //   - `check-web-experience-markers.ts` (ADR-0454, 2026-08-26, narrowing ADR-0336 D2) imports
 //     `findExperienceEntries` / `findExperienceMarkers` to back `check:web-experience-markers` — the
 //     `data-experience-skip` / `data-experience-fallback` presence contract only.
-// Neither import un-retires `check:web-experience` itself: the name stays in `RETIRED_CHECKS`, and
+// Neither import un-retires `check:web-experience` itself: the name stays declared retired, and
 // THIS file's own combined `main()` (all three properties as one judge) stays unreachable from the
 // gate — the two live rungs are independent, narrower re-derivations of its properties, not callers
 // of it.

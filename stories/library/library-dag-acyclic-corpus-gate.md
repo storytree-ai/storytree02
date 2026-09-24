@@ -66,9 +66,16 @@ Author only:
 - `packages/library/src/knowledge-dag.ts` (extend — do NOT write a second detector)
 - `packages/library/src/knowledge-dag-corpus.test.ts`
 - `packages/library/src/index.ts` (barrel re-export only)
-- `packages/cli/src/check-library-dag-acyclic.ts`
-- `package.json`, `packages/cli/src/gate-order.ts`, `packages/cli/src/gate-order.test.ts`,
-  `.github/workflows/ci.yml` (the wiring)
+- `packages/cli/src/check-library-dag-acyclic.ts` (the rung — and the wiring: the `/* gate-check`
+  declaration it opens with is the whole registration, since the gate finds a check by its file name
+  and reads its placement, subject and CI identity from that header, ADR-0606 D1)
+- `package.json` (the root `check:library-dag-acyclic` script — a by-hand convenience; the gate does
+  not read it)
+
+*(Corrected in place 2026-09-24 for ADR-0606 D1: the last bullet named `package.json`,
+`packages/cli/src/gate-order.ts`, `packages/cli/src/gate-order.test.ts` and `.github/workflows/ci.yml`
+as the wiring. The gate's hand-kept plan and CI's check steps are gone — a check is found from its own
+file — so none of those is where a rung is registered any more.)*
 
 Every rule lives in the pure judge; the rung reads the corpus, prints, and sets an exit code. The
 rung is `shared-environment` on both ordering axes — a cycle is authored by a live artifact write, so
@@ -104,6 +111,11 @@ skip. Do not bootstrap any corpus edge and do not touch the Studio.
 
 Run `pnpm --filter @storytree/library test`, then `pnpm --filter @storytree/library typecheck`. The
 judge's proof is literal rows against the real shipped detector — no DB, socket, live Library row or
-human witness participates. The rung's WIRING is separately held by `gate-order.test.ts` inside
-`pnpm -r test`: the plan is pinned by name, every planned step must name a real root script, and every
-check-shaped source file must be either wired into the plan or declared retired.
+human witness participates. The rung's WIRING is its own `/* gate-check` declaration
+(`subject: shared-environment`, `ciIdentity: ci-presence`), and `pnpm -r test` holds it in two
+places: `gate-checks.test.ts` requires every check-shaped file in the repo to declare itself cleanly
+and the real plan to run every live check the tree declares, once each; `gate-rerun.test.ts` holds a
+declared `ciIdentity` to the check file's real import closure, so this rung cannot stop declaring the
+store it reads. *(Corrected in place 2026-09-24 for ADR-0606 D1/D2: this said the wiring was held by
+`gate-order.test.ts` — the plan pinned by name, every planned step naming a real root script. Both went
+with the hand-kept plan they policed.)*

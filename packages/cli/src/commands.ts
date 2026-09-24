@@ -589,8 +589,8 @@ function frozenControlArm(): ReadonlySet<number> | undefined {
  *
  * It spoke in the gate's own voice anyway until 2026-08-08 — a broken-gate banner naming the failed
  * checks and instructing the reader to fix them before merging — and a session settling an unrelated
- * question read that as a live merge gate. That is the defect `RETIRED_CHECKS` exists to refuse
- * (`packages/cli/src/gate-order.ts`) arriving through prose rather than through an orphaned source
+ * question read that as a live merge gate. That is the defect the retired-check tombstone exists to refuse
+ * (each retired check's own `retired:` declaration, ADR-0606 D6) arriving through prose rather than through an orphaned source
  * file, and `gate-order.test.ts`'s gate-voice sweep now refuses it mechanically — including, as it
  * happens, a docstring that reproduces the retired sentence verbatim, which is why this one
  * describes it instead. Re-wiring this as a rung is a separate decision needing production-catch

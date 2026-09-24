@@ -127,9 +127,12 @@ ADR-0016 exists to prevent. Shared rules, not consumed outcomes.
 > `:161-164`, `finding()` / `measured()` in `decay-attribution.test.ts:15-33`, and `FROZEN` /
 > `MOVED` / `BOGUS_HASH` in `decision-source-decay.test.ts:64-`). So **`pnpm --filter
 > @storytree/cli test` reds when the JUDGE breaks, and never when the repo decays.** The command that
-> reds on real decay is `pnpm check:verification-decay` — `GATE_PLAN` step 9
-> (`gate-order.ts:228-233`), whose gatherer walks `stories/`, every workspace `package.json`, every
-> test file, the studio and desktop route tables and `git merge-base`.
+> reds on real decay is `pnpm check:verification-decay` — the gate check
+> `packages/cli/src/check-verification-decay.ts`, found from its own file and declared `runs: local`
+> there (ADR-0606 D1; ADR-0252 D3 keeps it out of CI) — whose gatherer walks `stories/`, every
+> workspace `package.json`, every test file, the studio and desktop route tables and
+> `git merge-base`. *(It read "`GATE_PLAN` step 9 (`gate-order.ts:228-233`)" until 2026-09-24;
+> ADR-0606 D1 replaced that hand-kept plan with discovery.)*
 >
 > **THAT SPLIT IS WHY THE OUTCOME ABOVE IS A JUDGING OUTCOME, AND THE WORDING IS DELIBERATE.** This
 > unit does NOT claim "the repo's verification apparatus is free of decay"; nothing here could red on
@@ -222,7 +225,7 @@ never walks the tree. So on the face of it, `cli` is eliminated here too.
 
 **It is not, and the reason is that the anchor precedent does not satisfy that reading either.**
 [`organism-boundary-tooling`](organism-boundary-tooling.md) — a pure judge plus a disk-reading check
-gatherer in `packages/cli/src`, at the immediately adjacent `GATE_PLAN` step, homed to `cli`
+gatherer in `packages/cli/src`, wired as a gate check the same way (`check:boundaries`), homed to `cli`
 precisely because `boundaries.test.ts` reds — was checked on the bytes for this increment:
 `boundaries.test.ts` builds *"a miniature world"* of literal fixtures and reads no repo file at all.
 Its single `node:fs` occurrence (`:715`) is inside a synthetic module source being fed to

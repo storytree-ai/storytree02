@@ -42,8 +42,10 @@ arc: story-green-monotonicity-arc
 # analyser has always been a `cli` capability. On arrival `gate-ci-parity` was a fourth pure judge of
 # that shape, whose comparison had to read the `GATE_PLAN` literal out of
 # `packages/cli/src/gate-order.ts`. ADR-0606 (2026-09-23) deleted that judge with the second list it
-# compared: CI's `verify` now runs `pnpm gate --ci`, and the capability is the gate program's CI mode
-# and its local stale-branch warning — `packages/cli/src/gate*.ts` itself, all of it this building's
+# compared: CI's `verify` now runs `pnpm gate --ci`, and the capability is the gate program itself —
+# how it finds and orders its checks (ADR-0606's second step, which replaced the `GATE_PLAN` literal
+# with discovery), its CI mode and its local stale-branch warning — `packages/cli/src/gate*.ts`
+# itself, all of it this building's
 # own code, which the report-only `sourceOwnership` map (now
 # `repo-manifest/source-ownership/gate-ci-parity.json`) had already assigned to it. The split holds
 # unchanged; only the side this capability sits on got plainer. It arrived with `depends_on: []` —
@@ -152,8 +154,9 @@ ANALYSER has always been a capability of this story, and nobody has ever thought
 `GATE_PLAN` literal out of `packages/cli/src/gate-order.ts`. ADR-0606 (2026-09-23) deleted that judge
 along with the second list it compared, and made the capability the gate program itself: CI's
 `verify` runs `pnpm gate --ci` and names no check, so what `gate-ci-parity` now contracts is how that
-one program walks the one plan in each run — which steps, over which packages, as whom, and what
-counts as green. That sits on the same side of the split as before, and more squarely: all of its
+one program finds the one plan — every check from its own file, ordered from what each declares, since
+ADR-0606's second step deleted the `GATE_PLAN` literal too — and how it walks that plan in each run:
+which steps, over which packages, as whom, and what counts as green. That sits on the same side of the split as before, and more squarely: all of its
 subject is this package's own code. The story it LEFT keeps the pipeline half — `ci-cd`'s
 [`green-gate`](../ci-cd/green-gate.md) asserts that `verify` runs the gate as a required step on the
 merge ref, and its UAT leg 3 and Reliability Gate 3 still assert the local/CI relationship as

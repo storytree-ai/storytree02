@@ -3,14 +3,14 @@ retired: ADR-0311 D2
 sources: [friction-drain.ts, db-required.ts]
 */
 // ⚠ UNWIRED — `check:friction-drain` was RETIRED from the gate by ADR-0311 D2 (2026-08-05), and NOTHING
-// invokes this file: it appears in no root `package.json` script, no `GATE_PLAN` step
+// invokes this file: it appears in no root `package.json` script, no gate step
 // (`gate-order.ts`), and no CI job. Its own unit tests still run under `pnpm -r test`, so they
 // stay GREEN while this enforces NOTHING — a passing test here is not evidence that the rule
 // below is enforced anywhere.
 //
 // KEPT DELIBERATELY, not forgotten (ADR-0311 D5 — the implementations stay so re-wiring is
 // cheap). Re-adding it needs fresh production-catch evidence AND an ADR, never just the wiring.
-// Tombstone: `RETIRED_CHECKS` in `gate-order.ts`, pinned by `gate-order.test.ts`.
+// Tombstone: the retired check's own `retired:` declaration (ADR-0606 D6), held by `gate-order.test.ts`.
 //
 // The description below is retained as written; read it as what this check DID, not as current
 // gate policy.

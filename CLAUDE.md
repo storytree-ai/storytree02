@@ -353,10 +353,15 @@ kind owes a seed export any more.
 - **`pnpm gate` RUNS EVERY STEP — an early red no longer hides the rest (since 2026-08-04).** It was a
   long `&&` chain, so the first red aborted it and every later step was left UNRUN and reported as
   *nothing at all* — which cost ~25 min of hand re-runs per hit and once hid a genuine RED behind an
-  unrelated flake. It is now a runner over a declared plan
-  (`packages/cli/src/gate-order.ts` → `gate-run.ts`) that executes every declared step and prints a
-  per-step **PASS / FAIL / SKIP / NOT RUN** table. **ASK THE PLAN FOR THE COUNT, never this file** —
-  it is `packages/cli/src/gate-order.ts`, and the runner prints the number in every `[n/N]` row. A
+  unrelated flake. It is now a runner over a FOUND plan
+  — every check is a `check-<name>.ts` / `<name>-check.ts` file that opens with a `/* gate-check`
+  declaration of itself (ADR-0606), and `gate-run.ts` finds them, orders them around the five fixed
+  legs and runs them — that executes every step and prints a per-step **PASS / FAIL / SKIP / NOT RUN**
+  table. **Registering a check is writing that ONE file** — no list, no workflow edit, no root script
+  (the `check:*` scripts in `package.json` are human shortcuts nothing holds to anything).
+  **ASK THE GATE FOR THE COUNT, never this file** — `pnpm gate --list` prints the plan with each
+  check's placement, file and owning story node (and the retired checks), and the runner prints the
+  number in every `[n/N]` row. A
   count hand-copied here goes stale silently and in the direction that reads as reassurance: this
   sentence said **twelve** on 2026-08-27 while the plan held **eighteen**, six steps having been
   added since anyone re-counted. (For scale, the plan carried 25 before ADR-0302 and ADR-0311
@@ -376,18 +381,21 @@ kind owes a seed export any more.
   *unverified*, never as passed. They are the same epistemic class and different causes: `NOT RUN`
   means the runner never asked (only under `--fail-fast`, or when a run was interrupted / a step was
   killed), while `SKIP` means the step RAN and declared it had nothing to check. A step declares a
-  skip by exiting the reserved code 3 — an opt-in its own author wrote, never inferred — and today
-  **five** do, all five declared in `SKIP_CAPABLE_CHECKS`. Four are the web four —
+  skip by exiting the reserved code 3 — an opt-in its own author DECLARES in the check's `skip:`
+  header, never inferred (an UNDECLARED exit 3 is a FAIL) — and today **six** declare one
+  (`pnpm gate --list` names them). Four are the web four —
   `check:web-grounding`, `check:web-experience-closure`, `check:web-experience-markers` (ADR-0454)
   and `check:web-engine` — when the `web/` submodule is not checked out
-  locally (`git submodule update --init web` to actually verify it). The fifth is
+  locally (`git submodule update --init web` to actually verify it). The fifth, `check:land-art`,
+  skips only when Playwright's Chromium was never downloaded. The sixth is
   `check:mutation-diff`, which skips on a DIFFERENT condition and far more often: this branch
   changes no mutable TypeScript under a workspace project's `src/`, which is the ordinary shape of
   a corpus, docs or config landing. So a laptop gate normally reads
   GREEN, NARROWED with those named, and that is the honest reading, not a defect.
   `check:web-engine` was the last to adopt the vocabulary; until then it returned 0 on the same state
-  and was recorded as a PASS that had compared nothing. **The skip code is LOCAL**: CI runs these as
-  ordinary steps where any non-zero code is a failure, so every branch that can fire THERE withholds
+  and was recorded as a PASS that had compared nothing. **The skip code is LOCAL**: CI runs them through
+  `pnpm gate --ci`, where a declared skip is a FAILURE unless the check's own declaration accepts it
+  in CI (`inCi: accepted`; none does today), so every branch that can fire THERE withholds
   the code and never the fact — it prints what it did not do and exits 0. THREE can: the two web
   bootstrap branches (`NOTHING TO COMPARE` / `NOTHING TO CHECK`), and — since `check:mutation-diff`
   was wired into `ci.yml` (ADR-0458 / `mutation-rung-in-ci`) — its skip, `NOTHING TO MUTATE`. That

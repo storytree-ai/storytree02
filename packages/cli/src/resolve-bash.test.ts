@@ -3,8 +3,8 @@
 // THE INCIDENT THIS ENCODES. `gate-bg.test.ts` spawned bare `bash` with an ABSOLUTE WINDOWS PATH.
 // On the owner's dev box, PATH resolves `bash` to `C:\Windows\system32\bash.exe` — the WSL launcher
 // — which starts a Linux bash that cannot open `C:\...\gate-bg.sh` and exits 127. That red
-// `pnpm -r test` — then rung 13 of the 24-rung `&&` gate chain, now step 12 of the declared
-// `GATE_PLAN` — for every session driving the gate from PowerShell.
+// `pnpm -r test` — then rung 13 of the 24-rung `&&` gate chain, now the gate's test
+// leg — for every session driving the gate from PowerShell.
 // It was caused by no branch, CI never saw it (CI is Linux), and it surfaced as
 // `127 !== 1` on an assertion about pipefail — naming neither WSL nor PATH.
 //

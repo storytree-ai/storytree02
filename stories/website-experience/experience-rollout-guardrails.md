@@ -51,11 +51,13 @@ moment the storm exists.
 > **⚠ THE COMBINED RUNG IS RETIRED — THE JUDGE IS NOT, AND ALL THREE OF ITS PROPERTIES ARE NOW
 > GATE-ENFORCED AGAIN THROUGH TWO NARROWER RUNGS. Read every `check:web-experience` mention in this
 > story against this paragraph.** ADR-0311 D2 (2026-08-05) retired `check:web-experience` from the
-> gate. It is **not a root `package.json` script**, **not a `GATE_PLAN` step**, and **not a CI
-> step** — it is declared in `RETIRED_CHECKS` in
-> [`packages/cli/src/gate-order.ts`](../../packages/cli/src/gate-order.ts), and
-> [`packages/cli/src/web-experience-check.ts`](../../packages/cli/src/web-experience-check.ts)
-> carries the `UNWIRED` banner the tombstone pins. **That name specifically stays unwired — but its
+> gate. It is **not a root `package.json` script**, **not a step of the gate's plan**, and **not a
+> CI step** — its own file,
+> [`packages/cli/src/web-experience-check.ts`](../../packages/cli/src/web-experience-check.ts),
+> opens with a `retired: ADR-0311 D2` declaration, so the gate lists it and never runs it
+> (ADR-0606 D6), and it carries the `UNWIRED` banner the tombstone pins. *(Until 2026-09-24 it was
+> declared in a central `RETIRED_CHECKS` map in `packages/cli/src/gate-order.ts`, which ADR-0606 D6
+> replaced with that in-file declaration.)* **That name specifically stays unwired — but its
 > three properties do not**: ADR-0336 (2026-08-09) re-wired the no-WebGL static-import-closure third
 > as `check:web-experience-closure`, and ADR-0454 (2026-08-26) re-wired the skip/fallback
 > marker-presence third as `check:web-experience-markers` (below). Between those two dates the marker

@@ -24,8 +24,13 @@ decisions: [251, 176, 100, 252, 249, 57]
 #      `apps/studio`. It is NOT registered for `packages/cli` — which costs nothing while there is no
 #      `real:` arm, and is the thing to check first if one is ever added.)
 # SINGLE-COMMAND PROOF, and the choice is deliberate — see "The proof command" in Guidance. The
-# command is spelled EXACTLY as `packages/cli/src/gate-order.ts:176` spells it, so the capability's
-# proof and the gate step it names can never drift into two different invocations.
+# command runs the root `check:mirror-conformance` script, which invokes
+# `packages/cli/src/check-mirror-conformance.ts` in exactly the form the gate builds for that found
+# check (`checkInvocation`, `packages/cli/src/gate-checks.ts`), so the capability's proof and the gate
+# step run one file the same way. Nothing pins the root script to that form: if the two ever differ,
+# the FILE is the check (ADR-0606 D1). (This read "spelled EXACTLY as
+# `packages/cli/src/gate-order.ts:176` spells it" until 2026-09-24, when ADR-0606 D1 replaced that
+# hand-kept plan with discovery.)
 proof:
   command:
     file: pnpm
@@ -64,22 +69,27 @@ is the dependency test in both directions: neither of them needs anything from t
 > reason this capability's `proof.command` is not a `--filter … test` like its two sibling retrospective
 > units.
 >
-> **The outcome half — `pnpm check:mirror-conformance`.** One of the NINE retained gate steps
-> (`packages/cli/src/gate-order.ts:175-181`), classified **PROOF INTEGRITY** rather than factory
-> bookkeeping (`:142-143`). FOUR of the nine carry that classification — this rung, both `-r` legs and
-> `check:verification-decay` — so the discriminating count is the narrower one: of the seven STANDALONE
-> `check:*` rungs it is one of only TWO proof-integrity rungs, the other five being factory bookkeeping
-> (the full classification is `:137-160`). It spawns every registered pair's two probes in their own
+> **The outcome half — `pnpm check:mirror-conformance`.** A gate check found from its own file,
+> `packages/cli/src/check-mirror-conformance.ts`, whose `/* gate-check` declaration places it `both`
+> and in the own-work block and classifies it **PROOF INTEGRITY** rather than factory bookkeeping
+> (its survival-audit line, beside the code it describes — ADR-0606 D1). ⚠ This paragraph once
+> counted the gate's steps and how many carried each class; those counts are struck rather than
+> restated, because the plan is now found rather than listed and grows whenever a check file lands —
+> `pnpm gate --list` prints it. It spawns every registered pair's two probes in their own
 > processes over one shared fixture set and compares the real decoded payloads. ⚠ The counts in this
 > region are DELIBERATELY not spelled out any more: the registry has grown from four rows to nine
 > since this was written, and each restated total was stale within an increment. Ask
 > `packages/cli/src/mirror-conformance.ts`'s `MIRRORS`, which is the only place the number lives.
 > ⚠ Since ADR-0496 D1 this rung has a SIBLING, `check:mirror-conformance-live`, which runs the same
 > instrument's `/api/activity` row over a snapshot of the real ledger and therefore holds a live-store
-> credential. Everything below describes the DB-free arm unless it says otherwise. That is a genuine integration proof
+> credential. Since 2026-09-24 that sibling is its OWN FILE,
+> `packages/cli/src/check-mirror-conformance-live.ts` — one file is one found check (ADR-0606 D1) —
+> and `check-mirror-conformance.ts` REFUSES `--arm live` rather than answering it with the fixtures,
+> so the fixtures arm's imports no longer reach the store at all. Everything below describes the
+> DB-free arm unless it says otherwise. That is a genuine integration proof
 > against real in-story collaborators — the desktop's own `/api/*` dispatcher and route handlers, run
-> for real — not a unit test over doubles. It has a recorded catch: `gate-order.ts:142-143` cites
-> commit `3ef84c96`, a studio-only docs change that produced 256+4 divergences.
+> for real — not a unit test over doubles. It has a recorded catch: its own declaration cites commit
+> `3ef84c96`, a studio-only docs change that produced 256+4 divergences.
 >
 > **The rules half — `packages/cli/src/mirror-conformance.test.ts`, 32 tests.** Part of the
 > `@storytree/cli` suite. It covers every divergence kind the judge can report, which is what makes
@@ -140,8 +150,9 @@ independent grounds:
 **A PROBE IS NOT GLUE, AND THAT IS WHAT SEPARATES THIS FROM `check:boundaries`.** The nearest
 structural twin in the corpus is
 [`organism-boundary-tooling`](../cli/organism-boundary-tooling.md) — a pure judge (`boundaries.ts`)
-plus a check driver (`check-boundaries.ts`), both in `packages/cli/src`, and the immediately adjacent
-step in `gate-order.ts`. That capability deliberately EXCLUDES its gatherer: *"the disk I/O is the
+plus a check driver (`check-boundaries.ts`), both in `packages/cli/src`, and, like this rung, a gate
+check the gate finds from its own file, in the same own-work block. That capability deliberately
+EXCLUDES its gatherer: *"the disk I/O is the
 gatherer's … that non-leaf I/O glue is NOT this capability's provable surface."* The same exclusion
 must not be copied here, and the difference is precise. `check-boundaries.ts` collects facts that
 exist anyway — the package graph is there whether or not anything reads it. A mirror probe collects

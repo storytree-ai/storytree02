@@ -13,7 +13,7 @@
 //      test leg, so every step before it ran with no credential by ORDER, and switched to the
 //      verdict-history identity for the last step alone (ADR-0560's split). One gate step cannot
 //      change identity between its children by step order, so both sign-ins now happen up front and
-//      {@link ciStepEnvironment} hands each child exactly the identity `ciIdentityFor` gives it —
+//      {@link ciStepEnvironment} hands each child exactly the identity its step DECLARES (`ciIdentity`) —
 //      and strips every credential variable from a child that gets none. Credential-free is now a
 //      property of the step, not of where it happened to sit.
 //   2. WHAT A FAILURE LOOKS LIKE ON GITHUB. Each check was its own workflow step with its own red box.
@@ -22,8 +22,8 @@
 //      summary page ({@link renderGithubSummary}). That is the accepted cost ADR-0606 names — one step
 //      on the run page instead of one box per check — paid down as far as the platform allows.
 //
-// (The third thing — a skip counting as a failure — is `gate-runner.ts`'s `skipIsFailure`, because it
-// is a rule about verdicts, not about GitHub.)
+// (The third thing — a declared skip counting as a failure unless the check accepts it in CI — is
+// `gate-runner.ts`'s `ci` input, because it is a rule about verdicts, not about GitHub.)
 //
 // Pure: no process, no filesystem. The caller hands in the environment and the results.
 

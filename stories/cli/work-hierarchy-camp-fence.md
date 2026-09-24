@@ -84,10 +84,17 @@ module when what actually broke is an enumeration.
 Author only:
 
 - `packages/cli/src/hierarchy-camps.ts` (the pure judge) and its `.test.ts`
-- `packages/cli/src/check-hierarchy-camps.ts` (the thin gatherer)
+- `packages/cli/src/check-hierarchy-camps.ts` (the thin gatherer — and the wiring: the
+  `/* gate-check` declaration it opens with is the whole registration, since the gate finds a check
+  by its file name and reads where it runs from that header, ADR-0606 D1)
 - `repo-manifest/hierarchy-camps/_domain.json` (`hierarchyCamps`, the declared map)
-- `package.json`, `packages/cli/src/gate-order.ts`, `packages/cli/src/gate-order.test.ts`,
-  `.github/workflows/ci.yml` (the wiring)
+- `package.json` (the root `check:hierarchy-camps` script — a by-hand convenience; the gate does not
+  read it)
+
+*(Corrected in place 2026-09-24 for ADR-0606 D1: the last bullet named `package.json`,
+`packages/cli/src/gate-order.ts`, `packages/cli/src/gate-order.test.ts` and `.github/workflows/ci.yml`
+as the wiring. The gate's hand-kept plan and CI's check steps are gone — a check is found from its own
+file — so none of those is where a rung is registered any more.)*
 
 Every rule lives in the judge; the rung walks the disk, reads the manifest, prints and sets an exit
 code. It is `own-work` on both ordering axes — offline, disk-only, no store and no credential — so it

@@ -80,13 +80,14 @@ env:
 jobs:
   # ---------------------------------------------------------------------------
   # The gate. ONE step runs every check, from the ONE plan the local `pnpm gate` walks (ADR-0606,
-  # superseding ADR-0486): `pnpm gate --ci` selects the steps whose `runs` placement includes CI in
-  # `packages/cli/src/gate-order.ts`, scopes from this PR's merge commit through the shared classifier
-  # (ADR-0304 D2), counts a skip as a failure, and hands each store-reading step only the identity it
-  # declares. THIS JOB NAMES NO CHECK, deliberately. It used to keep its own hand-written copy of the
-  # plan, and a third thing — the `gate-ci-parity` detector — existed only to catch the two drifting
-  # apart; the owner judged that the wrong kind of solution (2026-09-23). To add, move or retire a
-  # check, edit the plan. This file changes only when the ENVIRONMENT does.
+  # superseding ADR-0486): `pnpm gate --ci` finds every check from its own file, selects the ones whose
+  # declared `runs` placement includes CI, scopes from this PR's merge commit through the shared
+  # classifier (ADR-0304 D2), counts a declared skip as a failure unless the check accepts it in CI,
+  # and hands each store-reading step only the identity it declares. THIS JOB NAMES NO CHECK,
+  # deliberately. It used to keep its own hand-written copy of the plan, and a third thing — the
+  # `gate-ci-parity` detector — existed only to catch the two drifting apart; the owner judged that
+  # the wrong kind of solution (2026-09-23). To add, move or retire a check, write or edit that
+  # check's own file (`pnpm gate --list` shows the plan). This file changes only when the ENVIRONMENT does.
   #
   # CI IS NOT DB-FREE (ADR-0302 D3). The store-reading steps authenticate through keyless WIF
   # identities (infra/ci-presence.tf) — no JSON key in a secret. THAT DEPENDS ON THE DATABASE RUNNING
@@ -218,8 +219,8 @@ jobs:
 
       # THE TWO KEYLESS IDENTITIES (ADR-0021), both signed in before the gate starts, because one gate
       # step cannot change identity between its children by step order the way this job once did.
-      # The gate hands each store-reading step exactly the identity the plan declares for it
-      # (`ciIdentityFor`), and strips every credential from every other step — so the test leg and
+      # The gate hands each store-reading step exactly the identity its own declaration names
+      # (`ciIdentity`), and strips every credential from every other step — so the test leg and
       # every other branch-local step still run with NO credential, as they did when they ran before
       # any sign-in. AUTHORITY STAYS SPLIT (ADR-0560): `storytree-ci-presence` deliberately cannot
       # read verdict history; `storytree-ci-webverdict` is the verdict-history reader, and only
