@@ -1,0 +1,84 @@
+{
+  "capturedAt": "2026-09-24T21:04:27.726Z",
+  "viewport": "1600x1000",
+  "arms": {
+    "flat": {
+      "dist": "/tmp/laneAA/dist-web-9016b43",
+      "hasLand": false,
+      "landSha256": null,
+      "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+      "errors": []
+    },
+    "now": {
+      "dist": "/tmp/laneAA/dist-web-1552148",
+      "hasLand": true,
+      "landSha256": "28d14d90ae0c5f2d9537ec378c47d95cba9ecc38f6501b431b11624ae5075c36",
+      "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+      "errors": []
+    },
+    "fixed": {
+      "dist": "/tmp/laneAA/dist-web",
+      "hasLand": true,
+      "landSha256": "64a6844c583cfdefc25db58d8fd74148ae825c558cb9ce6131c2912030b6a820",
+      "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+      "errors": []
+    }
+  },
+  "shots": [
+    {
+      "arm": "flat",
+      "surface": "/forest/",
+      "file": "forest-poster-flat.png",
+      "sha256": "bfd2defebb91bd2c73d4b9d12edb1f966ea24331c5a88627bf34ab2833b6074e"
+    },
+    {
+      "arm": "flat",
+      "surface": "/ (settled)",
+      "file": "entry-settled-flat.png",
+      "sha256": "bfddacac5312cf55cb34e12e404604141d72855c7c16af36c405b94c62868888"
+    },
+    {
+      "arm": "flat",
+      "surface": "/ (settled, drawn routes outlined red)",
+      "file": "entry-drawn-routes-flat.png",
+      "sha256": "b4380a82f87b92031dbf66c7c9cef8a247926c5d85f96cfea44be721d0e66fea"
+    },
+    {
+      "arm": "now",
+      "surface": "/forest/",
+      "file": "forest-poster-now.png",
+      "sha256": "45326d7ab3d5ded07d17deec768ffe9e83366a0970ee5ea561487f44fe715af6"
+    },
+    {
+      "arm": "now",
+      "surface": "/ (settled)",
+      "file": "entry-settled-now.png",
+      "sha256": "31228903a1fd855f5f783e4ed218911dc7d80f9f151719eba6bbc44752832296"
+    },
+    {
+      "arm": "now",
+      "surface": "/ (settled, drawn routes outlined red)",
+      "file": "entry-drawn-routes-now.png",
+      "sha256": "67956f09566f6b315d685782cbbc7e6e8d91754169354e368cc8aa673e8ab924"
+    },
+    {
+      "arm": "fixed",
+      "surface": "/forest/",
+      "file": "forest-poster-fixed.png",
+      "sha256": "79c6065ca4bf1966b7faafba01767bf66ca837e28e52ba23c4999b6a0d222102"
+    },
+    {
+      "arm": "fixed",
+      "surface": "/ (settled)",
+      "file": "entry-settled-fixed.png",
+      "sha256": "fac27ecb36dc8b56fabed96d0771ee09ec3970b088b8778cf6fb561e89c34925"
+    },
+    {
+      "arm": "fixed",
+      "surface": "/ (settled, drawn routes outlined red)",
+      "file": "entry-drawn-routes-fixed.png",
+      "sha256": "68835f84daa68f62fa53b0f0b3b88a035667215bd4aab4015b7a79266d7a64bc"
+    }
+  ],
+  "browser": "148.0.7778.96"
+}
