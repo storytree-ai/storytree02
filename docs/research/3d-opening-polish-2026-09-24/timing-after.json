@@ -1,0 +1,551 @@
+{
+  "capturedAt": "2026-09-24T11:56:13.687Z",
+  "label": "after",
+  "mode": "timing",
+  "base": "http://127.0.0.1:5491",
+  "query": "?landMount=1&landMountProps=1&act2=intro",
+  "viewport": {
+    "width": 1800,
+    "height": 1100
+  },
+  "build": {
+    "indexSha256": "9ead312e5e5f73bc571f58cb01f7cb3471232c4bc31260d2771c6048ee00d80b",
+    "assetsSha256": "f0c63829dd4101ede916138fefceb325ffef6c85cbbcdd7b5660e3ff035f2e1e"
+  },
+  "snapshotWasFrozen": true,
+  "runs": [
+    {
+      "summary": {
+        "landReadyMs": 5790.600000023842,
+        "cursorFirstMovedMs": 5809.199999988079,
+        "cursorAtLandReady": 0,
+        "settledMs": 26716.600000023842,
+        "longTasks": {
+          "count": 24,
+          "totalMs": 5330,
+          "largestMs": 2109
+        },
+        "freezesOver150msAfterLandReady": [],
+        "firstFrameAfterLandReadyMs": 5803
+      },
+      "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+      "visibility": "visible",
+      "errors": [],
+      "events": [
+        {
+          "t": 138.69999998807907,
+          "kind": "notice",
+          "value": null
+        },
+        {
+          "t": 138.69999998807907,
+          "kind": "canvas",
+          "value": "absent"
+        },
+        {
+          "t": 138.69999998807907,
+          "kind": "islandsInSvg",
+          "value": "false"
+        },
+        {
+          "t": 1627.8999999761581,
+          "kind": "land",
+          "value": "drawn/loading"
+        },
+        {
+          "t": 1627.8999999761581,
+          "kind": "notice",
+          "value": "Loading the 3D forest map…"
+        },
+        {
+          "t": 2231.800000011921,
+          "kind": "canvas",
+          "value": "present"
+        },
+        {
+          "t": 5790.600000023842,
+          "kind": "land",
+          "value": "drawn/ready"
+        },
+        {
+          "t": 5796,
+          "kind": "notice",
+          "value": null
+        },
+        {
+          "t": 5809.199999988079,
+          "kind": "islandsInSvg",
+          "value": "true"
+        }
+      ],
+      "gaps": [
+        {
+          "from": 403.2,
+          "to": 1619.9,
+          "ms": 1216.7
+        },
+        {
+          "from": 1636.4,
+          "to": 1786.5,
+          "ms": 150.0999999999999
+        },
+        {
+          "from": 1903.1,
+          "to": 2219.8,
+          "ms": 316.7000000000003
+        },
+        {
+          "from": 2453.1,
+          "to": 4603,
+          "ms": 2149.9
+        },
+        {
+          "from": 4819.7,
+          "to": 5286.3,
+          "ms": 466.60000000000036
+        },
+        {
+          "from": 5286.3,
+          "to": 5736.3,
+          "ms": 450
+        }
+      ],
+      "longTasks": [
+        {
+          "start": 65.39999997615814,
+          "duration": 74
+        },
+        {
+          "start": 393.39999997615814,
+          "duration": 1234
+        },
+        {
+          "start": 1810.699999988079,
+          "duration": 81
+        },
+        {
+          "start": 1931.6000000238419,
+          "duration": 296
+        },
+        {
+          "start": 2287,
+          "duration": 169
+        },
+        {
+          "start": 2456.600000023842,
+          "duration": 2109
+        },
+        {
+          "start": 4566.100000023842,
+          "duration": 50
+        },
+        {
+          "start": 4616.5,
+          "duration": 115
+        },
+        {
+          "start": 5299.899999976158,
+          "duration": 251
+        },
+        {
+          "start": 5551,
+          "duration": 193
+        },
+        {
+          "start": 16974.19999998808,
+          "duration": 53
+        },
+        {
+          "start": 18192.69999998808,
+          "duration": 50
+        },
+        {
+          "start": 19374.19999998808,
+          "duration": 55
+        },
+        {
+          "start": 19560,
+          "duration": 55
+        },
+        {
+          "start": 19736.100000023842,
+          "duration": 51
+        },
+        {
+          "start": 19996.69999998808,
+          "duration": 50
+        },
+        {
+          "start": 20086.399999976158,
+          "duration": 50
+        },
+        {
+          "start": 20269.19999998808,
+          "duration": 53
+        },
+        {
+          "start": 20448.100000023842,
+          "duration": 50
+        },
+        {
+          "start": 20536.899999976158,
+          "duration": 50
+        },
+        {
+          "start": 20711.899999976158,
+          "duration": 50
+        },
+        {
+          "start": 20800.899999976158,
+          "duration": 86
+        },
+        {
+          "start": 21025.600000023842,
+          "duration": 52
+        },
+        {
+          "start": 23239.19999998808,
+          "duration": 53
+        }
+      ]
+    },
+    {
+      "summary": {
+        "landReadyMs": 5465,
+        "cursorFirstMovedMs": 5488.100000023842,
+        "cursorAtLandReady": 0,
+        "settledMs": 26378.900000035763,
+        "longTasks": {
+          "count": 14,
+          "totalMs": 4456,
+          "largestMs": 1874
+        },
+        "freezesOver150msAfterLandReady": [],
+        "firstFrameAfterLandReadyMs": 5477
+      },
+      "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+      "visibility": "visible",
+      "errors": [],
+      "events": [
+        {
+          "t": 142.60000002384186,
+          "kind": "notice",
+          "value": null
+        },
+        {
+          "t": 142.60000002384186,
+          "kind": "canvas",
+          "value": "absent"
+        },
+        {
+          "t": 142.60000002384186,
+          "kind": "islandsInSvg",
+          "value": "false"
+        },
+        {
+          "t": 1612.2000000476837,
+          "kind": "land",
+          "value": "drawn/loading"
+        },
+        {
+          "t": 1612.2000000476837,
+          "kind": "notice",
+          "value": "Loading the 3D forest map…"
+        },
+        {
+          "t": 2202.800000011921,
+          "kind": "canvas",
+          "value": "present"
+        },
+        {
+          "t": 5465,
+          "kind": "land",
+          "value": "drawn/ready"
+        },
+        {
+          "t": 5471.300000011921,
+          "kind": "notice",
+          "value": null
+        },
+        {
+          "t": 5488.100000023842,
+          "kind": "islandsInSvg",
+          "value": "true"
+        }
+      ],
+      "gaps": [
+        {
+          "from": 410.3,
+          "to": 1610.3,
+          "ms": 1200
+        },
+        {
+          "from": 1893.6,
+          "to": 2193.6,
+          "ms": 300
+        },
+        {
+          "from": 2293.6,
+          "to": 4193.5,
+          "ms": 1899.9
+        },
+        {
+          "from": 4426.8,
+          "to": 4960.1,
+          "ms": 533.3000000000002
+        },
+        {
+          "from": 4960.1,
+          "to": 5410.2,
+          "ms": 450.09999999999945
+        }
+      ],
+      "longTasks": [
+        {
+          "start": 64.40000003576279,
+          "duration": 79
+        },
+        {
+          "start": 404.4000000357628,
+          "duration": 1208
+        },
+        {
+          "start": 1793.5,
+          "duration": 83
+        },
+        {
+          "start": 1916,
+          "duration": 283
+        },
+        {
+          "start": 2279.400000035763,
+          "duration": 1874
+        },
+        {
+          "start": 4197.800000011921,
+          "duration": 126
+        },
+        {
+          "start": 4964.600000023842,
+          "duration": 269
+        },
+        {
+          "start": 5233.800000011921,
+          "duration": 182
+        },
+        {
+          "start": 16644.5,
+          "duration": 53
+        },
+        {
+          "start": 19071.700000047684,
+          "duration": 56
+        },
+        {
+          "start": 19255.400000035763,
+          "duration": 50
+        },
+        {
+          "start": 19429.30000001192,
+          "duration": 50
+        },
+        {
+          "start": 20312.30000001192,
+          "duration": 93
+        },
+        {
+          "start": 21432.400000035763,
+          "duration": 50
+        }
+      ]
+    },
+    {
+      "summary": {
+        "landReadyMs": 5372.300000011921,
+        "cursorFirstMovedMs": 5393.300000011921,
+        "cursorAtLandReady": 0,
+        "settledMs": 26282.200000047684,
+        "longTasks": {
+          "count": 23,
+          "totalMs": 4815,
+          "largestMs": 1854
+        },
+        "freezesOver150msAfterLandReady": [],
+        "firstFrameAfterLandReadyMs": 5385
+      },
+      "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+      "visibility": "visible",
+      "errors": [],
+      "events": [
+        {
+          "t": 138.20000004768372,
+          "kind": "notice",
+          "value": null
+        },
+        {
+          "t": 138.20000004768372,
+          "kind": "canvas",
+          "value": "absent"
+        },
+        {
+          "t": 138.20000004768372,
+          "kind": "islandsInSvg",
+          "value": "false"
+        },
+        {
+          "t": 1551.2000000476837,
+          "kind": "land",
+          "value": "drawn/loading"
+        },
+        {
+          "t": 1551.2000000476837,
+          "kind": "notice",
+          "value": "Loading the 3D forest map…"
+        },
+        {
+          "t": 2145.5,
+          "kind": "canvas",
+          "value": "present"
+        },
+        {
+          "t": 5372.300000011921,
+          "kind": "land",
+          "value": "drawn/ready"
+        },
+        {
+          "t": 5378.600000023842,
+          "kind": "notice",
+          "value": null
+        },
+        {
+          "t": 5393.300000011921,
+          "kind": "islandsInSvg",
+          "value": "true"
+        }
+      ],
+      "gaps": [
+        {
+          "from": 418,
+          "to": 1551.3,
+          "ms": 1133.3
+        },
+        {
+          "from": 1851.3,
+          "to": 2134.6,
+          "ms": 283.29999999999995
+        },
+        {
+          "from": 2234.6,
+          "to": 4117.8,
+          "ms": 1883.2000000000003
+        },
+        {
+          "from": 4301.2,
+          "to": 4851.1,
+          "ms": 549.9000000000005
+        },
+        {
+          "from": 4851.1,
+          "to": 5317.8,
+          "ms": 466.6999999999998
+        }
+      ],
+      "longTasks": [
+        {
+          "start": 64.40000003576279,
+          "duration": 74
+        },
+        {
+          "start": 402.30000001192093,
+          "duration": 1149
+        },
+        {
+          "start": 1731.800000011921,
+          "duration": 82
+        },
+        {
+          "start": 1856.7000000476837,
+          "duration": 285
+        },
+        {
+          "start": 2219.7000000476837,
+          "duration": 1854
+        },
+        {
+          "start": 4119.200000047684,
+          "duration": 115
+        },
+        {
+          "start": 4862,
+          "duration": 267
+        },
+        {
+          "start": 5129.100000023842,
+          "duration": 189
+        },
+        {
+          "start": 17803.400000035763,
+          "duration": 55
+        },
+        {
+          "start": 18209.200000047684,
+          "duration": 51
+        },
+        {
+          "start": 18997.600000023842,
+          "duration": 53
+        },
+        {
+          "start": 19098,
+          "duration": 53
+        },
+        {
+          "start": 19191.30000001192,
+          "duration": 52
+        },
+        {
+          "start": 19451.5,
+          "duration": 51
+        },
+        {
+          "start": 19629.5,
+          "duration": 53
+        },
+        {
+          "start": 19806.80000001192,
+          "duration": 50
+        },
+        {
+          "start": 19894.700000047684,
+          "duration": 50
+        },
+        {
+          "start": 20064.100000023842,
+          "duration": 50
+        },
+        {
+          "start": 20151.80000001192,
+          "duration": 52
+        },
+        {
+          "start": 20329.200000047684,
+          "duration": 50
+        },
+        {
+          "start": 20556.200000047684,
+          "duration": 53
+        },
+        {
+          "start": 20611.30000001192,
+          "duration": 76
+        },
+        {
+          "start": 20818.200000047684,
+          "duration": 51
+        }
+      ]
+    }
+  ],
+  "snapshotSha256": "a871e2759cff329bade339c3d5ba250f65d7a3b9e14641520b509849389e3722",
+  "accepted": true
+}
