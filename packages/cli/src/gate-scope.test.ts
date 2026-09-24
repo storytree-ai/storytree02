@@ -19,7 +19,7 @@ import assert from "node:assert/strict";
 
 import { discoverWorkspaceProjects, pnpmArgsFor, type WorkspaceProject } from "./ci-affected.js";
 import { loadGatePlan } from "./gate-checks.js";
-import { BUILT_IN_LEGS, type GatePlanStep, STUDIO_UAT_STEP, evaluateGateOrder, isExpensiveStep } from "./gate-order.js";
+import { BUILT_IN_LEGS, type GatePlanStep, type GateStep, STUDIO_UAT_SCRIPT, STUDIO_UAT_STEP, evaluateGateOrder, isExpensiveStep } from "./gate-order.js";
 import {
   behindMainLines,
   gitLines,
@@ -353,4 +353,21 @@ test("stale-branch-surfaced: the shell prints the warning before the run AND bes
   assert.ok(runAt > 0 && verdictAt > 0, "the run and the verdict must both still be found");
   assert.ok((prints[0] ?? Infinity) < runAt, "the first print comes before any step runs");
   assert.ok((prints[1] ?? -1) > verdictAt, "the second print comes after the verdict table");
+});
+
+test("the studio journey's script name has ONE home — the declared and the narrowed forms both run the script the studio declares", () => {
+  // The narrowed form runs under `--if-present`, which runs NOTHING at exit 0 in a scope where no
+  // package declares the named script. So a narrowed form spelling its own copy of the name would,
+  // after a rename, make every affected-scope PR run no journey and report green.
+  const step: GateStep = { command: STUDIO_UAT_STEP, check: undefined };
+  assert.deepEqual(scopeGatePlan([step], "--filter ...studio"), [{ command: `pnpm --filter ...studio --if-present ${STUDIO_UAT_SCRIPT}`, check: undefined }]);
+  assert.deepEqual(scopeGatePlan([step], "-r"), [step]);
+  assert.equal(STUDIO_UAT_STEP, `pnpm --filter studio ${STUDIO_UAT_SCRIPT}`);
+  const manifest = JSON.parse(readFileSync(new URL("../../../apps/studio/package.json", import.meta.url), "utf8")) as {
+    scripts?: Record<string, string>;
+  };
+  assert.equal(typeof manifest.scripts?.[STUDIO_UAT_SCRIPT], "string", `apps/studio declares no \`${STUDIO_UAT_SCRIPT}\` script`);
+  // A command that merely CONTAINS the declared step is not it.
+  const other: GateStep = { command: `${STUDIO_UAT_STEP} --extra`, check: undefined };
+  assert.deepEqual(scopeGatePlan([other], "--filter ...studio"), [other]);
 });

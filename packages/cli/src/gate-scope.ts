@@ -32,7 +32,7 @@
 // Pure: no spawning, no filesystem beyond what the caller passes in.
 
 import { classifyChangedFiles, type AffectedScope, type WorkspaceProject } from "./ci-affected.js";
-import { type GateStep, STUDIO_UAT_STEP, isExpensiveStep } from "./gate-order.js";
+import { type GateStep, STUDIO_UAT_SCRIPT, STUDIO_UAT_STEP, isExpensiveStep } from "./gate-order.js";
 
 /**
  * The local git signal, already gathered. `ok: false` carries the reason the caller could not produce
@@ -84,7 +84,7 @@ export function scopeGatePlan<T extends GateStep>(steps: readonly T[], pnpmArgs:
     // The studio journey names ONE package, so there is no `-r` to swap: it becomes "run `uat`
     // wherever the affected set declares one", which pnpm resolves dependents-inclusive — the
     // journey runs iff the studio is affected (STUDIO_UAT_STEP says why that is the right key).
-    if (step.command === STUDIO_UAT_STEP) return { ...step, command: `pnpm ${args} --if-present uat` };
+    if (step.command === STUDIO_UAT_STEP) return { ...step, command: `pnpm ${args} --if-present ${STUDIO_UAT_SCRIPT}` };
     if (!isExpensiveStep(step.command)) return step;
     const scoped = step.command.replace(/^pnpm\s+-r\s+/, `pnpm ${args} `);
     // A leg the rewrite did not actually touch is left alone rather than half-scoped.
