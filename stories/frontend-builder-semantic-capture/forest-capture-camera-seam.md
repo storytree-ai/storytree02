@@ -17,8 +17,11 @@ proof:
     testGlobs: ["apps/studio/src/components/TreeView.captureCamera.test.tsx", "apps/studio/src/lib/forestCaptureCamera.test.ts"]
     sourceGlobs: ["apps/studio/src/components/TreeView.tsx", "apps/studio/src/lib/forestCaptureCamera.ts", "apps/studio/src/lib/worldCamera.ts"]
   real:
-    testFile: "apps/studio/src/components/TreeView.captureCamera.test.tsx"
-    sourceFile: "apps/studio/src/components/TreeView.tsx"
+    # The pure resolver is the mutation-bearing geometry/refusal boundary, so it is the primary
+    # red→green test file. The proof command also runs the mounted controller test below: a pure
+    # receipt is not sufficient until TreeView commits and returns that receipt.
+    testFile: "apps/studio/src/lib/forestCaptureCamera.test.ts"
+    sourceFile: "apps/studio/src/lib/forestCaptureCamera.ts"
     editsExisting: true
     scope:
       testGlobs: ["apps/studio/src/components/TreeView.captureCamera.test.tsx", "apps/studio/src/lib/forestCaptureCamera.test.ts"]
@@ -29,7 +32,7 @@ proof:
       args: ["--filter", "studio", "typecheck"]
     proofCommand:
       file: pnpm
-      args: ["--filter", "studio", "exec", "vitest", "run", "src/components/TreeView.captureCamera.test.tsx"]
+      args: ["--filter", "studio", "exec", "vitest", "run", "src/lib/forestCaptureCamera.test.ts", "src/components/TreeView.captureCamera.test.tsx"]
 ---
 
 # A named forest capture target resolves to one exact camera receipt
@@ -78,10 +81,15 @@ wheel, drag and keyboard behaviour unchanged; they remain interaction coverage, 
 deterministic framing.
 
 **Make geometry the oracle.** Reuse `worldToScreen`, `centerOn`, `fitWorld`, `restingWorld` and the real
-layout output. The focused tests assert projected bounds and exact receipt equality, not opaque `setCam`
-call counts or screenshot pixels. A test may substitute only layout-unavailable rendering components through
-the existing `StudioSurfacesContext`; the target resolver, current world, camera math and controller state
-run for real. This is geometry/behaviour proof, not a visual-taste verdict.
+layout output. The focused proof command runs TWO complementary files: the pure
+`forestCaptureCamera.test.ts` reaches every resolver branch directly, while
+`TreeView.captureCamera.test.tsx` proves the mounted controller commits the same result. The pure file must
+assert projected bounds and exact receipt equality, not opaque `setCam` call counts or screenshot pixels.
+It must explicitly exercise non-finite/zero frame dimensions, absent world, every malformed square value,
+missing lookup, invalid island radius, the square width-vs-height limiting-scale branches, node-scale clamp,
+and island diameter/contain-fit geometry. A test may substitute only layout-unavailable rendering components
+through the existing `StudioSurfacesContext`; the target resolver, current world, camera math and controller
+state run for real. This is geometry/behaviour proof, not a visual-taste verdict.
 
 **Do not smuggle in the later driver.** This increment does not parse command-line flags, launch a
 server/browser, take a PNG, wait for animation, compare a baseline, write files or document a shell
@@ -91,31 +99,32 @@ reimplementing its target grammar.
 
 ## Proof walkthrough
 
-Mount the real `TreeView` controller over a deterministic, loaded fixture world with two distinguishable
-story-node positions and island bounds, a positive measured viewport, and ordinary camera limits. Call the
-mounted capture seam directly — never dispatch pointer or wheel events. For every target kind, read the
-returned receipt and project the subject back through its reported camera. Then send a missing id,
-non-finite/zero square and zero-sized frame; compare camera state before and after. Unmount and prove the
-stale command is no longer callable. The integration test drives the real controller and geometry; only
-rendering that jsdom cannot lay out is replaced through the established component context.
+First call the pure resolver with a real, small world fixture whose node positions, territory radii and frame
+aspect ratio make every branch distinguishable. Assert invalid frame before world access; null world; every
+non-finite and non-positive square field; missing id; invalid island radius; and both width-bound and
+height-bound square scales. Assert exact node-scale clamping and island `diameter → contain-fit → centre`
+geometry, then prove `resting` and `fit` are returned exactly. Next mount the real `TreeView` controller over
+that loaded fixture world, call the mounted capture seam directly — never dispatch pointer or wheel events —
+and compare its committed camera with the pure receipt. Finally unmount and prove the stale command is no
+longer callable. The mounted integration test drives the real controller and geometry; only rendering that
+jsdom cannot lay out is replaced through the established component context.
 
 ## Integration test
 
 **Goal —** Prove that the live Studio controller applies exactly the semantic frame it reports, and refuses
 unresolvable requests without moving the map.
 
-1. Mount `TreeView` under its existing focused-test seams with a loaded two-subject fixture and a positive
-   frame. Obtain the capture command registered by that mounted instance.
-2. Request a `square`; assert success, project all four square corners through the receipt camera, and
-   prove they remain inside the frame while the square centre is frame-centred.
-3. Request a `story-node` and an `island` whose fixture locations/bounds differ. Assert each receipt
-   identifies the resolved subject and projects its centre/bounds according to that target's framing rule,
-   proving neither path aliases the other or falls back to a mouse-derived camera.
-4. Request `resting` and `fit`; assert their receipts equal the current canonical camera calculations for
-   this world/frame, including existing limit and chrome-reserve inputs.
-5. Save the current camera, then request a missing id, invalid square and invalid frame. Assert the exact
-   typed refusal for each and that the saved camera remains byte-identical. Unmount; assert the old command
-   is unavailable rather than steering a replacement map.
+1. In `forestCaptureCamera.test.ts`, call the pure resolver over a two-subject fixture. Cover invalid frames,
+   unavailable world, non-finite and non-positive square fields, absent ids, invalid island radius and both
+   square limiting-axis branches. Assert every refusal code and exact receipt.
+2. In the same pure test, project all four valid-square corners, verify node-scale clamp and the island's
+   diameter/contain-fit framing, then assert `resting` and `fit` are the passed canonical cameras exactly.
+3. Mount `TreeView` under its existing focused-test seams with that loaded fixture and a positive frame.
+   Obtain the capture command registered by that mounted instance; request every successful target kind and
+   compare the committed camera and receipt to the resolver's exact result.
+4. Save the mounted camera, then request a missing id, malformed square and invalid frame. Assert the typed
+   refusal for each and the saved camera byte-identical. Unmount; assert the old command is unavailable rather
+   than steering a replacement map.
 
 ## Contracts (5)
 
@@ -145,9 +154,9 @@ unresolvable requests without moving the map.
 
 ## Guidance — the net-new slice that earns the signed verdict
 
-Build the focused `TreeView.captureCamera.test.tsx` red first: mount the real map controller, issue a semantic
-command and assert the five contract ids above. At HEAD no such command or receipt exists, so the test fails
-for the intended missing seam rather than relying on a visual diff. Add the pure target resolver and wire it
-once through `TreeView`'s existing camera-state boundary. Run the focused Vitest command and Studio typecheck.
-Do not make screenshots or mouse movement part of this unit's proof: those belong to follow-on CLI/browser
-orchestration after this seam is signed.
+Strengthen the pure `forestCaptureCamera.test.ts` first: author named cases for the resolver's refusal,
+lookup and exact-geometry branches, then run it **together with** `TreeView.captureCamera.test.tsx` through
+this capability's one `proofCommand`. The mounted file remains the independent application check: it proves
+the resolved camera is the committed/returned camera, not merely a calculation. Do not replace either file
+with screenshot or mouse movement evidence; those belong to follow-on CLI/browser orchestration after this
+seam is signed.
