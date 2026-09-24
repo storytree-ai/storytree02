@@ -1,0 +1,2943 @@
+{
+  "capturedAt": "2026-09-24T10:40:22.626Z",
+  "label": "after",
+  "mode": "video",
+  "base": "http://127.0.0.1:5391",
+  "query": "?landMount=1&landMountProps=1&act2=intro",
+  "viewport": {
+    "width": 1800,
+    "height": 1100
+  },
+  "build": {
+    "indexSha256": "d9feee64c5de914c8b7866dd121b7efc1e2978eb5869084d307f52cc4660ba49",
+    "assetsSha256": "e92e1b3076103bb739cbb25a1307e0c2d2680252f45f92a850442efe68372bf0"
+  },
+  "snapshotWasFrozen": true,
+  "runs": [
+    {
+      "summary": {
+        "landReadyMs": 4877,
+        "cursorFirstMovedMs": 4926.800000011921,
+        "cursorAtLandReady": 0,
+        "settledMs": 26167,
+        "longTasks": {
+          "count": 157,
+          "totalMs": 16079,
+          "largestMs": 2225
+        },
+        "freezesOver150msAfterLandReady": [
+          {
+            "fromMs": 4965,
+            "toMs": 5565,
+            "ms": 600,
+            "cursorBefore": 0.0005,
+            "cursorAfter": 0.0037
+          },
+          {
+            "fromMs": 5581,
+            "toMs": 6065,
+            "ms": 483,
+            "cursorBefore": 0.0005,
+            "cursorAfter": 0.0581
+          },
+          {
+            "fromMs": 21981,
+            "toMs": 22347,
+            "ms": 367,
+            "cursorBefore": 0.8105,
+            "cursorAfter": 0.8217
+          },
+          {
+            "fromMs": 22564,
+            "toMs": 22881,
+            "ms": 317,
+            "cursorBefore": 0.8394,
+            "cursorAfter": 0.8498
+          },
+          {
+            "fromMs": 22881,
+            "toMs": 23214,
+            "ms": 333,
+            "cursorBefore": 0.8442,
+            "cursorAfter": 0.865
+          },
+          {
+            "fromMs": 23214,
+            "toMs": 23464,
+            "ms": 250,
+            "cursorBefore": 0.8498,
+            "cursorAfter": 0.881
+          },
+          {
+            "fromMs": 23464,
+            "toMs": 23731,
+            "ms": 267,
+            "cursorBefore": 0.865,
+            "cursorAfter": 0.893
+          },
+          {
+            "fromMs": 23731,
+            "toMs": 23997,
+            "ms": 267,
+            "cursorBefore": 0.881,
+            "cursorAfter": 0.9059
+          },
+          {
+            "fromMs": 23997,
+            "toMs": 24281,
+            "ms": 283,
+            "cursorBefore": 0.893,
+            "cursorAfter": 0.9187
+          },
+          {
+            "fromMs": 24281,
+            "toMs": 24564,
+            "ms": 283,
+            "cursorBefore": 0.9059,
+            "cursorAfter": 0.9323
+          },
+          {
+            "fromMs": 24564,
+            "toMs": 24864,
+            "ms": 300,
+            "cursorBefore": 0.9187,
+            "cursorAfter": 0.9459
+          },
+          {
+            "fromMs": 24864,
+            "toMs": 25147,
+            "ms": 283,
+            "cursorBefore": 0.9323,
+            "cursorAfter": 0.9604
+          },
+          {
+            "fromMs": 25147,
+            "toMs": 25464,
+            "ms": 317,
+            "cursorBefore": 0.9459,
+            "cursorAfter": 0.974
+          },
+          {
+            "fromMs": 25464,
+            "toMs": 25797,
+            "ms": 333,
+            "cursorBefore": 0.9604,
+            "cursorAfter": 0.9892
+          },
+          {
+            "fromMs": 25797,
+            "toMs": 26097,
+            "ms": 300,
+            "cursorBefore": 0.974,
+            "cursorAfter": 0.9892
+          }
+        ],
+        "firstFrameAfterLandReadyMs": 4881
+      },
+      "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+      "visibility": "visible",
+      "win": [
+        1800,
+        1100
+      ],
+      "errors": [],
+      "progress": [
+        {
+          "t": 1618.199999988079,
+          "p": 0,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 0%"
+        },
+        {
+          "t": 4926.800000011921,
+          "p": 0.0004,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 0%"
+        },
+        {
+          "t": 4944.300000011921,
+          "p": 0.0005,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 0%"
+        },
+        {
+          "t": 5582.600000023842,
+          "p": 0.0037,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 0%"
+        },
+        {
+          "t": 6076.199999988079,
+          "p": 0.0333,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 3%"
+        },
+        {
+          "t": 6089,
+          "p": 0.0565,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 6%"
+        },
+        {
+          "t": 6101.300000011921,
+          "p": 0.0573,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 6%"
+        },
+        {
+          "t": 6114.399999976158,
+          "p": 0.0581,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 6%"
+        },
+        {
+          "t": 6133.600000023842,
+          "p": 0.059,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 6%"
+        },
+        {
+          "t": 6147,
+          "p": 0.0598,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 6%"
+        },
+        {
+          "t": 6161.100000023842,
+          "p": 0.0606,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 6%"
+        },
+        {
+          "t": 6177.199999988079,
+          "p": 0.0614,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 6%"
+        },
+        {
+          "t": 6195.5,
+          "p": 0.0622,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 6%"
+        },
+        {
+          "t": 6212.399999976158,
+          "p": 0.063,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 6%"
+        },
+        {
+          "t": 6227.600000023842,
+          "p": 0.0638,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 6%"
+        },
+        {
+          "t": 6243.800000011921,
+          "p": 0.0646,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 6%"
+        },
+        {
+          "t": 6260.5,
+          "p": 0.0654,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 7%"
+        },
+        {
+          "t": 6276.399999976158,
+          "p": 0.0662,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 7%"
+        },
+        {
+          "t": 6295.399999976158,
+          "p": 0.067,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 7%"
+        },
+        {
+          "t": 6309.699999988079,
+          "p": 0.0678,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 7%"
+        },
+        {
+          "t": 6326,
+          "p": 0.0686,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 7%"
+        },
+        {
+          "t": 6342.699999988079,
+          "p": 0.0694,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 7%"
+        },
+        {
+          "t": 6358.199999988079,
+          "p": 0.0702,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 7%"
+        },
+        {
+          "t": 6375.199999988079,
+          "p": 0.071,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 7%"
+        },
+        {
+          "t": 6392.600000023842,
+          "p": 0.0718,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 7%"
+        },
+        {
+          "t": 6408.399999976158,
+          "p": 0.0726,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 7%"
+        },
+        {
+          "t": 6427.199999988079,
+          "p": 0.0734,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 7%"
+        },
+        {
+          "t": 6442.600000023842,
+          "p": 0.0742,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 7%"
+        },
+        {
+          "t": 6459.899999976158,
+          "p": 0.075,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 7%"
+        },
+        {
+          "t": 6475.600000023842,
+          "p": 0.0758,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 8%"
+        },
+        {
+          "t": 6492.100000023842,
+          "p": 0.0766,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 8%"
+        },
+        {
+          "t": 6508.800000011921,
+          "p": 0.0774,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 8%"
+        },
+        {
+          "t": 6525.899999976158,
+          "p": 0.0782,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 8%"
+        },
+        {
+          "t": 6542.800000011921,
+          "p": 0.079,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 8%"
+        },
+        {
+          "t": 6558.600000023842,
+          "p": 0.0798,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 8%"
+        },
+        {
+          "t": 6576.600000023842,
+          "p": 0.0806,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 8%"
+        },
+        {
+          "t": 6593.300000011921,
+          "p": 0.0814,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 8%"
+        },
+        {
+          "t": 6609.600000023842,
+          "p": 0.0822,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 8%"
+        },
+        {
+          "t": 6626.699999988079,
+          "p": 0.083,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 8%"
+        },
+        {
+          "t": 6643.199999988079,
+          "p": 0.0838,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 8%"
+        },
+        {
+          "t": 6659.199999988079,
+          "p": 0.0846,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 8%"
+        },
+        {
+          "t": 6676.899999976158,
+          "p": 0.0854,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 9%"
+        },
+        {
+          "t": 6692.5,
+          "p": 0.0862,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 9%"
+        },
+        {
+          "t": 6709.5,
+          "p": 0.087,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 9%"
+        },
+        {
+          "t": 6726.600000023842,
+          "p": 0.0878,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 9%"
+        },
+        {
+          "t": 6742.699999988079,
+          "p": 0.0886,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 9%"
+        },
+        {
+          "t": 6759.399999976158,
+          "p": 0.0894,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 9%"
+        },
+        {
+          "t": 6775.5,
+          "p": 0.0902,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 9%"
+        },
+        {
+          "t": 6792.899999976158,
+          "p": 0.091,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 9%"
+        },
+        {
+          "t": 6809.300000011921,
+          "p": 0.0918,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 9%"
+        },
+        {
+          "t": 6827.199999988079,
+          "p": 0.0926,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 9%"
+        },
+        {
+          "t": 6843.899999976158,
+          "p": 0.0934,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 9%"
+        },
+        {
+          "t": 6859.699999988079,
+          "p": 0.0942,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 9%"
+        },
+        {
+          "t": 6876.600000023842,
+          "p": 0.095,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 10%"
+        },
+        {
+          "t": 6893.5,
+          "p": 0.0958,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 10%"
+        },
+        {
+          "t": 6909.800000011921,
+          "p": 0.0966,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 10%"
+        },
+        {
+          "t": 6926,
+          "p": 0.0974,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 10%"
+        },
+        {
+          "t": 6943.5,
+          "p": 0.0982,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 10%"
+        },
+        {
+          "t": 6959.199999988079,
+          "p": 0.099,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 10%"
+        },
+        {
+          "t": 6976,
+          "p": 0.0998,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 10%"
+        },
+        {
+          "t": 6995.800000011921,
+          "p": 0.1006,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 10%"
+        },
+        {
+          "t": 7010,
+          "p": 0.1014,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 10%"
+        },
+        {
+          "t": 7028.899999976158,
+          "p": 0.1022,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 10%"
+        },
+        {
+          "t": 7044.5,
+          "p": 0.103,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 10%"
+        },
+        {
+          "t": 7061.100000023842,
+          "p": 0.1038,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 10%"
+        },
+        {
+          "t": 7078,
+          "p": 0.1046,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 10%"
+        },
+        {
+          "t": 7093.300000011921,
+          "p": 0.1054,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 11%"
+        },
+        {
+          "t": 7111.699999988079,
+          "p": 0.1062,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 11%"
+        },
+        {
+          "t": 7126.5,
+          "p": 0.107,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 11%"
+        },
+        {
+          "t": 7144.399999976158,
+          "p": 0.1078,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 11%"
+        },
+        {
+          "t": 7158.899999976158,
+          "p": 0.1086,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 11%"
+        },
+        {
+          "t": 7176.100000023842,
+          "p": 0.1094,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 11%"
+        },
+        {
+          "t": 7195.399999976158,
+          "p": 0.1102,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 11%"
+        },
+        {
+          "t": 7209,
+          "p": 0.111,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 11%"
+        },
+        {
+          "t": 7226.699999988079,
+          "p": 0.1118,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 11%"
+        },
+        {
+          "t": 7242.699999988079,
+          "p": 0.1126,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 11%"
+        },
+        {
+          "t": 7261.100000023842,
+          "p": 0.1134,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 11%"
+        },
+        {
+          "t": 7276,
+          "p": 0.1142,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 11%"
+        },
+        {
+          "t": 7292.300000011921,
+          "p": 0.115,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 12%"
+        },
+        {
+          "t": 7314.899999976158,
+          "p": 0.1158,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 12%"
+        },
+        {
+          "t": 7335.199999988079,
+          "p": 0.1166,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 12%"
+        },
+        {
+          "t": 7350.199999988079,
+          "p": 0.1174,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 12%"
+        },
+        {
+          "t": 7364.300000011921,
+          "p": 0.1182,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 12%"
+        },
+        {
+          "t": 7381,
+          "p": 0.119,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 12%"
+        },
+        {
+          "t": 7395.699999988079,
+          "p": 0.1198,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 12%"
+        },
+        {
+          "t": 7411.100000023842,
+          "p": 0.1206,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 12%"
+        },
+        {
+          "t": 7429.5,
+          "p": 0.1214,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 12%"
+        },
+        {
+          "t": 7445.399999976158,
+          "p": 0.1223,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 12%"
+        },
+        {
+          "t": 7462.300000011921,
+          "p": 0.123,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 12%"
+        },
+        {
+          "t": 7479.100000023842,
+          "p": 0.1239,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 12%"
+        },
+        {
+          "t": 7495.300000011921,
+          "p": 0.1247,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 12%"
+        },
+        {
+          "t": 7511.699999988079,
+          "p": 0.1255,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 13%"
+        },
+        {
+          "t": 7528.399999976158,
+          "p": 0.1263,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 13%"
+        },
+        {
+          "t": 7547,
+          "p": 0.1271,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 13%"
+        },
+        {
+          "t": 7564.199999988079,
+          "p": 0.1279,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 13%"
+        },
+        {
+          "t": 7580.699999988079,
+          "p": 0.1287,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 13%"
+        },
+        {
+          "t": 7597,
+          "p": 0.1295,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 13%"
+        },
+        {
+          "t": 7615.300000011921,
+          "p": 0.1303,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 13%"
+        },
+        {
+          "t": 7629.399999976158,
+          "p": 0.1311,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 13%"
+        },
+        {
+          "t": 7645.600000023842,
+          "p": 0.1319,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 13%"
+        },
+        {
+          "t": 7662.199999988079,
+          "p": 0.1327,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 13%"
+        },
+        {
+          "t": 7678.600000023842,
+          "p": 0.1335,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 13%"
+        },
+        {
+          "t": 7695.800000011921,
+          "p": 0.1343,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 13%"
+        },
+        {
+          "t": 7713.100000023842,
+          "p": 0.1351,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 14%"
+        },
+        {
+          "t": 7729.899999976158,
+          "p": 0.1359,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 14%"
+        },
+        {
+          "t": 7745.699999988079,
+          "p": 0.1367,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 14%"
+        },
+        {
+          "t": 7762.199999988079,
+          "p": 0.1375,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 14%"
+        },
+        {
+          "t": 7779.100000023842,
+          "p": 0.1383,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 14%"
+        },
+        {
+          "t": 7796,
+          "p": 0.1391,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 14%"
+        },
+        {
+          "t": 7814,
+          "p": 0.1399,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 14%"
+        },
+        {
+          "t": 7834.100000023842,
+          "p": 0.1407,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 14%"
+        },
+        {
+          "t": 7852.800000011921,
+          "p": 0.1415,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 14%"
+        },
+        {
+          "t": 7876.899999976158,
+          "p": 0.1423,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 14%"
+        },
+        {
+          "t": 7893.699999988079,
+          "p": 0.1431,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 14%"
+        },
+        {
+          "t": 7911,
+          "p": 0.1447,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 14%"
+        },
+        {
+          "t": 7930.600000023842,
+          "p": 0.1455,
+          "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 15%"
+        },
+        {
+          "t": 7953.199999988079,
+          "p": 0.1463,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 15%"
+        },
+        {
+          "t": 7970.600000023842,
+          "p": 0.1471,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 15%"
+        },
+        {
+          "t": 7993.5,
+          "p": 0.1479,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 15%"
+        },
+        {
+          "t": 8021.100000023842,
+          "p": 0.1495,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 15%"
+        },
+        {
+          "t": 8040.699999988079,
+          "p": 0.1503,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 15%"
+        },
+        {
+          "t": 8062,
+          "p": 0.1519,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 15%"
+        },
+        {
+          "t": 8082.5,
+          "p": 0.1527,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 15%"
+        },
+        {
+          "t": 8098.399999976158,
+          "p": 0.1535,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 15%"
+        },
+        {
+          "t": 8121.600000023842,
+          "p": 0.1543,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 15%"
+        },
+        {
+          "t": 8141.100000023842,
+          "p": 0.1551,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 16%"
+        },
+        {
+          "t": 8163.199999988079,
+          "p": 0.1559,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 16%"
+        },
+        {
+          "t": 8182.699999988079,
+          "p": 0.1567,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 16%"
+        },
+        {
+          "t": 8203.699999988079,
+          "p": 0.1575,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 16%"
+        },
+        {
+          "t": 8229,
+          "p": 0.1583,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 16%"
+        },
+        {
+          "t": 8248.100000023842,
+          "p": 0.1591,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 16%"
+        },
+        {
+          "t": 8264.399999976158,
+          "p": 0.1607,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 16%"
+        },
+        {
+          "t": 8285.399999976158,
+          "p": 0.1615,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 16%"
+        },
+        {
+          "t": 8304.899999976158,
+          "p": 0.1623,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 16%"
+        },
+        {
+          "t": 8320.600000023842,
+          "p": 0.1631,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 16%"
+        },
+        {
+          "t": 8339.800000011921,
+          "p": 0.1639,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 16%"
+        },
+        {
+          "t": 8355.899999976158,
+          "p": 0.1647,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 16%"
+        },
+        {
+          "t": 8375.5,
+          "p": 0.1655,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 17%"
+        },
+        {
+          "t": 8394.300000011921,
+          "p": 0.1663,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 17%"
+        },
+        {
+          "t": 8411.800000011921,
+          "p": 0.1679,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 17%"
+        },
+        {
+          "t": 8430.399999976158,
+          "p": 0.1687,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 17%"
+        },
+        {
+          "t": 8448,
+          "p": 0.1695,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 17%"
+        },
+        {
+          "t": 8465,
+          "p": 0.1703,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 17%"
+        },
+        {
+          "t": 8486.899999976158,
+          "p": 0.1711,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 17%"
+        },
+        {
+          "t": 8506.5,
+          "p": 0.1719,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 17%"
+        },
+        {
+          "t": 8527.300000011921,
+          "p": 0.1727,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 17%"
+        },
+        {
+          "t": 8549.199999988079,
+          "p": 0.1735,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 17%"
+        },
+        {
+          "t": 8569.300000011921,
+          "p": 0.1751,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 18%"
+        },
+        {
+          "t": 8590.600000023842,
+          "p": 0.1759,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 18%"
+        },
+        {
+          "t": 8608.5,
+          "p": 0.1767,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 18%"
+        },
+        {
+          "t": 8630.199999988079,
+          "p": 0.1783,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 18%"
+        },
+        {
+          "t": 8651.699999988079,
+          "p": 0.1791,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 18%"
+        },
+        {
+          "t": 8668.199999988079,
+          "p": 0.1799,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 18%"
+        },
+        {
+          "t": 8691.699999988079,
+          "p": 0.1807,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 18%"
+        },
+        {
+          "t": 8707.699999988079,
+          "p": 0.1815,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 18%"
+        },
+        {
+          "t": 8730.100000023842,
+          "p": 0.1831,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 18%"
+        },
+        {
+          "t": 8755.199999988079,
+          "p": 0.1839,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 18%"
+        },
+        {
+          "t": 8774.5,
+          "p": 0.1847,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 18%"
+        },
+        {
+          "t": 8798.699999988079,
+          "p": 0.1855,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 19%"
+        },
+        {
+          "t": 8818.800000011921,
+          "p": 0.1871,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 19%"
+        },
+        {
+          "t": 8838.300000011921,
+          "p": 0.188,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 19%"
+        },
+        {
+          "t": 8858.100000023842,
+          "p": 0.1888,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 19%"
+        },
+        {
+          "t": 8880.300000011921,
+          "p": 0.1896,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 19%"
+        },
+        {
+          "t": 8899.5,
+          "p": 0.1912,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 19%"
+        },
+        {
+          "t": 8919.600000023842,
+          "p": 0.192,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 19%"
+        },
+        {
+          "t": 8942.600000023842,
+          "p": 0.1928,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 19%"
+        },
+        {
+          "t": 8967.899999976158,
+          "p": 0.1936,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 19%"
+        },
+        {
+          "t": 8991.899999976158,
+          "p": 0.1952,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 20%"
+        },
+        {
+          "t": 9009.600000023842,
+          "p": 0.196,
+          "readout": "depth 1 of 13 · 1/36 islands · 1 pathway growing · 20%"
+        },
+        {
+          "t": 9027.100000023842,
+          "p": 0.1976,
+          "readout": "depth 1 of 13 · 1/36 islands · 2 pathways growing · 20%"
+        },
+        {
+          "t": 9050.199999988079,
+          "p": 0.1984,
+          "readout": "depth 1 of 13 · 1/36 islands · 2 pathways growing · 20%"
+        },
+        {
+          "t": 9069.300000011921,
+          "p": 0.1992,
+          "readout": "depth 1 of 13 · 1/36 islands · 2 pathways growing · 20%"
+        },
+        {
+          "t": 9091.5,
+          "p": 0.2,
+          "readout": "depth 1 of 13 · 1/36 islands · 2 pathways growing · 20%"
+        },
+        {
+          "t": 9112.699999988079,
+          "p": 0.2008,
+          "readout": "depth 1 of 13 · 1/36 islands · 2 pathways growing · 20%"
+        },
+        {
+          "t": 9131,
+          "p": 0.2024,
+          "readout": "depth 1 of 13 · 1/36 islands · 2 pathways growing · 20%"
+        },
+        {
+          "t": 9149.899999976158,
+          "p": 0.2032,
+          "readout": "depth 1 of 13 · 1/36 islands · 2 pathways growing · 20%"
+        },
+        {
+          "t": 9171.300000011921,
+          "p": 0.204,
+          "readout": "depth 1 of 13 · 2/36 islands · 3 pathways growing · 20%"
+        },
+        {
+          "t": 9190.199999988079,
+          "p": 0.2048,
+          "readout": "depth 1 of 13 · 2/36 islands · 3 pathways growing · 20%"
+        },
+        {
+          "t": 9209.100000023842,
+          "p": 0.2056,
+          "readout": "depth 1 of 13 · 2/36 islands · 3 pathways growing · 21%"
+        },
+        {
+          "t": 9229.199999988079,
+          "p": 0.2072,
+          "readout": "depth 1 of 13 · 2/36 islands · 3 pathways growing · 21%"
+        },
+        {
+          "t": 9251.300000011921,
+          "p": 0.208,
+          "readout": "depth 1 of 13 · 2/36 islands · 3 pathways growing · 21%"
+        },
+        {
+          "t": 9274.600000023842,
+          "p": 0.2088,
+          "readout": "depth 1 of 13 · 2/36 islands · 3 pathways growing · 21%"
+        },
+        {
+          "t": 9292.800000011921,
+          "p": 0.2096,
+          "readout": "depth 1 of 13 · 2/36 islands · 3 pathways growing · 21%"
+        },
+        {
+          "t": 9311.300000011921,
+          "p": 0.2112,
+          "readout": "depth 1 of 13 · 2/36 islands · 3 pathways growing · 21%"
+        },
+        {
+          "t": 9333,
+          "p": 0.212,
+          "readout": "depth 1 of 13 · 2/36 islands · 3 pathways growing · 21%"
+        },
+        {
+          "t": 9352.5,
+          "p": 0.2128,
+          "readout": "depth 1 of 13 · 2/36 islands · 3 pathways growing · 21%"
+        },
+        {
+          "t": 9371.699999988079,
+          "p": 0.2136,
+          "readout": "depth 1 of 13 · 2/36 islands · 3 pathways growing · 21%"
+        },
+        {
+          "t": 9394.199999988079,
+          "p": 0.2144,
+          "readout": "depth 1 of 13 · 2/36 islands · 3 pathways growing · 21%"
+        },
+        {
+          "t": 9412.5,
+          "p": 0.2152,
+          "readout": "depth 1 of 13 · 2/36 islands · 3 pathways growing · 22%"
+        },
+        {
+          "t": 9436.899999976158,
+          "p": 0.2168,
+          "readout": "depth 1 of 13 · 2/36 islands · 3 pathways growing · 22%"
+        },
+        {
+          "t": 9456.5,
+          "p": 0.2176,
+          "readout": "depth 1 of 13 · 2/36 islands · 4 pathways growing · 22%"
+        },
+        {
+          "t": 9476.5,
+          "p": 0.2184,
+          "readout": "depth 1 of 13 · 2/36 islands · 4 pathways growing · 22%"
+        },
+        {
+          "t": 9495.300000011921,
+          "p": 0.2192,
+          "readout": "depth 1 of 13 · 2/36 islands · 4 pathways growing · 22%"
+        },
+        {
+          "t": 9516.100000023842,
+          "p": 0.2208,
+          "readout": "depth 1 of 13 · 2/36 islands · 4 pathways growing · 22%"
+        },
+        {
+          "t": 9538.699999988079,
+          "p": 0.2216,
+          "readout": "depth 1 of 13 · 2/36 islands · 4 pathways growing · 22%"
+        },
+        {
+          "t": 9556.899999976158,
+          "p": 0.2224,
+          "readout": "depth 1 of 13 · 2/36 islands · 4 pathways growing · 22%"
+        },
+        {
+          "t": 9575.800000011921,
+          "p": 0.2232,
+          "readout": "depth 1 of 13 · 2/36 islands · 4 pathways growing · 22%"
+        },
+        {
+          "t": 9595.399999976158,
+          "p": 0.2248,
+          "readout": "depth 1 of 13 · 2/36 islands · 4 pathways growing · 22%"
+        },
+        {
+          "t": 9631.699999988079,
+          "p": 0.2256,
+          "readout": "depth 5 of 13 · 2/36 islands · 3 pathways growing · 23%"
+        },
+        {
+          "t": 9673.399999976158,
+          "p": 0.2264,
+          "readout": "depth 5 of 13 · 2/36 islands · 2 pathways growing · 23%"
+        },
+        {
+          "t": 9703.800000011921,
+          "p": 0.2288,
+          "readout": "depth 5 of 13 · 2/36 islands · 2 pathways growing · 23%"
+        },
+        {
+          "t": 9731.199999988079,
+          "p": 0.2304,
+          "readout": "depth 5 of 13 · 2/36 islands · 2 pathways growing · 23%"
+        },
+        {
+          "t": 9762.5,
+          "p": 0.2312,
+          "readout": "depth 5 of 13 · 2/36 islands · 2 pathways growing · 23%"
+        },
+        {
+          "t": 9792.600000023842,
+          "p": 0.2328,
+          "readout": "depth 5 of 13 · 2/36 islands · 2 pathways growing · 23%"
+        },
+        {
+          "t": 9826.399999976158,
+          "p": 0.2344,
+          "readout": "depth 5 of 13 · 2/36 islands · 2 pathways growing · 23%"
+        },
+        {
+          "t": 9855.199999988079,
+          "p": 0.236,
+          "readout": "depth 5 of 13 · 2/36 islands · 2 pathways growing · 24%"
+        },
+        {
+          "t": 9885.300000011921,
+          "p": 0.2376,
+          "readout": "depth 7 of 13 · 2/36 islands · 1 pathway growing · 24%"
+        },
+        {
+          "t": 9916.899999976158,
+          "p": 0.2392,
+          "readout": "depth 7 of 13 · 2/36 islands · 1 pathway growing · 24%"
+        },
+        {
+          "t": 9947.899999976158,
+          "p": 0.2408,
+          "readout": "depth 7 of 13 · 2/36 islands · 1 pathway growing · 24%"
+        },
+        {
+          "t": 9975,
+          "p": 0.2416,
+          "readout": "depth 7 of 13 · 2/36 islands · 1 pathway growing · 24%"
+        },
+        {
+          "t": 10003.800000011921,
+          "p": 0.2432,
+          "readout": "depth 7 of 13 · 2/36 islands · 1 pathway growing · 24%"
+        },
+        {
+          "t": 10031.199999988079,
+          "p": 0.2448,
+          "readout": "depth 7 of 13 · 2/36 islands · 1 pathway growing · 24%"
+        },
+        {
+          "t": 10061.100000023842,
+          "p": 0.2456,
+          "readout": "depth 7 of 13 · 2/36 islands · 1 pathway growing · 25%"
+        },
+        {
+          "t": 10091.699999988079,
+          "p": 0.2472,
+          "readout": "depth 7 of 13 · 2/36 islands · 1 pathway growing · 25%"
+        },
+        {
+          "t": 10122,
+          "p": 0.2488,
+          "readout": "depth 7 of 13 · 2/36 islands · 1 pathway growing · 25%"
+        },
+        {
+          "t": 10150.100000023842,
+          "p": 0.2505,
+          "readout": "depth 7 of 13 · 2/36 islands · 1 pathway growing · 25%"
+        },
+        {
+          "t": 10179,
+          "p": 0.2521,
+          "readout": "depth 7 of 13 · 2/36 islands · 1 pathway growing · 25%"
+        },
+        {
+          "t": 10210.5,
+          "p": 0.2529,
+          "readout": "depth 7 of 13 · 2/36 islands · 1 pathway growing · 25%"
+        },
+        {
+          "t": 10243,
+          "p": 0.2545,
+          "readout": "depth 7 of 13 · 2/36 islands · 1 pathway growing · 25%"
+        },
+        {
+          "t": 10272.399999976158,
+          "p": 0.2561,
+          "readout": "depth 7 of 13 · 2/36 islands · 1 pathway growing · 26%"
+        },
+        {
+          "t": 10305.100000023842,
+          "p": 0.2577,
+          "readout": "depth 7 of 13 · 2/36 islands · 1 pathway growing · 26%"
+        },
+        {
+          "t": 10336.600000023842,
+          "p": 0.2593,
+          "readout": "depth 7 of 13 · 2/36 islands · 1 pathway growing · 26%"
+        },
+        {
+          "t": 10367.199999988079,
+          "p": 0.2609,
+          "readout": "depth 7 of 13 · 2/36 islands · 1 pathway growing · 26%"
+        },
+        {
+          "t": 10397.300000011921,
+          "p": 0.2625,
+          "readout": "depth 7 of 13 · 3/36 islands · 2 pathways growing · 26%"
+        },
+        {
+          "t": 10426.5,
+          "p": 0.2633,
+          "readout": "depth 7 of 13 · 3/36 islands · 2 pathways growing · 26%"
+        },
+        {
+          "t": 10457.199999988079,
+          "p": 0.2649,
+          "readout": "depth 7 of 13 · 3/36 islands · 2 pathways growing · 26%"
+        },
+        {
+          "t": 10488.800000011921,
+          "p": 0.2665,
+          "readout": "depth 7 of 13 · 3/36 islands · 2 pathways growing · 27%"
+        },
+        {
+          "t": 10519.199999988079,
+          "p": 0.2681,
+          "readout": "depth 7 of 13 · 3/36 islands · 2 pathways growing · 27%"
+        },
+        {
+          "t": 10549.5,
+          "p": 0.2697,
+          "readout": "depth 7 of 13 · 3/36 islands · 3 pathways growing · 27%"
+        },
+        {
+          "t": 10579.5,
+          "p": 0.2713,
+          "readout": "depth 7 of 13 · 3/36 islands · 3 pathways growing · 27%"
+        },
+        {
+          "t": 10612.199999988079,
+          "p": 0.2721,
+          "readout": "depth 7 of 13 · 3/36 islands · 3 pathways growing · 27%"
+        },
+        {
+          "t": 10647.199999988079,
+          "p": 0.2737,
+          "readout": "depth 10 of 13 · 3/36 islands · 1 pathway growing · 27%"
+        },
+        {
+          "t": 10686.300000011921,
+          "p": 0.2753,
+          "readout": "depth 10 of 13 · 3/36 islands · 1 pathway growing · 28%"
+        },
+        {
+          "t": 10724.399999976158,
+          "p": 0.2769,
+          "readout": "depth 10 of 13 · 3/36 islands · 0 pathways growing · 28%"
+        },
+        {
+          "t": 10764,
+          "p": 0.2793,
+          "readout": "depth 10 of 13 · 3/36 islands · 0 pathways growing · 28%"
+        },
+        {
+          "t": 10801.300000011921,
+          "p": 0.2809,
+          "readout": "depth 10 of 13 · 3/36 islands · 0 pathways growing · 28%"
+        },
+        {
+          "t": 10839.399999976158,
+          "p": 0.2825,
+          "readout": "depth 10 of 13 · 3/36 islands · 0 pathways growing · 28%"
+        },
+        {
+          "t": 10873.699999988079,
+          "p": 0.2849,
+          "readout": "depth 10 of 13 · 3/36 islands · 0 pathways growing · 28%"
+        },
+        {
+          "t": 10912.100000023842,
+          "p": 0.2865,
+          "readout": "depth 10 of 13 · 3/36 islands · 0 pathways growing · 29%"
+        },
+        {
+          "t": 10947.100000023842,
+          "p": 0.2881,
+          "readout": "depth 10 of 13 · 3/36 islands · 0 pathways growing · 29%"
+        },
+        {
+          "t": 10982.800000011921,
+          "p": 0.2897,
+          "readout": "depth 10 of 13 · 3/36 islands · 0 pathways growing · 29%"
+        },
+        {
+          "t": 11018.600000023842,
+          "p": 0.2913,
+          "readout": "depth 10 of 13 · 3/36 islands · 0 pathways growing · 29%"
+        },
+        {
+          "t": 11055.100000023842,
+          "p": 0.2929,
+          "readout": "depth 10 of 13 · 3/36 islands · 0 pathways growing · 29%"
+        },
+        {
+          "t": 11089.899999976158,
+          "p": 0.2953,
+          "readout": "depth 10 of 13 · 3/36 islands · 0 pathways growing · 30%"
+        },
+        {
+          "t": 11128.399999976158,
+          "p": 0.2969,
+          "readout": "depth 10 of 13 · 3/36 islands · 0 pathways growing · 30%"
+        },
+        {
+          "t": 11163,
+          "p": 0.2985,
+          "readout": "depth 10 of 13 · 3/36 islands · 0 pathways growing · 30%"
+        },
+        {
+          "t": 11202.300000011921,
+          "p": 0.3001,
+          "readout": "depth 10 of 13 · 3/36 islands · 1 pathway growing · 30%"
+        },
+        {
+          "t": 11237.600000023842,
+          "p": 0.3017,
+          "readout": "depth 10 of 13 · 3/36 islands · 1 pathway growing · 30%"
+        },
+        {
+          "t": 11274,
+          "p": 0.3041,
+          "readout": "depth 10 of 13 · 3/36 islands · 1 pathway growing · 30%"
+        },
+        {
+          "t": 11309.699999988079,
+          "p": 0.3057,
+          "readout": "depth 10 of 13 · 3/36 islands · 1 pathway growing · 31%"
+        },
+        {
+          "t": 11346.399999976158,
+          "p": 0.3073,
+          "readout": "depth 10 of 13 · 3/36 islands · 1 pathway growing · 31%"
+        },
+        {
+          "t": 11381.100000023842,
+          "p": 0.3089,
+          "readout": "depth 10 of 13 · 3/36 islands · 2 pathways growing · 31%"
+        },
+        {
+          "t": 11417,
+          "p": 0.3105,
+          "readout": "depth 10 of 13 · 3/36 islands · 2 pathways growing · 31%"
+        },
+        {
+          "t": 11451.300000011921,
+          "p": 0.3121,
+          "readout": "depth 10 of 13 · 3/36 islands · 2 pathways growing · 31%"
+        },
+        {
+          "t": 11487.399999976158,
+          "p": 0.3137,
+          "readout": "depth 10 of 13 · 3/36 islands · 2 pathways growing · 31%"
+        },
+        {
+          "t": 11521,
+          "p": 0.3154,
+          "readout": "depth 10 of 13 · 3/36 islands · 2 pathways growing · 32%"
+        },
+        {
+          "t": 11555.399999976158,
+          "p": 0.3178,
+          "readout": "depth 10 of 13 · 3/36 islands · 2 pathways growing · 32%"
+        },
+        {
+          "t": 11589.399999976158,
+          "p": 0.3194,
+          "readout": "depth 10 of 13 · 4/36 islands · 3 pathways growing · 32%"
+        },
+        {
+          "t": 11639.800000011921,
+          "p": 0.321,
+          "readout": "depth 10 of 13 · 4/36 islands · 2 pathways growing · 32%"
+        },
+        {
+          "t": 11723,
+          "p": 0.3226,
+          "readout": "depth 10 of 13 · 4/36 islands · 2 pathways growing · 32%"
+        },
+        {
+          "t": 11766.199999988079,
+          "p": 0.3258,
+          "readout": "depth 10 of 13 · 4/36 islands · 2 pathways growing · 33%"
+        },
+        {
+          "t": 11815.600000023842,
+          "p": 0.329,
+          "readout": "depth 10 of 13 · 4/36 islands · 1 pathway growing · 33%"
+        },
+        {
+          "t": 11869,
+          "p": 0.3314,
+          "readout": "depth 10 of 13 · 4/36 islands · 1 pathway growing · 33%"
+        },
+        {
+          "t": 11924,
+          "p": 0.3338,
+          "readout": "depth 10 of 13 · 4/36 islands · 1 pathway growing · 33%"
+        },
+        {
+          "t": 11975.5,
+          "p": 0.3362,
+          "readout": "depth 10 of 13 · 4/36 islands · 2 pathways growing · 34%"
+        },
+        {
+          "t": 12029.699999988079,
+          "p": 0.3386,
+          "readout": "depth 10 of 13 · 4/36 islands · 2 pathways growing · 34%"
+        },
+        {
+          "t": 12081.199999988079,
+          "p": 0.3418,
+          "readout": "depth 10 of 13 · 4/36 islands · 2 pathways growing · 34%"
+        },
+        {
+          "t": 12130.800000011921,
+          "p": 0.3434,
+          "readout": "depth 10 of 13 · 4/36 islands · 2 pathways growing · 34%"
+        },
+        {
+          "t": 12187.899999976158,
+          "p": 0.3466,
+          "readout": "depth 10 of 13 · 4/36 islands · 1 pathway growing · 35%"
+        },
+        {
+          "t": 12240.300000011921,
+          "p": 0.349,
+          "readout": "depth 10 of 13 · 4/36 islands · 1 pathway growing · 35%"
+        },
+        {
+          "t": 12289.899999976158,
+          "p": 0.3514,
+          "readout": "depth 10 of 13 · 4/36 islands · 2 pathways growing · 35%"
+        },
+        {
+          "t": 12341.5,
+          "p": 0.3538,
+          "readout": "depth 10 of 13 · 4/36 islands · 2 pathways growing · 35%"
+        },
+        {
+          "t": 12394.600000023842,
+          "p": 0.3562,
+          "readout": "depth 10 of 13 · 4/36 islands · 3 pathways growing · 36%"
+        },
+        {
+          "t": 12440.800000011921,
+          "p": 0.3586,
+          "readout": "depth 10 of 13 · 4/36 islands · 3 pathways growing · 36%"
+        },
+        {
+          "t": 12495,
+          "p": 0.361,
+          "readout": "depth 10 of 13 · 4/36 islands · 3 pathways growing · 36%"
+        },
+        {
+          "t": 12546.699999988079,
+          "p": 0.3634,
+          "readout": "depth 10 of 13 · 4/36 islands · 3 pathways growing · 36%"
+        },
+        {
+          "t": 12595.5,
+          "p": 0.3666,
+          "readout": "depth 10 of 13 · 4/36 islands · 3 pathways growing · 37%"
+        },
+        {
+          "t": 12647.100000023842,
+          "p": 0.369,
+          "readout": "depth 10 of 13 · 4/36 islands · 3 pathways growing · 37%"
+        },
+        {
+          "t": 12707.600000023842,
+          "p": 0.3714,
+          "readout": "depth 10 of 13 · 4/36 islands · 2 pathways growing · 37%"
+        },
+        {
+          "t": 12759.399999976158,
+          "p": 0.3738,
+          "readout": "depth 10 of 13 · 5/36 islands · 3 pathways growing · 37%"
+        },
+        {
+          "t": 12814.800000011921,
+          "p": 0.3762,
+          "readout": "depth 10 of 13 · 5/36 islands · 3 pathways growing · 38%"
+        },
+        {
+          "t": 12865.800000011921,
+          "p": 0.3795,
+          "readout": "depth 10 of 13 · 6/36 islands · 4 pathways growing · 38%"
+        },
+        {
+          "t": 12919.100000023842,
+          "p": 0.3819,
+          "readout": "depth 10 of 13 · 6/36 islands · 4 pathways growing · 38%"
+        },
+        {
+          "t": 12976.300000011921,
+          "p": 0.3843,
+          "readout": "depth 10 of 13 · 7/36 islands · 4 pathways growing · 38%"
+        },
+        {
+          "t": 13032.300000011921,
+          "p": 0.3867,
+          "readout": "depth 10 of 13 · 7/36 islands · 2 pathways growing · 39%"
+        },
+        {
+          "t": 13086.399999976158,
+          "p": 0.3891,
+          "readout": "depth 10 of 13 · 7/36 islands · 2 pathways growing · 39%"
+        },
+        {
+          "t": 13141.199999988079,
+          "p": 0.3923,
+          "readout": "depth 10 of 13 · 7/36 islands · 1 pathway growing · 39%"
+        },
+        {
+          "t": 13194.899999976158,
+          "p": 0.3947,
+          "readout": "depth 10 of 13 · 7/36 islands · 1 pathway growing · 39%"
+        },
+        {
+          "t": 13248.899999976158,
+          "p": 0.3971,
+          "readout": "depth 10 of 13 · 7/36 islands · 1 pathway growing · 40%"
+        },
+        {
+          "t": 13300.800000011921,
+          "p": 0.4003,
+          "readout": "depth 10 of 13 · 7/36 islands · 2 pathways growing · 40%"
+        },
+        {
+          "t": 13352.800000011921,
+          "p": 0.4027,
+          "readout": "depth 10 of 13 · 7/36 islands · 2 pathways growing · 40%"
+        },
+        {
+          "t": 13406.199999988079,
+          "p": 0.4051,
+          "readout": "depth 10 of 13 · 7/36 islands · 1 pathway growing · 41%"
+        },
+        {
+          "t": 13455.600000023842,
+          "p": 0.4075,
+          "readout": "depth 10 of 13 · 7/36 islands · 1 pathway growing · 41%"
+        },
+        {
+          "t": 13508.399999976158,
+          "p": 0.4099,
+          "readout": "depth 10 of 13 · 7/36 islands · 1 pathway growing · 41%"
+        },
+        {
+          "t": 13561.899999976158,
+          "p": 0.4123,
+          "readout": "depth 10 of 13 · 7/36 islands · 1 pathway growing · 41%"
+        },
+        {
+          "t": 13619.600000023842,
+          "p": 0.4147,
+          "readout": "depth 10 of 13 · 7/36 islands · 1 pathway growing · 41%"
+        },
+        {
+          "t": 13674.699999988079,
+          "p": 0.4179,
+          "readout": "depth 10 of 13 · 7/36 islands · 2 pathways growing · 42%"
+        },
+        {
+          "t": 13723.699999988079,
+          "p": 0.4203,
+          "readout": "depth 10 of 13 · 8/36 islands · 3 pathways growing · 42%"
+        },
+        {
+          "t": 13776.199999988079,
+          "p": 0.4227,
+          "readout": "depth 10 of 13 · 8/36 islands · 4 pathways growing · 42%"
+        },
+        {
+          "t": 13828.399999976158,
+          "p": 0.4251,
+          "readout": "depth 10 of 13 · 9/36 islands · 4 pathways growing · 43%"
+        },
+        {
+          "t": 13878.5,
+          "p": 0.4275,
+          "readout": "depth 10 of 13 · 9/36 islands · 4 pathways growing · 43%"
+        },
+        {
+          "t": 13930.5,
+          "p": 0.4307,
+          "readout": "depth 10 of 13 · 9/36 islands · 5 pathways growing · 43%"
+        },
+        {
+          "t": 13984.199999988079,
+          "p": 0.4331,
+          "readout": "depth 10 of 13 · 9/36 islands · 5 pathways growing · 43%"
+        },
+        {
+          "t": 14034.399999976158,
+          "p": 0.4355,
+          "readout": "depth 10 of 13 · 9/36 islands · 6 pathways growing · 44%"
+        },
+        {
+          "t": 14093.600000023842,
+          "p": 0.4379,
+          "readout": "depth 10 of 13 · 9/36 islands · 3 pathways growing · 44%"
+        },
+        {
+          "t": 14152.699999988079,
+          "p": 0.4403,
+          "readout": "depth 10 of 13 · 9/36 islands · 3 pathways growing · 44%"
+        },
+        {
+          "t": 14223.699999988079,
+          "p": 0.4436,
+          "readout": "depth 10 of 13 · 9/36 islands · 0 pathways growing · 44%"
+        },
+        {
+          "t": 14298.100000023842,
+          "p": 0.446,
+          "readout": "depth 10 of 13 · 9/36 islands · 0 pathways growing · 45%"
+        },
+        {
+          "t": 14362.899999976158,
+          "p": 0.45,
+          "readout": "depth 10 of 13 · 9/36 islands · 0 pathways growing · 45%"
+        },
+        {
+          "t": 14429,
+          "p": 0.4532,
+          "readout": "depth 10 of 13 · 9/36 islands · 0 pathways growing · 45%"
+        },
+        {
+          "t": 14493.100000023842,
+          "p": 0.4564,
+          "readout": "depth 10 of 13 · 9/36 islands · 1 pathway growing · 46%"
+        },
+        {
+          "t": 14555.899999976158,
+          "p": 0.4596,
+          "readout": "depth 10 of 13 · 9/36 islands · 1 pathway growing · 46%"
+        },
+        {
+          "t": 14619.100000023842,
+          "p": 0.4628,
+          "readout": "depth 10 of 13 · 9/36 islands · 1 pathway growing · 46%"
+        },
+        {
+          "t": 14686.800000011921,
+          "p": 0.466,
+          "readout": "depth 10 of 13 · 10/36 islands · 2 pathways growing · 47%"
+        },
+        {
+          "t": 14757.199999988079,
+          "p": 0.4684,
+          "readout": "depth 11 of 13 · 10/36 islands · 1 pathway growing · 47%"
+        },
+        {
+          "t": 14831,
+          "p": 0.4724,
+          "readout": "depth 11 of 13 · 10/36 islands · 1 pathway growing · 47%"
+        },
+        {
+          "t": 14903.800000011921,
+          "p": 0.4756,
+          "readout": "depth 11 of 13 · 11/36 islands · 1 pathway growing · 48%"
+        },
+        {
+          "t": 14974.600000023842,
+          "p": 0.4796,
+          "readout": "depth 11 of 13 · 11/36 islands · 0 pathways growing · 48%"
+        },
+        {
+          "t": 15052.5,
+          "p": 0.4828,
+          "readout": "depth 11 of 13 · 11/36 islands · 0 pathways growing · 48%"
+        },
+        {
+          "t": 15124,
+          "p": 0.486,
+          "readout": "depth 11 of 13 · 11/36 islands · 0 pathways growing · 49%"
+        },
+        {
+          "t": 15196.699999988079,
+          "p": 0.49,
+          "readout": "depth 11 of 13 · 11/36 islands · 0 pathways growing · 49%"
+        },
+        {
+          "t": 15272.600000023842,
+          "p": 0.4932,
+          "readout": "depth 11 of 13 · 12/36 islands · 0 pathways growing · 49%"
+        },
+        {
+          "t": 15345.199999988079,
+          "p": 0.4972,
+          "readout": "depth 11 of 13 · 12/36 islands · 1 pathway growing · 50%"
+        },
+        {
+          "t": 15418.5,
+          "p": 0.5004,
+          "readout": "depth 11 of 13 · 12/36 islands · 1 pathway growing · 50%"
+        },
+        {
+          "t": 15491.399999976158,
+          "p": 0.5044,
+          "readout": "depth 11 of 13 · 12/36 islands · 1 pathway growing · 50%"
+        },
+        {
+          "t": 15565.199999988079,
+          "p": 0.5077,
+          "readout": "depth 11 of 13 · 12/36 islands · 2 pathways growing · 51%"
+        },
+        {
+          "t": 15636.300000011921,
+          "p": 0.5109,
+          "readout": "depth 11 of 13 · 12/36 islands · 2 pathways growing · 51%"
+        },
+        {
+          "t": 15704.600000023842,
+          "p": 0.5149,
+          "readout": "depth 11 of 13 · 12/36 islands · 3 pathways growing · 51%"
+        },
+        {
+          "t": 15778.100000023842,
+          "p": 0.5181,
+          "readout": "depth 11 of 13 · 13/36 islands · 5 pathways growing · 52%"
+        },
+        {
+          "t": 15849.100000023842,
+          "p": 0.5213,
+          "readout": "depth 11 of 13 · 13/36 islands · 6 pathways growing · 52%"
+        },
+        {
+          "t": 15917.600000023842,
+          "p": 0.5253,
+          "readout": "depth 11 of 13 · 13/36 islands · 7 pathways growing · 53%"
+        },
+        {
+          "t": 15991.100000023842,
+          "p": 0.5285,
+          "readout": "depth 11 of 13 · 13/36 islands · 7 pathways growing · 53%"
+        },
+        {
+          "t": 16073.399999976158,
+          "p": 0.5317,
+          "readout": "depth 11 of 13 · 15/36 islands · 5 pathways growing · 53%"
+        },
+        {
+          "t": 16172.199999988079,
+          "p": 0.5349,
+          "readout": "depth 12 of 13 · 15/36 islands · 5 pathways growing · 53%"
+        },
+        {
+          "t": 16266.100000023842,
+          "p": 0.5397,
+          "readout": "depth 13 of 13 · 15/36 islands · 3 pathways growing · 54%"
+        },
+        {
+          "t": 16356.399999976158,
+          "p": 0.5445,
+          "readout": "depth 13 of 13 · 15/36 islands · 1 pathway growing · 54%"
+        },
+        {
+          "t": 16447.80000001192,
+          "p": 0.5485,
+          "readout": "depth 13 of 13 · 15/36 islands · 1 pathway growing · 55%"
+        },
+        {
+          "t": 16542.69999998808,
+          "p": 0.5533,
+          "readout": "depth 13 of 13 · 15/36 islands · 1 pathway growing · 55%"
+        },
+        {
+          "t": 16641.899999976158,
+          "p": 0.5573,
+          "readout": "depth 13 of 13 · 15/36 islands · 1 pathway growing · 56%"
+        },
+        {
+          "t": 16734.69999998808,
+          "p": 0.5621,
+          "readout": "depth 13 of 13 · 15/36 islands · 1 pathway growing · 56%"
+        },
+        {
+          "t": 16833.80000001192,
+          "p": 0.5669,
+          "readout": "depth 13 of 13 · 15/36 islands · 1 pathway growing · 57%"
+        },
+        {
+          "t": 16931.100000023842,
+          "p": 0.5709,
+          "readout": "depth 13 of 13 · 15/36 islands · 1 pathway growing · 57%"
+        },
+        {
+          "t": 17022.19999998808,
+          "p": 0.5766,
+          "readout": "depth 13 of 13 · 15/36 islands · 1 pathway growing · 58%"
+        },
+        {
+          "t": 17113,
+          "p": 0.5806,
+          "readout": "depth 13 of 13 · 15/36 islands · 1 pathway growing · 58%"
+        },
+        {
+          "t": 17202,
+          "p": 0.5854,
+          "readout": "depth 13 of 13 · 18/36 islands · 4 pathways growing · 59%"
+        },
+        {
+          "t": 17299.5,
+          "p": 0.5894,
+          "readout": "depth 13 of 13 · 21/36 islands · 5 pathways growing · 59%"
+        },
+        {
+          "t": 17410.600000023842,
+          "p": 0.5942,
+          "readout": "depth 13 of 13 · 21/36 islands · 2 pathways growing · 59%"
+        },
+        {
+          "t": 17528,
+          "p": 0.599,
+          "readout": "depth 13 of 13 · 21/36 islands · 2 pathways growing · 60%"
+        },
+        {
+          "t": 17637.100000023842,
+          "p": 0.6046,
+          "readout": "depth 13 of 13 · 21/36 islands · 2 pathways growing · 60%"
+        },
+        {
+          "t": 17754.19999998808,
+          "p": 0.6094,
+          "readout": "depth 13 of 13 · 21/36 islands · 3 pathways growing · 61%"
+        },
+        {
+          "t": 17872.399999976158,
+          "p": 0.6158,
+          "readout": "depth 13 of 13 · 22/36 islands · 4 pathways growing · 62%"
+        },
+        {
+          "t": 17967.19999998808,
+          "p": 0.6206,
+          "readout": "depth 13 of 13 · 22/36 islands · 4 pathways growing · 62%"
+        },
+        {
+          "t": 18068.80000001192,
+          "p": 0.6262,
+          "readout": "depth 13 of 13 · 22/36 islands · 5 pathways growing · 63%"
+        },
+        {
+          "t": 18174.30000001192,
+          "p": 0.6302,
+          "readout": "depth 13 of 13 · 22/36 islands · 6 pathways growing · 63%"
+        },
+        {
+          "t": 18280.69999998808,
+          "p": 0.6359,
+          "readout": "depth 13 of 13 · 22/36 islands · 7 pathways growing · 64%"
+        },
+        {
+          "t": 18377.69999998808,
+          "p": 0.6407,
+          "readout": "depth 13 of 13 · 22/36 islands · 6 pathways growing · 64%"
+        },
+        {
+          "t": 18489.100000023842,
+          "p": 0.6455,
+          "readout": "depth 13 of 13 · 22/36 islands · 6 pathways growing · 65%"
+        },
+        {
+          "t": 18602.399999976158,
+          "p": 0.6511,
+          "readout": "depth 13 of 13 · 22/36 islands · 3 pathways growing · 65%"
+        },
+        {
+          "t": 18716.5,
+          "p": 0.6559,
+          "readout": "depth 13 of 13 · 22/36 islands · 0 pathways growing · 66%"
+        },
+        {
+          "t": 18830.600000023842,
+          "p": 0.6615,
+          "readout": "depth 13 of 13 · 22/36 islands · 1 pathway growing · 66%"
+        },
+        {
+          "t": 18956,
+          "p": 0.6671,
+          "readout": "depth 13 of 13 · 22/36 islands · 1 pathway growing · 67%"
+        },
+        {
+          "t": 19059.399999976158,
+          "p": 0.6727,
+          "readout": "depth 13 of 13 · 22/36 islands · 0 pathways growing · 67%"
+        },
+        {
+          "t": 19164,
+          "p": 0.6783,
+          "readout": "depth 13 of 13 · 26/36 islands · 0 pathways growing · 68%"
+        },
+        {
+          "t": 19276.600000023842,
+          "p": 0.6831,
+          "readout": "depth 13 of 13 · 28/36 islands · 1 pathway growing · 68%"
+        },
+        {
+          "t": 19379,
+          "p": 0.6887,
+          "readout": "depth 13 of 13 · 30/36 islands · 1 pathway growing · 69%"
+        },
+        {
+          "t": 19491.30000001192,
+          "p": 0.6935,
+          "readout": "depth 13 of 13 · 30/36 islands · 1 pathway growing · 69%"
+        },
+        {
+          "t": 19620.5,
+          "p": 0.6983,
+          "readout": "depth 13 of 13 · 30/36 islands · 1 pathway growing · 70%"
+        },
+        {
+          "t": 19735.80000001192,
+          "p": 0.7048,
+          "readout": "depth 13 of 13 · 30/36 islands · 1 pathway growing · 70%"
+        },
+        {
+          "t": 19855.80000001192,
+          "p": 0.7104,
+          "readout": "depth 13 of 13 · 30/36 islands · 0 pathways growing · 71%"
+        },
+        {
+          "t": 19971.600000023842,
+          "p": 0.716,
+          "readout": "depth 13 of 13 · 30/36 islands · 0 pathways growing · 72%"
+        },
+        {
+          "t": 20095,
+          "p": 0.7224,
+          "readout": "depth 13 of 13 · 30/36 islands · 0 pathways growing · 72%"
+        },
+        {
+          "t": 20225.100000023842,
+          "p": 0.728,
+          "readout": "depth 13 of 13 · 30/36 islands · 0 pathways growing · 73%"
+        },
+        {
+          "t": 20335.399999976158,
+          "p": 0.7336,
+          "readout": "depth 13 of 13 · 30/36 islands · 0 pathways growing · 73%"
+        },
+        {
+          "t": 20445.5,
+          "p": 0.74,
+          "readout": "depth 13 of 13 · 31/36 islands · 0 pathways growing · 74%"
+        },
+        {
+          "t": 20562.5,
+          "p": 0.7448,
+          "readout": "depth 13 of 13 · 31/36 islands · 0 pathways growing · 74%"
+        },
+        {
+          "t": 20678.19999998808,
+          "p": 0.7504,
+          "readout": "depth 13 of 13 · 31/36 islands · 0 pathways growing · 75%"
+        },
+        {
+          "t": 20791.899999976158,
+          "p": 0.756,
+          "readout": "depth 13 of 13 · 31/36 islands · 0 pathways growing · 76%"
+        },
+        {
+          "t": 20893.899999976158,
+          "p": 0.7616,
+          "readout": "depth 13 of 13 · 31/36 islands · 0 pathways growing · 76%"
+        },
+        {
+          "t": 21009,
+          "p": 0.7665,
+          "readout": "depth 13 of 13 · 31/36 islands · 0 pathways growing · 77%"
+        },
+        {
+          "t": 21125.100000023842,
+          "p": 0.7721,
+          "readout": "depth 13 of 13 · 31/36 islands · 0 pathways growing · 77%"
+        },
+        {
+          "t": 21232.600000023842,
+          "p": 0.7777,
+          "readout": "depth 13 of 13 · 31/36 islands · 0 pathways growing · 78%"
+        },
+        {
+          "t": 21347.80000001192,
+          "p": 0.7833,
+          "readout": "depth 13 of 13 · 31/36 islands · 0 pathways growing · 78%"
+        },
+        {
+          "t": 21457.69999998808,
+          "p": 0.7881,
+          "readout": "depth 13 of 13 · 31/36 islands · 0 pathways growing · 79%"
+        },
+        {
+          "t": 21571,
+          "p": 0.7937,
+          "readout": "depth 13 of 13 · 31/36 islands · 0 pathways growing · 79%"
+        },
+        {
+          "t": 21696.100000023842,
+          "p": 0.7993,
+          "readout": "depth 13 of 13 · 34/36 islands · 3 pathways growing · 80%"
+        },
+        {
+          "t": 21808,
+          "p": 0.8041,
+          "readout": "depth 13 of 13 · 36/36 islands · 4 pathways growing · 80%"
+        },
+        {
+          "t": 21922.899999976158,
+          "p": 0.8105,
+          "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 81%"
+        },
+        {
+          "t": 22042.30000001192,
+          "p": 0.8161,
+          "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 82%"
+        },
+        {
+          "t": 22396.600000023842,
+          "p": 0.8217,
+          "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 82%"
+        },
+        {
+          "t": 22510.69999998808,
+          "p": 0.8394,
+          "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 84%"
+        },
+        {
+          "t": 22574.899999976158,
+          "p": 0.8442,
+          "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 84%"
+        },
+        {
+          "t": 22907.399999976158,
+          "p": 0.8498,
+          "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 85%"
+        },
+        {
+          "t": 23226.5,
+          "p": 0.865,
+          "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 87%"
+        },
+        {
+          "t": 23487.100000023842,
+          "p": 0.881,
+          "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 88%"
+        },
+        {
+          "t": 23751.69999998808,
+          "p": 0.893,
+          "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 89%"
+        },
+        {
+          "t": 24028.5,
+          "p": 0.9059,
+          "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 91%"
+        },
+        {
+          "t": 24302.5,
+          "p": 0.9187,
+          "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 92%"
+        },
+        {
+          "t": 24574.100000023842,
+          "p": 0.9323,
+          "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 93%"
+        },
+        {
+          "t": 24889.100000023842,
+          "p": 0.9459,
+          "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 95%"
+        },
+        {
+          "t": 25168.80000001192,
+          "p": 0.9604,
+          "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 96%"
+        },
+        {
+          "t": 25484.69999998808,
+          "p": 0.974,
+          "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 97%"
+        },
+        {
+          "t": 25813.399999976158,
+          "p": 0.9892,
+          "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 99%"
+        },
+        {
+          "t": 26167,
+          "p": 1,
+          "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 100%"
+        }
+      ],
+      "events": [
+        {
+          "t": 150.39999997615814,
+          "kind": "notice",
+          "value": null
+        },
+        {
+          "t": 150.39999997615814,
+          "kind": "canvas",
+          "value": "absent"
+        },
+        {
+          "t": 150.39999997615814,
+          "kind": "islandsInSvg",
+          "value": "false"
+        },
+        {
+          "t": 1618.199999988079,
+          "kind": "land",
+          "value": "drawn/loading"
+        },
+        {
+          "t": 1618.199999988079,
+          "kind": "notice",
+          "value": "Loading the 3D forest map…"
+        },
+        {
+          "t": 2261.300000011921,
+          "kind": "canvas",
+          "value": "present"
+        },
+        {
+          "t": 4877,
+          "kind": "land",
+          "value": "drawn/ready"
+        },
+        {
+          "t": 4885.899999976158,
+          "kind": "notice",
+          "value": null
+        },
+        {
+          "t": 4926.899999976158,
+          "kind": "islandsInSvg",
+          "value": "true"
+        }
+      ],
+      "gaps": [
+        {
+          "from": 431.5,
+          "to": 1614.8,
+          "ms": 1183.3
+        },
+        {
+          "from": 1631.5,
+          "to": 1814.8,
+          "ms": 183.29999999999995
+        },
+        {
+          "from": 1948.2,
+          "to": 2248.1,
+          "ms": 299.89999999999986
+        },
+        {
+          "from": 2481.5,
+          "to": 4748.1,
+          "ms": 2266.6000000000004
+        },
+        {
+          "from": 4964.7,
+          "to": 5564.7,
+          "ms": 600
+        },
+        {
+          "from": 5581.3,
+          "to": 6064.6,
+          "ms": 483.3000000000002
+        },
+        {
+          "from": 21980.7,
+          "to": 22347.4,
+          "ms": 366.7000000000007
+        },
+        {
+          "from": 22564,
+          "to": 22880.7,
+          "ms": 316.7000000000007
+        },
+        {
+          "from": 22880.7,
+          "to": 23214,
+          "ms": 333.2999999999993
+        },
+        {
+          "from": 23214,
+          "to": 23463.9,
+          "ms": 249.90000000000146
+        },
+        {
+          "from": 23463.9,
+          "to": 23730.6,
+          "ms": 266.6999999999971
+        },
+        {
+          "from": 23730.6,
+          "to": 23997.3,
+          "ms": 266.7000000000007
+        },
+        {
+          "from": 23997.3,
+          "to": 24280.6,
+          "ms": 283.2999999999993
+        },
+        {
+          "from": 24280.6,
+          "to": 24563.9,
+          "ms": 283.3000000000029
+        },
+        {
+          "from": 24563.9,
+          "to": 24863.9,
+          "ms": 300
+        },
+        {
+          "from": 24863.9,
+          "to": 25147.3,
+          "ms": 283.3999999999978
+        },
+        {
+          "from": 25147.3,
+          "to": 25464,
+          "ms": 316.7000000000007
+        },
+        {
+          "from": 25464,
+          "to": 25797.2,
+          "ms": 333.2000000000007
+        },
+        {
+          "from": 25797.2,
+          "to": 26097.2,
+          "ms": 300
+        }
+      ],
+      "longTasks": [
+        {
+          "start": 68.39999997615814,
+          "duration": 83
+        },
+        {
+          "start": 430.89999997615814,
+          "duration": 1187
+        },
+        {
+          "start": 1825.199999988079,
+          "duration": 88
+        },
+        {
+          "start": 1960.300000011921,
+          "duration": 297
+        },
+        {
+          "start": 2315.300000011921,
+          "duration": 167
+        },
+        {
+          "start": 2483.300000011921,
+          "duration": 2225
+        },
+        {
+          "start": 4709.199999988079,
+          "duration": 52
+        },
+        {
+          "start": 4761.5,
+          "duration": 106
+        },
+        {
+          "start": 5584.300000011921,
+          "duration": 277
+        },
+        {
+          "start": 5862.100000023842,
+          "duration": 205
+        },
+        {
+          "start": 16121.699999988079,
+          "duration": 51
+        },
+        {
+          "start": 16591.30000001192,
+          "duration": 51
+        },
+        {
+          "start": 16781.399999976158,
+          "duration": 53
+        },
+        {
+          "start": 16881.30000001192,
+          "duration": 50
+        },
+        {
+          "start": 17247.80000001192,
+          "duration": 52
+        },
+        {
+          "start": 17300.69999998808,
+          "duration": 55
+        },
+        {
+          "start": 17355.80000001192,
+          "duration": 55
+        },
+        {
+          "start": 17412,
+          "duration": 51
+        },
+        {
+          "start": 17464.19999998808,
+          "duration": 64
+        },
+        {
+          "start": 17578.80000001192,
+          "duration": 60
+        },
+        {
+          "start": 17639.69999998808,
+          "duration": 57
+        },
+        {
+          "start": 17697.600000023842,
+          "duration": 58
+        },
+        {
+          "start": 17806.80000001192,
+          "duration": 67
+        },
+        {
+          "start": 18012.19999998808,
+          "duration": 57
+        },
+        {
+          "start": 18117.69999998808,
+          "duration": 57
+        },
+        {
+          "start": 18224.399999976158,
+          "duration": 57
+        },
+        {
+          "start": 18327.19999998808,
+          "duration": 51
+        },
+        {
+          "start": 18378.899999976158,
+          "duration": 64
+        },
+        {
+          "start": 18537.100000023842,
+          "duration": 66
+        },
+        {
+          "start": 18604.100000023842,
+          "duration": 54
+        },
+        {
+          "start": 18659.80000001192,
+          "duration": 58
+        },
+        {
+          "start": 18718.399999976158,
+          "duration": 56
+        },
+        {
+          "start": 18775.69999998808,
+          "duration": 56
+        },
+        {
+          "start": 18832.100000023842,
+          "duration": 56
+        },
+        {
+          "start": 18889.600000023842,
+          "duration": 67
+        },
+        {
+          "start": 19006.899999976158,
+          "duration": 53
+        },
+        {
+          "start": 19109.30000001192,
+          "duration": 55
+        },
+        {
+          "start": 19213.69999998808,
+          "duration": 64
+        },
+        {
+          "start": 19326.69999998808,
+          "duration": 53
+        },
+        {
+          "start": 19429.80000001192,
+          "duration": 63
+        },
+        {
+          "start": 19493.19999998808,
+          "duration": 67
+        },
+        {
+          "start": 19560.69999998808,
+          "duration": 61
+        },
+        {
+          "start": 19622,
+          "duration": 56
+        },
+        {
+          "start": 19678.69999998808,
+          "duration": 58
+        },
+        {
+          "start": 19787.399999976158,
+          "duration": 69
+        },
+        {
+          "start": 19857.30000001192,
+          "duration": 59
+        },
+        {
+          "start": 19917.100000023842,
+          "duration": 56
+        },
+        {
+          "start": 19973.399999976158,
+          "duration": 57
+        },
+        {
+          "start": 20031.600000023842,
+          "duration": 64
+        },
+        {
+          "start": 20096.399999976158,
+          "duration": 63
+        },
+        {
+          "start": 20160.899999976158,
+          "duration": 65
+        },
+        {
+          "start": 20226.600000023842,
+          "duration": 55
+        },
+        {
+          "start": 20282.5,
+          "duration": 54
+        },
+        {
+          "start": 20337,
+          "duration": 51
+        },
+        {
+          "start": 20389.19999998808,
+          "duration": 57
+        },
+        {
+          "start": 20446.69999998808,
+          "duration": 55
+        },
+        {
+          "start": 20502,
+          "duration": 61
+        },
+        {
+          "start": 20564,
+          "duration": 62
+        },
+        {
+          "start": 20627,
+          "duration": 52
+        },
+        {
+          "start": 20679.600000023842,
+          "duration": 55
+        },
+        {
+          "start": 20736,
+          "duration": 57
+        },
+        {
+          "start": 20793.30000001192,
+          "duration": 50
+        },
+        {
+          "start": 20844.5,
+          "duration": 50
+        },
+        {
+          "start": 20895.100000023842,
+          "duration": 58
+        },
+        {
+          "start": 20953.80000001192,
+          "duration": 56
+        },
+        {
+          "start": 21010.30000001192,
+          "duration": 54
+        },
+        {
+          "start": 21065.5,
+          "duration": 60
+        },
+        {
+          "start": 21126.399999976158,
+          "duration": 55
+        },
+        {
+          "start": 21182.600000023842,
+          "duration": 51
+        },
+        {
+          "start": 21233.899999976158,
+          "duration": 56
+        },
+        {
+          "start": 21290.399999976158,
+          "duration": 58
+        },
+        {
+          "start": 21349.30000001192,
+          "duration": 56
+        },
+        {
+          "start": 21406.600000023842,
+          "duration": 52
+        },
+        {
+          "start": 21459.100000023842,
+          "duration": 53
+        },
+        {
+          "start": 21513.899999976158,
+          "duration": 58
+        },
+        {
+          "start": 21572.399999976158,
+          "duration": 62
+        },
+        {
+          "start": 21634.899999976158,
+          "duration": 62
+        },
+        {
+          "start": 21697.5,
+          "duration": 57
+        },
+        {
+          "start": 21755.5,
+          "duration": 53
+        },
+        {
+          "start": 21809.19999998808,
+          "duration": 57
+        },
+        {
+          "start": 21866.5,
+          "duration": 57
+        },
+        {
+          "start": 21924,
+          "duration": 61
+        },
+        {
+          "start": 21985.899999976158,
+          "duration": 57
+        },
+        {
+          "start": 22043.5,
+          "duration": 305
+        },
+        {
+          "start": 22398.19999998808,
+          "duration": 58
+        },
+        {
+          "start": 22457.100000023842,
+          "duration": 54
+        },
+        {
+          "start": 22511.899999976158,
+          "duration": 52
+        },
+        {
+          "start": 22576.30000001192,
+          "duration": 323
+        },
+        {
+          "start": 22908.399999976158,
+          "duration": 309
+        },
+        {
+          "start": 23227.80000001192,
+          "duration": 251
+        },
+        {
+          "start": 23488.399999976158,
+          "duration": 255
+        },
+        {
+          "start": 23752.899999976158,
+          "duration": 262
+        },
+        {
+          "start": 24029.5,
+          "duration": 265
+        },
+        {
+          "start": 24303.600000023842,
+          "duration": 260
+        },
+        {
+          "start": 24575.399999976158,
+          "duration": 303
+        },
+        {
+          "start": 24890.399999976158,
+          "duration": 270
+        },
+        {
+          "start": 25169.899999976158,
+          "duration": 305
+        },
+        {
+          "start": 25485.899999976158,
+          "duration": 319
+        },
+        {
+          "start": 25814.600000023842,
+          "duration": 298
+        },
+        {
+          "start": 26113.399999976158,
+          "duration": 55
+        },
+        {
+          "start": 26168.5,
+          "duration": 92
+        },
+        {
+          "start": 26263.100000023842,
+          "duration": 53
+        },
+        {
+          "start": 26317.100000023842,
+          "duration": 69
+        },
+        {
+          "start": 26386.600000023842,
+          "duration": 61
+        },
+        {
+          "start": 26448.399999976158,
+          "duration": 62
+        },
+        {
+          "start": 26511.19999998808,
+          "duration": 61
+        },
+        {
+          "start": 26572.600000023842,
+          "duration": 51
+        },
+        {
+          "start": 26624.399999976158,
+          "duration": 51
+        },
+        {
+          "start": 26676.19999998808,
+          "duration": 50
+        },
+        {
+          "start": 26727,
+          "duration": 57
+        },
+        {
+          "start": 26784.5,
+          "duration": 52
+        },
+        {
+          "start": 26836.600000023842,
+          "duration": 57
+        },
+        {
+          "start": 26894.30000001192,
+          "duration": 58
+        },
+        {
+          "start": 26952.69999998808,
+          "duration": 57
+        },
+        {
+          "start": 27010.19999998808,
+          "duration": 55
+        },
+        {
+          "start": 27065.899999976158,
+          "duration": 59
+        },
+        {
+          "start": 27170.399999976158,
+          "duration": 51
+        },
+        {
+          "start": 27222,
+          "duration": 55
+        },
+        {
+          "start": 27323.30000001192,
+          "duration": 52
+        },
+        {
+          "start": 27375.80000001192,
+          "duration": 52
+        },
+        {
+          "start": 27428.600000023842,
+          "duration": 53
+        },
+        {
+          "start": 27482.19999998808,
+          "duration": 52
+        },
+        {
+          "start": 27582,
+          "duration": 52
+        },
+        {
+          "start": 27634.30000001192,
+          "duration": 52
+        },
+        {
+          "start": 27686.80000001192,
+          "duration": 75
+        },
+        {
+          "start": 27764.5,
+          "duration": 60
+        },
+        {
+          "start": 27845.899999976158,
+          "duration": 71
+        },
+        {
+          "start": 27918,
+          "duration": 67
+        },
+        {
+          "start": 27985.600000023842,
+          "duration": 59
+        },
+        {
+          "start": 28050,
+          "duration": 60
+        },
+        {
+          "start": 28110.600000023842,
+          "duration": 61
+        },
+        {
+          "start": 28177.19999998808,
+          "duration": 54
+        },
+        {
+          "start": 28232.19999998808,
+          "duration": 63
+        },
+        {
+          "start": 28348.600000023842,
+          "duration": 57
+        },
+        {
+          "start": 28411.19999998808,
+          "duration": 51
+        },
+        {
+          "start": 28462.5,
+          "duration": 54
+        },
+        {
+          "start": 28522.30000001192,
+          "duration": 51
+        },
+        {
+          "start": 28574.100000023842,
+          "duration": 54
+        },
+        {
+          "start": 28633.399999976158,
+          "duration": 52
+        },
+        {
+          "start": 28686.399999976158,
+          "duration": 51
+        },
+        {
+          "start": 28889.100000023842,
+          "duration": 50
+        },
+        {
+          "start": 28994.30000001192,
+          "duration": 64
+        },
+        {
+          "start": 29063.80000001192,
+          "duration": 68
+        },
+        {
+          "start": 29132,
+          "duration": 73
+        },
+        {
+          "start": 29210.399999976158,
+          "duration": 59
+        },
+        {
+          "start": 29269.80000001192,
+          "duration": 56
+        },
+        {
+          "start": 29331.100000023842,
+          "duration": 51
+        },
+        {
+          "start": 29382.600000023842,
+          "duration": 57
+        },
+        {
+          "start": 29444.80000001192,
+          "duration": 58
+        },
+        {
+          "start": 29503.80000001192,
+          "duration": 56
+        },
+        {
+          "start": 29564.899999976158,
+          "duration": 51
+        },
+        {
+          "start": 29616,
+          "duration": 57
+        },
+        {
+          "start": 29725.30000001192,
+          "duration": 56
+        },
+        {
+          "start": 29786.69999998808,
+          "duration": 52
+        },
+        {
+          "start": 29839.30000001192,
+          "duration": 51
+        },
+        {
+          "start": 29891.80000001192,
+          "duration": 50
+        },
+        {
+          "start": 29942.5,
+          "duration": 57
+        }
+      ]
+    }
+  ],
+  "snapshotSha256": "a871e2759cff329bade339c3d5ba250f65d7a3b9e14641520b509849389e3722",
+  "video": {
+    "file": "opening-after.webm",
+    "sha256": "cdacb9dcfb3920bb597627901d148b4d0439859d085af72662ac16a3d4fc0001"
+  },
+  "accepted": true
+}
