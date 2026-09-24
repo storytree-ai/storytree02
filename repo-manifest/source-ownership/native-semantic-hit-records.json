@@ -1,0 +1,7 @@
+{
+  "sourceOwnership": {
+    "subtrees": {
+      "packages/forest-world-r3f/src/native-prop-hit-records.ts": "native-semantic-hit-records"
+    }
+  }
+}
