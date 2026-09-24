@@ -39,7 +39,9 @@ import {
   candidatePoints,
   capabilityFactsFrom,
   clearanceFactor,
+  COVERAGE_EMPHASIS_2026_09_24,
   coverageFloraAssembly,
+  widthForGroundShare,
   coverageFoliageTint,
   BUD_MAX_SHARE_OF_BLOOM,
   BUD_MIN_MULTIPLE_OF_COVER_FLOWER,
@@ -1469,4 +1471,22 @@ test('unrecognised coverage themes and statuses report the missing route', () =>
       message: `kit-vocabulary: coverage flora has no foliage route for ${theme}/${status}`,
     });
   }
+});
+
+test('the coverage plant is the width that matches the flat marks\' measured share of the ground', () => {
+  // Share goes as width squared: quadrupling the target share doubles the width, and a trial that
+  // already matches keeps its width.
+  assert.equal(widthForGroundShare(2, 0.01, 0.04), 4);
+  assert.equal(widthForGroundShare(4, 0.05, 0.05), 4);
+  assert.equal(widthForGroundShare(8, 0.16, 0.04), 4);
+  // Rounded to a quarter unit, not to a whole one: 4 x sqrt(0.064 / 0.0735) = 3.7325.
+  assert.equal(widthForGroundShare(4, 0.0735, 0.064), 3.75);
+  assert.equal(widthForGroundShare(1, 1, 1.21), 1.0);
+  assert.equal(widthForGroundShare(1, 1, 1.3), 1.25);
+
+  const { trialWidth, trialShare, flatShare } = COVERAGE_EMPHASIS_2026_09_24;
+  assert.deepEqual(KIT_ROLE_SIZE.coverageFlora, { axis: 'width', units: widthForGroundShare(trialWidth, trialShare, flatShare) });
+  assert.equal(KIT_ROLE_SIZE.coverageFlora.units, 3.75);
+  // The frozen footprint restates the delivered width, and the staging width it replaced is gone.
+  assert.equal(KIT_FOOTPRINTS_2026_08_29.coverageFlora, KIT_ROLE_SIZE.coverageFlora.units);
 });
