@@ -935,7 +935,9 @@ const ABSENCE_GOLDEN = fileURLToPath(new URL('./scene-absence-fixture.json', imp
  * escape hatch the file claimed to be "generated from HEAD" with no generator in the repo, so the
  * only way to move it was by hand — which is how a lock stops being evidence.
  */
-test('parcels-ABSENT scene matches the committed byte-for-byte lock (generated from HEAD)', () => {
+// test-removed: `parcels-ABSENT scene matches the committed byte-for-byte lock (generated from HEAD)` was renamed to bind its declared contract; the unchanged predicate is covered by the title below.
+// test-updated (refactor): `parcels-ABSENT scene matches the committed byte-for-byte lock (generated from HEAD)` gained only its declared-contract title prefix; its assertions are unchanged.
+test('rc-scene-folds-drawables-and-status: parcels-ABSENT scene matches the committed byte-for-byte lock (generated from HEAD)', () => {
   const built = buildScene(absenceLockInput());
   if (process.env.STORYTREE_REGEN_ABSENCE_LOCK === '1') {
     writeFileSync(ABSENCE_GOLDEN, `${JSON.stringify(built, null, 2)}\n`);
@@ -1093,13 +1095,67 @@ test('every land cell carries a story-scoped shape-free id — on BOTH ground br
   }
 });
 
-test('flora density IS the test count — a higher-testCount parcel grows strictly more flora (same island, same theme)', () => {
+// test-removed: `flora density IS the test count — a higher-testCount parcel grows strictly more flora (same island, same theme)` was renamed to bind its declared contract; the unchanged predicate is covered by the title below.
+// test-updated (refactor): `flora density IS the test count — a higher-testCount parcel grows strictly more flora (same island, same theme)` gained only its declared-contract title prefix; its assertions are unchanged.
+test('rc-flora-density-is-test-count: flora density IS the test count — a higher-testCount parcel grows strictly more flora (same island, same theme)', () => {
   const scene = parcelScene(parcelsAB(1, 12), CELLS_AB); // both meadow
   const flora = allByKind(mustByKind(scene, 'flora-layer'), 'parcel-flora');
   const a = flora.filter((n) => n.id === 'capA').length;
   const b = flora.filter((n) => n.id === 'capB').length;
   assert.ok(a > 0, 'a 1-test parcel still shows a sprig');
   assert.ok(b > a, `the 12-test parcel grows strictly more marks than the 1-test one: ${a} < ${b}`);
+});
+
+test('rc-coverage-flora-carries-semantic-ground-anchor-and-scale: every coverage item carries its own transform pivot and tile-art scale without changing the drawable', () => {
+  const scene = buildScene(
+    mkInput({
+      cameraElevationDeg: 90,
+      relaxedCells: CELLS_AB,
+      territories: [
+        mkTerritory({
+          anchorSpace: 'ground',
+          status: 'proposed',
+          parcels: [
+            { capId: 'meadow-cap', status: 'healthy', testCount: 2, theme: 'meadow', seed: { x: 0, y: 0 } },
+            { capId: 'woodland-cap', status: 'building', testCount: 5, theme: 'woodland', seed: { x: 50, y: 0 } },
+            { capId: 'heath-cap', status: 'unhealthy', testCount: 9, theme: 'heath', seed: { x: 100, y: 0 } },
+          ],
+        }),
+      ],
+    }),
+  );
+  type CoverageFlora = SceneNode & { groundAnchor?: { x: number; y: number }; floraScale?: number };
+  const flora = allByKind(mustByKind(scene, 'flora-layer'), 'parcel-flora') as CoverageFlora[];
+  assert.ok(flora.length > 3, 'the varied coverage parcels generate multiple independently placed items');
+  assert.deepEqual(new Set(flora.map((item) => item.id)), new Set(['meadow-cap', 'woodland-cap', 'heath-cap']));
+  assert.deepEqual(new Set(flora.map((item) => item.theme)), new Set(['meadow', 'woodland', 'heath']));
+  assert.deepEqual(new Set(flora.map((item) => item.status)), new Set(['healthy', 'building', 'unhealthy']));
+
+  const transformsBeforeMetadata = flora.map((item) => ({
+    id: item.id,
+    theme: item.theme,
+    status: item.status,
+    transform: item.transform,
+    children: children(item),
+  }));
+  for (const item of flora) {
+    const match = /^translate\((-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?)\) scale\((-?\d+(?:\.\d+)?)\) translate\(-?\d+(?:\.\d+)? -?\d+(?:\.\d+)?\)$/.exec(item.transform ?? '');
+    assert.ok(match, `parcel flora keeps its canonical pivot-scale-pivot transform: ${item.transform}`);
+    const [, x, y, scale] = match;
+    assert.deepEqual(item.groundAnchor, { x: Number(x), y: Number(y) }, `${item.id} exposes its absolute ground pivot`);
+    assert.equal(item.floraScale, Number(scale), `${item.id} exposes the tile-art scale`);
+  }
+  assert.deepEqual(
+    flora.map((item) => ({
+      id: item.id,
+      theme: item.theme,
+      status: item.status,
+      transform: item.transform,
+      children: children(item),
+    })),
+    transformsBeforeMetadata,
+    'metadata adds no item, ordering, mark geometry, transform, identity, theme, or folded-status change',
+  );
 });
 
 test('a parcels-present island RETIRES the conifer decor AND the one-plant-per-cap ring', () => {
