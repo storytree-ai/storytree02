@@ -2500,6 +2500,21 @@ export function TreeView({
   // `lib/landViewMount.ts` carries why it is ground-only and what it does not deliver.
   const landMount = useMemo(() => readLandMount(search), [search]);
   const landMountProps = useMemo(() => readLandMountProps(search), [search]);
+  // What the mounted 3D map tells a member while it is not simply drawn (ADR-0608 D5). Declared
+  // here, ahead of the regrow's start, because the FIRST growth waits on it (below).
+  const [landStatus, setLandStatus] = useState<LandMountStatus | null>(null);
+  // THE OPENING WAITS FOR THE LAND IT GROWS ON (ADR-0608 D1a; the-3d-map-opens-on-its-first-growth).
+  // Under the mount, the flat scene can accrete seconds before the 3D renderer has downloaded and
+  // made its context — and a cursor started then is already a third through by the time the land
+  // draws: the member saw blank cream, stray flat specks, one orphan name, then land popping in
+  // part-grown. So the start waits for the land's first SETTLED status: `ready`, or a terminal
+  // can't-draw (`unsupported` / `failed`), where the member gets the notice and the flat map grows
+  // as it always did rather than being held at nothing forever. Until then the cursor rests at 0 —
+  // nothing half-drawn — and the loading notice is what shows.
+  //
+  // ⚠ ONLY THE START MOVES. Once running, the cursor is the same wall-clock anchor it always was
+  // (ADR-0469): a map navigated away from and back to still shows where the world has got to.
+  const act2LandSettled = !landMount || (landStatus !== null && landStatus.kind !== 'loading');
 
   // `?sceneExport=1` — the SCENE-EXPORT BRIDGE (ADR-0521's ladder instrument). Behind the flag only,
   // the built scene graph and the layout's own bookkeeping are parked on `window` for a driver to
@@ -2741,11 +2756,11 @@ export function TreeView({
       act2Settle();
       return;
     }
-    if (!act2AccretionPlans) return;
+    if (!act2AccretionPlans || !act2LandSettled) return;
     act2PlayedToken.current = act2StartToken;
     act2PendingStartRef.current = false;
     act2Replay();
-  }, [act2StartToken, act2ReducedMotion, act2AccretionPlans, act2Replay, act2Settle]);
+  }, [act2StartToken, act2ReducedMotion, act2AccretionPlans, act2LandSettled, act2Replay, act2Settle]);
 
   // The gear panel's non-URL button (worldSettings holds the speed dial beside it). Memoised as an
   // array so the panel's own `grouped()` memo is not rebuilt on every render of this component.
@@ -2914,8 +2929,6 @@ export function TreeView({
   // the coordinate hit-test and the per-node click keep one picking authority. Only under the mount,
   // and only while the canvas actually reports plants.
   const [nativePropTargets, setNativePropTargets] = useState<readonly NativePropHitEnvelope[]>(NO_NATIVE_TARGETS);
-  // What the mounted 3D map tells a member while it is not simply drawn (ADR-0608 D5).
-  const [landStatus, setLandStatus] = useState<LandMountStatus | null>(null);
   const nativePropTargetLayer = useMemo<NativePropTargetRenderLayer | null>(
     () =>
       landMount && world && nativePropTargets.length > 0
