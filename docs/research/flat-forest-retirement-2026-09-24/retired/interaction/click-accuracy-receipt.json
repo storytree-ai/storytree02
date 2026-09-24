@@ -1,0 +1,30 @@
+{
+  "startedAt": "2026-09-24T12:56:42.614Z",
+  "viewport": {
+    "width": 1800,
+    "height": 1100
+  },
+  "summary": {
+    "registrationMaxAbsErrorPx": 8.043014690173322e-05,
+    "crownSamples": 40,
+    "crownSamplesStriking3dGeometryAboveGround": 38,
+    "crownSamplesHostHitSameCapability": 38,
+    "bothAgree": 36,
+    "baselineHostHitSameCapability": 38
+  },
+  "click": {
+    "hash": "#/tree/library",
+    "selectedCard": "A pure cycle detector for authored Library standsOn edges",
+    "selectedCardId": null,
+    "expected": {
+      "story": "library",
+      "cap": "library-dag-acyclic-core",
+      "pixel": {
+        "x": 781,
+        "y": 385
+      }
+    }
+  },
+  "finishedAt": "2026-09-24T12:57:41.695Z",
+  "note": "laneO native-targets/probe.mjs re-run on the retired build; the three console errors were React duplicate-key warnings from a sibling lane claim id (laneW-adr-derive) in the live data, not this change"
+}

@@ -77,5 +77,5 @@ inspector, chat, camera shell and bulk CSS remain Studio-owned.
 3. **`asa-world-events-reach-existing-studio-controller`**
    - **asserts —** selection/focus events invoke the current controller and return through the model.
 4. **`asa-studio-scene-regressions-stay-green`**
-   - **asserts —** scene/trail/arrival tests stay green; unchanged
+   - **asserts —** the studio's `SceneView` adapter keeps its scene/trail/arrival tests green; unchanged
      legend/inspector/chat/camera tests remain a regression wall, not moved scope.

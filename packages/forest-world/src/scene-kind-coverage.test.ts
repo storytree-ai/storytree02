@@ -333,7 +333,9 @@ function studioShippedInput(): SceneInput {
       'studio-shipped',
     ),
     territories: [library, cli, unhealthy],
-    vegetation: { heroTrees: { healthy: hero(20.6), proposed: hero(20.6), unhealthy: hero(20.6) } },
+    // ADR-0608: the studio composes the vegetation vocabulary as the bare presence flag — the baked
+    // hero-tree colourways retired with the flat forest look, so the fold sends no `heroTrees`.
+    vegetation: {},
   };
 }
 
@@ -444,6 +446,11 @@ const STARVED_KINDS: readonly SceneKind[] = [
   'garden-lavender-stem',
   'garden-lavender-head',
   'garden-grass-blade',
+  // the baked hero-tree colourways (ADR-0227): `vegetation.heroTrees` was set only by the studio's
+  // `useVegetation`, and ADR-0608 retired it with the flat forest look — the studio's SVG layer no
+  // longer draws a tree, and the 3D land draws its own. Its def layer and `<use>` are now unfed.
+  'baked-defs',
+  'baked-art',
   // the human-witness signpost: `signpost` is set only by the website's `worldToSceneInput`, whose
   // caller `renderWorld` has no caller. The studio retired the signpost (ADR-0226 decision 5).
   'sign-blank',
@@ -560,7 +567,8 @@ test('3b. the shipped fixtures are not stale mirrors: each optional input the st
   for (const field of ['parcels', 'uatCriteria', 'claims', 'departures'] as const) {
     assert.ok(t[field] !== undefined && (t[field] as unknown[]).length !== 0, `studio mirror sends ${field}`);
   }
-  assert.ok(studioShippedInput().vegetation?.heroTrees, 'studio mirror composes vegetation.heroTrees');
+  assert.ok(studioShippedInput().vegetation, 'studio mirror composes the vegetation vocabulary');
+  assert.equal(studioShippedInput().vegetation?.heroTrees, undefined, 'studio mirror sends no heroTrees (ADR-0608)');
   assert.equal(studioShippedInput().garden, undefined, 'studio mirror sends no garden (ADR-0228)');
   assert.equal(studioShippedInput().bakedStone, undefined, 'studio mirror sends no bakedStone (no caller of loadBakedStone)');
 });
@@ -568,9 +576,28 @@ test('3b. the shipped fixtures are not stale mirrors: each optional input the st
 test('4a. the studio painter (SceneView.tsx) names every kind it draws; the kinds it leaves unclassed are the pinned structural set', () => {
   const src = readPainter(STUDIO_PAINTER);
   const named = namedKinds(src, UNION);
-  // Kinds the studio painter deliberately never names: a `<g>` the studio styles through its parent,
-  // or a leaf whose class comes from the group. An addition here is a conscious decision.
-  const UNCLASSED_ON_STUDIO: readonly SceneKind[] = ['coast-shore'].filter((k) => !named.has(k)) as SceneKind[];
+  // Kinds the studio painter deliberately never names. Since ADR-0608 the studio's SVG is the map's
+  // INTERACTION layer over the 3D land, so there are two kinds of silence, and an addition to either
+  // is a conscious decision:
+  //  - the island ground's leaves, drawn UNCLASSED as unpainted hit geometry (`fill="transparent"`)
+  //    under their classed `ground` / `parcel` / `tile` groups — clickable, never painted;
+  //  - the parts of a RETIRED picture kind (`RETIRED_PICTURE_KINDS` in SceneView.tsx: the board, the
+  //    road passes, trees, flat flora, conifers, UAT flowers), which the walk never reaches because it
+  //    skips their ancestor — the 3D layer draws them from the same scene.
+  const GROUND_HIT_LEAVES: readonly SceneKind[] = ['cell', 'cell-wheat', 'tile-side', 'tile-top', 'tile-top-wheat'];
+  const UNDER_A_RETIRED_KIND: readonly SceneKind[] = [
+    'empty',
+    'trail-shadow', 'trail-casing', 'trail-fill', 'trail-ghost',
+    'trunk', 'crown-lo', 'crown-hi', 'bare', 'litter', 'shadow', 'sapling-trunk',
+    'sign-blank', 'sign-pass', 'sign-fail', 'sign-post', 'sign-head',
+    'flora-hit', 'dead-ground', 'flora-bed', 'flora-dark', 'flora-light', 'flora-core', 'flora-stem',
+    'flora-dead-stem', 'flora-dead-head', 'flora-dead-twig',
+    'parcel-blade', 'parcel-shrub', 'parcel-stem', 'parcel-flower',
+    'conifer-body', 'conifer-snow',
+    'tall-flower-stem', 'tall-flower-leaf', 'tall-flower-petal', 'tall-flower-center', 'tall-flower-bud', 'tall-flower-glow',
+    'garden-lavender-stem', 'garden-lavender-head', 'garden-grass-blade',
+  ];
+  const UNCLASSED_ON_STUDIO: readonly SceneKind[] = [...GROUND_HIT_LEAVES, ...UNDER_A_RETIRED_KIND];
   const unnamed = setMinus(UNION, named);
   assert.deepEqual(
     unnamed,

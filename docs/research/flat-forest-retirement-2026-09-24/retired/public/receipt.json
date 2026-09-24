@@ -1,0 +1,129 @@
+{
+  "capturedAt": "2026-09-24T12:55:22.819Z",
+  "viewport": "1600x1000",
+  "sides": {
+    "before": {
+      "dist": "/tmp/laneV-web-dist-before2",
+      "hasLand": true,
+      "landBytes": 1864752,
+      "growthFrames": {
+        "frames": 121,
+        "medianMs": 16.699999999999818,
+        "p95Ms": 16.800000000000182,
+        "maxMs": 33.29999999999927
+      },
+      "webgl2": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+      "errors": []
+    },
+    "after": {
+      "dist": "/tmp/laneV-web-dist-after2",
+      "hasLand": true,
+      "landBytes": 1864752,
+      "growthFrames": {
+        "frames": 121,
+        "medianMs": 16.699999999999818,
+        "p95Ms": 16.700000000000728,
+        "maxMs": 16.800000000000182
+      },
+      "webgl2": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+      "errors": []
+    }
+  },
+  "shots": [
+    {
+      "side": "before",
+      "surface": "/forest/",
+      "state": "drawn",
+      "file": "forest-poster-before.png",
+      "sha256": "12bd0de07cca27829da82bd31fceef28472bf506a52600c4cf539949a297b759"
+    },
+    {
+      "side": "before",
+      "surface": "/ (growing, ~1 s)",
+      "file": "entry-growing-before.png",
+      "sha256": "d840fd1f6c7e392fa425a04562ba1e232f8ad27275aba1b52c92d3b2cb021b4a"
+    },
+    {
+      "side": "before",
+      "surface": "/ (settled)",
+      "state": "drawn",
+      "file": "entry-settled-before.png",
+      "sha256": "38553649600117d050e0891dcad92c038193bfbe9f0916f0ea1a4dc328e95dd4"
+    },
+    {
+      "side": "before",
+      "surface": "/ (ROAM selection)",
+      "file": "entry-selected-before.png",
+      "sha256": "c4ea24504f18317fcf9661671474c949f1f74a99c714f835b0f958e5fa2b0998",
+      "roam": {
+        "at": {
+          "x": 755.4265747070312,
+          "y": 644.8688049316406,
+          "id": "storage-protocol",
+          "top": "DIV.storm-land-canvas has-prose-clearing has-land"
+        },
+        "open": false,
+        "selected": 0
+      }
+    },
+    {
+      "side": "after",
+      "surface": "/forest/",
+      "state": "drawn",
+      "file": "forest-poster-after.png",
+      "sha256": "12bd0de07cca27829da82bd31fceef28472bf506a52600c4cf539949a297b759"
+    },
+    {
+      "side": "after",
+      "surface": "/ (growing, ~1 s)",
+      "file": "entry-growing-after.png",
+      "sha256": "353227068fa9aaa1f90986031d08ccb02896b4f47aa9281c7d70c5a2aa7af4c9"
+    },
+    {
+      "side": "after",
+      "surface": "/ (settled)",
+      "state": "drawn",
+      "file": "entry-settled-after.png",
+      "sha256": "2d9f58491aff690f88d21ac97ee9f34e86546e509073188cbcb22ed6e948bdd5"
+    },
+    {
+      "side": "after",
+      "surface": "/ (ROAM selection)",
+      "file": "entry-selected-after.png",
+      "sha256": "dcf0dbdd7cf9ac064f6f00925b7a0e94f41cf7f272f2be20436c4ef8a9daf59d",
+      "roam": {
+        "at": {
+          "x": 755.4265747070312,
+          "y": 644.8688049316406,
+          "id": "storage-protocol",
+          "top": "DIV.storm-land-canvas has-prose-clearing has-land"
+        },
+        "open": false,
+        "selected": 0
+      }
+    },
+    {
+      "side": "before",
+      "surface": "/forest/ (no WebGL 2)",
+      "webgl2": false,
+      "state": {
+        "land": "unsupported",
+        "message": "This map needs a browser with WebGL 2 — a current version of Chrome, Edge, Firefox or Safari. Your browser does not support it, so the forest cannot be drawn here."
+      },
+      "file": "forest-poster-no-webgl2-before.png",
+      "sha256": "d793d41507596ed29cac5cf712f68a411b411468d0b2fa7f65d321b9d1ef5896"
+    },
+    {
+      "side": "after",
+      "surface": "/forest/ (no WebGL 2)",
+      "webgl2": false,
+      "state": {
+        "land": "unsupported",
+        "message": "This map needs a browser with WebGL 2 — a current version of Chrome, Edge, Firefox or Safari. Your browser does not support it, so the forest cannot be drawn here."
+      },
+      "file": "forest-poster-no-webgl2-after.png",
+      "sha256": "89a0167b4a14b26134ec1aeabd909f33cd2e186cc9771d423ca59ec49274486c"
+    }
+  ],
+  "browser": "148.0.7778.96"
+}
