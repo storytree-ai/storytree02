@@ -9,6 +9,7 @@
 export { hash, rand01 } from './rng.js';
 
 export { composePublicGroundScene, type PublicGroundFacts } from './public-ground-scene-input.js';
+export { projectPublicGroundScene } from './public-ground-projection.js';
 
 // The land's ONE declared camera (ADR-0367 D1) — read by the land's coordinate mapping below and,
 // across the package boundary, by the object sprites that stand on it.
