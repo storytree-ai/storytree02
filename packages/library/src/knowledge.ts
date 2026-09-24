@@ -1778,15 +1778,18 @@ export function assertIncrementInvariants(doc: Increment): void {
 export const UatCriterion = buildKindSchema("uat-criterion");
 
 /**
- * A decision record's status (ADR-0037 §1) — the same closed triad the markdown frontmatter carried,
- * moved onto the row unchanged by ADR-0403 dec 1.
+ * A decision record's STORED status (ADR-0037 §1) — the AUTHORED half only. The markdown frontmatter
+ * carried a triad, moved onto the row by ADR-0403 dec 1; ADR-0609 D3 took `superseded` out of it,
+ * because that half repeated another record's `supersedes` edge. It is now derived on read
+ * (`supersededDecisionNumbers` / `decisionStatusOf`, `decision-derived.ts`), and the write boundary
+ * turns a legacy stored `superseded` into `accepted` before this enum ever sees it.
  *
  * IT IS A PROJECTION, NOT AN INDEPENDENT WRITE (ADR-0139). The `## Status` prose inside the body is
  * the evidence; this field transcribes it. Being a column now changes nothing about that — the whole
  * reason the body is carried as one field is that the prose and its projection cannot drift apart
  * inside a single edit.
  */
-export const AdrDocStatus = z.enum(["proposed", "accepted", "superseded"]);
+export const AdrDocStatus = z.enum(["proposed", "accepted"]);
 export type AdrDocStatus = z.infer<typeof AdrDocStatus>;
 
 /** A decision number, as it appears in `supersedes` and in the `adr-NNNN` id. */
@@ -1822,16 +1825,18 @@ const AdrDocNumber = z.number().int().positive();
  * that rule to guard. The loop question is answered by a proof over the combined graph instead
  * (`combined-dag.ts`, ADR-0403 dec 5).
  *
- * Every field is `.default()`ed or `.optional()` except `number` and `status`, which no decision has
+ * Every field is `.default()`ed or `.optional()` except `status`, which no decision has
  * ever lacked. The kind's ARRIVAL needed no `CURRENT_SCHEMA_VERSION` bump (a new kind touches no
  * existing doc — the `uat-criterion` precedent); dropping `amends` from it DID, because every kind
  * schema is `.strict()` and 424 stored rows still carry the key. That is migration 8,
  * `drop-adr-amends`, in migration 7's class rather than 3's: a WRITABILITY fix folded in at the
  * write boundary by `upcast`, so an old-shape row is forward-migrated rather than bricked.
  */
-export const Adr = buildKindSchema("adr").extend({
-  /** The decision's number — its identity, and the `NNNN` in its `adr-NNNN` id. */
-  number: AdrDocNumber,
+export const Adr = buildKindSchema("adr").omit({ description: true }).extend({
+  // NO `number` and NO `description` (ADR-0609 D1 / D2): both were pure functions of stored facts —
+  // the id's digits and the title — and are computed on read (`adrNumberOfArtifactId`,
+  // `decisionCardLineOf`). `.omit` keeps the schema `.strict()`, so a writer that echoes either back
+  // is caught; `upcast` strips them first (`stripDerivedDecisionFields`), so no honest write is.
   status: AdrDocStatus,
   /** The ISO date the decision was made (`decided:` in the old frontmatter). */
   decided: z.string().optional(),

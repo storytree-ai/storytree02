@@ -78,8 +78,7 @@ async function main(): Promise<number> {
 
   try {
     const store = new PgLibraryStore(handle.pool);
-    const { adrs, parseErrors, unreadable, numberMismatches, descriptionMismatches } =
-      await loadTitledAdrMetasFromStore(store);
+    const { adrs, parseErrors, unreadable } = await loadTitledAdrMetasFromStore(store);
     if (unreadable) {
       process.stdout.write(
         `✗ check:adr-health — the decision rows could not be read:\n  ${parseErrors.join("\n  ")}\n`,
@@ -162,8 +161,6 @@ async function main(): Promise<number> {
     const results = adrHealth({
       adrs,
       parseErrors,
-      numberMismatches,
-      descriptionMismatches,
       stories,
       guardrails,
       decisionBodies,

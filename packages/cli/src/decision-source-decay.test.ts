@@ -188,7 +188,12 @@ test("a SUPERSEDED decision is excluded even when its anchor plainly drifted (AD
     findDecisionSourceDrift(factsFor(row("adr-0004", status, { sources }), MOVED), []).length;
 
   assert.equal(drifted(ACCEPTED), 1, "the control: the very same anchor IS located when accepted");
-  assert.equal(drifted("superseded"), 0, "…and silent when superseded");
+  // `superseded` is DERIVED from a replacer's edge (ADR-0609 D3): the row itself stores `accepted`.
+  const replaced = projectDecisionFacts(
+    [row("adr-0004", ACCEPTED, { sources }), row("adr-0009", ACCEPTED, { supersedes: [4] })],
+    treeWith(MOVED),
+  );
+  assert.equal(findDecisionSourceDrift(replaced, []).length, 0, "…and silent when a decided record superseded it");
   assert.equal(drifted("proposed"), 0, "…and silent when proposed — the obligation has not attached");
 });
 
@@ -306,7 +311,10 @@ test("the REFUTED block prints when NOTHING is unfrozen — the early return doe
 test("a REFUTED anchor on a SUPERSEDED decision is reported by nothing (ADR-0424 D3)", () => {
   // The same scope every neighbour here keeps: superseded prose is deliberately false about the
   // current world, so nothing about its anchors is a signal.
-  const facts = factsFor(row("adr-0033", "superseded", { sources: [refutedAnchor] }), MOVED);
+  const facts = projectDecisionFacts(
+    [row("adr-0033", ACCEPTED, { sources: [refutedAnchor] }), row("adr-0040", ACCEPTED, { supersedes: [33] })],
+    treeWith(MOVED),
+  );
   assert.deepEqual(findRefutedSources(facts), []);
 });
 
@@ -523,4 +531,14 @@ test("an unreachable decision log ESCALATES rather than reporting a clean sweep"
     1,
     "and raising the ceiling cannot clear it",
   );
+});
+
+test("a decision's judged status is its stored half, derived superseded, or empty when unreadable (ADR-0609)", () => {
+  const statusOf = (rows: DecisionRow[], id: string): string | undefined =>
+    projectDecisionFacts(rows, () => undefined).find((f) => f.id === id)?.status;
+  assert.equal(statusOf([row("adr-0001", ACCEPTED)], "adr-0001"), ACCEPTED);
+  assert.equal(statusOf([row("adr-0001", ACCEPTED, { status: 42 })], "adr-0001"), "", "an unreadable status is never judged");
+  assert.equal(statusOf([row("adr-0001", "superseded")], "adr-0001"), ACCEPTED, "a legacy stored word with no replacer");
+  assert.equal(statusOf([row("adr-0001", ACCEPTED), row("adr-0002", ACCEPTED, { supersedes: [1] })], "adr-0001"), "superseded");
+  assert.equal(statusOf([row("not-a-decision", ACCEPTED)], "not-a-decision"), ACCEPTED);
 });

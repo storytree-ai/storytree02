@@ -186,19 +186,35 @@ test("adr-round-trip-parses-either-spelling-of-the-argument: `403` and `adr-0403
   assert.equal(parseDecisionArg("0"), null);
 });
 
-test("adr-round-trip-push-keeps-the-labelled-description: the two directions cannot disagree", async () => {
-  // They DID disagree, and only for one live push: the loader wrote `ADR-0403 — <title>` and the push
-  // wrote the bare title, so the first real use of the verb silently restyled the row's card line.
-  // It surfaced as an `-11 chars` entry in the artifact's own history and nothing else. Both
-  // directions now call `adrDescriptionOf`, and this is what stops them drifting apart again.
+test("adr-round-trip-push-stores-no-copies: number, card line and superseded are computed on read (ADR-0609)", async () => {
+  // The seeded row is a LEGACY one — it still stores `number` and `description`, as every row written
+  // before ADR-0609 does. A push is a write, and every write strips them: the card line is computed
+  // from the title (`decisionCardLineOf`) and the number from the id, so the two directions can no
+  // longer disagree because there is no second copy to disagree with.
   const { store, deps } = await seeded();
   const out = await tmpFile("adr-0403.md");
   await adrPull("403", out, deps);
   await writeFile(out, DOC.replace("## Status\n\nproposed\n", "## Status\n\nproposed, restated.\n"), "utf8");
 
-  await adrPush("403", out, deps);
+  const env = await adrPush("403", out, deps);
+  assert.equal(env.ok, true, env.body);
   const row = (await store.getDoc("adr-0403"))?.doc as Record<string, unknown>;
-  assert.equal(row["description"], "ADR-0403 — A decision under test");
+  assert.equal(Object.hasOwn(row, "description"), false);
+  assert.equal(Object.hasOwn(row, "number"), false);
+  assert.equal(row["title"], "A decision under test");
+});
+
+test("adr-round-trip-pull-renders-a-legacy-superseded-row-as-its-authored-half: push accepts it back", async () => {
+  // A row stored `superseded` before ADR-0609 pulls as `accepted` — what its next write stores — so
+  // the document a pull hands out is one the push will take, and the pair stays byte-identical.
+  const { store, deps } = await seeded();
+  const row = (await store.getDoc("adr-0403"))?.doc as Record<string, unknown>;
+  await store.upsertDoc({ id: "adr-0403", kind: "adr", doc: { ...row, status: "superseded" } });
+  const out = await tmpFile("adr-0403.md");
+  await adrPull("403", out, deps);
+  assert.match(await readFile(out, "utf8"), /^---\nstatus: accepted\n/);
+  const env = await adrPush("403", out, deps);
+  assert.equal(env.ok, true, env.body);
 });
 
 test("adr-round-trip-push-refuses-a-document-for-a-different-decision: the one-character slip", async () => {
@@ -291,7 +307,7 @@ test("adr-round-trip-push-refuses-a-schema-skewed-row-instead-of-crashing", asyn
   assert.equal(after["body"], row["body"], "nothing was written");
 });
 
-test("adr-round-trip-push-reports-title-description-and-number: the fields it rewrites are never silent", async () => {
+test("adr-round-trip-push-reports-the-title-it-rewrites: the fields it rewrites are never silent", async () => {
   // The silent-reversion path this closes: `library artifact edit adr-0403 --set title=…` sets the
   // row's title, then ANY later body-only push re-derives `title` from the document's H1 and puts it
   // back — and the change report named only `body`. A field the report omits is a field that can
@@ -301,9 +317,8 @@ test("adr-round-trip-push-reports-title-description-and-number: the fields it re
   await store.upsertDoc({
     id: "adr-0403",
     kind: "adr",
-    // The state a `--set title=` edit leaves behind: title/description moved, body's H1 did not.
-    // `number` is skewed too, which is the `adr-number-identity` shape the push silently corrects.
-    doc: { ...row, title: "A hand-edited title", description: "ADR-0403 — A hand-edited title", number: 999 },
+    // The state a `--set title=` edit leaves behind: the title moved, the body's H1 did not.
+    doc: { ...row, title: "A hand-edited title" },
   });
 
   const out = await tmpFile("adr-0403.md");
@@ -312,8 +327,9 @@ test("adr-round-trip-push-reports-title-description-and-number: the fields it re
 
   assert.equal(env.ok, true, env.body);
   assert.match(env.body, /title: "A hand-edited title" -> "A decision under test"/);
-  assert.match(env.body, /description: .*A hand-edited title.* -> .*A decision under test/);
-  assert.match(env.body, /number: 999 -> 403/);
+  // No `description:` / `number:` lines: neither is written any more (ADR-0609 D1 / D2), and a
+  // changed title IS the changed card line.
+  assert.doesNotMatch(env.body, /description:|number:/);
 });
 
 test("adr-round-trip-push-does-not-take-a-quoted-heading-as-the-title", async () => {

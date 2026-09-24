@@ -1,5 +1,5 @@
 import { INNER_LOOP_EVENT_KIND, type InnerLoopEventDoc } from "@storytree/proof-protocol";
-import { DecisionAuthority, hasQuotedOwnerDirective } from "@storytree/library";
+import { adrNumberOfArtifactId, DecisionAuthority, hasQuotedOwnerDirective, supersededDecisionNumbers } from "@storytree/library";
 import type { Store } from "@storytree/storage-protocol";
 import {
   ATTEMPT_DECISION_POINT,
@@ -184,7 +184,7 @@ export async function recordNodeGrant(store: Store, input: NodeGrantInput): Prom
 /** Record the single owner-authorised exceptional allowance after proving its live provenance. */
 export async function recordNodeOwnerGrant(
   ledgerStore: Store,
-  authorityStore: Pick<Store, "getDoc">,
+  authorityStore: Pick<Store, "getDoc" | "queryDocs">,
   input: NodeOwnerGrantInput,
 ): Promise<NodeGrantResult> {
   const { unitId, authorityQuestionId, attempts, kind, difference, actor } = input;
@@ -221,6 +221,15 @@ export async function recordNodeOwnerGrant(
   try { decision = await authorityStore.getDoc(decisionId); } catch (error) { return { ok: false, reason: `deciding ADR could not be read: ${errorMessage(error)}` }; }
   if (decision === null || decision.kind !== "adr") return { ok: false, reason: "deciding ADR is missing or is not an adr" };
   const d = decision.doc as Record<string, unknown>; const i = increment.doc as Record<string, unknown>;
+  // `superseded` is not stored (ADR-0609 D3): a replaced decision still reads `accepted` on its own
+  // row, so the grant asks the set whether a decided record has replaced it. Read only once the cheap
+  // checks pass — the whole decision log is the price of the one question a single row cannot answer.
+  let replaced: boolean;
+  try {
+    // Stryker disable next-line ObjectLiteral: EQUIVALENT — the kind filter only trims the read; `supersededDecisionNumbers` ignores every row whose id is not a decision id.
+    replaced = supersededDecisionNumbers(await authorityStore.queryDocs({ kind: "adr" })).has(adrNumberOfArtifactId(decisionId) ?? Number.NaN);
+  } catch (error) { return { ok: false, reason: `decision log could not be read: ${errorMessage(error)}` }; }
+  if (replaced) return { ok: false, reason: "deciding ADR has been superseded" };
   if (d.status !== "accepted" || !hasQuotedOwnerDirective(DecisionAuthority.safeParse(d.authority).success ? DecisionAuthority.parse(d.authority) : undefined)) return { ok: false, reason: "deciding ADR is not accepted with quoted owner authority" };
   const arc = q.arcRef;
   if (typeof arc !== "string" || !arc.startsWith("asset:") || i.arcRef !== arc || d.arcRef !== arc) return { ok: false, reason: "question, increment and deciding ADR must name the same arc" };

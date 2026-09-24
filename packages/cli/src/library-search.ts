@@ -23,6 +23,7 @@
 import type { Store, StoredDoc } from "@storytree/storage-protocol";
 import {
   adrDocId,
+  decisionCardLineOf,
   buildSearchIndex,
   relatedArtifacts,
   searchCorpus,
@@ -63,6 +64,12 @@ const NUMBER_REF_FIELDS = ["amends", "supersedes"] as const;
 function stringField(doc: Record<string, unknown>, key: string): string | undefined {
   const v = doc[key];
   return typeof v === "string" && v !== "" ? v : undefined;
+}
+
+/** A decision's card line is computed from its id and title (ADR-0609 D2); every other row's is authored. */
+function descriptionOf(row: StoredDoc, doc: Record<string, unknown>): string | undefined {
+  const card = decisionCardLineOf(row.id, doc);
+  return card === null ? stringField(doc, "description") : card;
 }
 
 /** Collect every outbound pointer on one stored document, tagged with the field that authored it. */
@@ -106,7 +113,9 @@ export function toSearchDoc(row: StoredDoc): LibrarySearchDoc {
     id: row.id,
     kind: row.kind,
     title: stringField(doc, "title"),
-    description: stringField(doc, "description"),
+    // A decision's card line is computed from its id and title (ADR-0609 D2) — nothing stores it,
+    // and its `ADR-NNNN` token is what lets a search for the number find the record.
+    description: descriptionOf(row, doc),
     body: prose === "" ? stringField(doc, "body") : prose,
     refs: refsOf(doc),
   };

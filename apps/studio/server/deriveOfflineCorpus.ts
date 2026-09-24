@@ -33,7 +33,8 @@ export interface KnowledgeUnitLike {
   id: string;
   kind: string;
   title: string;
-  description: string;
+  /** Absent on a decision: its card line is computed from its id and title (ADR-0609 D2). */
+  description?: string;
   /** The authored `dependsOn` dependency edge (ADR-0223) — absent for an edge-free kind or an
    *  un-curated doc; carried so the offline focus graph walks the same substrate as the live one. */
   dependsOn?: string[];
@@ -55,7 +56,20 @@ export interface KnowledgeUnitLike {
  * follows and bundles instead), so this keeps `vite build` green while tsx resolves it at runtime.
  */
 export async function deriveOfflineAssets(units: KnowledgeUnitLike[]): Promise<GuidanceAsset[]> {
-  const { renderBody, libraryTemplates, hasDependsOnKey, readDependsOnPointers } = await import('@storytree/library');
+  const {
+    renderBody,
+    libraryTemplates,
+    hasDependsOnKey,
+    readDependsOnPointers,
+    adrNumberOfArtifactId,
+    decisionCardLineOf,
+    decisionStatusOf,
+    storedDecisionStatusOf,
+    supersededDecisionNumbers,
+  } = await import('@storytree/library');
+  // A decision's card line and `superseded` status are COMPUTED, never stored (ADR-0609): the card
+  // line from its id and title, `superseded` from the inbound edges of the whole set handed in here.
+  const superseded = supersededDecisionNumbers(units.map((u) => ({ id: u.id, doc: u })));
 
   // renderBody is driven by KIND_SPECS off the structured fields — the same render build-corpus used.
   const renderKnowledgeAsset = (doc: KnowledgeUnitLike): GuidanceAsset => {
@@ -63,7 +77,7 @@ export async function deriveOfflineAssets(units: KnowledgeUnitLike[]): Promise<G
       id: doc.id,
       category: doc.kind as GuidanceAsset['category'],
       title: doc.title,
-      description: doc.description,
+      description: (doc.kind === 'adr' ? decisionCardLineOf(doc.id, doc) : null) ?? doc.description ?? '',
       body: renderBody(doc as Parameters<typeof renderBody>[0]),
       createdAt: doc.createdAt ?? '',
       updatedAt: doc.updatedAt ?? '',
@@ -79,6 +93,11 @@ export async function deriveOfflineAssets(units: KnowledgeUnitLike[]): Promise<G
     // `open`, so the offline shelf would state the opposite of what the row says. Absent-by-default
     // (the `provenance` idiom above) so every fixture unit that carries neither is unaffected.
     if (typeof doc.status === 'string') asset.status = doc.status;
+    const decisionNumber = doc.kind === 'adr' ? adrNumberOfArtifactId(doc.id) : null;
+    const storedStatus = storedDecisionStatusOf(doc.status);
+    if (decisionNumber !== null && storedStatus !== null) {
+      asset.status = decisionStatusOf(decisionNumber, storedStatus, superseded);
+    }
     if (typeof doc.lifecycle === 'string') asset.lifecycle = doc.lifecycle;
     if (doc.loadBearing === true) asset.loadBearing = true;
     return asset;

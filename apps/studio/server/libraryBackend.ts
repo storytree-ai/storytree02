@@ -596,7 +596,7 @@ type StoreModule = typeof import('@storytree/library/store') &
   typeof import('@storytree/studio-members/store') &
   typeof import('@storytree/orchestrator/store') &
   typeof import('@storytree/notice-board/store') &
-  Pick<typeof import('@storytree/library'), 'CURRENT_SCHEMA_VERSION'>;
+  Pick<typeof import('@storytree/library'), 'CURRENT_SCHEMA_VERSION' | 'supersededDecisionNumbers'>;
 
 let storeModulePromise: Promise<StoreModule> | null = null;
 
@@ -614,7 +614,22 @@ function loadStoreModule(): Promise<StoreModule> {
     ...orch,
     ...notice,
     CURRENT_SCHEMA_VERSION: libMain.CURRENT_SCHEMA_VERSION,
+    supersededDecisionNumbers: libMain.supersededDecisionNumbers,
   })) as Promise<StoreModule>);
+}
+
+/**
+ * The render context a SINGLE decision needs to show `superseded` (ADR-0609 D3): that status is
+ * derived from OTHER rows' `supersedes` edges, so one returned row cannot carry it. Paid only for a
+ * decision (one extra read of the decision log on a create/update), never for any other kind.
+ */
+async function decisionContextFor(
+  library: Pick<Store, 'queryDocs'>,
+  kind: string,
+): Promise<{ supersededDecisions: ReadonlySet<number> } | undefined> {
+  if (kind !== 'adr') return undefined;
+  const { supersededDecisionNumbers } = await loadStoreModule();
+  return { supersededDecisions: supersededDecisionNumbers(await library.queryDocs({ kind: 'adr' })) };
 }
 
 /** One shared build, with the two escape hatches a POOL needs that a module import does not. */
@@ -864,7 +879,9 @@ export class PgBackend implements LibraryBackend {
   async listAssets(): Promise<GuidanceAsset[]> {
     const { store, library } = await this.#ready();
     const docs = await library.queryDocs();
-    return docs.map((d) => toGuidanceAsset(store.renderStoredDoc(d)));
+    // `superseded` is derived from the whole decision set's edges (ADR-0609 D3); the listing holds it.
+    const context = { supersededDecisions: store.supersededDecisionNumbers(docs) };
+    return docs.map((d) => toGuidanceAsset(store.renderStoredDoc(d, context)));
   }
 
   async createAsset(input: AssetInput): Promise<GuidanceAsset> {
@@ -879,7 +896,7 @@ export class PgBackend implements LibraryBackend {
       doc,
       actor: DEFAULT_ACTOR,
     });
-    return toGuidanceAsset(store.renderStoredDoc(stored));
+    return toGuidanceAsset(store.renderStoredDoc(stored, await decisionContextFor(library, stored.kind)));
   }
 
   async updateAsset(id: string, input: AssetInput): Promise<GuidanceAsset | null> {
@@ -895,7 +912,7 @@ export class PgBackend implements LibraryBackend {
       doc,
       actor: DEFAULT_ACTOR,
     });
-    return toGuidanceAsset(store.renderStoredDoc(stored));
+    return toGuidanceAsset(store.renderStoredDoc(stored, await decisionContextFor(library, stored.kind)));
   }
 
   async deleteAsset(id: string): Promise<boolean> {

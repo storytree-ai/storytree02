@@ -407,6 +407,7 @@ export const CLI_READ_VERBS = {
   "adr new": silent("write — reserves a number and scaffolds the decision"),
   "adr next": silent("retired — it refuses, reserving no number and reading nothing"),
   "adr rebind": silent("write — freezes a span binding"),
+  "adr drop-copies": silent("a migration — a bare run only COUNTS stored copies, and --pg writes; argv alone separates them only by a flag this table does not model, and neither shape reads any decision's content"),
 
   // --- question ------------------------------------------------------------
   "question check *": visit({

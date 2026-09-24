@@ -700,10 +700,13 @@ for that work; if the curated set ever does grow too large to calibrate on, that
 to take, not a pass already chartered.
 
 **Status is a projection of the `## Status` prose, never an invented flip.** An agent MAY flip an ADR
-`proposed → accepted` (the green flip) once the decision is made and the prose supports it (ADR-0084);
-the **`librarian-curator` MAY also flip an ADR to `superseded`** as curation (record the `supersedes`
-edge on the superseding ADR, or the gate goes red). Still HUMAN-only: `accepted → proposed`
-(un-deciding).
+`proposed → accepted` (the green flip) once the decision is made and the prose supports it (ADR-0084).
+**Nobody flips an ADR to `superseded` any more (ADR-0609 D3)**: a decision reads as superseded exactly
+when a decided record's `supersedes` names it, so superseding IS recording that edge on the replacing
+ADR — there is no second write, and no row stores the word. (Likewise a decision's number and its
+`ADR-NNNN — <title>` card line are computed from its id and title on read, never stored; the write
+boundary strips all three, and `adr push` refuses a document that says `status: superseded`.) Still
+HUMAN-only: `accepted → proposed` (un-deciding).
 
 **Every `accepted` ADR must be TRUE IN FULL, and the operation is chosen by INTENT.** When a claim in
 a decided ADR is overtaken, ask *did the DECISION change?*
@@ -711,7 +714,8 @@ a decided ADR is overtaken, ask *did the DECISION change?*
   move, not a violation: the archive keeps the prior text, so no new ADR and no superseded shell is
   left behind. An accepted ADR is **not** allowed to sit green carrying dead prose.
 - **Yes → SUPERSEDE-AND-REPLACE.** A genuine re-decision is a NEW ADR (allocated below) that
-  `supersedes` the old; the old flips to `superseded` and is KEPT as a browsable row.
+  `supersedes` the old; the old then reads as `superseded` (derived from that edge) and is KEPT as a
+  browsable row.
 
 **RETIREMENT IS THE THIRD OPERATION, AND WHAT GATES IT IS REFERENCES, NOT KIND.** `library artifact
 retire` works on ANY artifact, decisions included — it is not an open-question verb, and reading it
@@ -741,9 +745,10 @@ verb could then write, so both numbers it ever handed out are permanent gaps; `a
 writes in one step.
 ⚠ **`adr-number-unique` is GONE, and its absence is not a hole**
 — two rows cannot share a number, because the id is the primary key, so the question it asked is
-structurally unanswerable and a check asking it would be a permanent vacuous green.
-`check:adr-health` asks the reachable one instead (**`adr-number-identity`**: a row's stored `number`
-must agree with its id, which is what the allocator reserved).
+structurally unanswerable and a check asking it would be a permanent vacuous green. Its successor
+`adr-number-identity` is gone too (ADR-0609 D1): a row no longer stores a `number` to drift from its
+id — the number IS the id's — so, with `adr-description-identity` and `supersede-consistency`, it left
+`check:adr-health` because the copies those rungs compared are no longer stored.
 
 **Pointing your new decision at an existing one? There is ONE edge: `--depends-on`.**
 `adr new --depends-on 42,43` records support — `depends_on: ["asset:adr-NNNN"]` in the frontmatter —

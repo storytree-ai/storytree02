@@ -4,13 +4,15 @@ import path from "node:path";
 import {
   adrNumberOfArtifactId,
   DecisionAuthority,
+  decisionStatusOf,
   hasDependsOnKey,
   readDependsOnPointers,
+  storedDecisionStatusOf,
+  supersededDecisionNumbers,
 } from "@storytree/library";
-import { adrDescriptionOf } from "@storytree/library/adr-doc";
 import type { Store } from "@storytree/storage-protocol";
 
-import { AdrStatus, parseAdrFrontmatter, type AdrMeta } from "./adr-frontmatter.js";
+import { parseAdrFrontmatter, type AdrMeta } from "./adr-frontmatter.js";
 
 /**
  * The ADR-meta loader (split out of the cli `adr-health.ts` in the drive extraction): the thin
@@ -140,6 +142,15 @@ export function loadTitledAdrMetas(decisionsDir: string): LoadTitledAdrMetasResu
  * is the surface CLAUDE.md sends every new session to calibrate on and 215 of 409 rows would enter
  * it on a support closure — an inflation no consumer of the view can detect FROM the view.
  *
+ * ## STATUS IS HALF STORED, HALF DERIVED — AND THIS IS WHERE THE HALVES MEET (ADR-0609 D3)
+ *
+ * A row stores only `proposed` / `accepted`; `superseded` is derived from the inbound `supersedes`
+ * edges of the whole set ({@link supersededDecisionNumbers}), which this loader holds and a single
+ * row never does. Every view built on this result — `adr list`, `--current`, the arc rollup's ADR
+ * leg, `check:adr-health`, story builds — therefore reports `superseded` without anything storing it.
+ * `number` has been the id's since ADR-0403, and ADR-0609 D1 / D2 took the stored copies of it and of
+ * the card line away, so there is no longer a stored field here to compare anything against.
+ *
  * ## PARSE ERRORS ARE COLLECTED, NOT THROWN — the same fail-soft posture as the fs scan
  *
  * A malformed row becomes a line rather than an exception, because both callers render a VIEW: an
@@ -159,51 +170,11 @@ export interface StoreAdrMetasResult extends LoadTitledAdrMetasResult {
    * returning zero would read as FRESH — a check failing toward the answer that blesses unread work.
    */
   unreadable: boolean;
-  /**
-   * Rows whose stored `number` disagrees with the number in their own id — one FAIL line each.
-   *
-   * This is what replaces `adr-number-unique` after the migration, and it is NOT the same question
-   * wearing a new name. Two FILES sharing a number was the parallel-authoring collision ADR-0050's
-   * allocator exists to prevent; two ROWS cannot share one, because the id is the primary key. That
-   * check therefore becomes VACUOUS — a green that verified nothing, which is worse than no check.
-   *
-   * What IS reachable is a row whose `number` field drifts from its id, since both are ordinary
-   * fields a `library artifact edit --set number=…` can move independently. The loader keys every
-   * downstream reader off the ID (the allocator's own reservation), so a drifted `number` would make
-   * a decision render and cite as one number while being addressed as another.
-   */
-  numberMismatches: string[];
-  /**
-   * Rows whose stored `description` disagrees with what the write path derives from their title —
-   * one FAIL line each. `adr-description-identity`'s input, the same shape as
-   * {@link numberMismatches} and for the same reason: the raw row is the only place the field is
-   * legible, and {@link TitledAdrMeta} deliberately does not carry it.
-   *
-   * ## WHY IT IS REACHABLE AT ALL
-   *
-   * `adr push` DERIVES the description — it writes `adrDescriptionOf(number, <H1 title>)` and never
-   * parses a stored one (`adr-round-trip.ts`). The FIELD-SCOPED path does not: since ADR-0352 a
-   * `library artifact edit adr-NNNN --set title=... --pg` writes exactly the field it names, merged
-   * onto current state, so it moves the title and leaves the description naming the old one.
-   *
-   * FOUND BY ACCIDENT, WHICH IS THE POINT. `decision-log-readers-arc` increment 07 pushed 318
-   * decision bodies through the round trip asserting per row that only `body` changed; three rows —
-   * adr-0296, adr-0395, adr-0405 — tripped it, because the push silently CORRECTED a description
-   * that had been stale since an earlier `--set title=`. Nothing was watching, and the only thing
-   * that repaired them was a body edit that happened to pass through.
-   *
-   * The drift matters because `description` is not decoration: it is the line `adr list`, the
-   * Library's Decisions shelf and every artifact card render. A row whose description names a
-   * superseded title reads as a DIFFERENT decision than it is.
-   */
-  descriptionMismatches: string[];
 }
 
 export async function loadTitledAdrMetasFromStore(store: Store): Promise<StoreAdrMetasResult> {
   const adrs: TitledAdrMeta[] = [];
   const parseErrors: string[] = [];
-  const numberMismatches: string[] = [];
-  const descriptionMismatches: string[] = [];
   let rows: readonly { id: string; doc: unknown }[];
   try {
     rows = await store.queryDocs({ kind: "adr" });
@@ -215,10 +186,9 @@ export async function loadTitledAdrMetasFromStore(store: Store): Promise<StoreAd
       adrs,
       parseErrors: [`decision rows unreadable: ${err instanceof Error ? err.message : String(err)}`],
       unreadable: true,
-      numberMismatches: [],
-      descriptionMismatches: [],
     };
   }
+  const superseded = supersededDecisionNumbers(rows);
   for (const row of rows) {
     const bag = (typeof row.doc === "object" && row.doc !== null ? row.doc : {}) as Record<string, unknown>;
     const number = adrNumberOfArtifactId(row.id);
@@ -226,49 +196,16 @@ export async function loadTitledAdrMetasFromStore(store: Store): Promise<StoreAd
       parseErrors.push(`${row.id}: not a decision id (expected adr-NNNN)`);
       continue;
     }
-    const parsed = AdrStatus.safeParse(bag["status"]);
-    if (!parsed.success) {
+    const storedStatus = storedDecisionStatusOf(bag["status"]);
+    if (storedStatus === null) {
       parseErrors.push(`${row.id}: unreadable status ${JSON.stringify(bag["status"])}`);
       continue;
-    }
-    // The ID is authoritative — it is what the ADR-0050 allocator reserved and what every reader
-    // addresses the decision by. A disagreeing `number` field is REPORTED and the id still wins,
-    // rather than the row being dropped: a decision that renders under the wrong label is a defect
-    // worth a red, and one that vanishes from the corpus entirely is a bigger one.
-    const storedNumber = bag["number"];
-    if (typeof storedNumber === "number" && storedNumber !== number) {
-      numberMismatches.push(
-        `${row.id} stores number ${String(storedNumber)}, which disagrees with its id — the id is ` +
-          "what `adr new` reserved (ADR-0050); correct the field, never the id.",
-      );
     }
     const numbers = (value: unknown): number[] =>
       Array.isArray(value) ? value.filter((n): n is number => typeof n === "number") : [];
     const arcRef = bag["arcRef"];
     const decided = bag["decided"];
     const title = typeof bag["title"] === "string" ? bag["title"] : row.id;
-    // `description` must be the title carrying its label — see {@link StoreAdrMetasResult}. Compared
-    // against the SAME `title` local the meta is built from, so the rung can never disagree with the
-    // view a reader is looking at.
-    //
-    // A NON-STRING description is reported rather than skipped. The `adr` schema types it
-    // `z.string()`, so absence is unreachable through a validated write and a row carrying anything
-    // else got there some other way — and skipping it is the vacuous-green shape this whole file is
-    // organised against: the one row nobody can render would be the one row nothing checks.
-    const storedDescription = bag["description"];
-    const expectedDescription = adrDescriptionOf(number, title);
-    if (typeof storedDescription !== "string") {
-      descriptionMismatches.push(
-        `${row.id} has no string description (found ${JSON.stringify(storedDescription)}); ` +
-          `it must read ${JSON.stringify(expectedDescription)}.`,
-      );
-    } else if (storedDescription !== expectedDescription) {
-      descriptionMismatches.push(
-        `${row.id} describes itself as ${JSON.stringify(storedDescription)}, but its title makes ` +
-          `that ${JSON.stringify(expectedDescription)} — a \`--set title=\` moved one and not the ` +
-          "other (ADR-0352). Re-push the document, or correct `description` to match.",
-      );
-    }
     // ANNOTATED local, then one guarded assignment per optional — the shape
     // `anti-slop/no-conditional-empty-object-spread` requires. The annotation is LOAD-BEARING: an
     // un-annotated literal would infer a type without the three optionals, and the excess-property
@@ -276,7 +213,7 @@ export async function loadTitledAdrMetasFromStore(store: Store): Promise<StoreAd
     const meta: TitledAdrMeta = {
       number,
       file: row.id,
-      status: parsed.data,
+      status: decisionStatusOf(number, storedStatus, superseded),
       supersedes: numbers(bag["supersedes"]),
       loadBearing: bag["loadBearing"] === true,
       title,
@@ -319,5 +256,5 @@ export async function loadTitledAdrMetasFromStore(store: Store): Promise<StoreAd
     adrs.push(meta);
   }
   adrs.sort((a, b) => a.number - b.number);
-  return { adrs, parseErrors, unreadable: false, numberMismatches, descriptionMismatches };
+  return { adrs, parseErrors, unreadable: false };
 }
