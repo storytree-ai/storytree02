@@ -30,7 +30,7 @@
 // it was. A land layer half a screen out of register is worse than no land layer, because the map's
 // whole job is to say which island you are looking at.
 
-import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
+import { Component, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import type { SceneG } from '@storytree/forest-world';
 import {
@@ -38,11 +38,13 @@ import {
   type Descriptor3D,
   type ForestRegrowCursor,
   type ForestRegrowPresentation,
+  type NativePropHitEnvelope,
 } from '@storytree/forest-world-r3f';
 import type { RegisteredUnderlay } from '@storytree/forest-world-r3f/canvas';
 
 import { landViewStream } from '../lib/landView.js';
 import { mountedLandCamera } from '../lib/landViewMount.js';
+import { detectWebGL2, landMountStatus, type LandCanvasPhase, type LandMountStatus } from '../lib/landViewStatus.js';
 import type { Camera } from '../lib/worldCamera.js';
 
 /** What the canvas slot is handed in registered mode: the stream, and the host's own camera. */
@@ -55,6 +57,10 @@ export interface LandMountCanvasProps {
   regrow: ForestRegrowPresentation | null;
   /** Whether the host route is active. The registered canvas handles parking. */
   active: boolean;
+  /** The host's receiver for the native plants' click targets; absent ⇒ none are computed. */
+  onNativePropTargets?: (targets: readonly NativePropHitEnvelope[]) => void;
+  /** Reports the canvas's own progress (loading → ready, or unsupported / failed). Stable. */
+  onPhase: (phase: LandCanvasPhase) => void;
 }
 
 /** The real canvas, in its own chunk — the same chunk `LandView` loads, so opening both costs one. */
@@ -63,12 +69,58 @@ const ForestWorldCanvas = lazy(async () => {
   return { default: mod.ForestWorldCanvas };
 });
 
-function DefaultMountCanvas({ descriptors, hiddenStatuses, registered, regrow, active }: LandMountCanvasProps) {
+function DefaultMountCanvas({ descriptors, hiddenStatuses, registered, regrow, active, onNativePropTargets, onPhase }: LandMountCanvasProps) {
+  // ⚠ ASKED BEFORE THE CHUNK IS FETCHED: a browser without WebGL 2 is told so, and never downloads
+  // the renderer only to fail inside it (ADR-0608 D5).
+  const [supported] = useState(() => detectWebGL2());
+  useEffect(() => {
+    if (!supported) onPhase({ kind: 'unsupported' });
+  }, [supported, onPhase]);
+  const onRendererState = useCallback(
+    (state: 'ready' | 'lost') =>
+      onPhase(state === 'ready' ? { kind: 'ready' } : { kind: 'failed', reason: 'the browser took the graphics context away' }),
+    [onPhase],
+  );
+  if (!supported) return null;
   return (
     <Suspense fallback={null}>
-      <ForestWorldCanvas descriptors={descriptors} hiddenStatuses={hiddenStatuses} registered={registered} regrow={regrow} active={active} />
+      <ForestWorldCanvas
+        descriptors={descriptors}
+        hiddenStatuses={hiddenStatuses}
+        registered={registered}
+        regrow={regrow}
+        active={active}
+        onRendererState={onRendererState}
+        {...(onNativePropTargets === undefined ? {} : { onNativePropTargets })}
+      />
     </Suspense>
   );
+}
+
+/** The seam's default: the real canvas as a COMPONENT (it holds hooks), never called as a function. */
+const renderDefaultCanvas = (props: LandMountCanvasProps): React.ReactNode => <DefaultMountCanvas {...props} />;
+
+/**
+ * THE CANVAS SLOT'S ERROR BOUNDARY. A renderer chunk that fails to load, or a WebGL context that
+ * cannot be created (R3F throws that into React), must become a message — never an unmounted map
+ * route and never a silent blank. The working map above is untouched either way.
+ */
+interface LandCanvasBoundaryState {
+  readonly failed: boolean;
+}
+
+class LandCanvasBoundary extends Component<{ onFailed: (reason: string) => void; children: ReactNode }, LandCanvasBoundaryState> {
+  override state: LandCanvasBoundaryState = { failed: false };
+  static getDerivedStateFromError(): LandCanvasBoundaryState {
+    return { failed: true };
+  }
+  override componentDidCatch(error: unknown): void {
+    const detail = error instanceof Error && error.message ? error.message : String(error);
+    this.props.onFailed(`the 3D renderer stopped (${detail})`);
+  }
+  override render(): ReactNode {
+    return this.state.failed ? null : this.props.children;
+  }
 }
 
 export interface LandViewMountProps {
@@ -93,6 +145,18 @@ export interface LandViewMountProps {
   active?: boolean;
   /** Draw the kit props as well as the ground — the staging arm, off by default. */
   drawProps?: boolean;
+  /**
+   * Receives the native plants' click targets while the props arm is drawn (and an empty list when
+   * it stops), for the host to render into its OWN hit layer. The canvas stays inert: this is data,
+   * never a second picker. Must be a stable function.
+   */
+  onNativePropTargets?: (targets: readonly NativePropHitEnvelope[]) => void;
+  /**
+   * What the host should TELL the member (ADR-0608 D5): loading, ready, unsupported or failed.
+   * Called when the status changes. The land layer itself is `aria-hidden`, so the host renders
+   * the message in its own accessible layer (`LandViewNotice`). Must be a stable function.
+   */
+  onStatus?: (status: LandMountStatus) => void;
   /** The canvas seam, so the mount is provable in jsdom. Absent ⇒ the real, lazily-loaded one. */
   renderCanvas?: (props: LandMountCanvasProps) => React.ReactNode;
 }
@@ -134,6 +198,7 @@ function useMeasuredFrame(): [
 }
 
 const NO_HIDDEN_STATUSES: ReadonlySet<string> = new Set();
+const LOADING_PHASE: LandCanvasPhase = { kind: 'loading' };
 
 /**
  * The land layer. Draws the ground when it can be registered, and NOTHING otherwise — never a
@@ -149,9 +214,13 @@ export function LandViewMount({
   regrowCursor = null,
   active = true,
   drawProps = false,
-  renderCanvas = DefaultMountCanvas,
+  onNativePropTargets,
+  onStatus,
+  renderCanvas = renderDefaultCanvas,
 }: LandViewMountProps): React.JSX.Element {
   const [ref, frame] = useMeasuredFrame();
+  const [phase, setPhase] = useState<LandCanvasPhase>(LOADING_PHASE);
+  const onFailed = useCallback((reason: string) => setPhase({ kind: 'failed', reason }), []);
   // Memoised on the scene, for the reason `LandView` gives: it stops the conversion being paid
   // twice when this layer re-renders for its OWN reasons. The poll-driven repeat is stopped
   // downstream, where the ground is keyed on its own content (`ground-dependency.ts`).
@@ -177,11 +246,27 @@ export function LandViewMount({
       target: { x: registration.camera.target.x, z: registration.camera.target.z },
     };
     const withProps: RegisteredUnderlay = drawProps ? { ...registeredProps, props: true } : registeredProps;
+    const canvasProps: LandMountCanvasProps = {
+      descriptors: stream.descriptors,
+      hiddenStatuses,
+      registered: withProps,
+      regrow,
+      active,
+      onPhase: setPhase,
+    };
+    if (onNativePropTargets !== undefined) canvasProps.onNativePropTargets = onNativePropTargets;
     return {
       state: 'drawn' as const,
-      node: renderCanvas({ descriptors: stream.descriptors, hiddenStatuses, registered: withProps, regrow, active }),
+      node: <LandCanvasBoundary onFailed={onFailed}>{renderCanvas(canvasProps)}</LandCanvasBoundary>,
     };
   })();
+  const status = landMountStatus({ state: body.state, reason: 'reason' in body ? body.reason : undefined }, phase);
+  const statusKey = `${status.kind}::${'message' in status ? status.message : ''}`;
+  const statusRef = useRef(status);
+  statusRef.current = status;
+  useEffect(() => {
+    onStatus?.(statusRef.current);
+  }, [statusKey, onStatus]);
 
   return (
     <div
@@ -189,6 +274,7 @@ export function LandViewMount({
       data-testid="land-mount"
       data-state={body.state}
       data-reason={'reason' in body ? body.reason : undefined}
+      data-canvas={body.state === 'drawn' ? phase.kind : undefined}
       ref={ref}
       aria-hidden="true"
     >

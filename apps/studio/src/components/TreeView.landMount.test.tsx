@@ -405,6 +405,142 @@ describe('the land under the working map', () => {
     }
   });
 
+  it('renders the native plants\' targets into the map\'s OWN hit layer and selects through the host route', async () => {
+    const previousArrival = window.sessionStorage.getItem(ACT2_INTRO_SESSION_KEY);
+    markAct2IntroArrived(window.sessionStorage);
+    const originalRect = Element.prototype.getBoundingClientRect;
+    const originalRO = Object.getOwnPropertyDescriptor(globalThis, 'ResizeObserver');
+    const originalHitTest = Object.getOwnPropertyDescriptor(document, 'elementFromPoint');
+    class RO {
+      constructor(private readonly callback: () => void) {}
+      observe() { this.callback(); }
+      disconnect() {}
+    }
+    Object.defineProperty(globalThis, 'ResizeObserver', { configurable: true, writable: true, value: RO });
+    Element.prototype.getBoundingClientRect = function getBoundingClientRect() {
+      return { x: 0, y: 0, left: 0, top: 0, right: 1600, bottom: 900, width: 1600, height: 900, toJSON: () => ({}) } as DOMRect;
+    };
+    const canvasInputs: LandMountCanvasProps[] = [];
+    const surfaces: Partial<StudioSurfaces> = {
+      LandViewMount: (props) => (
+        <LandViewMount
+          {...props}
+          renderCanvas={(canvas) => {
+            canvasInputs.push(canvas);
+            return <div data-testid="native-canvas-slot" />;
+          }}
+        />
+      ),
+    };
+    try {
+      window.history.replaceState(null, '', '/?landMount=1&landMountProps=1');
+      const tree = (focus: string | null) => (
+        <StudioSurfacesContext.Provider value={surfaces}>
+          <AppDataContext.Provider value={appData}>
+            <TreeView focus={focus} />
+          </AppDataContext.Provider>
+        </StudioSurfacesContext.Provider>
+      );
+      const { container, rerender } = render(tree(null));
+      await act(async () => {});
+      const report = canvasInputs.at(-1)!.onNativePropTargets;
+      expect(typeof report).toBe('function');
+      // Nothing is drawn until the canvas reports plants.
+      expect(container.querySelector('svg.world-scene g.native-prop-targets')).toBeNull();
+
+      const world = container.querySelector('svg.world-scene g.world-camera > g')!;
+      const offset = /translate\(([-\d.]+) ([-\d.]+)\)/.exec(world.getAttribute('transform') ?? '')!;
+      const [ox, oy] = [Number(offset[1]), Number(offset[2])];
+      const envelope = (capabilityId: string, storyId: string, minX: number, minY: number) => ({
+        storyId,
+        capabilityId,
+        status: 'healthy',
+        root: { x: minX + 5, y: minY + 20 },
+        crown: { x: minX + 5, y: minY },
+        bounds: { minX, maxX: minX + 10, minY, maxY: minY + 24 },
+      });
+      await act(async () => {
+        report!([envelope('studio-map', 'studio', 300, 400), envelope('forest-layout', 'forest-world', 310, 420)]);
+      });
+
+      const layer = world.querySelector(':scope > g.native-prop-targets')!;
+      expect(layer).not.toBeNull();
+      const rects = [...layer.querySelectorAll('rect')];
+      expect(rects.map((r) => [r.getAttribute('data-story-id'), r.getAttribute('data-cap-id')])).toEqual([
+        ['studio', 'studio-map'],
+        ['forest-world', 'forest-layout'],
+      ]);
+      // Scene-root envelopes, drawn inside the offset world group: shifted back by the offset once.
+      expect(rects[1]!.getAttribute('x')).toBe((310 - ox).toFixed(1));
+      expect(rects[1]!.getAttribute('y')).toBe((420 - oy).toFixed(1));
+
+      // The host's coordinate hit-test is the one picking authority: a native target under the
+      // pointer selects its capability exactly as a flat mark does.
+      Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: () => rects[1] });
+      const viewport = container.querySelector('.world-viewport') as HTMLElement;
+      fireEvent.click(viewport, { clientX: 140, clientY: 130 });
+      expect(window.location.hash).toBe('#/tree/forest-world');
+      // The router hands the focused story back; the CAPABILITY the target named is the one selected.
+      rerender(tree('forest-world'));
+      await act(async () => {});
+      expect(container.querySelector('.tree-card.is-selected > title')?.textContent).toBe('The layout');
+
+      // Withdrawn plants withdraw their targets.
+      await act(async () => {
+        report!([]);
+      });
+      expect(container.querySelector('svg.world-scene g.native-prop-targets')).toBeNull();
+    } finally {
+      cleanup();
+      if (previousArrival === null) window.sessionStorage.removeItem(ACT2_INTRO_SESSION_KEY);
+      else window.sessionStorage.setItem(ACT2_INTRO_SESSION_KEY, previousArrival);
+      Element.prototype.getBoundingClientRect = originalRect;
+      if (originalRO) Object.defineProperty(globalThis, 'ResizeObserver', originalRO);
+      else Reflect.deleteProperty(globalThis, 'ResizeObserver');
+      if (originalHitTest) Object.defineProperty(document, 'elementFromPoint', originalHitTest);
+      else Reflect.deleteProperty(document, 'elementFromPoint');
+    }
+  });
+
+  it('tells the member, in the ACCESSIBLE host layer, when this browser cannot draw the 3D map (ADR-0608 D5)', async () => {
+    const originalRect = Element.prototype.getBoundingClientRect;
+    const originalRO = Object.getOwnPropertyDescriptor(globalThis, 'ResizeObserver');
+    class RO {
+      constructor(private readonly callback: () => void) {}
+      observe() { this.callback(); }
+      disconnect() {}
+    }
+    Object.defineProperty(globalThis, 'ResizeObserver', { configurable: true, writable: true, value: RO });
+    Element.prototype.getBoundingClientRect = function getBoundingClientRect() {
+      return { x: 0, y: 0, left: 0, top: 0, right: 1600, bottom: 900, width: 1600, height: 900, toJSON: () => ({}) } as DOMRect;
+    };
+    try {
+      // No surface override: the REAL mount and its REAL default canvas, on a runner with no WebGL 2.
+      const container = await renderTreeAt('?landMount=1&landMountProps=1');
+      await act(async () => {});
+      const notice = within(container).getByRole('alert');
+      expect(notice.textContent).toContain('WebGL 2');
+      expect(notice.textContent).toContain("This browser can't draw the forest map");
+      // Reachable: not inside the aria-hidden land layer, and not inside the clickable viewport.
+      expect(notice.closest('[aria-hidden="true"]')).toBeNull();
+      expect(notice.closest('.world-viewport')).toBeNull();
+      expect(notice.closest('.world-frame')).not.toBeNull();
+      expect(container.querySelector('[data-testid="land-mount"] canvas')).toBeNull();
+      // No fallback map is invented: the working map is exactly the one that was there.
+      expect(container.querySelector('svg.world-scene')).not.toBeNull();
+    } finally {
+      cleanup();
+      Element.prototype.getBoundingClientRect = originalRect;
+      if (originalRO) Object.defineProperty(globalThis, 'ResizeObserver', originalRO);
+      else Reflect.deleteProperty(globalThis, 'ResizeObserver');
+    }
+  });
+
+  it('shows no notice without the mount flag', async () => {
+    const container = await renderTreeAt('');
+    expect(container.querySelector('[data-testid="land-view-notice"]')).toBeNull();
+  });
+
   it('suppresses BOTH SVG path passes, and keeps every edge identity in the DOM', () => {
     // ⚠⚠ THE TWO HALVES OF THE PATHWAY RULE ARE ONE DECISION, and this is the half a stylesheet can
     // be asked about. The other half is `underlayComposition`'s `trails: true` under a host
