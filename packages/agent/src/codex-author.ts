@@ -26,7 +26,13 @@ import { createRequire } from "node:module";
 import * as os from "node:os";
 import * as path from "node:path";
 
-import type { AuthoringEscalation, AuthoringPhase, AuthorResult, PhaseAuthor } from "./phase-author.js";
+import type {
+  AuthoringEscalation,
+  AuthoringPhase,
+  AuthoringRepairAdmission,
+  AuthorResult,
+  PhaseAuthor,
+} from "./phase-author.js";
 import type { TokenUsage } from "./model-events.js";
 import { openCodexFeedbackEndpoint } from "./codex-feedback-endpoint.js";
 import type {
@@ -477,6 +483,39 @@ function unsatisfiedChangeError(satisfiedBy: CodexManifestChangeRule): string {
   return satisfiedBy === "any-allowed-target"
     ? "Codex completed without an observed change to any allowed target"
     : "Codex completed without an observed required target change";
+}
+
+/** C8's narrow, per-call substitute for AUTHOR_TEST's required-target change. */
+function admittedC8RepairTargets(
+  phase: AuthoringPhase,
+  admission: AuthoringRepairAdmission | undefined,
+  manifest: { allowed: Map<string, string> },
+  isWriteAllowed: (phase: AuthoringPhase, relPath: string) => boolean,
+): Set<string> | undefined {
+  if (admission === undefined) return undefined;
+  if (
+    phase !== "AUTHOR_TEST" ||
+    admission.kind !== "c8-existing-test-reason" ||
+    !Array.isArray(admission.targets) ||
+    admission.targets.length === 0
+  ) {
+    return undefined;
+  }
+  const admitted = new Set<string>();
+  for (const target of admission.targets) {
+    const normalized = normalizeExactTarget(target);
+    if (
+      normalized === undefined ||
+      !normalized.endsWith(".test.ts") ||
+      !manifest.allowed.has(targetKey(normalized)) ||
+      !isWriteAllowed("AUTHOR_TEST", normalized) ||
+      admitted.has(targetKey(normalized))
+    ) {
+      return undefined;
+    }
+    admitted.add(targetKey(normalized));
+  }
+  return admitted;
 }
 
 /**
@@ -1417,7 +1456,11 @@ export class CodexPhaseAuthor implements PhaseAuthor {
     );
   }
 
-  async author(phase: AuthoringPhase, prompt: string): Promise<AuthorResult> {
+  async author(
+    phase: AuthoringPhase,
+    prompt: string,
+    repairAdmission?: AuthoringRepairAdmission,
+  ): Promise<AuthorResult> {
     // The per-SLICE escalation slot (ADR-0569, extended to the Codex leaf): a fresh, unset variable
     // per author() call. Only ever set by the endpoint's `recordEscalation` callback, and only when
     // this phase is armed with feedback commands (see the endpoint open below).
@@ -1458,6 +1501,13 @@ export class CodexPhaseAuthor implements PhaseAuthor {
     const manifest = validatePromotionManifest(declaredManifest);
     if (declaredManifest !== undefined && !manifest.ok) {
       return { ok: false, error: `Codex ${phase} promotion manifest is malformed` };
+    }
+    const admittedRepairTargets =
+      manifest.ok
+        ? admittedC8RepairTargets(phase, repairAdmission, manifest, this.#args.isWriteAllowed)
+        : undefined;
+    if (repairAdmission !== undefined && admittedRepairTargets === undefined) {
+      return { ok: false, error: "Codex C8 repair admission is invalid for this AUTHOR_TEST call" };
     }
 
     // The shell-worker scrub subsumes the metered-auth names `scrubMeteredCodexAuth` removes: all
@@ -1816,7 +1866,10 @@ export class CodexPhaseAuthor implements PhaseAuthor {
         if (observedPaths.length === 0) {
           return failRun("Codex completed without reporting a file change in the synthetic runner seam");
         }
-        if (manifest.ok && !phaseChangeSatisfied(manifest, observedPaths)) {
+        const c8RepairChangeSatisfied =
+          admittedRepairTargets !== undefined &&
+          observedPaths.some((observedPath) => admittedRepairTargets.has(targetKey(observedPath)));
+        if (manifest.ok && !phaseChangeSatisfied(manifest, observedPaths) && !c8RepairChangeSatisfied) {
           return failRun(unsatisfiedChangeError(manifest.satisfiedBy));
         }
         return { ok: true };
@@ -1833,7 +1886,10 @@ export class CodexPhaseAuthor implements PhaseAuthor {
           `Codex required target is missing or not a regular file after the run: ${missingRequired.join(", ")}`,
         );
       }
-      if (!phaseChangeSatisfied(manifest, observedPaths)) {
+      const c8RepairChangeSatisfied =
+        admittedRepairTargets !== undefined &&
+        observedPaths.some((observedPath) => admittedRepairTargets.has(targetKey(observedPath)));
+      if (!phaseChangeSatisfied(manifest, observedPaths) && !c8RepairChangeSatisfied) {
         return failRun(unsatisfiedChangeError(manifest.satisfiedBy));
       }
       const promotionArgs: PromoteReplicaChangesArgs = {
