@@ -7,6 +7,10 @@ import {
   readComposedStatements,
   renderComposedBanner,
   upcastAndValidate,
+  adrNumberOfArtifactId,
+  decisionStatusOf,
+  storedDecisionStatusOf,
+  supersededDecisionNumbers,
   type ComposedBasisEntry,
   type ComposedStatementFields,
   type ComposedStatementReading,
@@ -58,17 +62,22 @@ interface DecisionRowOptional {
  * PURE and TOTAL: the `adr` rows among `docs`, in the shape the support walk and the fingerprint need.
  *
  * DEFENSIVE rather than validating, the `adrDocumentFieldsOf` posture: a caller reading the whole
- * corpus should not have one malformed row throw its render away. A row missing a `number` is
- * DROPPED rather than defaulted to 0, because a phantom decision zero would join the support graph
- * and could be walked into.
+ * corpus should not have one malformed row throw its render away. A row whose id is not a decision
+ * id is DROPPED rather than defaulted to 0, because a phantom decision zero would join the support
+ * graph and could be walked into.
+ *
+ * The number is the id's and the status is DERIVED (ADR-0609 D1 / D3) — `superseded` from the
+ * inbound edges of the whole set handed in. That keeps every stored fingerprint stable across the
+ * migration: the status it hashes is the one readers see, which is the one rows used to store.
  */
 export function decisionRowsOf(docs: readonly StoredDoc[]): DecisionRow[] {
   const rows: DecisionRow[] = [];
+  const superseded = supersededDecisionNumbers(docs);
   for (const stored of docs) {
     if (stored.kind !== "adr") continue;
     const doc = stored.doc as Record<string, unknown>;
-    const number = doc["number"];
-    if (typeof number !== "number") continue;
+    const number = adrNumberOfArtifactId(stored.id);
+    if (number === null) continue;
     const dependsOn = doc["dependsOn"];
     const optional: DecisionRowOptional = {};
     // KEY PRESENCE, not emptiness — `dependsOn` is optional-not-defaulted (ADR-0223) and the seam's
@@ -79,7 +88,7 @@ export function decisionRowsOf(docs: readonly StoredDoc[]): DecisionRow[] {
     }
     rows.push({
       number,
-      status: typeof doc["status"] === "string" ? doc["status"] : "proposed",
+      status: decisionStatusOf(number, storedDecisionStatusOf(doc["status"]) ?? "proposed", superseded),
       body: typeof doc["body"] === "string" ? doc["body"] : "",
       ...optional,
     });
@@ -139,9 +148,10 @@ export function composedReadingsFor(
 ): ComposedStatementReading[] {
   const statements = composedStatementsOf(doc);
   if (statements.length === 0) return [];
-  const number =
-    typeof doc === "object" && doc !== null ? (doc as Record<string, unknown>)["number"] : undefined;
-  if (typeof number !== "number") return [];
+  // A doc carrying statements is an object (`composedStatementsOf` returned [] otherwise), and its
+  // number is its id's (ADR-0609 D1). `String` makes an absent id the non-decision it is.
+  const number = adrNumberOfArtifactId(String((doc as Record<string, unknown>)["id"]));
+  if (number === null) return [];
   return readComposedStatements(statements, chainFingerprints(number, rows));
 }
 
@@ -395,9 +405,9 @@ interface ComposedIndexRow {
 function composeIndex(rows: readonly StoredDoc[], decisions: readonly DecisionRow[]): Envelope {
   const composed: ComposedIndexRow[] = [];
   for (const stored of rows) {
-    const doc = stored.doc as Record<string, unknown>;
-    const number = doc["number"];
-    if (typeof number !== "number") continue;
+    const number = adrNumberOfArtifactId(stored.id);
+    // Stryker disable next-line ConditionalExpression,EqualityOperator: EQUIVALENT — a row whose id is not a decision id yields no readings (`composedReadingsFor` returns [] for it), so the loop below pushes nothing either way; this guard exists to narrow `number` for the push.
+    if (number === null) continue;
     for (const reading of composedReadingsFor(stored.doc, decisions)) {
       composed.push({
         number,

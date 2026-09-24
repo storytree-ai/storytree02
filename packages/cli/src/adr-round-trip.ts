@@ -1,7 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 
 import {
-  adrDescriptionOf,
   adrDocId,
   adrDocumentFieldsOf,
   parseAdrDocument,
@@ -136,7 +135,7 @@ export async function adrPull(
   const stored = await deps.store.getDoc(id);
   if (!stored) return noSuchDecision(id, number);
 
-  const text = renderAdrDocument(adrDocumentFieldsOf(stored.doc as Record<string, unknown>));
+  const text = renderAdrDocument(adrDocumentFieldsOf(id, stored.doc as Record<string, unknown>));
   try {
     await writeFile(out, text, "utf8");
   } catch (e) {
@@ -163,35 +162,24 @@ export async function adrPull(
 /**
  * One human-readable line per field the push is about to change. Empty when nothing moved.
  *
- * IT MUST REPORT EVERY FIELD THE PUSH WRITES, and for a while it did not: `title`, `description` and
- * `number` were all rewritten and none of them appeared. The consequence was silent reversion — a
- * `library artifact edit <id> --set title=…` edit is undone by the next body-only push, which
- * re-derives `title` from the document's H1, and the report said only `body: +N characters`. A field
- * this function omits is a field that can change without anyone being told, which is the whole class
- * of defect this verb's guards exist to close.
+ * IT MUST REPORT EVERY FIELD THE PUSH WRITES, and for a while it did not: `title` was rewritten and
+ * never appeared. The consequence was silent reversion — a `library artifact edit <id> --set title=…`
+ * edit is undone by the next body-only push, which re-derives `title` from the document's H1, and the
+ * report said only `body: +N characters`. A field this function omits is a field that can change
+ * without anyone being told, which is the whole class of defect this verb's guards exist to close.
  *
- * `description` is DERIVED rather than parsed ({@link adrDescriptionOf} of the title), so it is
- * passed in from the caller's two sides rather than read off `AdrDocumentFields`, which has no such
- * member.
+ * `number` and `description` are no longer written at all (ADR-0609 D1 / D2 — both are computed on
+ * read from the id and the title), so they are no longer reported: a changed title IS the changed
+ * card line.
  */
 function changedFields(
   before: ReturnType<typeof adrDocumentFieldsOf>,
   after: ReturnType<typeof adrDocumentFieldsOf>,
-  description: { before: string; after: string },
 ): string[] {
   const lines: string[] = [];
   const list = (ns: readonly number[]) => (ns.length === 0 ? "(none)" : ns.join(", "));
   if (before.title !== after.title) {
     lines.push(`  title: ${JSON.stringify(before.title)} -> ${JSON.stringify(after.title)}`);
-  }
-  if (description.before !== description.after) {
-    lines.push(`  description: ${JSON.stringify(description.before)} -> ${JSON.stringify(description.after)}`);
-  }
-  // A disagreement here means the STORED `number` field did not match the id — the state
-  // `adr-number-identity` reds on. The push corrects it from argv; saying so is how the correction
-  // stops being invisible.
-  if (before.number !== after.number) {
-    lines.push(`  number: ${String(before.number)} -> ${String(after.number)}`);
   }
   if (before.status !== after.status) lines.push(`  status: ${before.status} -> ${after.status}`);
   if (before.decided !== after.decided) {
@@ -273,9 +261,8 @@ export async function adrPush(
   // comes from argv and the document's identity comes from its `# ADR-NNNN:` heading, and until now
   // nothing compared them — so `adr push 402 --file adr-0403.md` (one character off, and `adr pull`
   // suggests exactly that filename) overwrote ADR-0402 with ADR-0403's title, body and edges and
-  // printed `ok: true`. Nothing downstream could catch it either: `adr-number-identity` compares the
-  // stored `number` FIELD to the id, and the push sets that field correctly from argv, so the row
-  // stays internally consistent while carrying another decision's content.
+  // printed `ok: true`. Nothing downstream could catch it either: the row's number is its id's
+  // (ADR-0609 D1), so it stays internally consistent while carrying another decision's content.
   const heading = /^#\s+ADR-(\d{4}):/m.exec(text);
   if (heading?.[1] !== undefined && Number(heading[1]) !== number) {
     const found = Number(heading[1]);
@@ -320,15 +307,11 @@ export async function adrPush(
     };
   }
 
-  const before = adrDocumentFieldsOf(row);
+  const before = adrDocumentFieldsOf(id, row);
   // The values the upsert below actually writes, so the report and the write cannot disagree: an
-  // empty H1 falls back to the id for `title`, and `description` is derived from the parsed title.
+  // empty H1 falls back to the id for `title`.
   const nextTitle = fields.title === "" ? id : fields.title;
-  const nextDescription = adrDescriptionOf(number, fields.title);
-  const changes = changedFields(before, { ...fields, title: nextTitle }, {
-    before: typeof row["description"] === "string" ? row["description"] : "",
-    after: nextDescription,
-  });
+  const changes = changedFields(before, { ...fields, title: nextTitle });
   if (changes.length === 0) {
     return {
       ok: true,
@@ -357,9 +340,9 @@ export async function adrPush(
   const updated = {
     ...row,
     title: nextTitle,
-    description: nextDescription,
     body: fields.body,
-    number: fields.number,
+    // No `number`, no `description` (ADR-0609 D1 / D2): computed on read. A legacy row's stored copies
+    // arrive through `...row` and are stripped by `upcast` below, so a push also migrates its row.
     status: fields.status,
     supersedes: [...fields.supersedes],
     loadBearing: fields.loadBearing,

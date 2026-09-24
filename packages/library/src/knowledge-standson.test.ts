@@ -53,10 +53,9 @@ function minimalDoc(kind: KnowledgeKind) {
     doc["dispositionBy"] = "owner";
   }
   if (kind === "adr") {
-    // The `adr` kind carries two REQUIRED fields outside its KIND_SPECS table (ADR-0403 dec 1):
-    // its `number` — a decision's identity — and its `status`. No decision has ever lacked either,
-    // so they are not optional, and a generic builder driven by KIND_SPECS alone cannot supply them.
-    doc["number"] = 403;
+    // `status` is the one REQUIRED field outside the adr KIND_SPECS table; `number` and
+    // `description` are computed on read and never stored (ADR-0609 D1 / D2).
+    delete doc["description"];
     doc["status"] = "accepted";
   }
   return doc satisfies Record<string, unknown>;

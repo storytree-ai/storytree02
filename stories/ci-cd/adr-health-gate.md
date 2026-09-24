@@ -3,7 +3,7 @@ id: "adr-health-gate"
 tier: capability
 story: ci-cd
 title: "ADR-health gate — atomic number allocation plus the full adr-health decision-binding gate"
-outcome: "Decision-binding hygiene is enforced on the dev-repo path: ADR numbers allocate atomically from the store, allocation REFUSES rather than guessing when the store is unreachable, and every adr-health invariant (frontmatter, number-identity, edge-integrity, supersede-consistency, story-decisions, green-flip, load-bearing-live) reddens a PR through the `check:adr-health` rung — which fails, never skips, when its subject cannot be read."
+outcome: "Decision-binding hygiene is enforced on the dev-repo path: ADR numbers allocate atomically from the store, allocation REFUSES rather than guessing when the store is unreachable, and every adr-health invariant (frontmatter, edge-integrity, story-decisions, green-flip, load-bearing-live) reddens a PR through the `check:adr-health` rung — which fails, never skips, when its subject cannot be read."
 status: proposed
 proof_mode: integration-test
 depends_on: []
@@ -83,18 +83,26 @@ read to find the open questions bearing on a story. Nothing on the live `story b
   could never use would burn it.
 - **`adr-health` is SEVEN GATE checks plus one WARN, not one.** ci-cd once named only
   `adr-number-unique`; the suite enforces **`adr-frontmatter`** (every decision row reads with a
-  known status), **`adr-number-identity`** (a row's stored `number` agrees with the number in its
-  id — which is what the allocator reserved), **`adr-edge-integrity`** (every `supersedes`/`amends`
-  target exists), **`supersede-consistency`** (`X.supersedes ∋ Y ⇔ Y.status = superseded`, both
-  directions), **`story-decisions`** (every story's `decisions:` entry resolves and none names a
-  fully-superseded ADR), **`green-flip`** (no `healthy` story rests on a still-`proposed` deciding
-  ADR), and **`load-bearing-live`** (a `load_bearing: true` ADR must be `accepted`). All seven are
-  GATE-class and listed in `ADR_GATE_CHECKS`; **`enforced-by-anchors`** is WARN-class.
+  known status), **`adr-edge-integrity`** (every `supersedes` target exists), **`story-decisions`**
+  (every story's `decisions:` entry resolves and none names a fully-superseded ADR), **`green-flip`**
+  (no `healthy` story rests on a still-`proposed` deciding ADR), **`authority-declared`** (every
+  accepted decision from ADR-0519 onward declares whose call it was), **`load-bearing-live`** (a
+  `load_bearing: true` ADR must be `accepted`), and **`adr-body-links`** (no decision body links to a
+  sibling decision file that only ever resolved from the deleted `docs/decisions/` tree, or to an
+  unresolved repo path). All seven are GATE-class and listed in
+  `ADR_GATE_CHECKS`; **`enforced-by-anchors`** is WARN-class. Three rungs that held a stored copy of a
+  derivable fact against its source — **`adr-number-identity`**, **`adr-description-identity`** and
+  **`supersede-consistency`** — retired under ADR-0609: a decision's number, card line and
+  `superseded` status are now all COMPUTED on read (the write boundary strips the first two and
+  derives the third), so the drift those rungs caught is no longer a state a row can be in.
 - **THREE RUNGS RETIRED WITH THE FILES, and the reasons differ — they are declared in
   `RETIRED_ADR_CHECKS`, not silently dropped.** `adr-number-unique` was **replaced** by
   `adr-number-identity`: two FILES could share a number, two ROWS cannot, because the id is the
   primary key — so the old question is structurally unanswerable and asking it would be a permanent
-  vacuous green. `supersedes-in-part-retired` is **gone as unreachable**: ADR-0139 retired the edge,
+  vacuous green. `adr-number-identity` itself later retired (ADR-0609 D1, kept as its own row in
+  `RETIRED_ADR_CHECKS`): a decision's number is the id's and nothing stores a `number` field any
+  more, so the drift it caught is not a state a row can reach. `supersedes-in-part-retired` is **gone
+  as unreachable**: ADR-0139 retired the edge,
   a row has no frontmatter, and the `adr` schema refuses the key outright. `adr-link-integrity` is
   **gone and was a real loss**, not a dissolved question — it guarded `](NNNN-slug.md)` cross-links
   between decision bodies against rename rot; its rot class is rehomed into `references` as
@@ -151,7 +159,8 @@ read to find the open questions bearing on a story. Nothing on the live `story b
 1. **`atomic-allocation`** — `adr new --pg` reserves distinct, monotonically increasing numbers
    - **asserts —** two reservations against `events.adr_number` never return the same number and
      never go backwards; the scaffolded decision is written as the `adr-NNNN` ROW carrying the
-     reserved number in its id and its `number` field.
+     reserved number in its id — not in a stored `number` field, which the write boundary strips
+     (ADR-0609 D1; contract 3).
 2. **`allocation-refuses-without-a-store`** — no store yields no number, loudly
    - **asserts —** `adr new` invoked without `--pg`, and with `--pg` against an unreachable store,
      exits non-`ok` with a refusal naming the reason and pointing at `pnpm db:up` — it neither mints
@@ -162,17 +171,20 @@ read to find the open questions bearing on a story. Nothing on the live `story b
      Why: no verb could ever write the number it held (`adr new` always allocates afresh), so both
      reservations `events.adr_number` records for it, ADR-0420 and ADR-0480, were never written and
      are permanent holes (measured 2026-09-15).
-3. **`number-identity-on-the-row`** — `adr-number-identity` reddens a row whose number drifted
-   - **asserts —** a decision row whose stored `number` disagrees with the 4-digit number in its own
-     id fails the `adr-number-identity` check (non-zero exit from `pnpm check:adr-health`). This is
-     the reachable successor to `adr-number-unique`: duplicate ids are refused by the primary key, so
-     the failure that survives is a row's `number` field drifting from what the allocator reserved.
+3. **`number-identity-on-the-row`** — a decision's number is the id's; no row stores one (ADR-0609 D1)
+   - **asserts —** a decision row never carries a `number` field: the write boundary (`upcast`) strips
+     it from every write and the strict `adr` schema refuses it, so a decision can never render as one
+     number while being addressed as another — every reader derives the number from the `adr-NNNN` id
+     instead of comparing it against a stored copy. `storytree adr drop-copies --pg` drains the
+     legacy `number` field (and its two siblings) from rows written before ADR-0609. This is the
+     reachable successor to `adr-number-unique`: duplicate ids are refused by the primary key, and
+     the row-drift failure that briefly survived it (caught by `adr-number-identity`) is now
+     unreachable too, because there is no longer a copy left to drift.
 4. **`decision-binding-health-reddens-pr`** — the structural adr-health checks each fail-closed
-   - **asserts —** each of `adr-frontmatter`, `adr-edge-integrity`, `supersede-consistency`,
-     `story-decisions`, `green-flip` and `load-bearing-live` exits non-zero from
-     `pnpm check:adr-health` on its own violation (an unknown status, a dangling supersedes/amends
-     target, a one-directional supersede edge, a story `decisions:` entry that doesn't resolve, a
-     `healthy` story on a `proposed` ADR, a `load_bearing` ADR that isn't accepted) — so a
+   - **asserts —** each of `adr-frontmatter`, `adr-edge-integrity`, `story-decisions`, `green-flip`
+     and `load-bearing-live` exits non-zero from `pnpm check:adr-health` on its own violation (an
+     unknown status, a dangling supersedes/amends target, a story `decisions:` entry that doesn't
+     resolve, a `healthy` story on a `proposed` ADR, a `load_bearing` ADR that isn't accepted) — so a
      decision-binding break reddens the PR, not just a number problem. `enforced-by-anchors` warns
      and does not.
 5. **`unreadable-subject-fails-never-skips`** — the rung cannot report green having read nothing

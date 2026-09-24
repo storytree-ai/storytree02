@@ -38,9 +38,8 @@ function decisionRow(number: number, title: string, arcRef: string | undefined) 
     kind: "adr",
     id,
     title,
-    description: `ADR-${String(number).padStart(4, "0")} — ${title}`,
+    // No `description` / `number`: computed on read from the title and id (ADR-0609 D1 / D2).
     body: `# ADR-${String(number).padStart(4, "0")}: ${title}\n`,
-    number,
     status: "accepted",
     supersedes: [],
     loadBearing: false,

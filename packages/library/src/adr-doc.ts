@@ -1,6 +1,7 @@
 import { parse as parseYaml } from "yaml";
 
-import { adrDocId, decisionLabel } from "./decision-pointer.js";
+import { adrDescriptionOf, storedDecisionStatusOf } from "./decision-derived.js";
+import { adrDocId, adrNumberOfArtifactId, decisionLabel } from "./decision-pointer.js";
 import { hasDependsOnKey, readDependsOnPointers } from "./depends-on.js";
 import { AdrDocStatus } from "./knowledge.js";
 
@@ -56,20 +57,11 @@ import { AdrDocStatus } from "./knowledge.js";
 export { adrDocId };
 
 /**
- * PURE: a decision's Library `description` — its title carrying its LABEL.
- *
- * `adr-0403` is an opaque id in a listing and `ADR-0403` is the name a human knows the decision by,
- * so the card line carries both. It is NOT a second summary: a decision's H1 IS its summary, and
- * inventing another would be prose nobody wrote.
- *
- * It lives here, used by BOTH directions, because the loader and the round-trip push each need it and
- * they were briefly allowed to disagree — the push rewrote 403 rows' descriptions to the bare title on
- * its first live use, which showed up only as an `-11 chars` line in the artifact's own history.
+ * The card line is COMPUTED, never stored (ADR-0609 D2), so its one definition lives in the
+ * browser-safe barrel (`decision-derived.ts`) where every reader can reach it. Re-exported here so
+ * the document converters and their existing callers keep one import.
  */
-export function adrDescriptionOf(decisionNumber: number, title: string): string {
-  const named = title === "" ? adrDocId(decisionNumber) : title;
-  return `${decisionLabel(decisionNumber)} — ${named}`;
-}
+export { adrDescriptionOf };
 
 /** The queryable state a decision carries, plus the whole document text. */
 export interface AdrDocumentFields {
@@ -223,6 +215,17 @@ export function parseAdrDocument(decisionNumber: number, content: string): AdrDo
     }
   }
 
+  // `superseded` is REFUSED rather than parsed (ADR-0609 D3): it is no longer something a record
+  // says about itself. It is derived from the REPLACING record's `supersedes` edge, so writing it here
+  // would record nothing — and silently mapping it to `accepted` would let an author believe they had
+  // superseded a decision when they had not. Named, with the move that does the job.
+  if (bag["status"] === "superseded") {
+    throw new Error(
+      `${decisionLabel(decisionNumber)}: frontmatter \`status: superseded\` is no longer written — a ` +
+        "decision is superseded exactly when a decided record's `supersedes` names it (ADR-0609 D3). " +
+        "Write the status it was decided with (`accepted`), and record the edge on the replacing decision",
+    );
+  }
   const status = AdrDocStatus.parse(bag["status"]);
   // THROWS on a mistyped `decided:`, like its two siblings below — it used to fall through to
   // `undefined`, which the round-trip push turns into a field DELETION on the row. That contradicted
@@ -374,7 +377,7 @@ function stripFencedCode(text: string): string {
  * knows the id it asked for) than thrown from here. A missing `status` degrades to `proposed` —
  * the schema's own least-committed value — rather than inventing a decision.
  */
-export function adrDocumentFieldsOf(row: Record<string, unknown>): AdrDocumentFields {
+export function adrDocumentFieldsOf(id: string, row: Record<string, unknown>): AdrDocumentFields {
   const numbers = (value: unknown): number[] =>
     Array.isArray(value) ? value.filter((n): n is number => typeof n === "number") : [];
   const arcRef = row["arcRef"];
@@ -390,12 +393,14 @@ export function adrDocumentFieldsOf(row: Record<string, unknown>): AdrDocumentFi
   // push cycle would drop it. `hasDependsOnKey` is the shared reader for exactly this question.
   if (hasDependsOnKey(row)) optional.dependsOn = readDependsOnPointers(row);
   const fields: AdrDocumentFields = {
-    number: typeof row["number"] === "number" ? row["number"] : 0,
+    // The number is the id's (ADR-0609 D1) — nothing stores it any more, and before that the id was
+    // already the authority the stored copy was checked against.
+    number: adrNumberOfArtifactId(id) ?? 0,
     title: typeof row["title"] === "string" ? row["title"] : extractAdrTitle(body),
     body,
-    status: AdrDocStatus.safeParse(row["status"]).success
-      ? (row["status"] as AdrDocumentFields["status"])
-      : "proposed",
+    // The STORED half only: a legacy `superseded` reads as `accepted`, which is what its next write
+    // stores (ADR-0609 D3). A document is authored state, and `superseded` is derived state.
+    status: storedDecisionStatusOf(row["status"]) ?? "proposed",
     supersedes: numbers(row["supersedes"]),
     loadBearing: row["loadBearing"] === true,
     ...optional,

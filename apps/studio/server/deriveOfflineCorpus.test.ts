@@ -46,4 +46,27 @@ describe('deriveOfflineAssets', () => {
     expect(withProv?.provenance).toBe('Imported from v1');
     expect(withoutProv && 'provenance' in withoutProv).toBe(false);
   });
+
+  it('computes a decision\'s card line and superseded status on read — nothing stores them (ADR-0609)', async () => {
+    const decision = (id: string, over: Partial<KnowledgeUnitLike> = {}): KnowledgeUnitLike => {
+      const { description: _d, ...rest } = unit({ id, kind: 'adr', title: `Title of ${id}`, status: 'accepted', ...over });
+      return rest;
+    };
+    const assets = await deriveOfflineAssets([
+      decision('adr-0001', { status: 'superseded' }), // a legacy stored word — the edge below backs it
+      decision('adr-0002', { supersedes: [1] }),
+      decision('adr-0003', { status: 'superseded' }), // a legacy word NO decided record backs
+      decision('adr-0004', { status: 'proposed' }),
+      unit({ id: 'p1', kind: 'principle', status: 'superseded' }),
+    ]);
+    const byId = new Map(assets.map((a) => [a.id, a]));
+    expect(byId.get('adr-0001')?.description).toBe('ADR-0001 — Title of adr-0001');
+    expect(byId.get('adr-0001')?.status).toBe('superseded');
+    expect(byId.get('adr-0002')?.status).toBe('accepted');
+    expect(byId.get('adr-0003')?.status).toBe('accepted');
+    expect(byId.get('adr-0004')?.status).toBe('proposed');
+    // A non-decision keeps its authored line and its own status word.
+    expect(byId.get('p1')?.description).toBe('one line');
+    expect(byId.get('p1')?.status).toBe('superseded');
+  });
 });

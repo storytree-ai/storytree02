@@ -21,21 +21,14 @@ import type { CheckResult } from "./health.js";
  *
  * Checks:
  *   1 adr-frontmatter      — every decision row reads with a known status (GATE)
- *   1b adr-number-identity — a row's stored `number` agrees with the number in its id, which is what
- *                            the ADR-0050 allocator reserved (GATE). Successor to `adr-number-unique`
- *                            — see {@link RETIRED_ADR_CHECKS} for why that question dissolved.
- *   1c adr-description-identity — a row's stored `description` agrees with what the write path
- *                            derives from its title (GATE). Same shape of question as 1b: a field
- *                            the push DERIVES and a field-scoped `--set title=` can move out from
- *                            under it (ADR-0352), with nothing comparing the two.
- *   2 adr-edge-integrity   — every supersedes / amends target exists (GATE)
- *   3 supersede-consistency — X.supersedes ∋ Y ⇔ Y.status = superseded, both directions (GATE)
+ *   2 adr-edge-integrity   — every supersedes target exists (GATE)
  *   4 story-decisions      — every story `decisions` entry resolves, and none names a FULLY
  *                            superseded ADR as deciding (GATE)
  *   5 green-flip           — a `healthy` story whose deciding ADR is still `proposed` (GATE;
  *                            resolve by flipping the ADR `proposed → accepted` — an agent MAY now
  *                            perform that green flip, ADR-0084, so this is self-resolvable, not an
- *                            escalation; the librarian-curator MAY also flip to `superseded`, ADR-0086)
+ *                            escalation. `superseded` is no longer flipped by anyone: it is derived
+ *                            from the replacing record's `supersedes` edge, ADR-0609 D3)
  *   6 load-bearing-live    — a `load_bearing: true` ADR (ADR-0086 current-state tag) must be
  *                            `accepted`: a proposed one isn't yet current state, a superseded one is
  *                            dead, so neither may carry the calibrate-to-these tag (GATE)
@@ -51,16 +44,14 @@ import type { CheckResult } from "./health.js";
  *                            (`](NNNN-slug.md)`, deleted by PR #1546) or a REPO PATH reached by
  *                            `../`. A row has no location, so neither has a base (GATE)
  *
- * Two rungs RETIRED with the files, each with its reason, and one REPLACED by rung 8:
+ * Rungs 1b, 1c and 3 are gone (ADR-0609): each held a stored copy of a derivable fact against its
+ * source, and the copies are no longer stored. Every retired rung, with its reason:
  * {@link RETIRED_ADR_CHECKS}.
  */
 
 export const ADR_GATE_CHECKS: ReadonlySet<string> = new Set([
   "adr-frontmatter",
-  "adr-number-identity",
-  "adr-description-identity",
   "adr-edge-integrity",
-  "supersede-consistency",
   "story-decisions",
   "green-flip",
   "authority-declared",
@@ -69,6 +60,16 @@ export const ADR_GATE_CHECKS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * ⚠ SIX RUNGS NOW, IN TWO BATCHES. The last three — `adr-number-identity`,
+ * `adr-description-identity`, `supersede-consistency` — left under ADR-0609 (2026-09-24), and their
+ * reason is the one the owner gave for the whole `two-copies-held-by-a-checker-arc`: two hand-kept
+ * copies plus a checker is the wrong kind of solution where one source makes drift impossible. The
+ * decision's number is the id's, its card line is computed from its title, and `superseded` is
+ * derived from the replacing record's edge (`decision-derived.ts` in `@storytree/library`), so the
+ * states those rungs caught cannot be stored any more — the write boundary strips all three. The
+ * prose below (including its "successor" wording for `adr-number-identity`) is the FIRST batch's
+ * record and is kept as history.
+ *
  * THREE RUNGS LEFT THE PLAN WHEN DECISIONS BECAME ROWS (ADR-0403 dec 1), each for a different
  * reason, and declared here rather than silently dropped — a retired check that leaves no record
  * reads later as a check nobody thought to write. Two of the three have a SUCCESSOR asking the
@@ -109,6 +110,9 @@ export const RETIRED_ADR_CHECKS: ReadonlyMap<string, string> = new Map([
   ["adr-number-unique", "replaced by adr-number-identity — a row id is a primary key (ADR-0403 dec 1)"],
   ["supersedes-in-part-retired", "unreachable — the `adr` schema refuses the key (ADR-0139 + ADR-0403 dec 1)"],
   ["adr-link-integrity", "replaced by adr-body-links — the pointer half rehomed into `references`, the prose half did not"],
+  ["adr-number-identity", "unreachable — a decision's number is the id's and is not stored (ADR-0609 D1)"],
+  ["adr-description-identity", "unreachable — a decision's card line is computed from its title, not stored (ADR-0609 D2)"],
+  ["supersede-consistency", "unreachable — `superseded` is derived from inbound `supersedes` edges, not stored (ADR-0609 D3)"],
 ]);
 
 /** The story view the checks need — id, declared status, deciding ADR numbers. */
@@ -189,21 +193,6 @@ export interface AdrHealthInputs {
   readonly adrs: AdrMeta[];
   /** Parse failures from loading the decisions dir (each line one file's error). */
   readonly parseErrors: string[];
-  /**
-   * Pre-computed FAIL lines for `adr-number-identity` — one per row whose stored `number` disagrees
-   * with its own id (`loadTitledAdrMetasFromStore`). See {@link RETIRED_ADR_CHECKS} for what this
-   * replaced and why the old question stopped being answerable.
-   */
-  readonly numberMismatches: string[];
-  /**
-   * Pre-computed FAIL lines for `adr-description-identity` — one per row whose stored `description`
-   * disagrees with what `adr push` derives from its title (`loadTitledAdrMetasFromStore`).
-   *
-   * REQUIRED rather than optional-and-defaulted, for the same reason `decisionBodies` is: a rung
-   * whose input silently defaults to `[]` reports PASS on a caller that forgot to wire it, which is
-   * the vacuous green {@link RETIRED_ADR_CHECKS} exists to prevent.
-   */
-  readonly descriptionMismatches: string[];
   readonly stories: StoryDecisionsView[];
   readonly guardrails: GuardrailView[];
   /**
@@ -248,8 +237,6 @@ export function adrHealth(inputs: AdrHealthInputs): CheckResult[] {
   const {
     adrs,
     parseErrors,
-    numberMismatches,
-    descriptionMismatches,
     stories,
     guardrails,
     decisionBodies,
@@ -263,41 +250,6 @@ export function adrHealth(inputs: AdrHealthInputs): CheckResult[] {
     result("adr-frontmatter", parseErrors, `${adrs.length} ADRs parsed, statuses known`),
   );
 
-  // 1b adr-number-identity — a row's `number` field must agree with the number in its id.
-  //
-  // This is `adr-number-unique`'s successor, not its rename. Two FILES sharing a number was the
-  // parallel-authoring collision ADR-0050's allocator prevents; two ROWS cannot share one, so that
-  // question is now structurally unanswerable and asking it would be a permanent vacuous green. The
-  // failure that IS reachable is drift between the two places a decision's number is written — the
-  // id (what the allocator reserved, and what every reader addresses it by) and the field. See
-  // {@link RETIRED_ADR_CHECKS}.
-  results.push(
-    result(
-      "adr-number-identity",
-      numberMismatches,
-      `${adrs.length} decisions, every stored number agrees with its id`,
-    ),
-  );
-
-  // 1c adr-description-identity — a row's `description` must be the title carrying its label.
-  //
-  // The sibling of 1b, and reachable for the same structural reason: `description` is DERIVED by the
-  // write path (`adr push` writes `adrDescriptionOf(number, <H1>)`) but is an ordinary field a
-  // field-scoped `--set title=` can move independently since ADR-0352. Three rows were found drifted
-  // this way, and what repaired them was an unrelated body push that happened to pass through — so
-  // the population being clean today is luck, not a mechanism.
-  //
-  // It GATES rather than warning because `description` is what `adr list` and every artifact card
-  // show: a row describing itself by a superseded title reads as a different decision than it is,
-  // and there is no honest reading of that as cosmetic.
-  results.push(
-    result(
-      "adr-description-identity",
-      descriptionMismatches,
-      `${adrs.length} decisions, every description agrees with its title`,
-    ),
-  );
-
   // 2 adr-edge-integrity
   const dangling: string[] = [];
   for (const a of adrs) {
@@ -308,29 +260,6 @@ export function adrHealth(inputs: AdrHealthInputs): CheckResult[] {
     }
   }
   results.push(result("adr-edge-integrity", dangling, "every edge target exists"));
-
-  // 3 supersede-consistency (both directions)
-  const inconsistent: string[] = [];
-  const fullySupersededTargets = new Set<number>();
-  for (const a of adrs) {
-    for (const target of a.supersedes) {
-      fullySupersededTargets.add(target);
-      const t = byNumber.get(target);
-      if (t !== undefined && t.status !== "superseded") {
-        inconsistent.push(
-          `ADR-${pad(a.number)} supersedes ADR-${pad(target)}, but its status is "${t.status}" (flip it to superseded)`,
-        );
-      }
-    }
-  }
-  for (const a of adrs) {
-    if (a.status === "superseded" && !fullySupersededTargets.has(a.number)) {
-      inconsistent.push(
-        `ADR-${pad(a.number)} is superseded, but no ADR records superseding it (add the outgoing edge)`,
-      );
-    }
-  }
-  results.push(result("supersede-consistency", inconsistent, "supersedes ⇔ superseded holds"));
 
   // 4 story-decisions
   const badDecisions: string[] = [];
@@ -397,7 +326,7 @@ export function adrHealth(inputs: AdrHealthInputs): CheckResult[] {
   //     allocator, so it can mint a decision row that never passed through `resolveAuthority`
   //     (`scaffoldRow`'s own duplicate-id guard exists because of that same path);
   //   - a field-scoped `library artifact edit adr-NNNN --set …` can move a row out from under its
-  //     stamp, which is exactly how `adr-description-identity` next door became reachable;
+  //     stamp (the same move that once drifted a stored card line, before ADR-0609 stopped storing it);
   //   - a stamp that no longer satisfies `DecisionAuthority` — a schema change, or a hand-written
   //     row — projects as undeclared, which is the fail-closed direction the loader chose.
   // So this backstops the paths that BYPASS the writer, which is the only thing a health rung over a

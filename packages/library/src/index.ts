@@ -77,6 +77,7 @@ export * from "./knowledge-dag.js";
 // accepts one silently reclassifies the majority as "not a decision" — a confident, plausible,
 // wrong answer that has already been shipped once. Pure and browser-safe.
 export * from "./decision-pointer.js";
+export * from "./decision-derived.js";
 // ADR-0403 dec 5 (`adrs-into-the-dag-arc` inc 08): the COMBINED decisions-plus-Library acyclicity
 // proof. ADR-0223 D4's no-loop guarantee was STRUCTURAL — decisions were sinks, so nothing could
 // come back — and dec 4 retires it, which means proving the property over the graph that will

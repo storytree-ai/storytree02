@@ -48,8 +48,6 @@ function inputs(partial: Partial<AdrHealthInputs>): AdrHealthInputs {
   return {
     adrs: [],
     parseErrors: [],
-    numberMismatches: [],
-    descriptionMismatches: [],
     stories: [],
     guardrails: [],
     // A single decision with a clean body: the default must be a corpus the blind-read floor
@@ -84,22 +82,6 @@ test("adr-edge-integrity: a dangling edge target FAILs", () => {
   assert.equal(levelOf(ok, "adr-edge-integrity"), "PASS");
   const bad = adrHealth(inputs({ adrs: [adr(2, "accepted", { supersedes: [99] })] }));
   assert.equal(levelOf(bad, "adr-edge-integrity"), "FAIL");
-});
-
-test("supersede-consistency: both directions enforced", () => {
-  // X supersedes Y but Y not flipped -> FAIL
-  const halfDone = adrHealth(
-    inputs({ adrs: [adr(14, "proposed"), adr(27, "accepted", { supersedes: [14] })] }),
-  );
-  assert.equal(levelOf(halfDone, "supersede-consistency"), "FAIL");
-  // Y superseded with no incoming edge -> FAIL
-  const orphan = adrHealth(inputs({ adrs: [adr(14, "superseded")] }));
-  assert.equal(levelOf(orphan, "supersede-consistency"), "FAIL");
-  // the pair recorded properly -> PASS
-  const clean = adrHealth(
-    inputs({ adrs: [adr(14, "superseded"), adr(27, "accepted", { supersedes: [14] })] }),
-  );
-  assert.equal(levelOf(clean, "supersede-consistency"), "PASS");
 });
 
 test("story-decisions: dangling or superseded deciding ADRs FAIL", () => {
@@ -156,48 +138,6 @@ test("extractPathTokens: backticked repo paths only, line suffixes dropped", () 
 
 // --- (c) loadRetiredInPartEdges (the raw frontmatter scan behind the gate) ----------------------
 
-test("adr-number-identity: a row whose stored number disagrees with its id FAILs and GATES", () => {
-  // `adr-number-unique`'s successor. Two FILES could share a number; two ROWS cannot, because the id
-  // is the primary key — so the old question is unanswerable and asking it would be a permanent
-  // vacuous green. What IS reachable is drift between the two places a decision's number is written.
-  assert.equal(levelOf(adrHealth(inputs({})), "adr-number-identity"), "PASS");
-
-  const drifted = adrHealth(
-    inputs({ numberMismatches: ["adr-0403 stores number 402, which disagrees with its id"] }),
-  );
-  assert.equal(levelOf(drifted, "adr-number-identity"), "FAIL");
-  assert.ok(
-    adrGateFailures(drifted).some((r) => r.name === "adr-number-identity"),
-    "it GATES — a decision addressed as one number and rendering as another is not a warning",
-  );
-});
-
-test("adr-description-identity: a row whose description disagrees with its title FAILs and GATES", () => {
-  // 1b's sibling, and reachable for the same reason: `description` is DERIVED by `adr push` from the
-  // document H1, but is an ordinary field a field-scoped `--set title=` writes right past (ADR-0352).
-  //
-  // THE RED CASE COMES FROM A LITERAL, AND IT HAS TO. Measured against the live corpus while this
-  // rung was written: 424 decision rows, 0 disagreeing. So a red sourced from real data would be
-  // unreachable, and a rung that can only ever pass is the vacuous green this file is organised
-  // against — the disagreement must be injectable, which is why the mismatch lines are an INPUT.
-  assert.equal(levelOf(adrHealth(inputs({})), "adr-description-identity"), "PASS");
-
-  const drifted = adrHealth(
-    inputs({
-      descriptionMismatches: [
-        'adr-0296 describes itself as "ADR-0296 — An old title", but its title makes that ' +
-          '"ADR-0296 — The title it has now"',
-      ],
-    }),
-  );
-  assert.equal(levelOf(drifted, "adr-description-identity"), "FAIL");
-  assert.ok(
-    adrGateFailures(drifted).some((r) => r.name === "adr-description-identity"),
-    "it GATES — `description` is the line `adr list` and every artifact card render, so a row " +
-      "describing itself by a superseded title reads as a different decision than it is",
-  );
-});
-
 test("the three rungs that retired with the files are DECLARED, not silently dropped", () => {
   // A retired check leaving no record reads later as a check nobody thought to write. Each entry
   // names WHY, and the two sets must not overlap: a rung cannot be both live and retired.
@@ -209,9 +149,18 @@ test("the three rungs that retired with the files are DECLARED, not silently dro
       `${name}'s retirement must say why, not just that it happened`,
     );
   }
-  // And the successor IS live — the pair is what makes `adr-number-unique`'s removal a replacement
-  // rather than a deletion.
-  assert.ok(ADR_GATE_CHECKS.has("adr-number-identity"));
+});
+
+test("the three rungs ADR-0609 retired are DECLARED and no longer emitted: their copies are not stored", () => {
+  // Each held a stored copy of a derivable fact against its source. The copies are gone (the write
+  // boundary strips them), so the rungs asked a question nothing can make false — declared here with
+  // the reason, and absent from the emitted set so no caller wires an input for them again.
+  const emitted = new Set(adrHealth(inputs({})).map((r) => r.name));
+  for (const name of ["adr-number-identity", "adr-description-identity", "supersede-consistency"]) {
+    assert.match(RETIRED_ADR_CHECKS.get(name) ?? "", /ADR-0609/, `${name} must name the decision retiring it`);
+    assert.equal(ADR_GATE_CHECKS.has(name), false, `${name} must not still gate`);
+    assert.equal(emitted.has(name), false, `${name} must not still be emitted`);
+  }
 });
 
 test("every GATE-class rung the checks emit is declared in ADR_GATE_CHECKS, and vice versa", () => {

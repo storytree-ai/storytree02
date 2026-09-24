@@ -1,3 +1,4 @@
+import { stripDerivedDecisionFields } from "./decision-derived.js";
 import { KIND_SPECS } from "./knowledge.js";
 
 /**
@@ -458,5 +459,10 @@ export function upcast(doc: Record<string, unknown>) {
       v = m.version;
     }
   }
+  // NOT A VERSIONED MIGRATION, deliberately (ADR-0609): a decision's number, card line and
+  // `superseded` status are computed on read, and the hazard is not old rows but a writer echoing
+  // back what it READ — at the current version, where a migration would never run again. Stripping
+  // on every write is what makes "not stored" a property of the boundary rather than of each writer.
+  cur = stripDerivedDecisionFields(cur);
   return { ...cur, schemaVersion: CURRENT_SCHEMA_VERSION } satisfies Record<string, unknown>;
 }

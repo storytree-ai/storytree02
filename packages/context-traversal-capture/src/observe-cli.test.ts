@@ -334,6 +334,18 @@ test("`adr authority` observes NOTHING, and the recorded reason says why it cann
   });
 });
 
+test("`adr drop-copies` observes NOTHING — a count or a migration, never a read of any decision's content", () => {
+  for (const argv of [["adr", "drop-copies"], ["adr", "drop-copies", "--pg"]]) {
+    assert.deepEqual(observeCliInvocation(argv, harness().deps), [], `${argv.join(" ")} must observe nothing`);
+  }
+  assert.deepEqual(CLI_READ_VERBS["adr drop-copies"], {
+    observes: "nothing",
+    why:
+      "a migration — a bare run only COUNTS stored copies, and --pg writes; argv alone separates them " +
+      "only by a flag this table does not model, and neither shape reads any decision's content",
+  });
+});
+
 test("`adr pull` accepts the already-canonical id too, and refuses a token that names no decision", () => {
   for (const token of ["adr-0419", "419", "0419"]) {
     const events = observeCliInvocation(["adr", "pull", token], harness().deps);

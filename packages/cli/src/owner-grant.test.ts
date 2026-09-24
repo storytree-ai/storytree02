@@ -373,6 +373,27 @@ test("owner-grant-carries-settled-authority: increment, deciding ADR, owner prov
     await expectRefusal(await seedAuthorityStore(new InMemoryStore(), { decisionDoc }), "deciding ADR is not accepted with quoted owner authority");
   }
 
+  // A deciding ADR that a later decided record REPLACED still stores `accepted` on its own row
+  // (ADR-0609 D3 derives `superseded` from the replacer's edge), so the grant must ask the set.
+  const replacedStore = await seedAuthorityStore(new InMemoryStore());
+  await replacedStore.upsertDoc({ id: "adr-0600", kind: "adr", doc: { status: "accepted", supersedes: [577] } });
+  await expectRefusal(replacedStore, "deciding ADR has been superseded");
+  // The superseded question needs the whole decision log; a log that cannot be read refuses the
+  // grant with that reason rather than granting on a row that may have been replaced.
+  const logDown = await seedAuthorityStore(new InMemoryStore());
+  const before = (await ownerGrantEvents(logDown)).length;
+  const unreadableLog = await InnerLoopVerbs.recordNodeOwnerGrant(
+    logDown,
+    { getDoc: (id) => logDown.getDoc(id), queryDocs: () => Promise.reject(new Error("log-down")) },
+    validInput(),
+  );
+  assert.deepEqual(unreadableLog, { ok: false, reason: "decision log could not be read: log-down" });
+  assert.equal((await ownerGrantEvents(logDown)).length, before);
+  // …and a PROPOSED replacer replaces nothing yet.
+  const proposedReplacer = await seedAuthorityStore(new InMemoryStore());
+  await proposedReplacer.upsertDoc({ id: "adr-0600", kind: "adr", doc: { status: "proposed", supersedes: [577] } });
+  assert.equal((await InnerLoopVerbs.recordNodeOwnerGrant(proposedReplacer, proposedReplacer, validInput())).ok, true);
+
   const settledQuestion = { lifecycle: "settled", answer: "Try one more time.", settledAt: "2026-09-18T00:00:00.000Z", settledByRef: `asset:${DECISION_ID}`, arcRef: ARC_REF };
   await expectRefusal(await seedAuthorityStore(new InMemoryStore(), { questionDoc: { ...settledQuestion, arcRef: "arc-a" } }), "question, increment and deciding ADR must name the same arc");
   await expectRefusal(await seedAuthorityStore(new InMemoryStore(), { questionDoc: { ...settledQuestion, arcRef: 7 } }), "question, increment and deciding ADR must name the same arc");

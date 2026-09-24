@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { InMemoryStore } from "@storytree/storage-protocol";
 
+import { composedReadingsFor, decisionRowsOf } from "./adr-composed.js";
 import { run } from "./commands.js";
 
 /**
@@ -316,4 +317,58 @@ test("adr push does NOT clear a composed statement — a corrected document is n
   const after = await rowOf(store, "adr-0278");
   assert.match(String(after["body"]), /Something else/, "the document's edit landed");
   assert.deepEqual(after["composed"], before, "and the composed statement is untouched");
+});
+
+// ---------------------------------------------------------------------------
+// ADR-0609 — the number and status a statement's fingerprint reads are DERIVED, not stored
+// ---------------------------------------------------------------------------
+
+test("decisionRowsOf: number from the ID, status DERIVED — stored copies get no say (ADR-0609)", async () => {
+  const store = new InMemoryStore();
+  await seed(store, 10, "Replaced", { status: "superseded", number: 999 });
+  await seed(store, 11, "Replacer", { supersedes: [10] });
+  await seed(store, 12, "Unbacked legacy word", { status: "superseded" });
+  await seed(store, 13, "No status at all", { status: undefined });
+  await seed(store, 14, "Still a proposal", { status: "proposed" });
+  await store.upsertDoc({ id: "adr-x", kind: "adr", doc: { kind: "adr", status: "accepted" } });
+  await store.upsertDoc({ id: "a-principle", kind: "principle", doc: { kind: "principle", supersedes: [11] } });
+  const rows = decisionRowsOf(await store.queryDocs());
+  assert.deepEqual(
+    rows.map((r) => [r.number, r.status]),
+    [
+      [10, "superseded"],
+      [11, "accepted"],
+      [12, "accepted"],
+      [13, "proposed"],
+      [14, "proposed"],
+    ],
+  );
+});
+
+test("composedReadingsFor: a statement on a row whose id is no decision id yields nothing", async () => {
+  const store = await chain();
+  await run(["adr", "compose", "278", "--statement", "X"], { store, writable: true, now: () => NOW });
+  const doc = await rowOf(store, "adr-0278");
+  const rows = decisionRowsOf(await store.queryDocs());
+  assert.equal(composedReadingsFor(doc, rows).length, 1, "the control: the real record reads");
+  assert.deepEqual(composedReadingsFor({ ...doc, id: "not-a-decision" }, rows), []);
+  assert.deepEqual(composedReadingsFor({ ...doc, id: undefined }, rows), []);
+});
+
+test("adr compose: dropping the stored copies moves NO fingerprint — a superseded record beneath stays unmoved", async () => {
+  // The claim the migration rests on: a statement composed over legacy rows (status stored as
+  // `superseded`) must read "nothing beneath has moved" after `adr drop-copies` rewrites them.
+  const store = new InMemoryStore();
+  await seed(store, 100, "The bottom", { status: "superseded" });
+  await seed(store, 150, "Its replacer", { supersedes: [100] });
+  await seed(store, 200, "The middle", { dependsOn: ["asset:adr-0100"] });
+  await seed(store, 278, "The frontier", { dependsOn: ["asset:adr-0200"] });
+  await run(["adr", "compose", "278", "--statement", "X"], { store, writable: true, now: () => NOW });
+
+  const dropped = await run(["adr", "drop-copies"], { store, writable: true, now: () => NOW });
+  assert.equal(dropped.ok, true, dropped.body);
+  assert.equal((await rowOf(store, "adr-0100"))["status"], "accepted", "the stored word is gone");
+
+  const env = await run(["adr", "compose", "278"], { store, now: () => NOW });
+  assert.match(env.body, /nothing beneath has moved since/);
 });

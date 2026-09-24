@@ -28,6 +28,7 @@ import {
   PgWorkHierarchyStore,
   renderStoredDoc,
 } from "@storytree/library/store";
+import { supersededDecisionNumbers } from "@storytree/library";
 import { DEPARTURE_WINDOW_MS, foldDepartures } from "@storytree/notice-board";
 import { PgClaimStore } from "@storytree/notice-board/store";
 import { SIGNING_EVENT_KIND } from "@storytree/proof-protocol";
@@ -349,7 +350,9 @@ async function main(): Promise<void> {
   const backend: LocalBackendBackend = {
     listAssets: async () => {
       const docs = await library.queryDocs();
-      return docs.map(renderStoredDoc);
+      // `superseded` is derived from the whole decision set's edges (ADR-0609 D3); the listing holds it.
+      const context = { supersededDecisions: supersededDecisionNumbers(docs) };
+      return docs.map((d) => renderStoredDoc(d, context));
     },
     health: async () => {
       // The code stamp + runtime status ride every health answer (both the ok + unreachable DB

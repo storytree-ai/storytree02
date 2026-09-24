@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { InMemoryStore } from "@storytree/storage-protocol";
+import { loadTitledAdrMetasFromStore } from "@storytree/drive/adr-metas";
 import { seedDecisionRows } from "./decision.test-helpers.js";
 
 import {
@@ -1319,4 +1320,25 @@ test("ADR-0434 D3: `waiting` reads each question's STATE, and a settled one stay
   for (const rollup of [legacy, mixed, done]) {
     assert.equal(rollup.waiting, summariseArcRollup(rollup).openQuestions > 0);
   }
+});
+
+test("the decision fixture stores no number or card line, and the ADR leg still reads both (ADR-0609)", async () => {
+  // The fixture's rows are what every arc suite's ADR leg is proven over, so they carry the shape a
+  // post-0609 row has: the number and the `ADR-NNNN — title` line are computed on read, never stored.
+  const store = new InMemoryStore();
+  await seedDecisionRows(store);
+  for (const row of await store.queryDocs({ kind: "adr" })) {
+    const doc = row.doc as Record<string, unknown>;
+    assert.equal(Object.hasOwn(doc, "number"), false, `${row.id} stores a number`);
+    assert.equal(Object.hasOwn(doc, "description"), false, `${row.id} stores a card line`);
+    assert.equal(doc["status"], "accepted");
+  }
+  const { adrs } = await loadTitledAdrMetasFromStore(store);
+  assert.deepEqual(
+    adrs.map((a) => [a.number, a.title, a.status]),
+    [
+      [201, "A stamped decision", "accepted"],
+      [202, "An arc-less decision", "accepted"],
+    ],
+  );
 });
