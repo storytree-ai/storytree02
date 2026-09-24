@@ -220,11 +220,14 @@ and earns a fresh red→green verdict on the unreported-count producer boundary.
      silently erase its existing proof reference.
 9. **`rc-coverage-flora-carries-semantic-ground-anchor-and-scale`** — every generated capability
    coverage item reports the pivot and scale needed to stand its existing semantic mark on 3D ground
-   - **asserts —** every `parcel-flora` item from a real `buildScene` has an absolute
-     `groundAnchor` and `floraScale` copied from the same pivot-scale transform the current SVG
-     renderer uses. The fields preserve the item's exact generated count, painter order, child SVG
-     geometry, transform, capability id, theme and folded status. A multi-parcel fixture varies ids,
-     themes, statuses and test counts so copied or omitted metadata cannot pass.
+   - **asserts —** every `parcel-flora` item from a real `buildScene` has a `groundAnchor` pivot in
+     its containing scene basis and `floraScale` copied from the same pivot-scale transform the
+     current SVG renderer uses. A consuming mapper composes that pivot with its accumulated ancestor
+     translation to obtain world ground; it must not reapply the item's own pivot-scale-pivot
+     transform or recover an anchor from SVG. The fields preserve the item's exact generated count,
+     painter order, child SVG geometry, transform, capability id, theme and folded status. A
+     multi-parcel fixture varies ids, themes, statuses and test counts so copied or omitted metadata
+     cannot pass.
    - **covers —** `packages/forest-world/src/scene.ts` (`parcelFloraItem` and its typed scene-node
      fields) — test: `packages/forest-world/src/scene.test.ts` (new named test).
 10. **`rc-unreported-parcel-coverage-emits-no-flora`** — an absent capability count is unreported
