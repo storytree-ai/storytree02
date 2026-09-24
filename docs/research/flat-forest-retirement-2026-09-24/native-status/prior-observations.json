@@ -1,0 +1,61 @@
+{
+  "failedRuns": [
+    {
+      "run": "run-1",
+      "status": "FAILED",
+      "reason": "Instrument failed before status toggle: actual Legend drawer was collapsed.",
+      "startedAt": "2026-09-24T06:17:23.595Z",
+      "finishedAt": null,
+      "statusChecks": null,
+      "restoration": null
+    },
+    {
+      "run": "run-2",
+      "status": "FAILED",
+      "reason": "Actual status opacity .12 remained on opaque materials and produced unchanged native pixels. Computed child pointer auto was separately diagnosed; it was not proof of interception.",
+      "startedAt": "2026-09-24T06:27:11.700Z",
+      "finishedAt": null,
+      "statusChecks": {
+        "exactActualCameraAndCanvas": true,
+        "sameHostCameraAndComposition": true,
+        "sameStableData": true,
+        "sameRetainedTargetIdentities": true,
+        "sameGroundGeometryObjects": true,
+        "dimmedMaterialDelivered": true,
+        "nativeMountedPixelsChanged": false,
+        "standalonePixelsUnchanged": true,
+        "hostKeepsAccessibleInertComposition": false
+      },
+      "restoration": {
+        "exactCamerasAndCanvas": true,
+        "rawCanvasesExact": true,
+        "sameRetainedTargetIdentities": true,
+        "sameStableData": true
+      }
+    }
+  ],
+  "baselinePointerDiagnosis": {
+    "outcome": {
+      "samples": 81,
+      "canvasEligibleSamples": 81,
+      "nativeTopSamples": 0,
+      "actualViewportClicks": 1,
+      "actualCanvasClicks": 0
+    },
+    "receipts": {
+      "sameActualCameras": true,
+      "sameNativePixels": true,
+      "sameStableData": true,
+      "sameUrl": true
+    },
+    "interaction": {
+      "tabIndex": "0",
+      "label": "story forest map (pan and zoom)",
+      "mountAriaHidden": "true",
+      "mountPointerEvents": "none",
+      "canvasPointerEvents": "auto"
+    },
+    "scope": "Observed hit eligibility and one actual bare-background click only; eligibility beneath the SVG is distinct from interception. No CSS/camera/clock or product changes."
+  },
+  "note": "Original failed runs and the separate pointer diagnosis remain unchanged in /tmp. None is relabelled a product or appearance PASS."
+}
