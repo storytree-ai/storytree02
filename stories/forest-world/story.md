@@ -11,17 +11,15 @@ proof_mode: UAT
 # (ADR-0395). No DB, no API key, no browser — the geometry is exercised headless.
 uat_witness: machine
 # The capability FLOOR (ADR-0222 D2, option A — the owner's stated preference, executing the live
-# `forest-world-capability-floor` proposal): ONE capability standing for the render core — the geometry
-# KERNEL (mesh / coast / ranking / hex / sizing) plus the deterministic trail router and the
-# framework-agnostic SCENE-GRAPH (`scene.ts`, buildScene over the core's own SceneInput contract), all
-# BUILT in this core — with a separately observed offline suite, while its eight declared leaf
-# contracts drive the map's algorithmically compressed flora density (an empty contract list painted
-# forest-world a bare sapling despite its real suite). The three thin mappers (studio React;
-# website string-SVG, synced; R3F, packages/forest-world-r3f) live with their surfaces/packages, proven
-# there — outside this list. Split no finer than the floor until an in-core unit earns its own red→green
-# leg (a real defect, a new layer). The thin-port empty-capabilities exemption (proof-protocol /
-# storage-protocol) is explicitly NOT reopened (ADR-0222 D2).
-capabilities: [render-core]
+# `forest-world-capability-floor` proposal): `render-core` stands for the geometry KERNEL (mesh /
+# coast / ranking / hex / sizing), deterministic trail router, and framework-agnostic SCENE-GRAPH
+# (`scene.ts`, `buildScene` over its own SceneInput contract). `public-ground-scene-input` earns the
+# one finer leg the floor permits: a new pure adapter layer that composes already-published,
+# already-laid-out public facts into one plan-view SceneInput. The three thin mappers (studio React;
+# website string-SVG, synced; R3F, packages/forest-world-r3f) still live with their
+# surfaces/packages, proven there — outside this list. The thin-port empty-capabilities exemption
+# (proof-protocol / storage-protocol) is explicitly NOT reopened (ADR-0222 D2).
+capabilities: [render-core, public-ground-scene-input]
 # Foundational root organism (ADR-0093 §1, standing on ADR-0068 / ADR-0075): forest-world owns its OWN
 # minimal input contract (a story is just an id + deps + its capabilities' deps), so it depends on
 # NOTHING — `depends_on: []`, alongside proof-protocol and storage-protocol at the bottom of the order.
