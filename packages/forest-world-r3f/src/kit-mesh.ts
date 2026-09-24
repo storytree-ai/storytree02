@@ -47,6 +47,7 @@ import { KIT_PROP_INDIRECT_FRACTION, installPropLighting, propLightingOf } from 
 import { parseHex } from './shade-ladder.js';
 import { applyRawColourConvention } from './texture-convention.js';
 import type { ConventionMaterial, Rgb } from './texture-convention.js';
+import { presentationMaterial } from './kit-status-presentation.js';
 
 /** One kit object, its transform already baked so every bounding box is in one space. */
 export interface KitObject {
@@ -589,14 +590,14 @@ export function placementExtent(kit: LoadedKit, placement: KitPlacement): Placem
   return { width: assembly.width * scale, height: assembly.height * scale };
 }
 
-/** One merge bucket: everything sharing a material AND a tint becomes one mesh. */
+/** One merge bucket: everything sharing a material, tint, and presentation becomes one mesh. */
 interface MergeBucket {
   material: THREE.MeshStandardMaterial;
   parts: THREE.BufferGeometry[];
 }
 
 /**
- * BUILD THE DRESSING: one merged mesh per (material, tint), however many props there are.
+ * BUILD THE DRESSING: one merged mesh per (material, tint, presentation), however many props there are.
  *
  * The transform is `translate * rotate * scale`, applied to a CLONE of the kit's geometry, so
  * the kit itself is never mutated and two placements of one assembly cannot interfere.
@@ -617,9 +618,11 @@ export function kitMeshes(
   kit: LoadedKit,
   placements: readonly KitPlacement[],
   onTransformedPart?: (placement: KitPlacement, geometry: THREE.BufferGeometry) => void,
+  alphaByPlacement?: ReadonlyMap<KitPlacement, number>,
 ): THREE.Mesh[] {
   const byMaterial = new Map<string, MergeBucket>();
   const tints = new Map<string, THREE.MeshStandardMaterial>();
+  const presentations = new Map<string, THREE.MeshStandardMaterial>();
   const m = new THREE.Matrix4();
   const q = new THREE.Quaternion();
   const e = new THREE.Euler(0, 0, 0, 'YXZ');
@@ -646,8 +649,13 @@ export function kitMeshes(
     for (const part of assembly.objects) {
       const geometry = part.geometry.clone().applyMatrix4(m);
       onTransformedPart?.(placement, geometry);
-      const material = tintedMaterial(kit, part.material, part.materialName, placement.tint, tints);
-      const key = material === part.material ? part.materialName : `${part.materialName}::${placement.tint}`;
+      const tinted = tintedMaterial(kit, part.material, part.materialName, placement.tint, tints);
+      const alpha = alphaByPlacement?.get(placement) ?? 1;
+      const presentationKey = `${part.materialName}::${placement.tint ?? 'base'}::${alpha}`;
+      const cached = presentations.get(presentationKey);
+      const material = cached ?? presentationMaterial(tinted, alpha);
+      if (!cached) presentations.set(presentationKey, material);
+      const key = presentationKey;
       const bucket = byMaterial.get(key);
       if (bucket) bucket.parts.push(geometry);
       else byMaterial.set(key, { material, parts: [geometry] });
