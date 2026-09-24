@@ -1,0 +1,1276 @@
+{
+  "status": "CAPTURED",
+  "capturedAt": "2026-09-24T05:20:26.589Z",
+  "purpose": "Static coverage placement comparison; instrument completion is not owner appearance attestation, performance or final retirement proof",
+  "builds": {
+    "before": {
+      "head": "1b3859a2e9fd5a3d7fc3a8de67a1cba46f72fff6",
+      "sourceSha256": "06d0840a92135bd1d6aa858e98c5a9f0bdaf7b5238efadc03a5a4eb73fc58b4c",
+      "verifiedHealth": {
+        "pid": 3491939,
+        "store": "pg",
+        "db": "ok"
+      },
+      "sourceUnchanged": true
+    },
+    "after": {
+      "head": "40963443a1e13eb9b98d0dd970bf2904fe5eafb1",
+      "sourceSha256": "a079f23ee4bb5a8f3aac27fcbd964cfd35229ef9c48767a5bcb01af9210b7752",
+      "verifiedHealth": {
+        "pid": 3491948,
+        "store": "pg",
+        "db": "ok"
+      },
+      "sourceUnchanged": true
+    }
+  },
+  "browser": {
+    "version": "148.0.7778.96",
+    "playwright": "1.60.0",
+    "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)"
+  },
+  "query": "?landMount=1&landMountProps=1&landView=1&act2=intro&sceneExport=1",
+  "viewport": {
+    "width": 1800,
+    "height": 1100
+  },
+  "snapshot": {
+    "sha256": "46a99bc9787894547a6d82e00ab89d48775121c7396d8564e8a6196522bfcbd4",
+    "frozenAt": "2026-09-24T05:19:32.256Z",
+    "storyCount": 47
+  },
+  "comparisons": {
+    "rest": {
+      "checks": {
+        "sameStableLiveLayout": true,
+        "sameHostCameraAndComputedComposition": true,
+        "sameCanvasBuffersRectsAndComputedStyles": true,
+        "sameMountedOrthographicXYWProjection": true
+      },
+      "exactAllCameraRecordsEqual": false,
+      "mounted": {
+        "exactCameraEqual": false,
+        "equivalentXYW": true,
+        "coefficientTolerance": 1e-10,
+        "maxAbsCoefficientDelta": 2.6645352591003757e-15,
+        "coefficientDeltas": {
+          "x": [
+            0,
+            0,
+            0,
+            -4.440892098500626e-16
+          ],
+          "y": [
+            0,
+            0,
+            -1.3010426069826053e-18,
+            2.6645352591003757e-15
+          ],
+          "w": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "positionDelta": [
+          0,
+          -2794.7643302548313,
+          -2345.085718744248
+        ],
+        "before": {
+          "rawCamera": {
+            "type": "OrthographicCamera",
+            "position": [
+              475.1029794281541,
+              5277.885751303367,
+              5981.45164160698
+            ],
+            "quaternion": [
+              -0.4226182617406994,
+              0,
+              0,
+              0.90630778703665
+            ],
+            "zoom": 1.9724813357493298,
+            "near": 2867.2298884272986,
+            "far": 10912.351175601474,
+            "left": -539.703125,
+            "right": 539.703125,
+            "top": 550,
+            "bottom": -550,
+            "projectionMatrix": [
+              0.003654752482208306,
+              0,
+              0,
+              0,
+              0,
+              0.0035863297013624183,
+              0,
+              0,
+              0,
+              0,
+              -0.00024859786802574035,
+              0,
+              0,
+              0,
+              -1.7127872374027078,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0.6427876096865395,
+              -0.766044443118978,
+              0,
+              0,
+              0.766044443118978,
+              0.6427876096865395,
+              0,
+              475.1029794281541,
+              5277.885751303367,
+              5981.45164160698,
+              1
+            ]
+          },
+          "viewProjectionMatrix": [
+            0.003654752482208306,
+            0,
+            0,
+            0,
+            0,
+            0.002305248296286589,
+            -0.0001904370153723434,
+            0,
+            0,
+            -0.0027472879389212235,
+            -0.0001597956293614354,
+            0,
+            -1.7363837933696076,
+            4.265932816040059,
+            0.2481274021173021,
+            1
+          ],
+          "rows": {
+            "x": [
+              0.003654752482208306,
+              0,
+              0,
+              -1.7363837933696076
+            ],
+            "y": [
+              0,
+              0.002305248296286589,
+              -0.0027472879389212235,
+              4.265932816040059
+            ],
+            "w": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        "after": {
+          "rawCamera": {
+            "type": "OrthographicCamera",
+            "position": [
+              475.1029794281541,
+              2483.121421048536,
+              3636.365922862732
+            ],
+            "quaternion": [
+              -0.42261826174069944,
+              0,
+              0,
+              0.90630778703665
+            ],
+            "zoom": 1.9724813357493298,
+            "near": 1177.9611677831854,
+            "far": 5305.008438884584,
+            "left": -539.703125,
+            "right": 539.703125,
+            "top": 550,
+            "bottom": -550,
+            "projectionMatrix": [
+              0.003654752482208306,
+              0,
+              0,
+              0,
+              0,
+              0.0035863297013624183,
+              0,
+              0,
+              0,
+              0,
+              -0.00048460796996547444,
+              0,
+              0,
+              0,
+              -1.570849370217569,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0.6427876096865393,
+              -0.7660444431189781,
+              0,
+              0,
+              0.7660444431189781,
+              0.6427876096865393,
+              0,
+              475.1029794281541,
+              2483.121421048536,
+              3636.365922862732,
+              1
+            ]
+          },
+          "viewProjectionMatrix": [
+            0.003654752482208306,
+            0,
+            0,
+            0,
+            0,
+            0.002305248296286589,
+            -0.0003712312424832203,
+            0,
+            0,
+            -0.002747287938921225,
+            -0.0003114999986491535,
+            0,
+            -1.736383793369608,
+            4.265932816040062,
+            0.48369086021454777,
+            1
+          ],
+          "rows": {
+            "x": [
+              0.003654752482208306,
+              0,
+              0,
+              -1.736383793369608
+            ],
+            "y": [
+              0,
+              0.002305248296286589,
+              -0.002747287938921225,
+              4.265932816040062
+            ],
+            "w": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        "scope": "controlled mounted XY projection; raw depth/framing retained, not required to be identical"
+      },
+      "standalone": {
+        "exactCameraEqual": false,
+        "equivalentXYW": false,
+        "coefficientTolerance": 1e-10,
+        "maxAbsCoefficientDelta": 1.3747265894074516,
+        "coefficientDeltas": {
+          "x": [
+            0,
+            -2.857552012029539e-35,
+            -3.794841478730399e-19,
+            -1.3747265894074516
+          ],
+          "y": [
+            -1.969370432709436e-19,
+            4.336808689942018e-19,
+            -4.336808689942018e-19,
+            0
+          ],
+          "w": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "positionDelta": [
+          296.49177676437336,
+          -2794.7643302548313,
+          -2345.085718744247
+        ],
+        "before": {
+          "rawCamera": {
+            "type": "OrthographicCamera",
+            "position": [
+              187.96103106431224,
+              5277.885751303367,
+              5843.020112353169
+            ],
+            "quaternion": [
+              -0.4226182617406994,
+              0,
+              0,
+              0.90630778703665
+            ],
+            "zoom": 1.6682497445495552,
+            "near": 308.6386099002748,
+            "far": 13470.942454128497,
+            "left": -359.796875,
+            "right": 359.796875,
+            "top": 531.1015625,
+            "bottom": -531.1015625,
+            "projectionMatrix": [
+              0.004636643229737766,
+              0,
+              0,
+              0,
+              0,
+              0.003141112477050103,
+              0,
+              0,
+              0,
+              0,
+              -0.00015194908305334528,
+              0,
+              0,
+              0,
+              -1.0468973537692057,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0.6427876096865395,
+              -0.766044443118978,
+              0,
+              0,
+              0.766044443118978,
+              0.6427876096865395,
+              0,
+              187.96103106431224,
+              5277.885751303367,
+              5843.020112353169,
+              1
+            ]
+          },
+          "viewProjectionMatrix": [
+            0.004636643229737766,
+            0,
+            0,
+            0,
+            0,
+            0.0020190681808796005,
+            -0.00011639975071003918,
+            0,
+            0,
+            -0.002406231758255919,
+            -9.767098788992125e-05,
+            0,
+            -0.8715082421388735,
+            3.403249375697812,
+            0.13814077859278684,
+            1
+          ],
+          "rows": {
+            "x": [
+              0.004636643229737766,
+              0,
+              0,
+              -0.8715082421388735
+            ],
+            "y": [
+              0,
+              0.0020190681808796005,
+              -0.002406231758255919,
+              3.403249375697812
+            ],
+            "w": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        "after": {
+          "rawCamera": {
+            "type": "OrthographicCamera",
+            "position": [
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217
+            ],
+            "quaternion": [
+              -0.42261826174069933,
+              3.708819303461431e-17,
+              1.7294508439171524e-17,
+              0.90630778703665
+            ],
+            "zoom": 1.6682497445495552,
+            "near": 341.561956187581,
+            "far": 6141.40765048019,
+            "left": -359.796875,
+            "right": 359.796875,
+            "top": 531.1015625,
+            "bottom": -531.1015625,
+            "projectionMatrix": [
+              0.004636643229737766,
+              0,
+              0,
+              0,
+              0,
+              0.003141112477050103,
+              0,
+              0,
+              0,
+              0,
+              -0.000344836760393146,
+              0,
+              0,
+              0,
+              -1.1177831184452711,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              -8.184458649722383e-17,
+              0,
+              -6.269659068556885e-17,
+              0.6427876096865395,
+              -0.7660444431189779,
+              0,
+              5.260868612033374e-17,
+              0.7660444431189779,
+              0.6427876096865395,
+              0,
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217,
+              1
+            ]
+          },
+          "viewProjectionMatrix": [
+            0.004636643229737766,
+            -1.969370432709436e-19,
+            -1.8141408890275752e-20,
+            0,
+            -2.857552012029539e-35,
+            0.002019068180879601,
+            -0.00026416028408231994,
+            0,
+            -3.794841478730399e-19,
+            -0.0024062317582559194,
+            -0.0002216567969451603,
+            0,
+            -2.246234831546325,
+            3.403249375697812,
+            0.31349987516146904,
+            1
+          ],
+          "rows": {
+            "x": [
+              0.004636643229737766,
+              -2.857552012029539e-35,
+              -3.794841478730399e-19,
+              -2.246234831546325
+            ],
+            "y": [
+              -1.969370432709436e-19,
+              0.002019068180879601,
+              -0.0024062317582559194,
+              3.403249375697812
+            ],
+            "w": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        "scope": "unmatched-framing context; not a controlled appearance pair",
+        "controlledAppearancePair": false
+      },
+      "fullAppScope": "Within each full-app image: LEFT mounted view controlled; RIGHT standalone panel may reframe and is unmatched-framing context.",
+      "exactSceneExportMatch": true,
+      "elementDeltas": {
+        ".parcel": 0,
+        ".world-cave": 0,
+        ".trail-fill": 0,
+        ".parcel-blade": 0,
+        ".parcel-flora": 0,
+        ".parcel-shrub": 0,
+        ".story-tree": 0,
+        ".world-plate-bg": 0,
+        "[data-edges]": 0
+      }
+    },
+    "zoom": {
+      "checks": {
+        "sameStableLiveLayout": true,
+        "sameHostCameraAndComputedComposition": true,
+        "sameCanvasBuffersRectsAndComputedStyles": true,
+        "sameMountedOrthographicXYWProjection": true
+      },
+      "exactAllCameraRecordsEqual": false,
+      "mounted": {
+        "exactCameraEqual": false,
+        "equivalentXYW": true,
+        "coefficientTolerance": 1e-10,
+        "maxAbsCoefficientDelta": 1.0658141036401503e-14,
+        "coefficientDeltas": {
+          "x": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "y": [
+            0,
+            -8.673617379884035e-19,
+            -2.6020852139652106e-18,
+            1.0658141036401503e-14
+          ],
+          "w": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "positionDelta": [
+          0,
+          -2794.7643302548313,
+          -2345.0857187442475
+        ],
+        "before": {
+          "rawCamera": {
+            "type": "OrthographicCamera",
+            "position": [
+              504.12332547736673,
+              5277.885751303367,
+              5962.032758997982
+            ],
+            "quaternion": [
+              -0.4226182617406994,
+              0,
+              0,
+              0.90630778703665
+            ],
+            "zoom": 4.228188919246119,
+            "near": 2867.2298884272986,
+            "far": 10912.351175601474,
+            "left": -539.703125,
+            "right": 539.703125,
+            "top": 550,
+            "bottom": -550,
+            "projectionMatrix": [
+              0.007834286524181455,
+              0,
+              0,
+              0,
+              0,
+              0.007687616216811124,
+              0,
+              0,
+              0,
+              0,
+              -0.00024859786802574035,
+              0,
+              0,
+              0,
+              -1.7127872374027078,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0.6427876096865395,
+              -0.766044443118978,
+              0,
+              0,
+              0.766044443118978,
+              0.6427876096865395,
+              0,
+              504.12332547736673,
+              5277.885751303367,
+              5962.032758997982,
+              1
+            ]
+          },
+          "viewProjectionMatrix": [
+            0.007834286524181455,
+            0,
+            0,
+            0,
+            0,
+            0.004941504452191499,
+            -0.0001904370153723434,
+            0,
+            0,
+            -0.0058890556837195,
+            -0.0001597956293614354,
+            0,
+            -3.9494465753128756,
+            9.030046967675256,
+            0.2450243495493014,
+            1
+          ],
+          "rows": {
+            "x": [
+              0.007834286524181455,
+              0,
+              0,
+              -3.9494465753128756
+            ],
+            "y": [
+              0,
+              0.004941504452191499,
+              -0.0058890556837195,
+              9.030046967675256
+            ],
+            "w": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        "after": {
+          "rawCamera": {
+            "type": "OrthographicCamera",
+            "position": [
+              504.12332547736673,
+              2483.121421048536,
+              3616.947040253734
+            ],
+            "quaternion": [
+              -0.42261826174069944,
+              0,
+              0,
+              0.90630778703665
+            ],
+            "zoom": 4.228188919246119,
+            "near": 1177.9611677831854,
+            "far": 5305.008438884584,
+            "left": -539.703125,
+            "right": 539.703125,
+            "top": 550,
+            "bottom": -550,
+            "projectionMatrix": [
+              0.007834286524181455,
+              0,
+              0,
+              0,
+              0,
+              0.007687616216811124,
+              0,
+              0,
+              0,
+              0,
+              -0.00048460796996547444,
+              0,
+              0,
+              0,
+              -1.570849370217569,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0.6427876096865393,
+              -0.7660444431189781,
+              0,
+              0,
+              0.7660444431189781,
+              0.6427876096865393,
+              0,
+              504.12332547736673,
+              2483.121421048536,
+              3616.947040253734,
+              1
+            ]
+          },
+          "viewProjectionMatrix": [
+            0.007834286524181455,
+            0,
+            0,
+            0,
+            0,
+            0.004941504452191498,
+            -0.0003712312424832203,
+            0,
+            0,
+            -0.005889055683719503,
+            -0.0003114999986491535,
+            0,
+            -3.9494465753128756,
+            9.030046967675267,
+            0.4776418783080767,
+            1
+          ],
+          "rows": {
+            "x": [
+              0.007834286524181455,
+              0,
+              0,
+              -3.9494465753128756
+            ],
+            "y": [
+              0,
+              0.004941504452191498,
+              -0.005889055683719503,
+              9.030046967675267
+            ],
+            "w": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        "scope": "controlled mounted XY projection; raw depth/framing retained, not required to be identical"
+      },
+      "standalone": {
+        "exactCameraEqual": false,
+        "equivalentXYW": false,
+        "coefficientTolerance": 1e-10,
+        "maxAbsCoefficientDelta": 1.3747265894074516,
+        "coefficientDeltas": {
+          "x": [
+            0,
+            -2.857552012029539e-35,
+            -3.794841478730399e-19,
+            -1.3747265894074516
+          ],
+          "y": [
+            -1.969370432709436e-19,
+            4.336808689942018e-19,
+            -4.336808689942018e-19,
+            0
+          ],
+          "w": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "positionDelta": [
+          296.49177676437336,
+          -2794.7643302548313,
+          -2345.085718744247
+        ],
+        "before": {
+          "rawCamera": {
+            "type": "OrthographicCamera",
+            "position": [
+              187.96103106431224,
+              5277.885751303367,
+              5843.020112353169
+            ],
+            "quaternion": [
+              -0.4226182617406994,
+              0,
+              0,
+              0.90630778703665
+            ],
+            "zoom": 1.6682497445495552,
+            "near": 308.6386099002748,
+            "far": 13470.942454128497,
+            "left": -359.796875,
+            "right": 359.796875,
+            "top": 531.1015625,
+            "bottom": -531.1015625,
+            "projectionMatrix": [
+              0.004636643229737766,
+              0,
+              0,
+              0,
+              0,
+              0.003141112477050103,
+              0,
+              0,
+              0,
+              0,
+              -0.00015194908305334528,
+              0,
+              0,
+              0,
+              -1.0468973537692057,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0.6427876096865395,
+              -0.766044443118978,
+              0,
+              0,
+              0.766044443118978,
+              0.6427876096865395,
+              0,
+              187.96103106431224,
+              5277.885751303367,
+              5843.020112353169,
+              1
+            ]
+          },
+          "viewProjectionMatrix": [
+            0.004636643229737766,
+            0,
+            0,
+            0,
+            0,
+            0.0020190681808796005,
+            -0.00011639975071003918,
+            0,
+            0,
+            -0.002406231758255919,
+            -9.767098788992125e-05,
+            0,
+            -0.8715082421388735,
+            3.403249375697812,
+            0.13814077859278684,
+            1
+          ],
+          "rows": {
+            "x": [
+              0.004636643229737766,
+              0,
+              0,
+              -0.8715082421388735
+            ],
+            "y": [
+              0,
+              0.0020190681808796005,
+              -0.002406231758255919,
+              3.403249375697812
+            ],
+            "w": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        "after": {
+          "rawCamera": {
+            "type": "OrthographicCamera",
+            "position": [
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217
+            ],
+            "quaternion": [
+              -0.42261826174069933,
+              3.708819303461431e-17,
+              1.7294508439171524e-17,
+              0.90630778703665
+            ],
+            "zoom": 1.6682497445495552,
+            "near": 341.561956187581,
+            "far": 6141.40765048019,
+            "left": -359.796875,
+            "right": 359.796875,
+            "top": 531.1015625,
+            "bottom": -531.1015625,
+            "projectionMatrix": [
+              0.004636643229737766,
+              0,
+              0,
+              0,
+              0,
+              0.003141112477050103,
+              0,
+              0,
+              0,
+              0,
+              -0.000344836760393146,
+              0,
+              0,
+              0,
+              -1.1177831184452711,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              -8.184458649722383e-17,
+              0,
+              -6.269659068556885e-17,
+              0.6427876096865395,
+              -0.7660444431189779,
+              0,
+              5.260868612033374e-17,
+              0.7660444431189779,
+              0.6427876096865395,
+              0,
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217,
+              1
+            ]
+          },
+          "viewProjectionMatrix": [
+            0.004636643229737766,
+            -1.969370432709436e-19,
+            -1.8141408890275752e-20,
+            0,
+            -2.857552012029539e-35,
+            0.002019068180879601,
+            -0.00026416028408231994,
+            0,
+            -3.794841478730399e-19,
+            -0.0024062317582559194,
+            -0.0002216567969451603,
+            0,
+            -2.246234831546325,
+            3.403249375697812,
+            0.31349987516146904,
+            1
+          ],
+          "rows": {
+            "x": [
+              0.004636643229737766,
+              -2.857552012029539e-35,
+              -3.794841478730399e-19,
+              -2.246234831546325
+            ],
+            "y": [
+              -1.969370432709436e-19,
+              0.002019068180879601,
+              -0.0024062317582559194,
+              3.403249375697812
+            ],
+            "w": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        "scope": "unmatched-framing context; not a controlled appearance pair",
+        "controlledAppearancePair": false
+      },
+      "fullAppScope": "Within each full-app image: LEFT mounted view controlled; RIGHT standalone panel may reframe and is unmatched-framing context.",
+      "exactSceneExportMatch": true,
+      "elementDeltas": {
+        ".parcel": 0,
+        ".world-cave": 0,
+        ".trail-fill": 0,
+        ".parcel-blade": 0,
+        ".parcel-flora": 0,
+        ".parcel-shrub": 0,
+        ".story-tree": 0,
+        ".world-plate-bg": 0,
+        "[data-edges]": 0
+      }
+    }
+  },
+  "captures": {
+    "before-rest": {
+      "sceneSha256": "553570a45bb6cfba1d0b152039bfc2e73d6f0cd620a2e98bb0aed888dca3a0a5",
+      "stableDataSha256": "3dbb76388e5d671ff8c9700bd0718a9b83944c77b8761bf7a411b2a5a28873ff",
+      "counts": {
+        ".parcel": 213,
+        ".world-cave": 0,
+        ".trail-fill": 109,
+        ".parcel-blade": 11051,
+        ".parcel-flora": 2473,
+        ".parcel-shrub": 2030,
+        ".story-tree": 0,
+        ".world-plate-bg": 36,
+        "[data-edges]": 327
+      },
+      "rawCanvases": {
+        "land-mount": {
+          "file": "before-rest-land-mount-raw.png",
+          "sha256": "dfd75b416bb1248c300478bcd552613558cfce80d8e0269fdfd65df8b22b8cba"
+        },
+        "land-view": {
+          "file": "before-rest-land-view-raw.png",
+          "sha256": "8fd56aa0c3264e3dc4632efda0f50587ca047f6bceee063289efa70b668422e9"
+        }
+      }
+    },
+    "before-zoom": {
+      "sceneSha256": "553570a45bb6cfba1d0b152039bfc2e73d6f0cd620a2e98bb0aed888dca3a0a5",
+      "stableDataSha256": "3dbb76388e5d671ff8c9700bd0718a9b83944c77b8761bf7a411b2a5a28873ff",
+      "counts": {
+        ".parcel": 213,
+        ".world-cave": 0,
+        ".trail-fill": 109,
+        ".parcel-blade": 11051,
+        ".parcel-flora": 2473,
+        ".parcel-shrub": 2030,
+        ".story-tree": 0,
+        ".world-plate-bg": 36,
+        "[data-edges]": 327
+      },
+      "rawCanvases": {
+        "land-mount": {
+          "file": "before-zoom-land-mount-raw.png",
+          "sha256": "f9354aff80e7cacb46b8dd5d25b85ea7d8c942c12f8c401cabc2e8e69a794505"
+        },
+        "land-view": {
+          "file": "before-zoom-land-view-raw.png",
+          "sha256": "8fd56aa0c3264e3dc4632efda0f50587ca047f6bceee063289efa70b668422e9"
+        }
+      }
+    },
+    "after-rest": {
+      "sceneSha256": "553570a45bb6cfba1d0b152039bfc2e73d6f0cd620a2e98bb0aed888dca3a0a5",
+      "stableDataSha256": "3dbb76388e5d671ff8c9700bd0718a9b83944c77b8761bf7a411b2a5a28873ff",
+      "counts": {
+        ".parcel": 213,
+        ".world-cave": 0,
+        ".trail-fill": 109,
+        ".parcel-blade": 11051,
+        ".parcel-flora": 2473,
+        ".parcel-shrub": 2030,
+        ".story-tree": 0,
+        ".world-plate-bg": 36,
+        "[data-edges]": 327
+      },
+      "rawCanvases": {
+        "land-mount": {
+          "file": "after-rest-land-mount-raw.png",
+          "sha256": "18ec1b0f20df98c5ffcc5e1002df990ac800be3f387c8bf4179f913598406405"
+        },
+        "land-view": {
+          "file": "after-rest-land-view-raw.png",
+          "sha256": "e4992f8aba015a3ab698fa836bfdfb65e32314750d6faccdddc4f051d30d4e95"
+        }
+      }
+    },
+    "after-zoom": {
+      "sceneSha256": "553570a45bb6cfba1d0b152039bfc2e73d6f0cd620a2e98bb0aed888dca3a0a5",
+      "stableDataSha256": "3dbb76388e5d671ff8c9700bd0718a9b83944c77b8761bf7a411b2a5a28873ff",
+      "counts": {
+        ".parcel": 213,
+        ".world-cave": 0,
+        ".trail-fill": 109,
+        ".parcel-blade": 11051,
+        ".parcel-flora": 2473,
+        ".parcel-shrub": 2030,
+        ".story-tree": 0,
+        ".world-plate-bg": 36,
+        "[data-edges]": 327
+      },
+      "rawCanvases": {
+        "land-mount": {
+          "file": "after-zoom-land-mount-raw.png",
+          "sha256": "52fd326f4f7f06635a0db688d51d09e4787ca4fb2d28ab409fe190c01dba4ef0"
+        },
+        "land-view": {
+          "file": "after-zoom-land-view-raw.png",
+          "sha256": "e4992f8aba015a3ab698fa836bfdfb65e32314750d6faccdddc4f051d30d4e95"
+        }
+      }
+    }
+  },
+  "svgDiagnostic": {
+    "scope": "AFTER-only temporary SVG coverage opacity0, exact native image/camera/data/time-function checks, then restored; no product style change",
+    "checks": {
+      "matchesOrdinaryCapture": true,
+      "styleApplied": {
+        "sameSettledAppCursor": true,
+        "sameCameraAndComposition": true,
+        "sameStableLiveData": true,
+        "exactNativeRawCanvases": true,
+        "sameCoverageTargets": true,
+        "timingFunctionsUnchanged": true
+      },
+      "afterScreenshot": {
+        "sameSettledAppCursor": true,
+        "sameCameraAndComposition": true,
+        "sameStableLiveData": true,
+        "exactNativeRawCanvases": true,
+        "sameCoverageTargets": true,
+        "timingFunctionsUnchanged": true
+      },
+      "styleRemoved": {
+        "sameSettledAppCursor": true,
+        "sameCameraAndComposition": true,
+        "sameStableLiveData": true,
+        "exactNativeRawCanvases": true,
+        "sameCoverageTargets": true,
+        "timingFunctionsUnchanged": true
+      },
+      "coverageStyleRestored": true,
+      "styleNodeRemoved": true
+    }
+  },
+  "placement": {
+    "status": "DIAGNOSTIC_RECONSTRUCTION",
+    "path": [
+      "LandViewMount(scene)",
+      "landViewStream(scene)",
+      "landStreamFromDrawing(scene)",
+      "createGroundInputCache(SHIPPED_GROUND_INPUT)(descriptors)",
+      "ground.placements shared by KitProps and casters"
+    ],
+    "scope": "Settled placement/alignment reconstruction through actual consumer modules; not a read of the live browser cache or GPU buffers.",
+    "constants": {
+      "relief": 0.8292227333419435,
+      "footprintBinding": "KIT_FOOTPRINTS_2026_08_29",
+      "heightBinding": "KIT_HEIGHTS_2026_08_29"
+    },
+    "counts": {
+      "descriptors": 21527,
+      "cells": 2760,
+      "allPlacements": 3840,
+      "coverageDescriptors": 2473,
+      "coveragePlacements": 2473,
+      "casters": 3840
+    },
+    "extents": {
+      "groundRings": {
+        "minX": 62.88090818922284,
+        "maxX": 906.024707468148,
+        "minZ": 65.2383471674252,
+        "maxZ": 1829.9356911860264
+      },
+      "coverageDescriptors": {
+        "minX": 79.39437423685882,
+        "maxX": 904.7225819593076,
+        "minZ": 75.47816265471572,
+        "maxZ": 1810.865845356493
+      },
+      "coveragePlacements": {
+        "minX": 79.39437423685882,
+        "maxX": 904.7225819593076,
+        "minZ": 75.47816265471572,
+        "maxZ": 1810.865845356493
+      }
+    },
+    "summary": {
+      "identityMismatches": 0,
+      "coordinateMismatches": 0,
+      "landHeightMismatches": 0,
+      "outsideWholeGroundBounds": 0,
+      "outsideOwnIslandGroundBounds": 0,
+      "missingOwnIslandGroundBounds": 0
+    },
+    "limits": [
+      "Bounds use actual cell-ground rings before the canvas coast/shore geometry treatment; a bounding-box overlap is not polygon containment, shoreline clearance or tree collision proof.",
+      "The height comparison checks the shipped placement binding to landHeight. It does not claim equality to every locally shore-deformed ground vertex or mesh footprint.",
+      "No glTF loading or GPU mesh construction is performed. Loaded asset geometry, merged mesh visibility and appearance still require the actual browser capture.",
+      "No app clock, renderer frame loop, camera, scene input or payload is changed. No historical growth helper is used.",
+      "Diagnostic fields are observations, not a gate verdict, performance result, browser limitation or owner appearance attestation."
+    ]
+  },
+  "roadFindingCorrection": {
+    "statement": "Initial preview reading of absent roads was wrong. Exact saved PNG pixels show roads unchanged. No road defect or repair is claimed.",
+    "pixels": {
+      "run-3": {
+        "scope": "Exact RGBA comparison at every BEFORE pixel matching the four road colours observed in isolated actual-Line2 render; no generated/edited image",
+        "beforeRoadMaskPixels": 17464,
+        "changedAtBeforeRoadMask": 0,
+        "afterRoadMaskPixels": 17464,
+        "roadMaskSymmetricDifference": 0
+      },
+      "run-4": {
+        "scope": "Exact RGBA comparison at every BEFORE pixel matching the four road colours observed in isolated actual-Line2 render; no generated/edited image",
+        "beforeRoadMaskPixels": 17464,
+        "changedAtBeforeRoadMask": 0,
+        "afterRoadMaskPixels": 17464,
+        "roadMaskSymmetricDifference": 0
+      }
+    },
+    "browserDiagnosis": {
+      "scope": "AFTER-only causal diagnosis: hides/restores non-road meshes, changes/restores line depth flags, and temporarily substitutes/restores camera depth settings. Ordinary comparison images precede these interventions. This is not a product camera, behavior proof or appearance verdict.",
+      "lineCount": 109,
+      "checks": {
+        "actualCameraAndHostRestored": true,
+        "exactNativeRawCanvasesRestored": true,
+        "visibilityRestored": true,
+        "materialDepthRestored": true
+      },
+      "cases": {
+        "ordinary-after": {
+          "sha256": "52fd326f4f7f06635a0db688d51d09e4787ca4fb2d28ab409fe190c01dba4ef0",
+          "renderInfo": {
+            "calls": 31,
+            "triangles": 1993706
+          }
+        },
+        "roads-only-current-camera": {
+          "sha256": "a492df03fa85866c1d771d21f1be819b90e6de230700ef90b80dd5bd92ce9e95",
+          "renderInfo": {
+            "calls": 22,
+            "triangles": 1872
+          }
+        },
+        "roads-only-no-depth-test": {
+          "sha256": "a492df03fa85866c1d771d21f1be819b90e6de230700ef90b80dd5bd92ce9e95",
+          "renderInfo": {
+            "calls": 22,
+            "triangles": 1872
+          }
+        },
+        "roads-only-before-depth-camera": {
+          "sha256": "a492df03fa85866c1d771d21f1be819b90e6de230700ef90b80dd5bd92ce9e95",
+          "renderInfo": {
+            "calls": 22,
+            "triangles": 1872
+          }
+        },
+        "roads-only-near-zero": {
+          "sha256": "a492df03fa85866c1d771d21f1be819b90e6de230700ef90b80dd5bd92ce9e95",
+          "renderInfo": {
+            "calls": 22,
+            "triangles": 1872
+          }
+        },
+        "restored-after": {
+          "sha256": "52fd326f4f7f06635a0db688d51d09e4787ca4fb2d28ab409fe190c01dba4ef0",
+          "renderInfo": {
+            "calls": 31,
+            "triangles": 1993706
+          }
+        }
+      }
+    }
+  },
+  "limits": [
+    "Ordinary full screenshots preserve the SVG overlay and native coverage flora; double presentation is expected until retirement.",
+    "One AFTER-only diagnostic follows all ordinary captures. It temporarily sets only .world-scene .parcel-flora opacity to 0, then removes that exact style and verifies restoration. This is harness diagnosis, not product styling or retirement.",
+    "Raw land-mount PNGs compare the actual mounted 3D canvas with equal orthographic XYW view-projection coefficients within the explicit 1e-10 tolerance and unchanged canvas, host and stable data. Exact raw camera equality is separately reported, not claimed.",
+    "Camera depth position, near/far and complete raw matrices remain in the receipts and comparisons. The XYW check establishes screen projection equivalence, not depth-buffer equivalence, clipping sufficiency or pixel identity.",
+    "Standalone land-view PNGs are unmatched-framing context: corrected descriptor bounds can recenter this panel. They are not a controlled before/after appearance pair. Within every full-app image, the LEFT mounted view is controlled and the RIGHT standalone panel reframes.",
+    "Both consumers are enabled together by the stated query; this is not the ordinary single-panel opening composition.",
+    "Static reduced-motion appearance evidence only: no growth, quiet-render, performance or hardware-floor verdict.",
+    "The API snapshot is a frozen set acquired in one warm-up window, not a database transaction snapshot. Browser health bodies also replay after-host bytes; independently fetched health receipts prove each real server identity.",
+    "Live session wisps and other elapsed-time decorations may differ despite identical API bodies; exact scene exports are retained.",
+    "Raw PNG extraction explicitly renders each existing scene with its actual camera once, then reads its canvas. No camera or renderer clock is changed.",
+    "Diagnostic clock checks observe the settled app cursor/readout and regrow state, plus unchanged browser timing-function identities. They do not freeze wall time or expose the app clock internals.",
+    "Diagnostic data equality covers the frozen API inputs and exported world/trails/tile/spacing. Full drawable scene hashes are recorded separately because live elapsed-time decorations can change.",
+    "CAPTURED means instrument checks passed. Appearance remains for the owner to judge."
+  ],
+  "privateArtifacts": "API snapshot, full scene exports and served-source responses remain outside this committed bundle."
+}
