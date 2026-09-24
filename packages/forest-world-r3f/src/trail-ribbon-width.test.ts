@@ -5,7 +5,12 @@ import test from 'node:test';
 
 import { trailFillWidth } from '@storytree/forest-world';
 
-import { RIBBON_GROUND_SCALE, RIBBON_MIN_SCREEN_PX, trailRibbonScreenWidth } from './trail-ribbon-width.js';
+import {
+  RIBBON_GROUND_SCALE,
+  RIBBON_MIN_SCREEN_PX,
+  scaleRibbonWithZoom,
+  trailRibbonScreenWidth,
+} from './trail-ribbon-width.js';
 
 // The three zooms measured on the live forest, 2026-09-25 (CSS px per ground unit): 8 wheel notches
 // in, the studio's opening view, and wheeled out to the zoom-out floor.
@@ -63,4 +68,35 @@ test('a road never vanishes: the floor holds, and a zoom that projects nothing k
   assert.equal(trailRibbonScreenWidth(0, OPENING), RIBBON_MIN_SCREEN_PX);
   // Zoomed right out, the heaviest measured trunk still reads above the floor.
   assert.ok(trailRibbonScreenWidth(12.44, ZOOMED_OUT) > RIBBON_MIN_SCREEN_PX);
+});
+
+test('the installed hook sets the drawn width from the camera of THAT draw, after the line\'s own hook', () => {
+  const calls: string[] = [];
+  class FakeLine {
+    material = { linewidth: 3 };
+    onBeforeRender(): void {
+      calls.push('own');
+    }
+  }
+  const line = new FakeLine();
+  const w = trailFillWidth(4);
+  const undo = scaleRibbonWithZoom(line, w);
+  const draw = (camera: unknown): number => {
+    (line.onBeforeRender as (r: unknown, s: unknown, c: unknown) => void)(null, null, camera);
+    return line.material.linewidth;
+  };
+  const ortho = (zoom: number) => ({ isOrthographicCamera: true, zoom });
+  // The old ribbon drew `w` px whatever the zoom; this one follows the zoom of each draw.
+  const opening = draw(ortho(OPENING));
+  const zoomedOut = draw(ortho(ZOOMED_OUT));
+  const zoomedIn = draw(ortho(ZOOMED_IN));
+  assert.equal(zoomedIn, trailRibbonScreenWidth(w, ZOOMED_IN));
+  assert.ok(zoomedOut < opening && opening < zoomedIn, `${zoomedOut} < ${opening} < ${zoomedIn}`);
+  assert.deepEqual(calls, ['own', 'own', 'own']);
+  // A perspective camera has no zoom in this sense: the width is left as it was.
+  line.material.linewidth = 7;
+  assert.equal(draw({ isPerspectiveCamera: true, zoom: 1 }), 7);
+  undo();
+  assert.equal(Object.prototype.hasOwnProperty.call(line, 'onBeforeRender'), false);
+  assert.equal(draw(ortho(ZOOMED_OUT)), 7);
 });

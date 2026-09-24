@@ -44,3 +44,39 @@ export function trailRibbonScreenWidth(width: number, zoom: number): number {
   if (!(zoom > 0) || !Number.isFinite(zoom) || !(width > 0)) return RIBBON_MIN_SCREEN_PX;
   return Math.max(RIBBON_MIN_SCREEN_PX, width * RIBBON_GROUND_SCALE * zoom);
 }
+
+/** The slice of a drei `<Line>` (three-stdlib's `Line2`) the zoom hook touches. */
+export interface ZoomScaledRibbon {
+  onBeforeRender(renderer: never, scene: never, camera: never, ...rest: never[]): void;
+  readonly material: { linewidth: number };
+}
+
+/**
+ * Make a road ribbon take its width from the camera's zoom AT EVERY DRAW, whichever path draws it.
+ *
+ * ⚠ IT RIDES THE RENDERER'S OWN PER-OBJECT HOOK, NOT `useFrame`. Under a host the canvas draws the
+ * host's camera synchronously in the host's own commit (`presentRegisteredCamera`, a direct
+ * `gl.render` — it is what stops the land tearing on pan), and a direct render runs no `useFrame`
+ * callback, so a width set there would lag the zoom by a frame on exactly the gestures that change
+ * it. `onBeforeRender` runs inside every `gl.render`, before the object's uniforms are uploaded, so
+ * the width drawn is always the width for the camera being drawn with.
+ *
+ * The line's own hook still runs first (it sets the material's resolution from the viewport). A
+ * camera that is not orthographic has no zoom in this sense and leaves the width alone. Returns the
+ * undo, for an effect's cleanup.
+ */
+export function scaleRibbonWithZoom(line: ZoomScaledRibbon, width: number): () => void {
+  const own = Object.prototype.hasOwnProperty.call(line, 'onBeforeRender');
+  const base = line.onBeforeRender;
+  line.onBeforeRender = function (this: ZoomScaledRibbon, renderer: never, scene: never, camera: never, ...rest: never[]) {
+    base.call(this, renderer, scene, camera, ...rest);
+    const cam = camera as { readonly isOrthographicCamera?: boolean; readonly zoom?: number } | null;
+    if (cam?.isOrthographicCamera === true && typeof cam.zoom === 'number') {
+      line.material.linewidth = trailRibbonScreenWidth(width, cam.zoom);
+    }
+  };
+  return () => {
+    if (own) line.onBeforeRender = base;
+    else delete (line as { onBeforeRender?: unknown }).onBeforeRender;
+  };
+}
