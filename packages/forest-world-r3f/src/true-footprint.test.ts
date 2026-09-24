@@ -19,7 +19,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { islandCentres, nearestCentre, scaleAboutIslands, scaledBearing } from './true-footprint.js';
+import { islandCentres, nearestCentre, scaleAboutIslands, scaledBearing, type GroundShift } from './true-footprint.js';
 import type { Descriptor3D, InstanceDescriptor } from './world-to-3d.js';
 
 /** The z-only stretch the module used to export: the same plane scaled along z alone. */
@@ -154,10 +154,28 @@ test('⚠ a cave’s bearing turns with the stretched rim — n′ ∝ (s·cos b
   }
 });
 
-test('⚠⚠ a ribbon between two islands lands on BOTH stretched coasts and has no step between them', () => {
+/** The road displacement field, DERIVED here from its definition (true-footprint.ts header) and
+ *  never read back off the module: within an island's reach the ground's own move, in the band past
+ *  it the rim's move on the same ray tapered linearly to zero, beyond the band nothing — summed. */
+function fieldShift(
+  p: { x: number; z: number },
+  islands: readonly { c: { x: number; z: number }; reach: number; s: { x: number; z: number } }[],
+): GroundShift {
+  let dx = 0;
+  let dz = 0;
+  for (const { c, reach, s } of islands) {
+    const r = Math.hypot(p.x - c.x, p.z - c.z);
+    const band = reach * Math.max(1, 2 * Math.max(Math.abs(s.x - 1), Math.abs(s.z - 1)));
+    const w = r <= reach ? 1 : r >= reach + band ? 0 : (reach / r) * (1 - (r - reach) / band);
+    dx += (p.x - c.x) * (s.x - 1) * w;
+    dz += (p.z - c.z) * (s.z - 1) * w;
+  }
+  return { dx, dz };
+}
+
+test('⚠⚠ a ribbon between two islands lands on BOTH stretched coasts, follows the position field between, and never folds', () => {
   // ⚠ AWAY FROM z = 0 AND WITH x VARYING, NON-UNIFORMLY. Islands on z = 0 make `p.z - c.z` and
-  // `p.z + c.z` the same number, and points on one x make the arc length blind to its x term —
-  // both survived `check:mutation-diff` before this fixture moved.
+  // `p.z + c.z` the same number, and points on one x hide an x term.
   const ds: InstanceDescriptor[] = [square('a', 0, 40), square('b', 0, 140)];
   // A strip from a's south coast (z = 50) to b's north coast (z = 130), five points, wandering in x.
   const raw = [
@@ -175,24 +193,18 @@ test('⚠⚠ a ribbon between two islands lands on BOTH stretched coasts and has
   // a's coast moved to 40 + 10·3 = 70; b's coast to 140 - 10·3 = 110.
   assert.ok(Math.abs(moved.points![0]!.z - 70) < 1e-9, 'the first end sits on a’s stretched coast');
   assert.ok(Math.abs(moved.points![4]!.z - 110) < 1e-9, 'the last end sits on b’s stretched coast');
-  // Every interior point is DERIVED here from the definition — arc-length blend of the two
-  // islands' displacements — never read back off the module.
-  const lengths = [0];
-  for (let i = 1; i < raw.length; i += 1) {
-    lengths.push(lengths[i - 1]! + Math.hypot(raw[i]!.x - raw[i - 1]!.x, raw[i]!.z - raw[i - 1]!.z));
-  }
-  const total = lengths[4]!;
+  const reach = Math.hypot(10, 10);
+  const islands = [
+    { c: { x: 0, z: 40 }, reach, s: { x: 1, z: s } },
+    { c: { x: 0, z: 140 }, reach, s: { x: 1, z: s } },
+  ];
   for (const [i, p] of raw.entries()) {
-    const t = lengths[i]! / total;
-    const want = p.z + (1 - t) * (p.z - 40) * (s - 1) + t * (p.z - 140) * (s - 1);
+    const want = p.z + fieldShift(p, islands).dz;
     assert.ok(Math.abs(moved.points![i]!.z - want) < 1e-9, `point ${i}: ${moved.points![i]!.z} against ${want}`);
     assert.equal(moved.points![i]!.x, p.x, 'x never moves');
   }
-  // Monotone in between: no fold, no jump.
+  // Monotone in between: no fold, no jump — even under a threefold growth.
   for (let i = 1; i < 5; i += 1) assert.ok(moved.points![i]!.z > moved.points![i - 1]!.z, `point ${i} steps back`);
-  // ⚠ NON-VACUITY against the per-point-nearest-island rule: that rule would put point 3 (z=110,
-  // nearer b) at 140 + (110-140)·3 = 50, BEHIND point 1 — a fold in the ribbon.
-  assert.ok(moved.points![3]!.z > moved.points![1]!.z);
   // The anchor moved by the mean of the points' shifts.
   const meanShift = moved.points!.reduce((acc, p, i) => acc + (p.z - pts[i]!.z), 0) / 5;
   assert.ok(Math.abs(moved.transform.z - (90 + meanShift)) < 1e-9);
@@ -201,31 +213,54 @@ test('⚠⚠ a ribbon between two islands lands on BOTH stretched coasts and has
   const ghost: InstanceDescriptor = { ...strip, kind: 'trail-ghost-strip', group: 'trail-ghost-strip' };
   const g = stretchAboutIslands([...ds, ghost], s)[2]!;
   assert.deepEqual(g.points, moved.points);
-  // A ribbon of ONE point (or coincident points) has no arc length to blend along: it is placed
-  // about the island nearest it and stays finite.
-  const dot: InstanceDescriptor = {
-    kind: 'trail-strip',
-    transform: { x: 0, y: 0, z: 56 },
-    group: 'trail-strip',
-    points: [{ x: 0, y: 0, z: 56 }, { x: 0, y: 0, z: 56 }],
-  };
-  const d1 = stretchAboutIslands([...ds, dot], s)[2]!;
-  assert.deepEqual(d1.points!.map((p) => p.z), [88, 88]);
-  assert.equal(d1.transform.z, 88);
-  // A strip with NO points, or an empty list, is a point-like thing: nearest island, no blend.
+  // A strip with NO points, or an empty list, is a point-like thing: nearest island, no field.
   const bare: InstanceDescriptor = { kind: 'trail-strip', transform: { x: 0, y: 0, z: 56 }, group: 'trail-strip' };
   assert.equal(stretchAboutIslands([...ds, bare], s)[2]!.transform.z, 88);
   assert.equal(stretchAboutIslands([...ds, { ...bare, points: [] }], s)[2]!.transform.z, 88);
-  // A ribbon whose both ends are nearest the SAME island stretches about that island exactly.
+  // A ribbon wholly inside one island's reach stretches about that island exactly.
   const dock: InstanceDescriptor = {
     kind: 'trail-strip',
-    transform: { x: 0, y: 0, z: 26 },
+    transform: { x: 0, y: 0, z: 36 },
     group: 'trail-strip',
-    points: [{ x: 0, y: 0, z: 22 }, { x: 0, y: 0, z: 26 }, { x: 0, y: 0, z: 30 }],
+    points: [{ x: 0, y: 0, z: 32 }, { x: 0, y: 0, z: 36 }, { x: 0, y: 0, z: 40 }],
   };
   const d2 = stretchAboutIslands([...ds, dock], s)[2]!;
-  assert.deepEqual(d2.points!.map((p) => p.z), [-14, -2, 10]);
-  assert.ok(Math.abs(d2.transform.z - -2) < 1e-9);
+  assert.deepEqual(d2.points!.map((p) => p.z), [16, 28, 40]);
+  assert.ok(Math.abs(d2.transform.z - 28) < 1e-9);
+});
+
+test('⚠⚠ a road in OPEN GROUND stays exactly where the drawing put it, and a junction two strips share moves identically in both', () => {
+  // The public map's bug (2026-09-25): the router bundles the network, so strips run junction to
+  // junction far from any coast, and the retired rule dragged those junctions toward the nearest
+  // shrinking island by (p − c)·(s − 1) — a third of the way in at the public map's factors — so
+  // the 3D roads left the routes the SVG's selection lanes light on a click.
+  const a = square('a', 0, 0); // reach 10√2 ≈ 14.1; shrinks to 0.6, so its band is one reach wide
+  const b = square('b', 300, 0);
+  const trunk: InstanceDescriptor = {
+    kind: 'trail-strip',
+    transform: { x: 150, y: 0, z: 0 },
+    group: 'g',
+    // from a's coast out to a junction at (150, 60), far from both islands
+    points: [{ x: 10, y: 0, z: 0 }, { x: 80, y: 0, z: 40 }, { x: 150, y: 0, z: 60 }],
+  };
+  const branch: InstanceDescriptor = {
+    kind: 'trail-strip',
+    transform: { x: 225, y: 0, z: 30 },
+    group: 'g',
+    // from that same junction on to b's coast
+    points: [{ x: 150, y: 0, z: 60 }, { x: 290, y: 0, z: 0 }],
+  };
+  const out = scaleAboutIslands([a, b, trunk, branch], () => ({ x: 0.6, z: 0.6 }));
+  const [, , t, br] = out as [InstanceDescriptor, InstanceDescriptor, InstanceDescriptor, InstanceDescriptor];
+  // the docks land on the scaled coasts
+  assert.deepEqual([t.points![0]!.x, t.points![0]!.z], [6, 0]);
+  assert.ok(Math.abs(br.points![1]!.x - 294) < 1e-9 && br.points![1]!.z === 0);
+  // open ground: not moved AT ALL (the retired rule moved (80, 40) to (69.9, 34.9) and the junction
+  // to (120, 48) — 32 units off the drawn route)
+  assert.deepEqual([t.points![1]!.x, t.points![1]!.z], [80, 40]);
+  assert.deepEqual([t.points![2]!.x, t.points![2]!.z], [150, 60]);
+  // the junction is one point in both strips
+  assert.deepEqual(t.points![2], br.points![0]);
 });
 
 test('⚠ islandCentres reads CELLS ONLY, and only cells with vertices; nearestCentre keeps the first of two equidistant centres', () => {
@@ -332,29 +367,37 @@ test('⚠ a wisp EQUIDISTANT from two islands follows the FIRST — the tie rule
   assert.deepEqual(swapped[2]!.transform, { x: 75, y: 0, z: 0 });
 });
 
-test('⚠ a ribbon under an x-scale: each end follows its own island along x, the points between blend, and the transform moves by the mean shift', () => {
-  const a = square('a', 0, 0); // scaled ×3 about (0, 0)
-  const b = square('b', 200, 0); // held
+test('⚠ a ribbon under an x-scale: each end follows its own island along x, the points between follow the field, and the transform moves by the mean shift', () => {
+  const a = square('a', 0, 0); // scaled ×3 along x about (0, 0)
+  const b = square('b', 200, 0); // scaled ×½ along x about (200, 0)
   const strip: InstanceDescriptor = {
     kind: 'trail-strip',
     transform: { x: 105, y: 0, z: 7 },
     group: 'g',
     points: [
       { x: 10, y: 0, z: 7 },
+      { x: 40, y: 0, z: 7 },
       { x: 105, y: 0, z: 7 },
-      { x: 200, y: 0, z: 7 },
+      { x: 190, y: 0, z: 7 },
     ],
   };
-  // a scales ×3 about (0, 0); b scales ×0.5 about (200, 0) — BOTH ends move, in opposite senses.
   const out = scaleAboutIslands([a, b, strip], (id) => (id === 'a' ? { x: 3, z: 1 } : { x: 0.5, z: 1 }));
   const s = out[2]!;
-  // First end, attached to a: (10 − 0) × (3 − 1) = +20 → 30. Last end, attached to b:
-  // (200 − 200) × (0.5 − 1) = 0 → 200. The middle point blends the two islands' displacements OF
-  // ITSELF by arc length: ½·(105 − 0)·2 + ½·(105 − 200)·(−½) = 105 + 23.75 = +128.75 → 233.75.
-  assert.deepEqual(s.points!.map((p) => p.x), [30, 233.75, 200]);
+  const reach = Math.hypot(10, 10);
+  const islands = [
+    { c: { x: 0, z: 0 }, reach, s: { x: 3, z: 1 } },
+    { c: { x: 200, z: 0 }, reach, s: { x: 0.5, z: 1 } },
+  ];
+  // First end, inside a's reach: 10 × 3 = 30. Last end, inside b's: 200 − 10 × ½ = 195. The point
+  // at 40 is in a's band (a's growth widens it to four reaches) and moves; the one at 105 is past
+  // every band and does not.
+  const want = strip.points!.map((p) => p.x + fieldShift(p, islands).dx);
+  assert.ok(Math.abs(want[0]! - 30) < 1e-9 && Math.abs(want[3]! - 195) < 1e-9);
+  assert.ok(want[1]! > 40 && want[2] === 105, `${want}`);
+  s.points!.forEach((p, i) => assert.ok(Math.abs(p.x - want[i]!) < 1e-9, `point ${i}: ${p.x} against ${want[i]}`));
   assert.ok(s.points!.every((p) => p.z === 7));
-  // The transform moves by the MEAN of the points' shifts: (20 + 128.75 + 0) / 3.
-  assert.ok(Math.abs(s.transform.x - (105 + 148.75 / 3)) < 1e-9, `${s.transform.x}`);
+  const meanShift = want.reduce((acc, x, i) => acc + (x - strip.points![i]!.x), 0) / 4;
+  assert.ok(Math.abs(s.transform.x - (105 + meanShift)) < 1e-9, `${s.transform.x}`);
   assert.equal(s.transform.z, 7);
 });
 

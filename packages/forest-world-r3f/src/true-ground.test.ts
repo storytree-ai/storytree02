@@ -22,9 +22,9 @@ import {
   type SceneG,
 } from '@storytree/forest-world';
 
-import { LAND_AREA_PER_CAPABILITY } from './land-per-capability.js';
+import { LAND_AREA_PER_CAPABILITY, sizeIslandsByCapability } from './land-per-capability.js';
 import { landStreamFromDrawing, trueGroundFromDrawing } from './true-ground.js';
-import type { Descriptor3D, InstanceDescriptor } from './world-to-3d.js';
+import { worldTo3D, type Descriptor3D, type InstanceDescriptor } from './world-to-3d.js';
 
 /** A parcel whose ring is the four points given, in the DRAWING's coordinates. */
 function drawnCell(ring: readonly (readonly [number, number])[]): InstanceDescriptor {
@@ -253,13 +253,13 @@ test('the pipeline sizes ONCE, and a RIBBON is where sizing twice shows', () => 
   // cells-only assertion therefore cannot separate them, which is what makes this fixture the
   // cheapest one that can.
   //
-  // A RIBBON can. A trail spans two islands and belongs to neither, so the sizing attaches each end
-  // to its nearest island and BLENDS between the two islands' factors along the path — and blending
-  // twice, over geometry the first blend already moved, is not blending once.
+  // A RIBBON can. A trail belongs to no island: near an island's shore it moves as the island's
+  // ground does, tapering to nothing out in open ground (`spanShift`, true-footprint.ts) — and a
+  // taper computed twice, over geometry the first pass already moved, is not the taper once.
   const s = groundFlattening(LAND_CAMERA_ELEVATION_DEG);
-  // Two islands of DIFFERENT size and capability count, so their factors differ and the blend has
-  // something to interpolate. Ground footprints: `a` 80 x 120 over one capability, `b` 180 x 180
-  // over four. Each island's cells are drawn as one rectangle per capability.
+  // Two islands of DIFFERENT size and capability count, so their factors differ. Ground
+  // footprints: `a` 80 x 120 over one capability, `b` 180 x 180 over four. Each island's cells are
+  // drawn as one rectangle per capability.
   const island = (id: string, caps: readonly string[], cx: number, cz: number, hw: number, hd: number): SceneG => ({
     el: 'g',
     kind: 'ground',
@@ -282,8 +282,9 @@ test('the pipeline sizes ONCE, and a RIBBON is where sizing twice shows', () => 
     children: [
       island('a', ['ca'], 0, 0, 40, 60),
       island('b', ['cb', 'cc', 'cd', 'ce'], 400, 900, 90, 90),
-      // A three-point ribbon from a's centre to b's centre, drawn in the DRAWING's squashed space.
-      { el: 'path', kind: 'trail-fill', id: 'seg1', edges: 'a->b', d: `M 0 0 L 200 ${450 * s} L 400 ${900 * s}` },
+      // A three-point ribbon from a's centre to b's centre, drawn in the DRAWING's squashed space;
+      // its middle point sits just off a's shore, inside the band where the road follows the island.
+      { el: 'path', kind: 'trail-fill', id: 'seg1', edges: 'a->b', d: `M 0 0 L 60 ${90 * s} L 400 ${900 * s}` },
     ],
   };
 
@@ -293,24 +294,33 @@ test('the pipeline sizes ONCE, and a RIBBON is where sizing twice shows', () => 
   assert.equal(pts.length, 3);
 
   // THE DERIVATION, from the fixture and the shared ratio — never from a run. Un-projected, the
-  // ribbon runs (0, 0) → (200, 450) → (400, 900) on true ground, and each island scales about its
+  // ribbon runs (0, 0) → (60, 90) → (400, 900) on true ground, and each island scales about its
   // own centre by `√(capabilities · ratio / area)`.
   const fa = Math.sqrt(LAND_AREA_PER_CAPABILITY / (80 * 120));
   const fb = Math.sqrt((4 * LAND_AREA_PER_CAPABILITY) / (180 * 180));
-  assert.ok(Math.abs(fa - fb) > 0.01, 'the two islands really do scale differently, or there is no blend to see');
-  // The ENDS sit exactly on their islands' centres, so scaling about those centres leaves them put
-  // — which is the ribbon docking where it docked.
+  assert.ok(Math.abs(fa - fb) > 0.01, 'the two islands really do scale differently');
+  // The ENDS sit exactly on their islands' centres, so scaling about those centres leaves them put.
   assert.ok(Math.abs(pts[0]!.x) < 1e-9 && Math.abs(pts[0]!.z) < 1e-9);
   assert.ok(Math.abs(pts[2]!.x - 400) < 1e-9 && Math.abs(pts[2]!.z - 900) < 1e-9);
-  // The MIDDLE point is the blend: half a's transform of it plus half b's, at the path's midpoint.
-  const midX = 0.5 * (0 + fa * (200 - 0)) + 0.5 * (400 + fb * (200 - 400));
-  const midZ = 0.5 * (0 + fa * (450 - 0)) + 0.5 * (900 + fb * (450 - 900));
+  // The MIDDLE point is past a's reach (its farthest corner, √(40² + 60²)) and inside the band, so
+  // it moves by a's rim move on its ray, tapered; b is ~880 away and contributes nothing.
+  const reach = Math.hypot(40, 60);
+  const r = Math.hypot(60, 90);
+  const band = reach * Math.max(1, 2 * Math.abs(fa - 1));
+  assert.ok(r > reach && r < reach + band, 'the middle point is in the band, or the taper is not exercised');
+  const w = (reach / r) * (1 - (r - reach) / band);
+  const midX = 60 + 60 * (fa - 1) * w;
+  const midZ = 90 + 90 * (fa - 1) * w;
   assert.ok(Math.abs(pts[1]!.x - midX) < 1e-6, `mid x ${pts[1]!.x} wanted ${midX}`);
   assert.ok(Math.abs(pts[1]!.z - midZ) < 1e-6, `mid z ${pts[1]!.z} wanted ${midZ}`);
-  // ⚠ THE SEPARATION: sizing the drawing first and then sizing again lands this point at
-  // (197.24, 443.79) — measured — about 1.1 and 2.6 units away, which is far outside the tolerance
-  // above and is the whole reason the mapper is asked to leave the islands alone.
-  assert.ok(Math.hypot(pts[1]!.x - 197.2408, pts[1]!.z - 443.7917) > 1, 'and this is not the twice-sized answer');
+  // ⚠ THE SEPARATION: sizing the drawing in the mapper and then sizing again lands this point
+  // elsewhere — which is the whole reason the mapper is asked to leave the islands alone.
+  const twice = sizeIslandsByCapability(
+    trueGroundFromDrawing(worldTo3D(scene)),
+    LAND_AREA_PER_CAPABILITY,
+  ).find((d): d is InstanceDescriptor => d.kind === 'trail-strip');
+  const tp = twice!.points![1]!;
+  assert.ok(Math.hypot(pts[1]!.x - tp.x, pts[1]!.z - tp.z) > 0.5, `and this is not the twice-sized answer (${tp.x}, ${tp.z})`);
 });
 
 test('the pipeline stands the island UPRIGHT — the drawing’s squash is gone by the end', () => {
