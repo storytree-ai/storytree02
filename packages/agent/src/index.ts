@@ -22,6 +22,7 @@ export { runStep, runStepValidated } from "./step.js";
 
 export type {
   AuthoringPhase,
+  AuthoringRepairAdmission,
   AuthorResult,
   AuthoringEscalation,
   LiveRuntime,
