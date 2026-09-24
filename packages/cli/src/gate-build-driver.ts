@@ -532,6 +532,7 @@ export async function driveBuildTestsGate(
       // or any other builder fault) fails closed as an unsigned result — never an escaped throw that
       // skips the report.
       const reason = err instanceof Error ? err.message : String(err);
+      // Stryker disable next-line ArrayDeclaration: EQUIVALENT — a failed result's phasesVisited is never rendered in the gate envelope, so no test of the drive can observe its contents.
       return { result: { ok: false, failedAt: "AUTHOR_TEST", reason, phasesVisited: [] } };
     });
 

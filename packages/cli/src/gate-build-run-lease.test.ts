@@ -235,8 +235,8 @@ function grantingFactory(rec: Recorder, guard: BuildGuard): NonNullable<GateBuil
 /** Every method call on the wrapped store is recorded as `<tag>:<method>`. */
 function recordingStore(target: Store, tag: string, rec: Recorder): Store {
   return new Proxy(target, {
-    get(t, prop, receiver) {
-      const value = Reflect.get(t, prop, receiver) as unknown;
+    get(t, prop) {
+      const value: unknown = t[prop as keyof Store];
       if (typeof value !== "function") return value;
       return (...args: unknown[]) => {
         rec.events.push(`${tag}:${String(prop)}`);
@@ -610,6 +610,12 @@ test("gate-build-carries-one-gate-id-lease-through-every-exit: a worktree failur
         }),
       );
       assert.equal(settled.env?.ok ?? false, false, `${exit.name}: never a pass`);
+      if (exit.name === "builder throw") {
+        assert.ok(
+          settled.env!.body.includes("verdict:     NONE — failed closed at AUTHOR_TEST: builder-throw-marker"),
+          `a thrown walk is reported as an unsigned AUTHOR_TEST failure naming the throw: ${settled.env!.body}`,
+        );
+      }
       assert.equal(rec.events.includes("builder"), exit.builderReached, `${exit.name}: builder reached`);
       assert.deepEqual(rec.events.filter((e) => e === "acquire" || e === "release"), ["acquire", "release"], `${exit.name}: acquired once, released once`);
       assert.equal(rec.events.at(-1), "release", `${exit.name}: released last`);
@@ -668,4 +674,35 @@ test("gate-build-lease-loss-blocks-the-next-controlled-step: a held guard whose 
     "no signed pass after the loss",
   );
   assert.equal(rec.events.filter((e) => e === "release").length, 1, "the lost guard is still released exactly once");
+});
+
+test("gate-build-lease-loss-blocks-the-next-controlled-step: the drive's own beforePhase hook is the held guard's checkpoint", async () => {
+  const rec = recorder();
+  const guard = recordingGuard(rec, async () => {
+    throw new Error("gate-hook-checkpoint-marker");
+  });
+  let hookError: unknown;
+  const settled = await settle(
+    driveBuildTestsGate(buildTestsGate(), "builder@example.com", {
+      corpusStore: corpus,
+      progress: recordingProgress(rec),
+      storiesDir: stories,
+      repoRoot: repo,
+      store: new InMemoryStore(),
+      promote: false,
+      increment: "inc-live",
+      innerLoopReads: { corpus, ledger: new InMemoryStore() },
+      authorOverride: throwingAuthor,
+      buildGuardFactory: grantingFactory(rec, guard),
+      realNodeBuilder: async (args: RealBuildArgs): Promise<RealBuildResult> => {
+        await args.beforePhase?.("IMPLEMENT").catch((e: unknown) => {
+          hookError = e;
+        });
+        return { result: { ok: false, failedAt: "IMPLEMENT", reason: "hook-probe", phasesVisited: [] } };
+      },
+    }),
+  );
+  assert.equal(settled.error, undefined, String(settled.error));
+  assert.ok(rec.events.includes("checkpoint"), "calling beforePhase reaches the held guard's assertHeld");
+  assert.match(String(hookError), /gate-hook-checkpoint-marker/, "a lost lease surfaces through the drive's beforePhase hook");
 });
