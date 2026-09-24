@@ -11,6 +11,7 @@ import {
   ENGINE_PACKAGES,
   R3F_PACKAGE,
   bannerFor,
+  checkoutPinSight,
   computeSyncPlan,
   detectEngineDrift,
   isEngineSource,
@@ -376,4 +377,73 @@ test("no blind branch reports a plain OK to the gate runner — the property the
 
   // …and the code the shell maps a skip onto is the one the runner reads as SKIP, not as a pass.
   assert.notEqual(GATE_SKIP_EXIT_CODE, 0);
+});
+
+// ---------- the pin comes FIRST: a checkout off the recorded commit refuses before comparing ----------
+//
+// `wes-off-pin-checkout-refuses-first` (friction `web-engine-red-prescribes-the-wrong-repair`). The
+// comparison reads whatever commit sits under `web/`; CI checks out the one this branch records. So
+// a checkout on any OTHER commit must stop the run before a single file is read, and must prescribe
+// the checkout repair — never the sync-and-bump that is right for genuine source drift and wrong
+// here. The end-to-end half, over real git state, is `web-engine.test.ts`.
+
+const RECORDED = "747d65d3a1b2c3d4e5f60718293a4b5c6d7e8f90";
+const ELSEWHERE = "a3691b40f0e1d2c3b4a5968778695a4b3c2d1e0f";
+
+test("wes-off-pin-checkout-refuses-first: a checkout on the recorded commit lets the comparison go ahead", () => {
+  assert.equal(checkoutPinSight({ pin: RECORDED, checkedOut: RECORDED }), null);
+});
+
+test("wes-off-pin-checkout-refuses-first: a checkout off the recorded commit refuses in both runs, naming both commits and the checkout repair", () => {
+  const sight = checkoutPinSight({ pin: RECORDED, checkedOut: ELSEWHERE });
+  assert.deepEqual(sight, { kind: "off-pin", pin: RECORDED, checkedOut: ELSEWHERE });
+  assert.ok(sight);
+  for (const inCi of [false, true]) {
+    const verdict = judgeEngineCheck(sight, { inCi });
+    assert.deepEqual(verdict, {
+      status: "fail",
+      message:
+        "check:web-engine — BLOCKED: web/ is checked out at a3691b40, but this branch records 747d65d3 " +
+        "for it, so nothing was compared: the copy on disk is not the one CI checks, and a difference " +
+        "in it would say nothing about the parent packages.\n" +
+        "  RUN:  git submodule update --init web   — puts web/ back on the recorded commit (fetching it " +
+        "if this clone lacks it); it changes nothing in this repository.\n" +
+        "  Do not sync or re-pin to make this pass: the difference is in the checkout, not the packages.",
+    });
+    assert.doesNotMatch(verdict.message, /pnpm (sync|land):web-engine/, "the drift remedy is the wrong one here");
+  }
+});
+
+test("wes-off-pin-checkout-refuses-first: an unreadable pin or checkout refuses rather than comparing an unknown checkout", () => {
+  const noPin = checkoutPinSight({ pin: null, checkedOut: ELSEWHERE });
+  assert.deepEqual(noPin, { kind: "pin-unreadable", what: "the web gitlink this branch records (`git rev-parse :web`)" });
+  const noCheckout = checkoutPinSight({ pin: RECORDED, checkedOut: null });
+  assert.deepEqual(noCheckout, {
+    kind: "pin-unreadable",
+    what: "the commit web/ is checked out at (`git -C web rev-parse HEAD`)",
+  });
+  assert.deepEqual(checkoutPinSight({ pin: null, checkedOut: null }), noPin, "the recorded commit is asked about first");
+  assert.ok(noCheckout);
+  for (const inCi of [false, true]) {
+    assert.deepEqual(judgeEngineCheck(noCheckout, { inCi }), {
+      status: "fail",
+      message:
+        "check:web-engine — BLOCKED: could not read the commit web/ is checked out at " +
+        "(`git -C web rev-parse HEAD`), so it cannot tell whether web/ is on the commit this branch " +
+        "records, and a comparison over an unknown checkout proves nothing.",
+    });
+  }
+});
+
+test("wes-off-pin-checkout-refuses-first: no sight that compared nothing reports OK, in either run", () => {
+  const blind = [
+    { kind: "no-web-checkout" },
+    { kind: "off-pin", pin: RECORDED, checkedOut: ELSEWHERE },
+    { kind: "pin-unreadable", what: "the web gitlink" },
+    { kind: "no-adopted-package" },
+  ] as const;
+  for (const sight of blind) {
+    assert.notEqual(judgeEngineCheck(sight, { inCi: false }).status, "ok", `${sight.kind} compared nothing`);
+    assert.doesNotMatch(judgeEngineCheck(sight, { inCi: true }).message, /\bOK:/, `${sight.kind} in CI`);
+  }
 });

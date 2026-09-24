@@ -280,6 +280,11 @@ export interface SceneNodeBase {
    *  `theme-<t>` class so meadow / woodland / heath flora read as distinct country. Carried on the
    *  `parcel-flora` item group; the colour itself stays CSS-side (ADR-0093 §4). */
   theme?: SurfaceTheme;
+  /** The absolute ground-space pivot for a coverage-flora item's tile-art scale. Carried only by
+   *  `parcel-flora`, so consumers need not reverse-engineer the SVG pivot transform. */
+  groundAnchor?: Pt;
+  /** The tile-art scale applied about {@link groundAnchor}. Carried only by `parcel-flora`. */
+  floraScale?: number;
   /** A wisp's orbit phase in degrees (the mapper drives the rotation from it). */
   phase?: number;
   /** A wisp's red→green BAND, folded from the live prove-it-gate phase (ADR-0048 §3 v2): `red`
@@ -1896,6 +1901,10 @@ function parcelFloraItem(
     kind: 'parcel-flora',
     theme,
     status,
+    // The semantic values are the same one-decimal values serialized into the canonical SVG
+    // pivot-scale-pivot transform, so consumers see exactly the drawable's positioned anchor.
+    groundAnchor: { x: Number(f(pivot.x)), y: Number(f(pivot.y)) },
+    floraScale: Number(f(art.flora)),
     transform: `translate(${f(pivot.x)} ${f(pivot.y)}) scale(${f(art.flora)}) translate(${f(-pivot.x)} ${f(-pivot.y)})`,
   };
   if (opacity != null) attrs.opacity = opacity;

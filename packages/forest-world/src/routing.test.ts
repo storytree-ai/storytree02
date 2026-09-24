@@ -96,7 +96,9 @@ function foreignIslandsOf(net: TrailNetwork, segId: string, islands: readonly Tr
 
 // ---------- determinism ----------
 
-test('routeTrails is deterministic: same input, deep-equal network + byte-identical d', () => {
+// test-removed: `routeTrails is deterministic: same input, deep-equal network + byte-identical d` was renamed to bind its declared contract; the unchanged predicate is covered by the title below.
+// test-updated (refactor): `routeTrails is deterministic: same input, deep-equal network + byte-identical d` gained only its declared-contract title prefix; its assertions are unchanged.
+test('rc-trail-router-deterministic-network: routeTrails is deterministic: same input, deep-equal network + byte-identical d', () => {
   const islands = [isle('A', 0, 0, 40), isle('B', 520, 0, 40), isle('O', 260, 10, 55)];
   const edges: TrailEdgeIn[] = [
     { from: 'A', to: 'B', title: 'a to b' },

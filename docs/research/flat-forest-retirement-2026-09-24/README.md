@@ -1,0 +1,59 @@
+# Flat forest retirement: the pieces before the switch
+
+Inventory taken against `8ad24c2929025fb40b56d920975a8213387768d4` and the current full live ADR-0608 on 24 September 2026. The static mounted look is approved. **Retirement is not ready:** coverage plants still live in SVG, and neither public website map mounts the 3D consumer. Nothing in this inventory authorizes a partial removal.
+
+The live predecessor arc is closed with no open increments or questions. Its last row, `the-3d-regrow-settles-reduces-and-survives-unwatched`, records [merged PR #2049](https://github.com/storytree-ai/Storytree/pull/2049). The two open rows on `mount-the-land-on-a-real-surface-arc` remain the retirement and coverage-plant work. The entry claim was granted to `laneK-retire`; the separate drive-machinery claims are outside this work.
+
+## Pieces inventory
+
+The inventory follows the actual scene kinds and consumers, including pictures that also carry a meaning. An existing descriptor is not sufficient evidence that the mounted consumer draws it.
+
+| Piece the member sees or uses | Existing 3D replacement or retained surface | Work before retirement |
+| --- | --- | --- |
+| Islands, parcel ground, coast, relief and ground status | `world-to-3d.ts` emits `cell-ground`; `ForestWorldCanvas` draws the land in the registered mount. | Existing approved static treatment. Remove flat island fills, tile faces, empty hex board, coast paint and their picture-only styles at the final switch; retain necessary hit geometry. |
+| Story hero trees, baked crown variants, conifers and their shadows/litter | The 3D vocabulary deliberately replaces the central hero with one state-bearing tree per capability; story status remains in ground and words. | Existing kit treatment is available through the props arm. Deliver that arm by default in the final switch. Delete flat hero art and unused sprite/pose machinery, preserving signposts and hit descendants currently nested inside trees. |
+| Coverage plants: meadow, woodland and heath marks whose density follows test count | **Missing.** Core `buildTerritorySurface` produces `parcel-flora` groups and stamps the owning capability. The 3D mapper currently skips them. | Build on the existing coverage-plant increment: carry every generated mark's count, identity, status, theme and ground anchor into a real 3D plant layer; preserve option-A emphasis. Prove grounded placement, tree clearance, filtering and interaction delegation; stage the result. |
+| Decorative healthy-island cover | Existing kit bushes, grass and flower patches; explicitly reports no coverage or verdict. | Keep distinct from coverage plants. It is not their replacement, even though both contain grass. |
+| UAT criteria: signed flower, unsigned bud, witnessed failing flower | Mapper and dresser already carry all three forms, attributed to the owning island. Registered drawing depends on the props arm. | Verify all three in the actual default mount and public consumer before deleting flat criterion pictures. Preserve criterion identity and any text/interaction semantics. |
+| Roads, docks, worn on-island paths | Existing registered 3D roads and shore docking, including causal growth, landed in #2040/#2044. | Retire flat shadow/casing/fill/ghost pictures. Keep edge metadata and selection lane affordances; a lit selected route is interaction feedback, not obsolete road art. |
+| Cave/portal route marks | Mapper has `cave-arch`; registered mode intentionally leaves cave marks to the host. | Preserve route-reveal meaning in the interaction layer. Do not infer that a standalone cave descriptor means the mount draws it. |
+| Nameplates, story/status words and tooltips | Existing SVG/DOM overlay. | Retain; the canvas is aria-hidden and pointer inert. |
+| Story/capability selection, URL focus, shore ring, one-hop route highlight | Host and `SceneView` own selection and edge/capability metadata. | Retain; ensure invisible semantic hit regions still cover the visible new plants/land. Do not delete selection lanes with the road picture. |
+| Click, keyboard pan/navigation, focus, zoom, compositor drag | Existing studio host and camera registration. | Retain the single host camera; no renderer controls or second picking authority under the mount. Exercise actual hit testing, keyboard and focus after removal. |
+| Building, working, exploring, queued and departing session wisps | Existing SVG families above the registered canvas. | Retain all five, their motion, hit targets, phase/role semantics and departure behavior. Registered 3D disables its legacy wisp to avoid duplication. |
+| Witness signposts and verdict signals | Existing `sign-blank`, `sign-pass`, `sign-fail` in SVG; the old verdict bloom was already retired. | Retain. Their nesting inside a tree is not permission to remove them with tree art. |
+| Legend, status filtering and explanatory vocabulary | Existing `WorldLegend` and per-mark filter classes. | Keep interaction and truthfulness while moving coverage into 3D; legend examples must describe the delivered marks. A CSS class on an invisible SVG plant no longer filters a 3D plant. |
+| Whole-forest growth, island arrival, roads, vegetation settlement | Both actual 3D consumers follow app-owned causal presentation; #2044/#2049 prove settlement, reduced motion and unwatched progress. | Reuse that presentation for new plants. Retire only obsolete flat picture animation; retain the app clock and necessary label/affordance reveals. |
+| Older flat growth clips, authored sprite tracks, organic pose images and garden artwork | Legacy picture machinery in `SceneView`; the modern kit supplies the forest picture. | Trace reachability and retire picture-only adapters/assets/tests together at the final switch. Shared timing/semantic helpers and preserved affordances survive. Dormant artwork is not a new required product feature. |
+| Loading, unsupported stack and rendering failure | Flag-gated mount currently may render nothing while waiting or refusing. | Before default delivery, provide a clear message naming the missing modern-browser capability. No fallback flat map. Test failure without pretending that a silent blank is usable. |
+| Public entry forest and `/forest/` poster | **Missing 3D consumers.** Both currently serialize flat SVG from the published snapshot. | Build and prove both consumers, retaining each surface's present text/selection/ROAM semantics and dated snapshot provenance. Move them with studio. |
+| Website entry sequence, GROW/ROAM/TELL/ASK and reduced motion | Existing website host coordinates SVG/CSS animation and pan/focus. It does not feed the 3D regrow API. | Adapt host-owned presentation to the real 3D consumer, including active/hidden/settled policy and camera registration. Do not create a renderer clock. |
+
+The public website's datum is its published snapshot. It deliberately omits session activity; this transition does not add a public live-session feed. The studio continues using the live corpus. Website runtime dependencies are installed already, but copying the renderer into `web/src/lib` has not mounted it.
+
+## Source map
+
+- [Core scene kinds and coverage generation](../../../packages/forest-world/src/scene.ts): `SceneKind`, `parcelFloraItem`, theme surface functions, `buildTerritorySurface` and `buildScene`.
+- [Studio painter](../../../packages/app-surface/src/SceneView.tsx): class vocabulary, filters, handler delegation, preserved sprite descendants, regrow, selection lanes and picture render paths.
+- [Actual mount](../../../apps/studio/src/components/LandViewMount.tsx) and [TreeView](../../../apps/studio/src/components/TreeView.tsx): registered canvas inside the host pan layer and SVG overlay. `drawProps` is an explicit arm, not the mount's default.
+- [3D mapper](../../../packages/forest-world-r3f/src/world-to-3d.ts), [dressing](../../../packages/forest-world-r3f/src/map-dressing.ts), [vocabulary](../../../packages/forest-world-r3f/src/kit-vocabulary.ts) and [actual canvas](../../../packages/forest-world-r3f/src/ForestWorldCanvas.tsx): emitted families, semantic versus decorative roles and registered composition.
+- [Legend](../../../apps/studio/src/components/WorldLegend.tsx): the map vocabulary and filters that must remain truthful.
+- Website submodule: `src/pages/index.astro`, `src/pages/forest.astro`, `src/scripts/forest-snapshot-map.ts`, `forest-arrival.ts`, `forest-legend.ts`, `inflection.ts`; studio snapshot exporter is `apps/studio/server/forestSnapshot.ts`.
+
+## Delivery and evidence boundaries
+
+First prove the missing coverage producer, then its grounded rendering and host interaction. The website can use its existing `forestSceneInput(snapshot)` seam, but must supply true-ground scene coordinates to `worldTo3D`, not the projected SVG drawing. Any remaining pure units go through the leaf build; visual integration is staged behind an explicit comparison arm. The final switch removes the complete flat picture and its obsolete machinery in one landing, after all prerequisites exist.
+
+Before/after pictures must use one fresh real-corpus snapshot per comparison, the same computed camera/state, and verified served worktree/HEAD. Appearance remains the owner's verdict. No new appearance result is claimed by this source inventory.
+
+The predecessor's [quiet-rendering evidence](../3d-regrow-quiet-2026-09-24/README.md) and [causal-growth evidence](../3d-regrow-2026-09-24/README.md) remain authoritative for their measured revisions. Their RTX 2060 GPU times and slow development loads are not production smoothness or a browser limitation. A website exception requires a measured failure in a current mainstream browser and its own decision. Publishing the agreed transition is already approved.
+
+Every render, timing run and gate uses the shared heavy lock. Forest-engine changes must finish the sanctioned `land:web-engine` mirror and verify both the pushed website commit and parent pin; dirty generated website content is not a landed mirror.
+
+## First prerequisite: explicit coverage placement
+
+The first real leaf build, `real-muesy456`, signed commit `e0e78d91f2a3018d5160c7846ca2f36c41ef6071`. Each `parcel-flora` node now carries an absolute `groundAnchor` and `floraScale`, derived from the same rounded pivot and scale as its unchanged SVG transform. The consumer no longer needs to mistake the first translation of a pivot transform for a group displacement. Count, identity, status, theme and the existing picture remain unchanged.
+
+The build recorded four of nine declared contracts as signed, including the new metadata behavior. Five historical geometry/routing contracts were not independently observed by this build; their unchanged regression tests remain in the package suite. This is producer evidence only: it does not prove a 3D plant, grounding, clearance, filtering, picking, browser performance or appearance. Both owning increments remain open.
+
+The full gate passed on 24 September (`/tmp/laneK-retire-2.log`, exit 0), including the package suites and the mutation check. The mutation runner generated one mutant over the changed source spans and reported it killed by this branch's tests. The generated website copy landed through [website PR #154](https://github.com/storytree-ai/storytree-web/pull/154), merged at 01:13:33 UTC. Its branch tip `e73afc7653b8a217736b37f6ff842de6755ade4a` is the parent pin, and the checked-out generated scene is byte-identical to the copy checked by that gate. Main drift is followed by a fresh parent gate before opening its PR.
