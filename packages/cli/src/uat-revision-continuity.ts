@@ -24,6 +24,15 @@ import { chooseBaseRef, type BaseRefChoice, type BaseRefEvidence } from "./owner
  * present on both sides whose exact revision changed needs a current signed pass for the candidate
  * revision. A newly added id remains additive expansion under ADR-0416 and is reported by the story
  * health fold rather than blocked here merely for existing.
+ *
+ * A DECLARED REPLACEMENT IS A REPLACEMENT, whatever id it wears. A new id carrying a
+ * `(lineage: replaces | split-from | merged-from …)` tag that names a base criterion the candidate no
+ * longer holds has told this wall exactly which acceptance text it supersedes, so it is charged as a
+ * change from that base revision. Until 2026-09-24 it was waved through as additive expansion: the
+ * adversarial pass reworded a leg, re-minted it under a fresh id with a `replaces` tag, and landed it
+ * at exit 0 with no signed pass (`instrument-escape-repair-arc`). An UNDECLARED rename is still
+ * indistinguishable from delete-plus-add and stays out of scope — the tag is the author's statement,
+ * and this wall reads statements, not intentions.
  */
 
 /**
@@ -113,6 +122,11 @@ export interface ChangedCriterionRevision {
   readonly criterionId: string;
   readonly oldRevisionId: string;
   readonly newRevisionId: string;
+  /**
+   * Present only when the change is a DECLARED REPLACEMENT: the removed base criterion id(s) the new
+   * id's lineage tag names. `oldRevisionId` is then theirs.
+   */
+  readonly replaces?: readonly string[];
   /** True only while the exact candidate revision's current fold is healthy. */
   readonly witnessed: boolean;
 }
@@ -155,6 +169,8 @@ export async function readUatRevisionVerdictEvents(
 interface CriterionOwner {
   readonly storyId: string;
   readonly revisionId: string;
+  /** The base criterion ids this one declares it descends from, when it carries a lineage tag. */
+  readonly lineage: readonly string[];
 }
 
 interface IndexedHierarchy {
@@ -237,6 +253,7 @@ function indexStoryCriteria(
     criteria.set(criterion.criterionId, {
       storyId: story.id,
       revisionId: criterion.revisionId,
+      lineage: criterion.lineage?.criterionIds ?? [],
     });
   }
 }
@@ -254,7 +271,23 @@ function candidateChanges(
   const errors: string[] = [];
   for (const [criterionId, after] of candidate) {
     const before = base.get(criterionId);
-    if (before === undefined) continue; // New id: additive expansion, intentionally not charged.
+    if (before === undefined) {
+      // A new id is additive expansion UNLESS it declares it supersedes a base criterion this branch
+      // removed — then it is that criterion's replacement, charged from the revision it replaces.
+      const replaced = after.lineage.flatMap((id) => {
+        const source = base.get(id);
+        return source !== undefined && !candidate.has(id) ? [{ id, revisionId: source.revisionId }] : [];
+      });
+      if (replaced.length === 0) continue;
+      changes.push({
+        storyId: after.storyId,
+        criterionId,
+        oldRevisionId: replaced.map((r) => r.revisionId).join(" + "),
+        newRevisionId: after.revisionId,
+        replaces: replaced.map((r) => r.id),
+      });
+      continue;
+    }
     if (before.storyId !== after.storyId) {
       errors.push(
         `✗ criterion ${criterionId} changed owner from ${before.storyId} to ${after.storyId}; ` +
@@ -315,6 +348,12 @@ function relevantEvents(rawEvents: readonly unknown[]): RelevantEvents {
   };
 }
 
+/** One changed revision as the report names it — a declared replacement says what it replaces. */
+function describeChange(change: ChangedCriterionRevision): string {
+  const replaces = change.replaces === undefined ? "" : ` (replaces ${change.replaces.join(", ")})`;
+  return `${change.storyId} › ${change.criterionId}${replaces}: ${change.oldRevisionId} → ${change.newRevisionId}`;
+}
+
 /** Judge exact-revision continuity without filesystem, git, network or database access. */
 export function judgeUatRevisionContinuity(
   inputs: UatRevisionContinuityInputs,
@@ -362,7 +401,7 @@ export function judgeUatRevisionContinuity(
         "",
         ...missing.map(
           (change) =>
-            `  ${change.storyId} › ${change.criterionId}: ${change.oldRevisionId} → ${change.newRevisionId} — UNWITNESSED`,
+            `  ${describeChange(change)} — UNWITNESSED`,
         ),
         "",
         "  Drive and sign each candidate revision before landing; an old-revision verdict cannot prove new acceptance text.",
@@ -388,7 +427,7 @@ export function judgeUatRevisionContinuity(
       `✓ ${String(changes.length)} changed existing UAT criterion revision(s) each have a current signed pass.`,
       ...changes.map(
         (change) =>
-          `  ${change.storyId} › ${change.criterionId}: ${change.oldRevisionId} → ${change.newRevisionId}`,
+          `  ${describeChange(change)}`,
       ),
     ],
   };
