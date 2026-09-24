@@ -256,6 +256,16 @@ test('public-ground-scene-preserves-published-capability-ground: every published
     assert.deepEqual(territory.treeSpot, base.treeSpot);
     assert.equal(territory.labelY, base.labelY);
     assertAttributedGround(crowded);
+
+    const filledCapacity = composePublicGroundScene({
+      ...facts,
+      islands: [{ ...base, capabilities: Array.from({ length: crowded.relaxedCells!.length }, (_, i) => ({
+        id: `crowded#${i}`, status: 'healthy', dependsOn: [],
+      } as const)) }],
+    });
+    assert.deepEqual(filledCapacity.relaxedCells, crowded.relaxedCells,
+      'filling unused cells preserves the current mesh until its capacity is exceeded');
+    assert.deepEqual(filledCapacity.territories[0]!.coastGroundLoops, territory.coastGroundLoops);
   }
 });
 

@@ -54,14 +54,12 @@ function groundFor(island: PublicIsland, owner: number) {
   const ground = { elevationDeg: PLAN_VIEW_ELEVATION_DEG };
   const drawTiles = tiles.map((h) => ({ h, owner }));
   const coarse = buildRelaxedCells(drawTiles, [], 'mesh', undefined, ground);
-  if (coarse.length === 0) throw new Error('The canonical public ground mesh has no cells');
   // Subdivide only the interior: the scene's parcel allocation needs at least
   // one cell per capability, while the supplied rings and footprint stay fixed.
   // Each extra canonical quad subdivision multiplies capacity by four. Computing
   // the required depth once avoids a retry loop waiting for geometry to grow.
-  const extraPasses = Math.max(0, Math.ceil(Math.log(island.capabilities.length / coarse.length) / Math.log(4)));
-  const cells = extraPasses === 0 ? coarse
-    : buildRelaxedCells(drawTiles, [], 'mesh', { subdiv: 1 + extraPasses }, ground);
+  const extraPasses = Math.max(0, Math.ceil(Math.log(island.capabilities.length / Math.max(1, coarse.length)) / Math.log(4)));
+  const cells = (extraPasses && buildRelaxedCells(drawTiles, [], 'mesh', { subdiv: 1 + extraPasses }, ground)) || coarse;
 
   const mine = new Set(tiles.map(axialKey));
   const boundary: BoundarySeg[] = [];
