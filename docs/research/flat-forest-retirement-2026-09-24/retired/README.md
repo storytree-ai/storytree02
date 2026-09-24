@@ -6,6 +6,26 @@ the flat picture at all. Appearance is the owner's verdict; nothing here signs i
 
 ## The pictures (ADR-0601)
 
+> **⚠ Re-staged on a healthy snapshot — look at [`studio-restaged/`](studio-restaged/) first**
+> (laneX, 2026-09-24T14:51Z). The `studio/` set below froze its API snapshot at 12:54Z from a
+> server whose two signed-verdict reads had silently failed, so every island in every arm reads
+> `proposed` and is painted yellow — not the forest that was approved. The cause was the studio,
+> not this retirement: the proof roll-up burned ~6 s of CPU per map request, stalling the server
+> long enough for the 4 s verdict reads to time out (fixed in #2084; the map now also refuses a
+> proof-less tree rather than serving one). The re-staged set runs the same `capture.mjs`, the same
+> three arms (`flat`/`mounted` = `main` at `5c50208c`; `retired` = `main` after this landing plus
+> those fixes), one frozen snapshot carrying **32 stories and 212 capabilities with a signed
+> verdict and 69 proven UAT legs** (recorded in its `manifest.json`; the script now refuses a
+> snapshot with none). What it confirms: the 3D land is still **byte-identical** between the
+> approved mount and the retired default (raw canvas `595a51b0…` at the opening, `19906b9f…`
+> zoomed, both arms), and the flat-picture marks still go to zero in the retired arm.
+>
+> | Framing | before (flat default) | before (approved mount) | after (retired, default) |
+> | --- | --- | --- | --- |
+> | Opening | [flat](studio-restaged/studio-flat-rest.png) | [mounted](studio-restaged/studio-mounted-rest.png) | [retired](studio-restaged/studio-retired-rest.png) |
+> | Zoomed | [flat](studio-restaged/studio-flat-zoom.png) | [mounted](studio-restaged/studio-mounted-zoom.png) | [retired](studio-restaged/studio-retired-zoom.png) |
+> | Zoomed, one island selected | [flat](studio-restaged/studio-flat-zoom-selected.png) | [mounted](studio-restaged/studio-mounted-zoom-selected.png) | [retired](studio-restaged/studio-retired-zoom-selected.png) |
+
 One real-corpus API snapshot (47 stories, 36 islands on the map) replayed byte for byte to every
 arm, reduced motion, the host's own wheel for zoom, a real click on a nameplate for selection.
 Arms: **flat** = `main` at `5c50208c` with no query (what a member saw by default until now);

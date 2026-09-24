@@ -2067,6 +2067,23 @@ function reviewFeedSuggestionStore(backend: LibraryBackend): ReviewFeedSuggestio
 }
 
 /**
+ * The `/api/tree` refusal when the live store served the hierarchy but its proof could not be read.
+ * The desktop's tree route answers the same words — the two surfaces are held to one another by the
+ * `tree-fixtures` conformance arm that exercises this case.
+ */
+export const TREE_PROOF_UNREAD =
+  'the live store served the work hierarchy but its signed verdicts could not be read — refusing to paint a map without its proof';
+
+/** A proof read that did not answer: the verdict map, or the event stream on a backend that has one. */
+function proofUnread(
+  backend: Pick<LibraryBackend, 'verdictEvents'>,
+  verdicts: unknown,
+  verdictEvents: unknown,
+): boolean {
+  return verdicts === null || (backend.verdictEvents !== undefined && verdictEvents === null);
+}
+
+/**
  * THE forest map read — the studio's fold, in one callable place.
  *
  * Extracted from the `/api/tree` route so it has a SECOND consumer that is not an HTTP client:
@@ -2115,11 +2132,27 @@ export async function buildTreePayload(
   // The asset list was a FOURTH leg, read ONLY to feed the ADR-0107 open-question green-gate its
   // `references`. That gate is retired with the citation tier (ADR-0477 D1), so the read went with
   // it rather than being left fetching a list nothing folds.
-  const [verdicts, verdictEvents, builds] = await Promise.all([
-    ctx.backend.latestVerdicts(),
-    ctx.backend.verdictEvents?.() ?? Promise.resolve(null),
+  const readProof = () =>
+    Promise.all([
+      ctx.backend.latestVerdicts(),
+      ctx.backend.verdictEvents?.() ?? Promise.resolve(null),
+    ]);
+  let [[verdicts, verdictEvents], builds] = await Promise.all([
+    readProof(),
     ctx.backend.inFlightBuilds(),
   ]);
+  // The advisory contract above is for a store that CANNOT answer. When the live store just served
+  // the hierarchy, a null proof read is a failed read (a timeout, a dropped pooled connection), not
+  // an absence — and every island would paint its authored status, which is how the whole map read
+  // `proposed` on 2026-09-24. Re-read once; if the proof still cannot be read, refuse rather than
+  // serve a proof-less map as current. The client keeps its last painted map, marked provisional
+  // (ADR-0445 D3), or shows the error on a cold load.
+  if (selection.origin === 'live' && proofUnread(ctx.backend, verdicts, verdictEvents)) {
+    [verdicts, verdictEvents] = await readProof();
+    if (proofUnread(ctx.backend, verdicts, verdictEvents)) {
+      throw new HttpError(503, TREE_PROOF_UNREAD);
+    }
+  }
   if (verdicts) {
     for (const story of payload.stories) {
       const sv = verdicts[story.id];

@@ -1,0 +1,484 @@
+{
+  "startedAt": "2026-09-24T14:50:59.857Z",
+  "viewport": {
+    "width": 1800,
+    "height": 1100
+  },
+  "zoomSteps": 8,
+  "anchor": [
+    0.6,
+    0.45
+  ],
+  "arms": [
+    {
+      "name": "flat",
+      "origin": "http://127.0.0.1:5441",
+      "dir": "/home/mickh/code/Storytree/.claude/worktrees/laneX-before",
+      "head": "5c50208c774354421060fe51b7e4470d2b63bb92",
+      "query": "?act2=intro",
+      "dirty": ""
+    },
+    {
+      "name": "mounted",
+      "origin": "http://127.0.0.1:5441",
+      "dir": "/home/mickh/code/Storytree/.claude/worktrees/laneX-before",
+      "head": "5c50208c774354421060fe51b7e4470d2b63bb92",
+      "query": "?landMount=1&landMountProps=1&act2=intro",
+      "dirty": ""
+    },
+    {
+      "name": "retired",
+      "origin": "http://127.0.0.1:5442",
+      "dir": "/home/mickh/code/Storytree/.claude/worktrees/laneX-guard",
+      "head": "1537f14c4be1c675299495827eff578c0b50dd41",
+      "query": "?act2=intro",
+      "dirty": ""
+    }
+  ],
+  "health": {
+    "flat": {
+      "store": "pg",
+      "db": "ok",
+      "schema": {
+        "code": 9,
+        "db": 9
+      },
+      "pid": 763911,
+      "code": {
+        "startedAt": "5c50208c774354421060fe51b7e4470d2b63bb92",
+        "head": "5c50208c774354421060fe51b7e4470d2b63bb92",
+        "stale": false,
+        "directory": "/home/mickh/code/Storytree/.claude/worktrees/laneX-before",
+        "branch": "HEAD"
+      }
+    },
+    "mounted": {
+      "store": "pg",
+      "db": "ok",
+      "schema": {
+        "code": 9,
+        "db": 9
+      },
+      "pid": 763911,
+      "code": {
+        "startedAt": "5c50208c774354421060fe51b7e4470d2b63bb92",
+        "head": "5c50208c774354421060fe51b7e4470d2b63bb92",
+        "stale": false,
+        "directory": "/home/mickh/code/Storytree/.claude/worktrees/laneX-before",
+        "branch": "HEAD"
+      }
+    },
+    "retired": {
+      "store": "pg",
+      "db": "ok",
+      "schema": {
+        "code": 9,
+        "db": 9
+      },
+      "pid": 763913,
+      "code": {
+        "startedAt": "1537f14c4be1c675299495827eff578c0b50dd41",
+        "head": "1537f14c4be1c675299495827eff578c0b50dd41",
+        "stale": false,
+        "directory": "/home/mickh/code/Storytree/.claude/worktrees/laneX-guard",
+        "branch": "claude/lane-x-proof-guard"
+      }
+    }
+  },
+  "captures": {
+    "flat-mounted": false,
+    "flat-rest": {
+      "host": "translate(-46.79104115967948 -1796.2630488220357) scale(1.9724813357493323)",
+      "camera": null,
+      "fullFile": "flat-rest.png",
+      "flatMarks": {
+        "heroTrees": 142,
+        "coverageMarks": 2516,
+        "uatFlowers": 106,
+        "roadPasses": 372,
+        "board": 762,
+        "paintedGroundCells": 2738,
+        "paintedCoast": 36
+      },
+      "keptMarks": {
+        "nameplates": 36,
+        "storyHitRects": 36,
+        "capabilityGround": 213,
+        "nativePlantTargets": 0,
+        "selectionLanes": 0,
+        "shoreRings": 0
+      },
+      "notice": null
+    },
+    "flat-zoom": {
+      "host": "translate(-1335.3766670381397 -4416.525832221401) scale(4.228188919246124)",
+      "camera": null,
+      "fullFile": "flat-zoom.png",
+      "flatMarks": {
+        "heroTrees": 142,
+        "coverageMarks": 2516,
+        "uatFlowers": 106,
+        "roadPasses": 372,
+        "board": 762,
+        "paintedGroundCells": 2738,
+        "paintedCoast": 36
+      },
+      "keptMarks": {
+        "nameplates": 36,
+        "storyHitRects": 36,
+        "capabilityGround": 213,
+        "nativePlantTargets": 0,
+        "selectionLanes": 0,
+        "shoreRings": 0
+      },
+      "notice": null
+    },
+    "flat-zoom-selected": {
+      "host": "translate(-1335.3766670381397 -4416.525832221401) scale(4.228188919246124)",
+      "camera": null,
+      "fullFile": "flat-zoom-selected.png",
+      "flatMarks": {
+        "heroTrees": 142,
+        "coverageMarks": 2516,
+        "uatFlowers": 106,
+        "roadPasses": 372,
+        "board": 762,
+        "paintedGroundCells": 2738,
+        "paintedCoast": 21
+      },
+      "keptMarks": {
+        "nameplates": 36,
+        "storyHitRects": 36,
+        "capabilityGround": 213,
+        "nativePlantTargets": 0,
+        "selectionLanes": 14,
+        "shoreRings": 15
+      },
+      "notice": null
+    },
+    "mounted-mounted": true,
+    "mounted-rest": {
+      "host": "translate(-46.79104115967948 -1796.2630488220357) scale(1.9724813357493323)",
+      "camera": {
+        "position": [
+          480,
+          2537.1581336873146,
+          3681.7081085079644
+        ],
+        "zoom": 1.9724813357493323,
+        "projectionMatrix": [
+          0.002191645928610369,
+          0,
+          0,
+          0,
+          0,
+          0.0035863297013624226,
+          0,
+          0,
+          0,
+          0,
+          -0.0004928645438001274,
+          0,
+          0,
+          0,
+          -1.632379553616008,
+          1
+        ]
+      },
+      "rawFile": "mounted-rest-land-raw.png",
+      "rawSha256": "595a51b03a377692947f5ff675bb3d7d9b48f0806c348747babf87260f6ebcdd",
+      "fullFile": "mounted-rest.png",
+      "flatMarks": {
+        "heroTrees": 142,
+        "coverageMarks": 2516,
+        "uatFlowers": 106,
+        "roadPasses": 372,
+        "board": 762,
+        "paintedGroundCells": 2738,
+        "paintedCoast": 36
+      },
+      "keptMarks": {
+        "nameplates": 36,
+        "storyHitRects": 36,
+        "capabilityGround": 213,
+        "nativePlantTargets": 2729,
+        "selectionLanes": 0,
+        "shoreRings": 0
+      },
+      "notice": null
+    },
+    "mounted-zoom": {
+      "host": "translate(-1335.3766670381397 -4416.525832221401) scale(4.228188919246124)",
+      "camera": {
+        "position": [
+          528.684197828299,
+          2537.1581336873146,
+          3662.289225898966
+        ],
+        "zoom": 4.228188919246124,
+        "projectionMatrix": [
+          0.004697987688051249,
+          0,
+          0,
+          0,
+          0,
+          0.0076876162168111346,
+          0,
+          0,
+          0,
+          0,
+          -0.0004928645438001274,
+          0,
+          0,
+          0,
+          -1.632379553616008,
+          1
+        ]
+      },
+      "rawFile": "mounted-zoom-land-raw.png",
+      "rawSha256": "19906b9f3b42636b4a6b41523ec5c75bce68aacb269dc5053bc868f3308c4b09",
+      "fullFile": "mounted-zoom.png",
+      "flatMarks": {
+        "heroTrees": 142,
+        "coverageMarks": 2516,
+        "uatFlowers": 106,
+        "roadPasses": 372,
+        "board": 762,
+        "paintedGroundCells": 2738,
+        "paintedCoast": 36
+      },
+      "keptMarks": {
+        "nameplates": 36,
+        "storyHitRects": 36,
+        "capabilityGround": 213,
+        "nativePlantTargets": 2729,
+        "selectionLanes": 0,
+        "shoreRings": 0
+      },
+      "notice": null
+    },
+    "mounted-zoom-selected": {
+      "host": "translate(-1335.3766670381397 -4416.525832221401) scale(4.228188919246124)",
+      "camera": {
+        "position": [
+          528.684197828299,
+          2537.1581336873146,
+          3662.289225898966
+        ],
+        "zoom": 4.228188919246124,
+        "projectionMatrix": [
+          0.004697987688051249,
+          0,
+          0,
+          0,
+          0,
+          0.0076876162168111346,
+          0,
+          0,
+          0,
+          0,
+          -0.0004928645438001274,
+          0,
+          0,
+          0,
+          -1.632379553616008,
+          1
+        ]
+      },
+      "rawFile": "mounted-zoom-selected-land-raw.png",
+      "rawSha256": "19906b9f3b42636b4a6b41523ec5c75bce68aacb269dc5053bc868f3308c4b09",
+      "fullFile": "mounted-zoom-selected.png",
+      "flatMarks": {
+        "heroTrees": 142,
+        "coverageMarks": 2516,
+        "uatFlowers": 106,
+        "roadPasses": 372,
+        "board": 762,
+        "paintedGroundCells": 2738,
+        "paintedCoast": 21
+      },
+      "keptMarks": {
+        "nameplates": 36,
+        "storyHitRects": 36,
+        "capabilityGround": 213,
+        "nativePlantTargets": 2729,
+        "selectionLanes": 14,
+        "shoreRings": 15
+      },
+      "notice": null
+    },
+    "retired-mounted": true,
+    "retired-rest": {
+      "host": "translate(-46.79104115967948 -1796.2630488220357) scale(1.9724813357493323)",
+      "camera": {
+        "position": [
+          480,
+          2537.1581336873146,
+          3681.7081085079644
+        ],
+        "zoom": 1.9724813357493323,
+        "projectionMatrix": [
+          0.002191645928610369,
+          0,
+          0,
+          0,
+          0,
+          0.0035863297013624226,
+          0,
+          0,
+          0,
+          0,
+          -0.0004928645438001274,
+          0,
+          0,
+          0,
+          -1.632379553616008,
+          1
+        ]
+      },
+      "rawFile": "retired-rest-land-raw.png",
+      "rawSha256": "595a51b03a377692947f5ff675bb3d7d9b48f0806c348747babf87260f6ebcdd",
+      "fullFile": "retired-rest.png",
+      "flatMarks": {
+        "heroTrees": 0,
+        "coverageMarks": 0,
+        "uatFlowers": 0,
+        "roadPasses": 0,
+        "board": 0,
+        "paintedGroundCells": 0,
+        "paintedCoast": 0
+      },
+      "keptMarks": {
+        "nameplates": 36,
+        "storyHitRects": 36,
+        "capabilityGround": 213,
+        "nativePlantTargets": 2729,
+        "selectionLanes": 0,
+        "shoreRings": 0
+      },
+      "notice": null
+    },
+    "retired-zoom": {
+      "host": "translate(-1335.3766670381397 -4416.525832221401) scale(4.228188919246124)",
+      "camera": {
+        "position": [
+          528.684197828299,
+          2537.1581336873146,
+          3662.289225898966
+        ],
+        "zoom": 4.228188919246124,
+        "projectionMatrix": [
+          0.004697987688051249,
+          0,
+          0,
+          0,
+          0,
+          0.0076876162168111346,
+          0,
+          0,
+          0,
+          0,
+          -0.0004928645438001274,
+          0,
+          0,
+          0,
+          -1.632379553616008,
+          1
+        ]
+      },
+      "rawFile": "retired-zoom-land-raw.png",
+      "rawSha256": "19906b9f3b42636b4a6b41523ec5c75bce68aacb269dc5053bc868f3308c4b09",
+      "fullFile": "retired-zoom.png",
+      "flatMarks": {
+        "heroTrees": 0,
+        "coverageMarks": 0,
+        "uatFlowers": 0,
+        "roadPasses": 0,
+        "board": 0,
+        "paintedGroundCells": 0,
+        "paintedCoast": 0
+      },
+      "keptMarks": {
+        "nameplates": 36,
+        "storyHitRects": 36,
+        "capabilityGround": 213,
+        "nativePlantTargets": 2729,
+        "selectionLanes": 0,
+        "shoreRings": 0
+      },
+      "notice": null
+    },
+    "retired-zoom-selected": {
+      "host": "translate(-1335.3766670381397 -4416.525832221401) scale(4.228188919246124)",
+      "camera": {
+        "position": [
+          528.684197828299,
+          2537.1581336873146,
+          3662.289225898966
+        ],
+        "zoom": 4.228188919246124,
+        "projectionMatrix": [
+          0.004697987688051249,
+          0,
+          0,
+          0,
+          0,
+          0.0076876162168111346,
+          0,
+          0,
+          0,
+          0,
+          -0.0004928645438001274,
+          0,
+          0,
+          0,
+          -1.632379553616008,
+          1
+        ]
+      },
+      "rawFile": "retired-zoom-selected-land-raw.png",
+      "rawSha256": "19906b9f3b42636b4a6b41523ec5c75bce68aacb269dc5053bc868f3308c4b09",
+      "fullFile": "retired-zoom-selected.png",
+      "flatMarks": {
+        "heroTrees": 0,
+        "coverageMarks": 0,
+        "uatFlowers": 0,
+        "roadPasses": 0,
+        "board": 0,
+        "paintedGroundCells": 0,
+        "paintedCoast": 0
+      },
+      "keptMarks": {
+        "nameplates": 36,
+        "storyHitRects": 36,
+        "capabilityGround": 213,
+        "nativePlantTargets": 2729,
+        "selectionLanes": 14,
+        "shoreRings": 15
+      },
+      "notice": null
+    }
+  },
+  "errors": [],
+  "browser": "148.0.7778.96",
+  "snapshot": {
+    "source": "retired",
+    "frozenAt": "2026-09-24T14:51:14.114Z",
+    "sha256": "b3c87074790b2a9fda17eadff228aca6bab0fdb13f306c0f75bcb119ee633893",
+    "storyCount": 47,
+    "proof": {
+      "storiesWithVerdict": 32,
+      "capabilitiesWithVerdict": 212,
+      "provenUatLegs": 69
+    }
+  },
+  "selectStory": "library",
+  "lateRequests": [
+    "/api/attestations?storyId=library",
+    "/api/attestations?storyId=library"
+  ],
+  "sameHostCamera-rest": true,
+  "sameHostCamera-zoom": true,
+  "status": "CAPTURED",
+  "finishedAt": "2026-09-24T14:51:59.193Z"
+}
