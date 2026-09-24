@@ -104,7 +104,7 @@ why: >-
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import type { ChangeEvent } from "@storytree/proof-protocol";
 import { closePool, createPool, PgLibraryStore } from "@storytree/library/store";
@@ -174,7 +174,7 @@ const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
  * where the next reader of this file will not find it. A NARROWING aperture must LOWER the ceiling by
  * the measured amount in the same landing (ADR-0269 5), or the exception becomes a ratchet.
  */
-const CEILINGS = {
+export const CEILINGS = {
   /**
    * Baselined 2026-07-27 at the 5 signals that sweep located — every one of them a unit bound to
    * `@storytree/core` (dissolved by ADR-0068) or `@storytree/store` (dissolved by ADR-0077).
@@ -443,8 +443,11 @@ const CEILINGS = {
    * not locate `defaultWorktreeIo`, which `worktree-idle-signal.test.ts` genuinely drives — that pair
    * is this instrument's own validation, and it is the reason the number is trusted: a hand-run
    * name-keyed probe the same day reported BOTH as uncovered and was wrong about both.
+   *
+   * LOWERED 24 → 21 on 2026-09-24: the sweep printed `unproven-seam-default (21/24)` — three drains had
+   * landed since the "exactly AT its population" re-measure above and none was subtracted (ADR-0269).
    */
-  [UNPROVEN_SEAM_DEFAULT]: 24,
+  [UNPROVEN_SEAM_DEFAULT]: 21,
   /**
    * Baselined 2026-08-24 (ADR-0424) at the ZERO this instrument's FIRST REAL SWEEP located against
    * the live store, and HELD AT ZERO through the first real drain the same day. The original
@@ -1056,7 +1059,7 @@ function isTestFile(rel: string): boolean {
 }
 
 /** The measured facts the classifier needs, or the reason they could not be measured. */
-interface GitEvidence {
+export interface GitEvidence {
   branch: string | null;
   mergeBase: string | null;
   touched: Set<string>;
@@ -1078,7 +1081,7 @@ interface GitEvidence {
  * over-charge. That is the safe direction. A MISSING ref is different: with no base there is no
  * "before", every question below is unanswerable, and the honest answer is to charge everything.
  */
-function readGitEvidence(root: string): GitEvidence {
+export function readGitEvidence(root: string): GitEvidence {
   const branchRaw = git(root, ["rev-parse", "--abbrev-ref", "HEAD"]);
   const branch = branchRaw !== null && branchRaw.length > 0 && branchRaw !== "HEAD" ? branchRaw : null;
 
@@ -1095,7 +1098,10 @@ function readGitEvidence(root: string): GitEvidence {
     };
   }
 
-  const diff = git(root, ["diff", "--name-only", mergeBase]);
+  // `--no-renames` on BOTH probes: with rename detection on, a `git mv` lists only its NEW path and
+  // shows as `R`, so the old path was absent from `touched` and invisible to `--diff-filter=D`. A
+  // moved target kills a binding exactly as a deleted one does, so a move must read as a delete + add.
+  const diff = git(root, ["diff", "--name-only", "--no-renames", mergeBase]);
   if (diff === null) {
     return {
       branch,
@@ -1110,13 +1116,42 @@ function readGitEvidence(root: string): GitEvidence {
 
   // Deletions are tracked separately because they are the one edit that can create a finding in a file
   // the branch never opened — `contract-binding-drift` locates a spec whose bound TARGET is gone.
-  const deleted = pathLines(git(root, ["diff", "--name-only", "--diff-filter=D", mergeBase]));
+  // An UNREADABLE deletion probe counts as a deletion: "could not tell" must charge, never excuse.
+  const deletedOut = git(root, ["diff", "--name-only", "--no-renames", "--diff-filter=D", mergeBase]);
 
-  return { branch, mergeBase, touched, deletedAny: deleted.size > 0 };
+  return { branch, mergeBase, touched, deletedAny: deletedOut === null || pathLines(deletedOut).size > 0 };
 }
 
-/** The root `package.json` and the workspace manifest — the two files that redefine what a package IS. */
-const WORKSPACE_SHAPE = ["package.json", "pnpm-workspace.yaml"] as const;
+/**
+ * Does this path redefine what a package IS? The workspace manifest, and ANY `package.json` — not just
+ * the root's. A package's own manifest carries its `name`, and renaming a package kills every
+ * `--filter <old-name>` binding in a spec the branch never opened; the root-only list excused that.
+ */
+function isWorkspaceShape(rel: string): boolean {
+  return rel === "pnpm-workspace.yaml" || rel === "package.json" || rel.endsWith("/package.json");
+}
+/**
+ * The instruments' OWN source. Changing an instrument changes what every one of its findings rests
+ * on — a narrowed matcher or a re-keyed id can surface a finding in a file the branch never touched —
+ * so a touch to any of these charges EVERY instrument. `mirror-conformance.ts` and `gate-order.ts`
+ * are inputs too, but to one instrument each, and are guarded below at that grain.
+ */
+const INSTRUMENT_SOURCES = [
+  "packages/cli/src/check-verification-decay.ts",
+  "packages/cli/src/verification-decay.ts",
+  "packages/cli/src/decay-attribution.ts",
+  "packages/cli/src/decision-source-decay.ts",
+  "packages/cli/src/route-surfaces.ts",
+  "packages/cli/src/route-tables.ts",
+] as const;
+const ALL_INSTRUMENTS = [
+  CONTRACT_BINDING_DRIFT,
+  MIRROR_PAIR_DRIFT,
+  VACUOUS_PROOF,
+  WARN_LIST_HYGIENE,
+  UNPROVEN_SEAM_DEFAULT,
+  DECISION_SOURCE_DRIFT,
+] as const;
 /** Where `mirror-pair-drift` reads its registered-pairs exemption from. */
 const MIRROR_REGISTRY = "packages/cli/src/mirror-conformance.ts";
 
@@ -1131,9 +1166,12 @@ const MIRROR_REGISTRY = "packages/cli/src/mirror-conformance.ts";
  * as its basis, and `unproven-seam-default` is answered exactly by {@link seamDefaultsUncoveredHere}.
  * What remains is the residue where the exact question would cost more than the check.
  */
-function crossInputGuards(ev: GitEvidence): Map<string, string> {
+export function crossInputGuards(ev: {
+  readonly touched: ReadonlySet<string>;
+  readonly deletedAny: boolean;
+}): Map<string, string> {
   const guards = new Map<string, string>();
-  const touchedShape = WORKSPACE_SHAPE.filter((f) => ev.touched.has(f));
+  const touchedShape = [...ev.touched].filter(isWorkspaceShape).sort();
 
   if (ev.deletedAny || touchedShape.length > 0) {
     guards.set(
@@ -1162,6 +1200,19 @@ function crossInputGuards(ev: GitEvidence): Map<string, string> {
         "roster, and the roster decides which checks are swept at all, so a signal can appear for a " +
         "check whose own sources are untouched; charged rather than excused",
     );
+  }
+  const touchedInstrument = INSTRUMENT_SOURCES.filter((f) => ev.touched.has(f));
+  if (touchedInstrument.length > 0) {
+    // Last, and only where no narrower reason was already recorded — the charge is the same either
+    // way, and the specific reason is the more useful one to print.
+    for (const instrument of ALL_INSTRUMENTS) {
+      if (guards.has(instrument)) continue;
+      guards.set(
+        instrument,
+        `this branch changed the sweep's own source (${touchedInstrument.join(", ")}) — a changed ` +
+          "instrument changes what every finding rests on; charged rather than excused",
+      );
+    }
   }
   return guards;
 }
@@ -1482,4 +1533,5 @@ async function main(): Promise<void> {
   if (failed) process.exitCode = 1;
 }
 
-await main();
+// Run only as the entry point: the tests import the pure resolvers above, and an import must not sweep.
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) await main();

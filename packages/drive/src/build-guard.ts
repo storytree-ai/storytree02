@@ -63,12 +63,20 @@ export async function acquireBuildGuard(input: AcquireBuildGuardInput): Promise<
   const held: string[] = [];
 
   for (const unitId of unitIds) {
-    const result = await input.store.claim({
-      unitId,
-      sessionId,
-      branch: `build-lease:${input.runId}`,
-      intent: "build lease",
-    });
+    let result: Awaited<ReturnType<typeof input.store.claim>>;
+    try {
+      result = await input.store.claim({
+        unitId,
+        sessionId,
+        branch: `build-lease:${input.runId}`,
+        intent: "build lease",
+      });
+    } catch (error) {
+      // A throwing claim returns no guard, so nobody else could release what is
+      // already held.  Unwind best-effort and surface the original failure.
+      await Promise.allSettled(held.map(async (heldUnit) => input.store.release(heldUnit, sessionId)));
+      throw error;
+    }
     if (!result.acquired) {
       await Promise.all(held.map(async (heldUnit) => input.store.release(heldUnit, sessionId)));
       return { ok: false, refusal: refusal(unitId, result.heldBy, new Date()) };
@@ -81,8 +89,10 @@ export async function acquireBuildGuard(input: AcquireBuildGuardInput): Promise<
   const guard: BuildGuard = {
     async noteActivity(observedAt: Date): Promise<void> {
       if (lastObservedAt !== undefined && observedAt.getTime() <= lastObservedAt.getTime()) return;
-      await input.store.stampActivity([{ sessionId, observedAt: observedAt.toISOString() }]);
-      lastObservedAt = observedAt;
+      const stamped = await input.store.stampActivity([{ sessionId, observedAt: observedAt.toISOString() }]);
+      // The store refuses an observation later than its own now(); a refused
+      // future stamp must not become the floor that suppresses genuine ones.
+      if (stamped > 0) lastObservedAt = observedAt;
     },
 
     async assertHeld(): Promise<void> {

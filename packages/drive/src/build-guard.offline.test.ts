@@ -19,9 +19,13 @@ class MemoryClaims implements Pick<PgClaimStore, "claim" | "release" | "current"
   readonly stamps: Array<{ sessionId: string; observedAt: string }> = [];
   readonly queuedSessions = new Set<string>();
   refusalSnapshot: ClaimDocT | undefined;
+  throwOnClaimOf: string | undefined;
+  /** Copy the real adapter's stamp rule: observed > heartbeat AND observed <= now(). */
+  enforceStampRule = false;
 
   async claim(request: ClaimRequest, options: ClaimOptions = {}): Promise<ClaimResult> {
     this.claims.push(request);
+    if (request.unitId === this.throwOnClaimOf) throw new Error("store unreachable (connection reset)");
     const held = this.rows.get(request.unitId);
     const now = new Date();
     // Match the real adapter's attribution validation before any claim write.
@@ -50,7 +54,19 @@ class MemoryClaims implements Pick<PgClaimStore, "claim" | "release" | "current"
 
   async stampActivity(stamps: readonly { sessionId: string; observedAt: string }[]): Promise<number> {
     this.stamps.push(...stamps);
-    return stamps.length;
+    if (!this.enforceStampRule) return stamps.length;
+    const now = Date.now();
+    let updated = 0;
+    for (const { sessionId, observedAt } of stamps) {
+      const observed = new Date(observedAt).getTime();
+      if (observed > now) continue;
+      for (const row of this.rows.values()) {
+        if (row.sessionId !== sessionId || observed <= new Date(row.heartbeatAt).getTime()) continue;
+        row.heartbeatAt = new Date(observed).toISOString();
+        updated += 1;
+      }
+    }
+    return updated;
   }
 }
 
@@ -163,6 +179,37 @@ test("observed-activity-alone-renews-a-build-lease: only observed activity is st
     { sessionId: sessionFor(RUN_A), observedAt: observedAt.toISOString() },
     { sessionId: sessionFor(RUN_A), observedAt: later.toISOString() },
   ]);
+});
+
+test("a-refused-future-observation-does-not-suppress-later-renewal: a store-refused future stamp leaves renewal working", async () => {
+  const store = new MemoryClaims();
+  store.enforceStampRule = true;
+  const result = await acquire(store, RUN_A, ["vegetation"]);
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  const held = store.rows.get(buildKey("vegetation"));
+  assert.ok(held);
+  const backdated = new Date(Date.now() - 60_000).toISOString();
+  held.heartbeatAt = backdated;
+  await result.guard.noteActivity(new Date(Date.now() + 3_600_000));
+  assert.equal(held.heartbeatAt, backdated, "the store refuses an observation later than its now()");
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  const genuine = new Date(Date.now() - 5);
+  await result.guard.noteActivity(genuine);
+  assert.equal(held.heartbeatAt, genuine.toISOString(), "a genuine observation after a refused future one must still renew the lease");
+  await result.guard.release();
+});
+
+test("multi-unit-claim-leaves-no-partial-lease-when-a-claim-throws: a throwing later claim unwinds earlier leases and rethrows", async () => {
+  const store = new MemoryClaims();
+  store.throwOnClaimOf = buildKey("vegetation");
+  await assert.rejects(() => acquire(store, RUN_A, ["vegetation", "canopy"]), /connection reset/, "the original store failure surfaces");
+  assert.deepEqual(store.releases, [[buildKey("canopy"), sessionFor(RUN_A)]]);
+  assert.equal(store.rows.get(buildKey("canopy")), undefined, "no partial guard lease survives the throw");
+  store.throwOnClaimOf = undefined;
+  const successor = await acquire(store, RUN_B, ["canopy"]);
+  assert.equal(successor.ok, true, "a different run acquires the first unit at once");
+  if (successor.ok) await successor.guard.release();
 });
 
 test("run-scoped-cleanup-cannot-release-a-successor-or-an-ordinary-session-claim: old cleanup cannot release a successor", async () => {

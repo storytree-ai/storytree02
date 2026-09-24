@@ -988,7 +988,14 @@ export type Divergence =
    * Same discipline as `stale-allowlist`, and for the same reason: a sanctioned-difference list
    * nobody prunes decays into a blanket exemption, and this one exempts whole entries.
    */
-  | { kind: "stale-correct-difference"; where: string; key: string; difference: string; reason: string };
+  | { kind: "stale-correct-difference"; where: string; key: string; difference: string; reason: string }
+  /**
+   * One side carries the same entry key more than once. The per-key maps keep only the LAST row
+   * for a key, so without this a duplicate carrying a wrong value was invisible to every other rule.
+   */
+  | { kind: "duplicate-key"; where: string; side: "reference" | "mirror"; keys: string[] }
+  /** The two payloads carry a different NUMBER of entries (reported only alongside a duplicate). */
+  | { kind: "length"; where: string; reference: number; mirror: number };
 
 /** A decoded payload entry — an arbitrary JSON record keyed by the spec's `key` field. */
 export type Entry = Record<string, unknown>;
@@ -1457,6 +1464,18 @@ function keyOf(entry: Entry, spec: MirrorSpec): string {
   return typeof raw === "string" ? raw : JSON.stringify(raw);
 }
 
+/** Every key that occurs more than once in `entries`, in first-duplicate order. */
+function duplicateKeys(entries: Entry[], spec: MirrorSpec): string[] {
+  const seen = new Set<string>();
+  const dupes = new Set<string>();
+  for (const e of entries) {
+    const key = keyOf(e, spec);
+    if (seen.has(key)) dupes.add(key);
+    else seen.add(key);
+  }
+  return [...dupes];
+}
+
 /**
  * Compare a mirrored payload against its reference and return every divergence, most-structural
  * first (missing/extra entries, then order, then per-field, then allowlist rot). An EMPTY array
@@ -1487,6 +1506,20 @@ export function compareMirrors(
       if (clause.disposition !== "exempt") continue;
       for (const key of clause.keys) exemptByKey.set(key, clause);
     }
+  }
+
+  // Duplicates and length FIRST: the maps below are last-row-wins and the order walk spans only
+  // `reference.length`, so a mirror of [a,b,c',c] against [a,b,c] passed every later rule — the
+  // wrong-valued c' was simply never looked at. Recording them in `out` also suppresses the order
+  // walk, whose positional comparison means nothing once the sides disagree on multiplicity.
+  const refDupes = duplicateKeys(reference, spec);
+  const mirrorDupes = duplicateKeys(mirror, spec);
+  if (refDupes.length > 0) out.push({ kind: "duplicate-key", where, side: "reference", keys: refDupes });
+  if (mirrorDupes.length > 0) out.push({ kind: "duplicate-key", where, side: "mirror", keys: mirrorDupes });
+  // A length mismatch WITHOUT duplicates is already a missing/extra entry below; naming it twice
+  // would say the same fact in two vocabularies, so it is reported only where a duplicate hides it.
+  if (refDupes.length + mirrorDupes.length > 0 && reference.length !== mirror.length) {
+    out.push({ kind: "length", where, reference: reference.length, mirror: mirror.length });
   }
 
   const refByKey = new Map(reference.map((e) => [keyOf(e, spec), e]));
@@ -1610,6 +1643,10 @@ export function formatDivergence(spec: MirrorSpec, d: Divergence): string {
       return `[${d.where}] stale referenceOnlyFields entry \`${d.field}\`: ${d.reason}`;
     case "stale-correct-difference":
       return `[${d.where}] stale correctDifferences key \`${d.key}\` (${d.difference}): ${d.reason}`;
+    case "duplicate-key":
+      return `[${d.where}] ${d.side === "reference" ? spec.reference : spec.mirror} carries DUPLICATE entry key(s) ${d.keys.join(", ")}`;
+    case "length":
+      return `[${d.where}] entry count diverges: ${spec.reference} has ${d.reference}, ${spec.mirror} has ${d.mirror}`;
   }
 }
 

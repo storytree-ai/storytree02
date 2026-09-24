@@ -42,7 +42,9 @@
 // with the sign flipped.
 //
 // Pure: no clock, no filesystem, no git, no process. The caller supplies the record, the timestamps
-// and the tree digest; this module only decides and phrases.
+// and the tree digest's raw inputs; this module only decides, hashes and phrases.
+
+import { createHash } from "node:crypto";
 
 import type { GateStep } from "./gate-order.js";
 import type { GateStepResult, GateStepStatus } from "./gate-runner.js";
@@ -380,6 +382,69 @@ export function parseSelectionRequest(argv: readonly string[]): SelectionParse {
 }
 
 // ── the fail→pass question ───────────────────────────────────────────────────
+
+/**
+ * What {@link computeTreeDigest} reads. Every reader is injected (git and the filesystem live in
+ * `gate-run.ts`), and each returns `null` for "could not read" — which makes the whole digest `null`.
+ */
+export interface TreeDigestReaders {
+  /** `git status --porcelain -uall`. */
+  readonly status: () => string | null;
+  /** `git diff HEAD`. */
+  readonly diff: () => string | null;
+  /** `git hash-object` over every untracked, non-ignored file ("" when there are none). */
+  readonly untrackedContent: () => string | null;
+  /**
+   * The INSTALLED dependency state: the content of `node_modules/.pnpm/lock.yaml` (the lockfile the
+   * current `node_modules` was built from). `undefined` = the file is absent (hashed as its own
+   * constant, distinct from any content); `null` = present but unreadable.
+   */
+  readonly installedLockfile: () => string | undefined | null;
+}
+
+/**
+ * What an ABSENT installed lockfile contributes to the digest. A present file contributes
+ * `installed-lockfile:content:` + its content, which can never equal this marker.
+ */
+export const INSTALLED_LOCKFILE_ABSENT = "installed-lockfile:absent";
+
+/**
+ * A digest of everything the gate reads from THIS worktree, or `null` when any input could not be read.
+ *
+ * ITS ONLY CONSUMER IS THE FLAKE CLAIM ({@link treeChangedSince}), so the question it answers is
+ * "could ANYTHING the gate reads have changed?" — and `null` must stay distinguishable from equality.
+ *
+ * THE APERTURE, STATED. Porcelain status (which paths are dirty/untracked), `git diff HEAD` (the
+ * content of every tracked change), the untracked files' content, AND the installed dependency state.
+ * The last is the one gitignored input folded in: fail → `pnpm install` → pass changes nothing git can
+ * see, yet the install is exactly what fixed it, and without it that sequence was labelled a flake
+ * ("nothing was fixed in between"). Other gitignored paths stay out deliberately — `.gate-logs/` is
+ * rewritten by every run, so a digest that saw it could never equal itself.
+ */
+export function computeTreeDigest(read: TreeDigestReaders): string | null {
+  const status = read.status();
+  if (status === null) return null;
+  const diff = read.diff();
+  if (diff === null) return null;
+  const untracked = read.untrackedContent();
+  if (untracked === null) return null;
+  const installed = read.installedLockfile();
+  if (installed === null) return null;
+  const installedPart =
+    installed === undefined
+      ? INSTALLED_LOCKFILE_ABSENT
+      : `installed-lockfile:content:${installed}`;
+
+  return createHash("sha256")
+    .update(status)
+    .update("\0")
+    .update(diff)
+    .update("\0")
+    .update(untracked)
+    .update("\0")
+    .update(installedPart)
+    .digest("hex");
+}
 
 /**
  * Did the working tree move between the recorded run and now?
