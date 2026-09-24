@@ -168,6 +168,141 @@ test('r3f-mapping-is-deterministic: same scene → deep-equal descriptor arrays,
   assert.deepEqual(worldTo3D(buildScene(mkInput())), worldTo3D(scene));
 });
 
+test('r3f-coverage-flora-preserves-grounded-capability-semantics: every core coverage wrapper becomes one grounded descriptor with its own capability, island, status, theme, and scale', () => {
+  // This is deliberately a real true-ground SceneInput, not a forged scene fragment: the core owns
+  // the parcel-flora wrapper's grounding semantics. The two islands vary capability, theme, folded
+  // status, and test count, so identity cannot be accidentally borrowed from one territory-wide
+  // value. `landAreaPerCapability: null` leaves the core's direct coordinates intact.
+  const drawTiles: DrawTile[] = [
+    { h: { q: 0, r: 0 }, owner: 0 },
+    { h: { q: 1, r: 0 }, owner: 0 },
+    { h: { q: 6, r: 0 }, owner: 1 },
+    { h: { q: 7, r: 0 }, owner: 1 },
+  ];
+  const scene = buildScene(
+    mkInput({
+      cameraElevationDeg: PLAN_VIEW_ELEVATION_DEG,
+      drawTiles,
+      wheatSets: [new Set<string>(), new Set<string>()],
+      relaxedCells: buildRelaxedCells(drawTiles, [new Set<string>(), new Set<string>()], 'mesh'),
+      territories: [
+        mkTerritory({
+          id: 'library',
+          status: 'healthy',
+          caps: 2,
+          parcels: [
+            { capId: 'library-meadow', status: 'healthy', testCount: 2, theme: 'meadow', seed: { x: 100, y: 200 } },
+            { capId: 'library-woodland', status: 'building', testCount: 5, theme: 'woodland', seed: { x: 120, y: 195 } },
+          ],
+        }),
+        mkTerritory({
+          id: 'cli',
+          status: 'unhealthy',
+          caps: 2,
+          centroid: { x: 500, y: 200 },
+          groundRadius: 60,
+          screenRadius: 60,
+          treeSpot: { x: 500, y: 190 },
+          labelY: 260,
+          plate: { w: 120, h: 33, rx: 7, idY: 14, subY: 27, idText: 'cli', subText: 'unhealthy · 2 caps', title: 'The cli' },
+          parcels: [
+            { capId: 'cli-heath', status: 'unhealthy', testCount: 9, theme: 'heath', seed: { x: 500, y: 200 } },
+            { capId: 'cli-meadow', status: 'proposed', testCount: 3, theme: 'meadow', seed: { x: 520, y: 195 } },
+          ],
+        }),
+      ],
+    }),
+  );
+
+  type CoverageSource = { id: string; island: string; status: string; theme: string; groundAnchor: { x: number; y: number }; floraScale: number };
+  const sources: CoverageSource[] = [];
+  const collect = (node: SceneNode, island?: string): void => {
+    const nextIsland = node.el === 'g' && node.kind === 'territory' && node.id !== undefined ? node.id : island;
+    if (
+      node.el === 'g' &&
+      node.kind === 'parcel-flora' &&
+      node.id !== undefined &&
+      node.status !== undefined &&
+      node.theme !== undefined &&
+      node.groundAnchor !== undefined &&
+      node.floraScale !== undefined &&
+      nextIsland !== undefined
+    ) {
+      sources.push({
+        id: node.id,
+        island: nextIsland,
+        status: node.status,
+        theme: node.theme,
+        groundAnchor: node.groundAnchor,
+        floraScale: node.floraScale,
+      });
+    }
+    if (node.el === 'g') for (const child of node.children) collect(child, nextIsland);
+  };
+  collect(scene);
+  assert.ok(sources.length > 4, 'the varied real core fixture emits several coverage wrappers across both territories');
+  assert.deepEqual(new Set(sources.map((source) => source.island)), new Set(['library', 'cli']));
+
+  type CoverageDescriptor = {
+    kind: 'coverage-flora';
+    transform: { x: number; y: number; z: number };
+    group: string;
+    capability: string;
+    island: string;
+    material: string;
+    theme: string;
+    floraScale: number;
+  };
+  const descriptors = worldTo3D(scene, { landAreaPerCapability: null }).filter(
+    (descriptor): descriptor is Descriptor3D & CoverageDescriptor => (descriptor as { kind: string }).kind === 'coverage-flora',
+  );
+  assert.equal(descriptors.length, sources.length, 'one coverage-flora descriptor exists for every core wrapper');
+  for (let i = 0; i < sources.length; i++) {
+    const source = sources[i]!;
+    const descriptor = descriptors[i]!;
+    assert.deepEqual(
+      descriptor,
+      {
+        kind: 'coverage-flora',
+        transform: { x: source.groundAnchor.x, y: 0, z: source.groundAnchor.y },
+        group: 'coverage-flora',
+        capability: source.id,
+        island: source.island,
+        material: source.status,
+        theme: source.theme,
+        floraScale: source.floraScale,
+      },
+      `coverage wrapper ${i} is transported without recovering SVG transform data`,
+    );
+  }
+
+  // A malformed semantic wrapper is not an invitation to parse its SVG transform or invent a
+  // capability: it remains a visible skip, making the malformed source observable to callers.
+  const malformed: SceneG = { el: 'g', kind: 'parcel-flora', id: 'missing-semantics', transform: 'translate(999 999)', children: [] };
+  assert.deepEqual(worldTo3D(malformed), [{ kind: 'skipped', sceneKind: 'parcel-flora' }]);
+});
+
+// The mutation rung observed that one wrapper missing everything did not witness any individual
+// required-field guard. Remove one fact at a time, retaining every other valid fact.
+for (const missing of ['id', 'status', 'theme', 'groundAnchor', 'floraScale', 'island'] as const) {
+  test(`r3f-coverage-flora-preserves-grounded-capability-semantics: missing ${missing} skips visibly on its own`, () => {
+    const node: SceneG = {
+      el: 'g', kind: 'parcel-flora', id: 'cap-coverage', status: 'healthy', theme: 'woodland',
+      groundAnchor: { x: 12, y: 34 }, floraScale: 0.4,
+      transform: 'translate(999 999)', children: [],
+    };
+    if (missing !== 'island') delete node[missing];
+    const root: SceneG = { el: 'g', kind: 'territory', children: [node] };
+    if (missing !== 'island') root.id = 'island-coverage';
+    const result = worldTo3D(root, { landAreaPerCapability: null });
+    assert.equal(result.some((d) => d.kind === 'coverage-flora'), false, `${missing} must not be invented`);
+    assert.deepEqual(
+      result.filter((d) => d.kind === 'skipped' && d.sceneKind === 'parcel-flora'),
+      [{ kind: 'skipped', sceneKind: 'parcel-flora' }],
+    );
+  });
+}
+
 // ---------------------------------------------------------------------------
 // contract: r3f-semantic-layer-maps-faithfully
 // ---------------------------------------------------------------------------

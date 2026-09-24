@@ -23,19 +23,17 @@ decisions: [123, 93, 562]
 #  - `shade-ladder` is HERE. In-degree 11, ZERO dependencies of its own, and `stepped-skirt` (a
 #    scene-model module) imports it — so it cannot sit in land-surface without a backedge.
 #
-# Node-borne proof config (ADR-0057 keystone). CARRIED FORWARD UNCHANGED from the pre-split
-# `forest-rendering-engine` in its `real:` arm — same `testFile`, same `sourceFile`, same inner
-# scope, same install/typecheck walls — because the arm was always about `world-to-3d.ts`, which is
-# this lane's. The OUTER `scope` is NARROWED from the package-wide globs it carried before to this
-# lane's own 15 modules and their tests: a package-wide write scope on a lane that owns 15 of the
-# package's 46 renderer modules is an over-declaration (ADR-0087's posture), and leaving it wide
-# would let this lane's leaf write the surface, dressing and delivery lanes — silently re-merging
-# exactly what the split exists to separate. Narrowing a declared scope changes no behaviour and
-# arms nothing new.
+# Node-borne proof config (ADR-0057 keystone). The outer scope was narrowed from the pre-split
+# package-wide globs to this lane's 15 modules and tests: a package-wide write scope on a lane that
+# owns 15 of the package's 46 renderer modules is an over-declaration (ADR-0087's posture), and
+# leaving it wide would let this lane's leaf write the surface, dressing and delivery lanes —
+# silently re-merging exactly what the split exists to separate. The current `real:` arm owns the
+# mapper pair because it is this lane's pure descriptor boundary; its install/typecheck walls stay
+# the package's existing ones.
 #
-# The current real arm is the explicit per-vertex island-slot transport. It replaces the inherited
-# mapper arm without claiming its three historical contracts: coverage keeps the mapper test while
-# the new proof changes only `cell-ground-geometry`'s optional input/output pair.
+# The current real arm carries the core's already-typed `parcel-flora` semantics into one pure
+# coverage descriptor per source wrapper. The historical island-slot contract remains in coverage;
+# this arm edits only the mapper pair and earns no credit for that older geometry proof.
 proof:
   command:
     file: pnpm
@@ -75,21 +73,23 @@ proof:
       - "packages/forest-world-r3f/src/shade-ladder.ts"
       - "packages/forest-world-r3f/src/detail-normal.ts"
   coverage:
-    testGlobs: ["packages/forest-world-r3f/src/world-to-3d.test.ts"]
+    testGlobs:
+      - "packages/forest-world-r3f/src/world-to-3d.test.ts"
+      - "packages/forest-world-r3f/src/cell-ground-geometry.test.ts"
   real:
     editsExisting: true
-    testFile: "packages/forest-world-r3f/src/cell-ground-geometry.test.ts"
-    sourceFile: "packages/forest-world-r3f/src/cell-ground-geometry.ts"
+    testFile: "packages/forest-world-r3f/src/world-to-3d.test.ts"
+    sourceFile: "packages/forest-world-r3f/src/world-to-3d.ts"
     scope:
-      testGlobs: ["packages/forest-world-r3f/src/cell-ground-geometry.test.ts"]
-      sourceGlobs: ["packages/forest-world-r3f/src/cell-ground-geometry.ts"]
+      testGlobs: ["packages/forest-world-r3f/src/world-to-3d.test.ts"]
+      sourceGlobs: ["packages/forest-world-r3f/src/world-to-3d.ts"]
     install: true
     typecheck:
       file: pnpm
       args: ["--filter", "@storytree/forest-world-r3f", "typecheck"]
     proofCommand:
       file: bun
-      args: ["test", "--preload", "./scripts/tsx-cache-off.mjs", "packages/forest-world-r3f/src/cell-ground-geometry.test.ts"]
+      args: ["test", "--preload", "./scripts/tsx-cache-off.mjs", "packages/forest-world-r3f/src/world-to-3d.test.ts"]
 ---
 
 # The scene model — a real forest world becomes typed 3D scene geometry
@@ -132,8 +132,8 @@ rests on, not an aspiration.
 > see the corrected note in Guidance), so ADR-0559 D4 would withhold credit from it independently.
 > Every reader agrees and agreed before the split: `storytree tree website-experience` reports this
 > lane `status=proposed`. The other 14 modules in the lane carry real `node:test` suites but no
-> contract id leads one of them; the explicit-slot proof below adds one current geometry contract
-> while coverage keeps the three historical mapper contracts visible.
+> contract id leads one of them; the re-armed coverage-flora proof adds one current mapper contract
+> while coverage keeps the four historical contracts visible.
 
 ## The lane — 15 modules
 
@@ -183,8 +183,9 @@ input maps deterministically to typed 3D descriptors that carry the semantic lay
    are deep-equal (determinism — the core's discipline carried into 3D).
 2. Assert the core kind families each produced their descriptor branch: ≥1 instanced `cell-ground`
    descriptor per relaxed-mesh parcel, carrying that parcel's real (non-collapsing) ring of points
-   and its folded status; a tree descriptor for a story node; a road descriptor for a dependency
-   edge; a wisp-family descriptor when the scene carries one. And assert the RETIRED substrate's
+   and its folded status; a `trail-strip` descriptor for a routed `trail-fill` dependency edge; a wisp-family
+   descriptor when the scene carries one; and an explicit skip for the retired placeholder `tree`
+   family. And assert the RETIRED substrate's
    refusal: a scene the core built the classic way (`relaxedCells: null`, so it emits `tile`
    groups) makes `worldTo3D` throw `world-to-3d: the 3D map draws the relaxed-mesh land only — the
    classic extruded-hex ground was retired (adopt-the-land-into-the-shipped-map-arc,
@@ -197,33 +198,35 @@ input maps deterministically to typed 3D descriptors that carry the semantic lay
 4. Feed a drawable with an unhandled/unknown `kind` → assert an explicit `skipped` descriptor (with
    the kind named) and no throw — the mapping is total and fail-visible.
 
-## Explicit island-slot proof walkthrough
+## Proof walkthrough
 
-The canvas needs direct vertex provenance for its growth texture; an atlas UV offset is a sample
-address and may be shared by different islands, so it is not identity. Extend only
-`cellGroundGeometry`:
+The core already emits one `parcel-flora` wrapper for each actual coverage mark. Its new
+`groundAnchor` and `floraScale` are the semantic source of placement; the mapper must transport
+them, never recover them by parsing the SVG drawing transform.
 
-1. Add optional `CellGroundGeometryInput.islandSlot`, a resolver from the source cell's `island` id
-   to one numeric slot, and `CellGroundGeometry.islandSlots`, one float per emitted vertex. Before
-   the implementation, cast the result in the existing test to an optional `islandSlots` field and
-   assert a two-island resolver produces the expected per-vertex slot run. At the recorded
-   baseline, the result lacked that buffer, making this an assertion red against existing code.
-2. With the resolver present, every top face and skirt vertex emitted from an island receives that
-   island's resolver value. With it omitted, `islandSlots` is zero-length exactly like the existing
-   optional atlas/status buffers, preserving the old geometry shape rather than silently declaring
-   slot zero for every island. The mutation rung observed a surviving conditional at
-   `cell-ground-geometry.ts:527` that makes `input.islandSlot === undefined` false. Repair that
-   observed gap with the omitted-resolver case: `islandSlots` must be zero-length and
-   `positions`, `normals`, `colors`, `statuses`, and `atlasOrigins` must remain byte-identical to
-   the baseline geometry. This strengthens the existing optional-input contract only.
-3. The resolver is passed the cell's direct `island` id. No reverse lookup from `atlasOrigins`, no
-   import from delivery, and no geometry or triangulation change is allowed.
+1. Build one real true-ground `SceneInput` with at least two territories and parcels that vary
+   capability id, theme, folded status and test count. Pass `landAreaPerCapability: null` so the
+   mapper receives the core's direct coordinates. Collect the source `parcel-flora` wrappers in
+   scene traversal order, then collect `coverage-flora` descriptors. The test must first fail
+   because the existing mapper has no `coverage-flora` family.
+2. Make exactly one descriptor for every source wrapper, in the same order. Each descriptor carries
+   `groundAnchor.x → transform.x`, `groundAnchor.y → transform.z`, `transform.y = 0`, the exact
+   `floraScale`, the wrapper's theme and folded status/material, the capability from that wrapper's
+   own `id`, and the enclosing territory's island id. Later placement supplies `landHeight`; this
+   mapper does not claim grounding or appearance. The generic island sizing path remains attributable: turning
+   its normal sizing back on must not erase or substitute the wrapper's capability identity.
+3. A hand-built malformed `parcel-flora` node with missing required semantic fields must be visible
+   in the mapper result as an explicit `skipped` descriptor, never silently invented from a
+   transform and never a throw. Do not change parcel geometry, SVG, JSX, clocks, art direction or
+   any drawing path: pure descriptor transport is this unit's complete outcome.
 
-## Contracts (4)
+## Contracts (5)
 
 Each one isolated automated test (`node:test`, the package suite), cited at real `file:line`. Per
-ADR-0122 each contract id leads a distinctly-named test; `storytree coverage forest-scene-model`
-reports 4/4, including the signed explicit-slot proof (`5e06fd51`).
+ADR-0122 each contract id leads a distinctly-named test. The four historical predicates remain
+declared; their former verdicts are history, not current credit. Until this re-armed mapper proof
+lands, coverage is therefore incomplete rather than silently treating the old slot signature as a
+pass for the new descriptor family.
 
 ⚠ **The three ids below are BYTE-IDENTICAL to the ones the pre-split `forest-rendering-engine`
 carried, deliberately.** A contract id is proof-bearing identity and ADR-0253 makes criterion
@@ -238,9 +241,10 @@ carry those names. The capability was renamed; its contract ids were not, and mu
    - **covers —** `packages/forest-world-r3f/src/world-to-3d.ts` — test:
      `packages/forest-world-r3f/src/world-to-3d.test.ts:155`
 2. **`r3f-semantic-layer-maps-faithfully`** — kind → mesh family, position → transform, status → variant
-   - **asserts —** the core kind families (relaxed-mesh parcel ground → `cell-ground`, story tree,
-     road, wisp) each yield their typed descriptor branch with transforms derived from the World
-     geometry, and each folded `SceneStatus` selects a distinct material/mesh variant; a scene
+   - **asserts —** the core kind families (relaxed-mesh parcel ground → `cell-ground`, routed
+     `trail-fill` → `trail-strip`, wisp) each yield their typed descriptor branch with transforms
+     derived from the World geometry, and each folded `SceneStatus` selects a distinct
+     material/mesh variant; the retired placeholder `tree` family skips explicitly; a scene
      carrying the RETIRED classic `tile` ground is refused outright rather than mapped or skipped.
    - **covers —** `packages/forest-world-r3f/src/world-to-3d.ts` — test:
      `packages/forest-world-r3f/src/world-to-3d.test.ts:167`
@@ -258,6 +262,16 @@ carry those names. The capability was renamed; its contract ids were not, and mu
      including skirt vertices, with each island's value intact; omitting the resolver leaves the
      optional slot buffer empty.
    - **covers —** `packages/forest-world-r3f/src/cell-ground-geometry.ts`
+5. **`r3f-coverage-flora-preserves-grounded-capability-semantics`** — every core coverage wrapper
+   becomes one attributable, typed placement descriptor
+   - **asserts —** a real, multi-island true-ground `buildScene` input yields `coverage-flora`
+     descriptors whose count and traversal order equal the source `parcel-flora` wrappers; each
+     copies that wrapper's exact anchor-to-`x/z`, zero `y`, scale, theme, folded status/material and
+     own capability id, while its island comes from the enclosing territory. Later placement owns
+     land height and appearance. Missing semantic fields
+     skip visibly and do not trigger transform parsing or invented identity.
+   - **covers —** `packages/forest-world-r3f/src/world-to-3d.ts` — test:
+     `packages/forest-world-r3f/src/world-to-3d.test.ts` (added by this re-armed proof)
 
 ## Guidance
 
@@ -269,10 +283,10 @@ real `buildScene` output over the core's own `SceneInput` contract, not a hand-r
 THE MAPPER CONSUMES THE SEMANTIC LAYER, NOT THE 2D PRIMITIVES (ADR-0123 §1 — hold this line
 precisely). Input: the `World` geometry + the scene-graph's `kind` / position / `variant` / folded
 `SceneStatus`. The mapper SUPPLIES its own 3D geometry where the SVG primitive geometry would
-otherwise be consumed: the ground family becomes the merged relaxed-mesh ground; the story
-tree family (`trunk`/`crown-*`/`bare`) becomes a 3D tree; a `road` becomes a path strip on the
-ground; a `wisp` becomes a GPU sprite/point. The deterministic world-computation is REUSED, never
-re-derived — we draw the EXISTING world in 3D.
+otherwise be consumed: the ground family becomes the merged relaxed-mesh ground; the retired
+placeholder `tree` family skips explicitly because capability trees belong to the downstream kit;
+a routed `trail-fill` becomes a path strip on the ground; a `wisp` becomes a GPU sprite/point.
+The deterministic world-computation is REUSED, never re-derived — we draw the EXISTING world in 3D.
 
 WHICH GROUND FAMILY — CORRECTED 2026-09-02 (`adopt-the-land-into-the-shipped-map-arc`,
 `retire-the-old-land-path`). This capability was authored when the ground family the mapper drew was
@@ -309,17 +323,16 @@ scene-model module is a sign the change belongs here instead, and is worth stopp
 
 ## Guidance — the slice that earns a signed verdict
 
-The bootstrap rung toward `healthy` (ADR-0057 §3, NET-NEW), retained from the pre-split spec because
-the `real:` arm is unchanged:
+The current bootstrap rung toward `healthy` (ADR-0057 §3, NET-NEW) is this mapper-only
+coverage-flora transport proof:
 
 - **The test —** `packages/forest-world-r3f/src/world-to-3d.test.ts` (`node:test` +
   `node:assert/strict`, the workspace convention). Import `{ worldTo3d }` from `"./world-to-3d.js"`
   and the real core from `@storytree/forest-world`. Name each test for its contract id (`r3f-…`).
 - **The GREEN —** the pure semantic-layer → descriptor mapping above (no React/three imports in
   this module); after the leaf, the package suite + typecheck are green.
-- ⚠ **The July signature does not discharge a fresh run.** The witnessed ground obligation changed
-  on 2026-09-02, so a re-arm here is a genuine red→green against the CURRENT `cell-ground`
-  obligation, not a re-issue of the old one.
+- ⚠ **The July signature does not discharge a fresh run.** This is a genuine red→green against the
+  current coverage-flora descriptor obligation, not a re-issue of an old mapper or ground verdict.
 
 Rules:
 
