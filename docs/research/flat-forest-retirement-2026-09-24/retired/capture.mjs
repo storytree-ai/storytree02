@@ -203,6 +203,18 @@ try {
   const source = arms.at(-1);
   const warm = await open(source, true); await warm.page.waitForTimeout(1500); await warm.context.close(); frozen = true;
   manifest.snapshot = { source: source.name, frozenAt: new Date().toISOString(), sha256: hash(JSON.stringify([...payloads].sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, hash(v.body)]))), storyCount: JSON.parse(payloads.get('/api/tree').body.toString()).stories.length };
+  // The snapshot's PROOF, counted — the 2026-09-24 12:54Z run froze a tree whose verdict reads had
+  // silently failed, and every island in every arm read `proposed`. A snapshot with no signed verdict
+  // on any story or capability is refused rather than photographed (added by laneX when it re-staged these pictures).
+  const frozenStories = JSON.parse(payloads.get('/api/tree').body.toString()).stories;
+  manifest.snapshot.proof = {
+    storiesWithVerdict: frozenStories.filter((s) => s.verdict).length,
+    capabilitiesWithVerdict: frozenStories.reduce((n, s) => n + s.capabilities.filter((c) => c.verdict).length, 0),
+    provenUatLegs: frozenStories.reduce((n, s) => n + (s.uatCriteria ?? []).filter((u) => u.state === 'proven').length, 0),
+  };
+  if (manifest.snapshot.proof.storiesWithVerdict + manifest.snapshot.proof.capabilitiesWithVerdict === 0) {
+    save(); throw Error(`the frozen /api/tree carries no signed verdict at all — refusing to capture a proof-less map (${JSON.stringify(manifest.snapshot.proof)})`);
+  }
   for (const arm of arms) {
     const { context, page, mounted } = await open(arm, false);
     manifest.captures[`${arm.name}-mounted`] = mounted;
