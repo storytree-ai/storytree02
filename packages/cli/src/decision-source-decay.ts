@@ -1,4 +1,8 @@
 import {
+  adrNumberOfArtifactId,
+  decisionStatusOf,
+  storedDecisionStatusOf,
+  supersededDecisionNumbers,
   isBoundSource,
   isRefutedSource,
   readDecisionSources,
@@ -363,16 +367,19 @@ export function projectDecisionFacts(
   readFile: (repoRelPath: string) => string | undefined,
 ): DecisionFacts[] {
   const facts: DecisionFacts[] = [];
+  // `superseded` is DERIVED from the inbound edges of the whole set (ADR-0609 D3) — no row stores it.
+  // `rows` is every decision row, so the set is complete; a superseded decision is not judged.
+  const superseded = supersededDecisionNumbers(rows);
   for (const row of rows) {
     const doc = row.doc;
     const sources = readDecisionSources(doc);
-    const status =
+    const stored =
       typeof doc === "object" && doc !== null
-        ? ((): string => {
-            const value = (doc as Record<string, unknown>)["status"];
-            return typeof value === "string" ? value : "";
-          })()
-        : "";
+        ? storedDecisionStatusOf((doc as Record<string, unknown>)["status"])
+        : null;
+    const number = adrNumberOfArtifactId(row.id);
+    const status =
+      stored === null ? "" : number === null ? stored : decisionStatusOf(number, stored, superseded);
     const locations = new Map<string, SpanLocation>();
     for (const source of sources) {
       const text = readFile(source.file);

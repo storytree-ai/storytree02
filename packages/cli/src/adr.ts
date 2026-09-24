@@ -4,6 +4,7 @@ import type { Store } from "@storytree/storage-protocol";
 import { defaultCliActor } from "./cli-actor.js";
 
 import { adrAuthority, type AdrAuthorityOpts } from "./adr-authority-verb.js";
+import { adrDropCopies } from "./adr-drop-copies.js";
 import { adrCompose, type AdrComposeOpts } from "./adr-composed.js";
 import { adrRebind, type AdrRebindDeps, type AdrRebindOpts } from "./adr-rebind.js";
 import { adrPull, adrPush, type AdrRoundTripDeps } from "./adr-round-trip.js";
@@ -430,7 +431,7 @@ export function scaffold(
   fm.push("---", "");
   const edgeProse = [
     edges.supersedes.length > 0
-      ? `**Supersedes** ${edges.supersedes.map((e) => `ADR-${pad(e)}`).join(", ")} — <why; flip their status to superseded>.`
+      ? `**Supersedes** ${edges.supersedes.map((e) => `ADR-${pad(e)}`).join(", ")} — <why>. (They read as superseded from this edge alone, ADR-0609 D3; nothing else to flip.)`
       : "",
     // THE PLACEHOLDER CARRIES ADR-0139 D4'S OBLIGATION, because this is the moment the author is
     // deciding what the edge claims and there is no longer a second edge to signal it with. Until
@@ -1062,7 +1063,7 @@ async function scaffoldRow(
     return { failed: true, reason: "this invocation is read-only (no --pg)" };
   }
   try {
-    const { parseAdrDocument, adrDocId, adrDescriptionOf } = await import("@storytree/library/adr-doc");
+    const { parseAdrDocument, adrDocId } = await import("@storytree/library/adr-doc");
     const { upcastAndValidate } = await import("@storytree/library");
     const fields = parseAdrDocument(n, scaffolded);
     const id = adrDocId(n);
@@ -1076,9 +1077,9 @@ async function scaffoldRow(
       kind: "adr",
       id,
       title: fields.title === "" ? id : fields.title,
-      description: adrDescriptionOf(n, fields.title),
+      // No `number` and no `description`: both are computed on read from the id and the title
+      // (ADR-0609 D1 / D2), and the strict schema refuses a stored copy of either.
       body: fields.body,
-      number: n,
       status: fields.status,
       supersedes: [...fields.supersedes],
       loadBearing: fields.loadBearing,
@@ -1300,6 +1301,9 @@ export function adrHelp(): Envelope {
       "  Anchors themselves are authored by hand against the decision's prose —",
       "  `library artifact edit adr-NNNN --set sources=@anchors.json --pg`. NEVER auto-anchor.",
       "",
+      "  storytree adr drop-copies [--pg]   ADR-0609's one-time migration: drop the stored number, card line",
+      "                                     and `superseded` from decision rows (a DRY RUN without --pg)",
+      "",
       "  storytree adr authority                            how much of the log declares WHOSE CALL it was",
       "  storytree adr authority <n>                        one record's authority stamp + the owner's words",
       "  storytree adr authority <n> --basis <b> [--owner-said <text|@file>] --pg   stamp a record that has none",
@@ -1358,7 +1362,7 @@ export function adrHelp(): Envelope {
       "                      That annotation is now the ONLY record of an amendment — `--amends` is",
       "                      RETIRED and its 517 edges were migrated here in place against a frozen",
       "                      snapshot (docs/research/amends-edge-snapshot-2026-08-23.md).",
-      "  --supersedes <n,…>  this REPLACED them; flip their status to superseded. Not support at all,",
+      "  --supersedes <n,…>  this REPLACED them — they read as superseded from this edge (ADR-0609). Not support at all,",
       "                      and never summed with the edge above (ADR-0403 dec 6).",
       "",
       "  A `dependsOn` naming something other than a decision (a Library artifact, a repository file)",
@@ -1523,6 +1527,21 @@ export async function adrCommand(
       writable: deps.roundTrip.writable,
       actor: deps.roundTrip.actor,
       today: deps.today,
+    });
+  }
+  // ADR-0609's one-time migration: drop the stored copies of the three facts now computed on read.
+  if (sub === "drop-copies") {
+    if (deps.roundTrip === undefined) {
+      return {
+        ok: false,
+        body: "adr drop-copies needs the live store, which this invocation was not given.",
+        next: ["pnpm db:up", "storytree adr list --current"],
+      };
+    }
+    return await adrDropCopies({
+      store: deps.roundTrip.store,
+      writable: deps.roundTrip.writable,
+      actor: deps.roundTrip.actor,
     });
   }
   return {

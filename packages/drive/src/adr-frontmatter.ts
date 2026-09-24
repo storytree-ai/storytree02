@@ -9,12 +9,13 @@ import type { DecisionAuthority } from "@storytree/library";
  * Status is a projection of evidence (ADR-0006/0031): the prose `## Status` section is the evidence,
  * and the frontmatter transcribes it — never an invented write. ADR-0084 widened WHO may perform that
  * transcription: an AGENT (not only a human) may flip an ADR `proposed → accepted` (the green flip).
- * ADR-0086 widened it further: the `librarian-curator` may also flip an ADR to `superseded` as part of
- * curation (still a projection of the `## Status` prose, never invented) — ADR-0086 is itself now
- * SUPERSEDED by ADR-0139, which restates and keeps that supersede authority in force, so cite 0139 as
- * the live rule and 0086 only as its origin. Edges are OUTGOING only and BINARY on the axis of the
+ * ADR-0086 (restated by ADR-0139) let the `librarian-curator` flip an ADR to `superseded` as part of
+ * curation; ADR-0609 D3 overtook that: `superseded` is no longer stored or flipped by anyone — it is
+ * DERIVED from the replacing decision's `supersedes` edge, so the librarian's act is recording that
+ * edge. This enum is the VIEWED status (`loadTitledAdrMetasFromStore` derives its third value); the
+ * row stores only the first two. Edges are OUTGOING only and BINARY on the axis of the
  * TARGET'S SURVIVAL in the current set, not of its text (ADR-0139 D4): `supersedes` = the target
- * LEAVES the set (flips to `superseded`). Incoming edges stay derived, never double-entered:
+ * LEAVES the set (reads as `superseded`). Incoming edges stay derived, never double-entered:
  * `renderAdrList` computes the `superseded by NNNN` back-edge from these outgoing lists, so a note in
  * the target's body carries only the clause-level detail the derived edge cannot.
  *

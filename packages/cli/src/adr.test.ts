@@ -869,7 +869,9 @@ test("adr new DUAL-WRITES the row, so the scaffold is visible to `adr list`", as
   assert.match(env.body, /reserved in the DB and written as adr-0077/);
 
   const row = (await store.getDoc("adr-0077"))?.doc as Record<string, unknown>;
-  assert.equal(row["number"], 77);
+  // No stored number or card line (ADR-0609 D1 / D2): both are computed on read.
+  assert.equal(Object.hasOwn(row, "number"), false);
+  assert.equal(Object.hasOwn(row, "description"), false);
   assert.equal(row["status"], "proposed");
   assert.equal(row["title"], "A dual written decision");
 

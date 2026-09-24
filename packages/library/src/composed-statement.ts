@@ -140,7 +140,7 @@ export interface FingerprintableDecision {
  * PURE: a content fingerprint of one decision, as a composed statement depends on it.
  *
  * STATUS AND BODY, and nothing else. The body is what the decision SAYS; the status is what it still
- * IS, and a record flipping to `superseded` changes what the chain adds up to even when not a byte of
+ * IS, and a record becoming `superseded` (derived from a replacer's edge, ADR-0609 D3) changes what the chain adds up to even when not a byte of
  * its prose moves. The EDGES are deliberately excluded and their absence is not an oversight: a
  * change to `amends` / `dependsOn` changes the SHAPE of the chain beneath the frontier, which
  * {@link outstandingEffects} already reports as an `added` or `removed` record. Fingerprinting them

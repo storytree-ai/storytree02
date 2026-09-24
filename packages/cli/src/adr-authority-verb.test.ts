@@ -464,24 +464,24 @@ test("adr authority --backfill: a row that cannot re-validate is counted as a FA
 
 // ─── the row projection's defensive arms ──────────────────────────────────────────────────────
 
-test("adr authority: a row whose `number` is not a number is SKIPPED, not counted", async () => {
-  // Both arms of the guard are reachable and neither is redundant: a `--set` can write a string
-  // into `number`, and a stored NaN/Infinity is a different failure the same guard must catch.
+test("adr authority: the number is the ID's — a stored copy is ignored, a non-decision id is SKIPPED", async () => {
+  // ADR-0609 D1: nothing stores a decision's number any more, so a legacy row's stale `number`
+  // (a string, NaN, a wrong value) gets no say, and a row is a decision by its id alone.
   const store = new InMemoryStore();
   await seed(store, 100, "accepted.");
   for (const [id, number] of [
     ["adr-0200", "200"],
     ["adr-0300", Number.NaN],
-    ["adr-0400", Number.POSITIVE_INFINITY],
   ] as const) {
     await store.upsertDoc({
       id,
       kind: "adr",
-      doc: { kind: "adr", id, title: "T", description: "d", body: "b", number, status: "accepted" },
+      doc: { kind: "adr", id, title: "T", body: "b", number, status: "accepted" },
     });
   }
+  await store.upsertDoc({ id: "adr-x", kind: "adr", doc: { kind: "adr", id: "adr-x", title: "T", body: "b", status: "accepted" } });
   const env = await adrAuthority(undefined, {}, depsFor(store));
-  assert.match(env.body, /0 of 1 decision rows declare a basis/, "only the well-formed row is counted");
+  assert.match(env.body, /0 of 3 decision rows declare a basis/, "every decision id is counted; the malformed id is not");
 });
 
 test("adr authority: a row whose `body` is not a string classifies to nothing rather than throwing", async () => {

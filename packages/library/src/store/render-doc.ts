@@ -1,5 +1,7 @@
 import type { StoredDoc } from "@storytree/storage-protocol";
 import { CURRENT_SCHEMA_VERSION } from "../migrations.js";
+import { decisionCardLineOf, decisionStatusOf, storedDecisionStatusOf } from "../decision-derived.js";
+import { adrNumberOfArtifactId } from "../decision-pointer.js";
 import { hasDependsOnKey, readDependsOnPointers } from "../depends-on.js";
 import {
   KIND_SPECS,
@@ -274,7 +276,28 @@ function extractFields(doc: Knowledge) {
   return fields satisfies Record<string, string>;
 }
 
-export function renderStoredDoc(stored: StoredDoc): RenderedAsset {
+/**
+ * What a render needs from OUTSIDE the one row to show a decision's status (ADR-0609 D3): the set of
+ * decision numbers some decided record supersedes (`supersededDecisionNumbers`). A row cannot know
+ * it is superseded — that fact lives on the replacing row — so a caller that renders decisions and
+ * wants `superseded` shown hands this in. Without it a decision renders its STORED half
+ * (`proposed` / `accepted`), which is honest about what one row can say and never invents a state.
+ */
+export interface RenderDecisionContext {
+  readonly supersededDecisions: ReadonlySet<number>;
+}
+
+/**
+ * The card line a row renders under. A decision's is COMPUTED from its id and title (ADR-0609 D2) —
+ * nothing stores it — and every other kind's is its authored `description`.
+ */
+function descriptionOf(stored: StoredDoc, doc: unknown): string {
+  const card = decisionCardLineOf(stored.id, doc);
+  if (card !== null && stored.kind === "adr") return card;
+  return asString((doc as { description?: unknown } | null)?.description);
+}
+
+export function renderStoredDoc(stored: StoredDoc, context?: RenderDecisionContext): RenderedAsset {
   const doc = stored.doc;
   // The doc's own kind wins over the envelope's, matching the degraded branch below: a body-bearing
   // asset carries no `kind` at all and falls back to the stored one.
@@ -290,7 +313,7 @@ export function renderStoredDoc(stored: StoredDoc): RenderedAsset {
       id: asString(doc.id) || stored.id,
       category,
       title: asString(doc.title),
-      description: asString(doc.description),
+      description: descriptionOf(stored, doc),
       body: doc.body,
       createdAt: stored.createdAt,
       updatedAt: stored.updatedAt,
@@ -320,7 +343,7 @@ export function renderStoredDoc(stored: StoredDoc): RenderedAsset {
       id: asString(bag["id"]) || stored.id,
       category: stored.kind,
       title: asString(bag["title"]),
-      description: asString(bag["description"]),
+      description: descriptionOf(stored, bag),
       body: renderDegradedBody(bag, reason),
       degraded: reason,
       createdAt: stored.createdAt,
@@ -348,7 +371,7 @@ export function renderStoredDoc(stored: StoredDoc): RenderedAsset {
     id: knowledge.id ?? stored.id,
     category: stored.kind,
     title: asString(knowledge.title),
-    description: asString(knowledge.description),
+    description: descriptionOf(stored, knowledge),
     body: renderBody(knowledge),
     fields: extractFields(knowledge),
     createdAt: stored.createdAt,
@@ -361,6 +384,17 @@ export function renderStoredDoc(stored: StoredDoc): RenderedAsset {
   if (Array.isArray(typedEdges.branchEdges)) asset.branchEdges = typedEdges.branchEdges;
   if (typeof typedEdges.arcRef === "string" && typedEdges.arcRef) asset.arcRef = typedEdges.arcRef;
   if (typeof typedEdges.status === "string" && typedEdges.status) asset.status = typedEdges.status;
+  // A decision's status is half stored, half derived (ADR-0609 D3): the row says proposed/accepted
+  // (a legacy stored `superseded` reads as `accepted`, what its next write stores), and the context,
+  // when given, says whether a decided record has since replaced it.
+  const decisionNumber = stored.kind === "adr" ? adrNumberOfArtifactId(stored.id) : null;
+  const storedStatus = storedDecisionStatusOf(typedEdges.status);
+  if (decisionNumber !== null && storedStatus !== null) {
+    asset.status =
+      context === undefined
+        ? storedStatus
+        : decisionStatusOf(decisionNumber, storedStatus, context.supersededDecisions);
+  }
   if (typeof typedEdges.lifecycle === "string" && typedEdges.lifecycle) {
     asset.lifecycle = typedEdges.lifecycle;
   }

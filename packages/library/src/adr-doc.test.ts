@@ -366,14 +366,33 @@ test("adr-doc-renders-a-grounded-row-identically: anchors change no byte of the 
   // grounded must pull as exactly the document an ungrounded one pulls, or the anchors would
   // round-trip through a file and become hand-editable after all.
   const base = {
-    number: 424,
     title: "Grounded claims",
     body: "# ADR-0424: Grounded claims\n\n## Decision\n\nBind at the flip.\n",
     status: "accepted",
   };
-  const ungrounded = renderAdrDocument(adrDocumentFieldsOf(base));
+  const ungrounded = renderAdrDocument(adrDocumentFieldsOf("adr-0424", base));
   const grounded = renderAdrDocument(
-    adrDocumentFieldsOf({ ...base, sources: [{ claim: "D7", file: "packages/cli/src/adr.ts", boundHash: "a1b2" }] }),
+    adrDocumentFieldsOf("adr-0424", { ...base, sources: [{ claim: "D7", file: "packages/cli/src/adr.ts", boundHash: "a1b2" }] }),
   );
   assert.equal(grounded, ungrounded);
+});
+
+test("adr-doc-refuses-a-written-superseded-status: supersession is the replacer's edge (ADR-0609 D3)", () => {
+  // `superseded` is derived from the REPLACING record's `supersedes`. A document that still says it
+  // about itself would record nothing, so it is refused with the move that does the job — never
+  // silently mapped, which would let an author believe a decision was superseded when it was not.
+  assert.throws(
+    () => parseAdrDocument(86, "---\nstatus: superseded\n---\n# ADR-0086: Replaced\n"),
+    /no longer written[\s\S]*ADR-0609 D3[\s\S]*record the edge on the replacing decision/,
+  );
+});
+
+test("adr-doc-fields-of-a-row-take-the-number-from-the-id: nothing stores it (ADR-0609 D1)", () => {
+  const fields = adrDocumentFieldsOf("adr-0086", { title: "Old", body: "", status: "accepted" });
+  assert.equal(fields.number, 86);
+  // A row a stale writer left carrying `number` does not get a say — the id is the allocation.
+  assert.equal(adrDocumentFieldsOf("adr-0086", { number: 99, body: "", status: "accepted" }).number, 86);
+  // A legacy stored `superseded` reads as its authored half, exactly what its next write stores, so
+  // a pull renders a document the push will accept.
+  assert.equal(adrDocumentFieldsOf("adr-0086", { body: "", status: "superseded" }).status, "accepted");
 });

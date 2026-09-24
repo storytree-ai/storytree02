@@ -107,10 +107,9 @@ async function loadDecisionRows(store: PgLibraryStore): Promise<DecisionRow[]> {
   }
   const rows: DecisionRow[] = [];
   for (const stored of await store.queryDocs({ kind: "adr" })) {
-    const fields = adrDocumentFieldsOf(stored.doc as Record<string, unknown>);
-    // The id is the primary key and is what the allocator reserved (`adr-number-identity`), so it is
-    // the more trustworthy of the two when they disagree — `adrDocumentFieldsOf` degrades a missing
-    // `number` to 0 rather than throwing.
+    // The number is the id's (ADR-0609 D1 — nothing stores it); `adrDocumentFieldsOf` degrades a
+    // non-decision id to 0 rather than throwing.
+    const fields = adrDocumentFieldsOf(stored.id, stored.doc as Record<string, unknown>);
     const fromId = resolveDecisionId(stored.id);
     const number = fromId?.number ?? fields.number;
     if (number === 0) continue;

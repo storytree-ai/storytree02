@@ -1,4 +1,5 @@
 import {
+  adrNumberOfArtifactId,
   DecisionAuthority,
   AuthorityBasis,
   explainDocValidationError,
@@ -202,28 +203,16 @@ function authorityOf(bag: Record<string, unknown>): DecisionAuthority | undefine
   return parsed.success ? parsed.data : undefined;
 }
 
-/**
- * A stored value that is a real, finite decision number — narrowing and runtime test in one.
- *
- * `Number.isFinite` alone IS the predicate: it performs no coercion, so a string, `null`, `undefined`
- * and `NaN` are all false. Pairing it with a `typeof` check would add a branch no input could reach.
- */
-const isFiniteNumber = (value: unknown): value is number => Number.isFinite(value);
-
 function authorityRowsOf(docs: readonly StoredDoc[]): AuthorityRow[] {
   const rows: AuthorityRow[] = [];
   for (const doc of docs) {
     const bag = (typeof doc.doc === "object" && doc.doc !== null ? doc.doc : {}) as Record<string, unknown>;
-    // ONE runtime test, not two. `Number.isFinite` does NOT coerce (unlike the global `isFinite`),
-    // so it is already false for a string, for null and for undefined — which made the `typeof raw
-    // !== "number" ||` arm that used to sit here pure redundancy: no stored value could tell the two
-    // conditions apart. It was there for TypeScript's narrowing, and a type predicate buys that
-    // without a second runtime branch nothing can reach.
-    if (!isFiniteNumber(bag["number"])) continue;
-    const raw = bag["number"];
+    // The number is the id's (ADR-0609 D1): nothing stores it, so a row is a decision by its id.
+    const number = adrNumberOfArtifactId(doc.id);
+    if (number === null) continue;
     rows.push({
       id: doc.id,
-      number: raw,
+      number,
       bag,
       authority: authorityOf(bag),
       // PRESENCE, never parse success — see the field's docstring for why the two cannot be one.
