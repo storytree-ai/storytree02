@@ -233,3 +233,10 @@ export function cannedRun(overrides: Partial<SdkRunInfo> = {}): SdkRunInfo {
     ...overrides,
   };
 }
+
+/** Explicit offline admission: tests never infer a bypass from another injected dependency. */
+export const offlineBuildGuardFactory: import("./node-build.js").BuildGuardFactory = async ({ runId }) => ({
+  ok: true,
+  runId,
+  guard: { assertHeld: async () => {}, noteActivity: async () => {}, release: async () => {} },
+});

@@ -1,4 +1,5 @@
 import * as fs from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import * as os from "node:os";
 import path from "node:path";
@@ -21,6 +22,7 @@ import {
   createBuildWorktree,
   findNodeSpecFile,
   foldInnerLoopLedger,
+  globMatch,
   observedAttempt,
   parseAttemptRecord,
   loadNodeSpec,
@@ -108,6 +110,8 @@ import {
 } from "./scope-walls.js";
 import type { LiveRunInfo, UsageRunIds } from "./usage.js";
 import { staleExistenceClaimRefusal } from "./stale-existence-claim.js";
+import { acquireBuildGuard, type AcquireBuildGuardInput, type BuildGuard, type BuildGuardResult, type BuildGuardRefusal } from "./build-guard.js";
+import { createBuildActivityObserver } from "./build-activity.js";
 import { fileHoldChannel, resolveHoldsDir } from "./build-hold.js";
 import { chooseHoldGraceMs, chooseTimeBudgetMs } from "./time-budget.js";
 import {
@@ -1614,6 +1618,83 @@ export async function preflightPaidBuild(input: {
   return runPaidBuildPreflight(reads, input.incrementId, input.unitIds, input.revise).finally(() => reads.close());
 }
 
+/** Explicit injection is the only offline admission seam; absence always opens the shared store. */
+export type BuildGuardFactory = (input: { runId: string; unitIds: readonly string[] }) => Promise<BuildGuardResult>;
+
+export interface BuildClaimHandle {
+  store: AcquireBuildGuardInput["store"];
+  close(): Promise<void>;
+}
+
+export async function openPgClaimStore(
+  open: typeof createPool = createPool,
+  close: typeof closePool = closePool,
+): Promise<BuildClaimHandle> {
+  const handle = await open();
+  return { store: new PgClaimStore(handle.pool), close: () => close(handle.pool, handle.connector) };
+}
+
+/** The acquired guard owns its pool; a refusal or failed acquisition closes it here. */
+export function sharedBuildGuardFactory(open: () => Promise<BuildClaimHandle> = openPgClaimStore): BuildGuardFactory {
+  return async (input) => {
+    const handle = await open();
+    let transferred = false;
+    try {
+      const acquired = await acquireBuildGuard({ ...input, store: handle.store });
+      if (!acquired.ok) return acquired;
+      let released = false;
+      const guard: BuildGuard = {
+        noteActivity: (at) => acquired.guard.noteActivity(at),
+        assertHeld: () => acquired.guard.assertHeld(),
+        async release() {
+          if (released) return;
+          released = true;
+          try { await acquired.guard.release(); } finally { await handle.close(); }
+        },
+      };
+      transferred = true;
+      return { ok: true, runId: input.runId, guard };
+    } finally {
+      if (!transferred) await handle.close();
+    }
+  };
+}
+
+export function buildGuardRefusalBody(refusal: BuildGuardRefusal): string {
+  return `build lease refused for ${refusal.unitId}; held by ${refusal.holderRunId}; ` +
+    `age ${refusal.startAgeMs}ms, last activity ${refusal.heartbeatAgeMs}ms ago; ${refusal.classification}`;
+}
+
+/** Resolve the cheap increment, acquire, then fold policy while the caller's outer finally holds it. */
+export async function preflightGuardedPaidBuild(input: {
+  incrementId: string | undefined;
+  unitIds: readonly string[];
+  revise: boolean;
+  reads: InnerLoopReadHandles | undefined;
+  runId: string;
+  factory: BuildGuardFactory | undefined;
+  /** Opens caller-owned read handles; tests supply an offline lifecycle with the same ownership. */
+  openReads?: typeof liveInnerLoopReads;
+  acquired(guard: BuildGuard): void;
+}): Promise<{ ok: true; preflight: Extract<PaidBuildPreflight, { ok: true }> } | { ok: false; refusal: Envelope }> {
+  const ownedReads = input.reads === undefined ? (input.openReads ?? liveInnerLoopReads)() : undefined;
+  const reads = input.reads ?? ownedReads!;
+  try {
+    const increment = await resolveBuildIncrement(reads.corpus, input.incrementId);
+    if (!increment.ok) return { ok: false, refusal: innerLoopRefusalEnvelope(increment.state) };
+    const lease = await (input.factory ?? sharedBuildGuardFactory())({ runId: input.runId, unitIds: [...new Set(input.unitIds)].sort() });
+    if (!lease.ok) return { ok: false, refusal: { ok: false, body: buildGuardRefusalBody(lease.refusal), next: [] } };
+    input.acquired(lease.guard);
+    const policy = await preflightInnerLoop({ ledger: reads.ledger, incrementId: increment.incrementId, unitIds: input.unitIds, revise: input.revise });
+    if (!policy.ok) return { ok: false, refusal: innerLoopRefusalEnvelope(policy.state) };
+    return { ok: true, preflight: { ok: true, incrementId: increment.incrementId, warnings: policy.warnings, ledgers: policy.ledgers } };
+  } catch (err) {
+    return { ok: false, refusal: { ok: false, body: err instanceof Error ? err.message : String(err), next: [] } };
+  } finally {
+    await ownedReads?.close();
+  }
+}
+
 /** `[]` for undefined, or `{lines,next}` rendered through {@link renderInnerLoopEntryState}. */
 export function innerLoopRefusalEnvelope(state: InnerLoopRefusedState): Envelope {
   const rendered = renderInnerLoopEntryState(state);
@@ -1851,6 +1932,16 @@ export interface RealBuildArgs {
    * walk), nothing is recorded at all.
    */
   incrementId?: string | undefined;
+  /** Paid-entry seam: acquire the run lease before the REAL walk starts. */
+  buildGuardFactory?: BuildGuardFactory;
+  /** Already held by the outer node/story entry; this walk never releases a borrowed guard. */
+  buildGuard?: BuildGuard;
+  /** A held shared guard's checkpoint, run outside advisory phase reporting. */
+  beforePhase?: (step: BuildPhase | "entry" | "attempt" | "signing" | "signed-pass" | "promotion") => Promise<void>;
+  /** Observes real build activity; its lifecycle is owned by this REAL entry. */
+  buildActivityObserver?: { start(): Promise<void>; stop(): Promise<void> };
+  /** Explicit observer dependency; production observes the actual worktree and private replicas. */
+  buildActivityFactory?: typeof createBuildActivityObserver;
 }
 
 /**
@@ -1926,6 +2017,35 @@ export interface RealBuildResult {
  */
 export async function buildNodeReal(args: RealBuildArgs): Promise<RealBuildResult> {
   const { spec, worktree, baseSha, realConfig, store, runId, signer } = args;
+  let acquiredGuard: BuildGuard | undefined;
+  if (args.buildGuardFactory !== undefined) {
+    const acquired = await args.buildGuardFactory({ runId, unitIds: [spec.id] });
+    if (!acquired.ok) {
+      return {
+        result: {
+          ok: false,
+          failedAt: "AUTHOR_TEST",
+          reason: buildGuardRefusalBody(acquired.refusal),
+          phasesVisited: [],
+        },
+      };
+    }
+    acquiredGuard = acquired.guard;
+  }
+  const heldGuard = args.buildGuard ?? acquiredGuard;
+  let activity: Awaited<ReturnType<typeof createBuildActivityObserver>> | undefined;
+  const checkpoint = async (step: Parameters<NonNullable<RealBuildArgs["beforePhase"]>>[0]) => {
+    await activity?.checkpoint();
+    await args.beforePhase?.(step);
+  };
+  try {
+    if (heldGuard !== undefined) {
+      const globs = [...realConfig.scope.testGlobs, ...realConfig.scope.sourceGlobs];
+      activity = await (args.buildActivityFactory ?? createBuildActivityObserver)({ root: worktree.root, guard: heldGuard,
+        includes: (relative) => globs.some((glob) => globMatch(glob, relative)) });
+    }
+    if (args.buildActivityObserver !== undefined) await args.buildActivityObserver.start();
+    await checkpoint("entry");
   await store.appendEvent(
     workEvent({ unitId: spec.id, event: "building", runId, tier: spec.tier }, signer),
   );
@@ -1990,12 +2110,21 @@ export async function buildNodeReal(args: RealBuildArgs): Promise<RealBuildResul
   let typecheck: "green" | "red" | undefined;
   let backstopRefusal: BackstopPreservationRefusal | undefined;
   const reportPhase = withPhaseReport(phaseActivityWriter(store, phaseTarget), args.onPhase);
-  resolved.spec.onPhase = (phase) => {
+  resolved.spec.onPhase = async (phase) => {
+    await checkpoint(phase);
+    await activity?.phase();
     if (phase === "GATE") {
       typecheck = undefined;
       backstopRefusal = undefined;
     }
     return reportPhase(phase);
+  };
+  // This REAL resolver uses its default tree seam, which always supplies a binding thunk.
+  const binding = resolved.spec.binding as Extract<NonNullable<typeof resolved.spec.binding>, () => unknown>;
+  resolved.spec.binding = async () => {
+    const observed = await binding();
+    await checkpoint("signing");
+    return observed;
   };
   // `sign-after-typecheck` (ADR-0315): the package TYPECHECK runs AHEAD of the signature. It is
   // injected as the gate's `backstop` seam (run inside GATE, after the clean-tree + signer refusals,
@@ -2045,6 +2174,7 @@ export async function buildNodeReal(args: RealBuildArgs): Promise<RealBuildResul
   let innerLoop: InnerLoopRecording | undefined;
   if (args.incrementId !== undefined) {
     const incrementId = args.incrementId;
+    await checkpoint("attempt");
     try {
       await appendInnerLoopEvent(store, { event: "attempt", unitId: spec.id, incrementId, runId }, signer);
       innerLoop = { incrementId, attempt: { recorded: true } };
@@ -2075,6 +2205,7 @@ export async function buildNodeReal(args: RealBuildArgs): Promise<RealBuildResul
   // here never overturns the verdict (it is already signed), but never swallowed either: reported on
   // `innerLoop.signedPass` so an unrecordable pass is visible rather than silently lost.
   if (innerLoop !== undefined && result.ok) {
+    await checkpoint("signed-pass");
     try {
       await appendInnerLoopEvent(
         store,
@@ -2115,6 +2246,7 @@ export async function buildNodeReal(args: RealBuildArgs): Promise<RealBuildResul
     runId,
   });
   if (preservationRequest !== undefined) {
+    await checkpoint("promotion");
     forensicPreservation = await promoteRealPass(preservationRequest);
   }
   const out: RealBuildResult = { result };
@@ -2156,6 +2288,7 @@ export async function buildNodeReal(args: RealBuildArgs): Promise<RealBuildResul
 
   // node build --real: single-node promotion. No `push: false` arm survives here — a red backstop
   // now refuses the verdict itself, so reaching this line means any owed typecheck was green.
+  await checkpoint("promotion");
   out.promotion = await promoteRealPass({
     repoRoot: args.repoRoot,
     unitId: spec.id,
@@ -2163,6 +2296,18 @@ export async function buildNodeReal(args: RealBuildArgs): Promise<RealBuildResul
     commitSha: result.verdict.commitSha,
   });
   return out;
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    return { result: { ok: false, failedAt: "AUTHOR_TEST", reason, phasesVisited: [] } };
+  } finally {
+    try {
+      try { await activity?.stop(); } finally {
+        if (args.buildActivityObserver !== undefined) await args.buildActivityObserver.stop();
+      }
+    } finally {
+      if (acquiredGuard !== undefined) await acquiredGuard.release();
+    }
+  }
 }
 
 // ── `storytree node build` ───────────────────────────────────────────────────
@@ -2306,6 +2451,9 @@ export interface NodeBuildOpts {
    * omits it and {@link liveInnerLoopReads} opens instead.
    */
   innerLoopReads?: InnerLoopReadHandles | undefined;
+  buildGuardFactory?: BuildGuardFactory;
+  /** Explicit offline REAL builder; admission still requires its own shared or injected guard. */
+  realNodeBuilder?: typeof buildNodeReal;
 }
 
 /** `storytree node build <id>` — the full walk in one envelope (dry-run | live smoke | real). */
@@ -2593,21 +2741,21 @@ export async function nodeBuild(
   // ADR-0575 D1/ADR-0576 D1/D4/D5/D6: a REAL build names a live increment and its unit passes the
   // attempt policy, BOTH refused before any spend — before the prompt render, the claim, and the
   // worktree. Every existing cheap refusal above (the revision read included) keeps its precedence.
+  const runId = real ? `real-${randomUUID()}` : `${mode}-${Date.now().toString(36)}`;
+  let buildGuard: BuildGuard | undefined;
+  try {
   let incrementId: string | undefined;
   // Stryker disable next-line ArrayDeclaration: EQUIVALENT — renderIncrementLines renders nothing while incrementId is undefined, and the one path that sets incrementId sets these warnings with it
   let incrementWarnings: readonly string[] = [];
   if (real) {
-    const preflight = await progress.stage(
+    const admission = await progress.stage(
       "inner-loop preflight (the increment and the attempt ledger, before any spend)",
-      () =>
-        preflightPaidBuild({
-          incrementId: opts.increment,
-          unitIds: [spec.id],
-          revise: testRevision !== undefined,
-          reads: opts.innerLoopReads,
-        }),
+      () => preflightGuardedPaidBuild({ incrementId: opts.increment, unitIds: [spec.id],
+        revise: testRevision !== undefined, reads: opts.innerLoopReads, runId,
+        factory: opts.buildGuardFactory, acquired: (guard) => { buildGuard = guard; } }),
     );
-    if (!preflight.ok) return innerLoopRefusalEnvelope(preflight.state);
+    if (!admission.ok) return admission.refusal;
+    const preflight = admission.preflight;
     incrementId = preflight.incrementId;
     incrementWarnings = preflight.warnings;
     // ADR-0586: the predecessor's report, resolved from the fold the preflight just took plus this
@@ -2673,7 +2821,6 @@ export async function nodeBuild(
   const claimStore = opts.claim?.store !== undefined ? opts.claim.store : storeChoice.claim;
   const claimIdentity = opts.identity !== undefined ? opts.identity : deriveIdentity();
 
-  const runId = `${mode}-${Date.now().toString(36)}`;
   let claimHeld = false;
   /** The session's OWN claim this build's take absorbed, if any — a borrow, not a take. */
   let claimDisplaced: ClaimDocT | undefined;
@@ -2760,6 +2907,7 @@ export async function nodeBuild(
           // rather than merely reassuring.
           onPhase: (phase) => progress.note(phase),
         };
+        realArgs.buildGuard = buildGuard!;
         if (dbProofEnv !== undefined) realArgs.dbProofEnv = dbProofEnv;
         if (opts.model !== undefined) realArgs.model = opts.model;
         if (opts.budgetUsd !== undefined) realArgs.budgetUsd = opts.budgetUsd;
@@ -2774,7 +2922,7 @@ export async function nodeBuild(
         realArgs.incrementId = incrementId;
         const built = await progress.stage(
           "gate (the leaf authors, the spine observes red -> green)",
-          () => buildNodeReal(realArgs),
+          () => (opts.realNodeBuilder ?? buildNodeReal)(realArgs),
         );
         result = built.result;
         liveAuthor = built.liveAuthor;
@@ -2963,6 +3111,9 @@ export async function nodeBuild(
       }
     }
     await storeChoice.close();
+  }
+  } finally {
+    await buildGuard?.release();
   }
 }
 

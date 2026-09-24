@@ -1,3 +1,4 @@
+import { offlineBuildGuardFactory } from "./real-chain-fixture.js";
 import { after, before, describe, test } from "node:test";
 import assert from "node:assert/strict";
 import * as fsp from "node:fs/promises";
@@ -393,6 +394,7 @@ describe("node-build-takes-a-revision-and-names-the-record-it-leaves: node build
       reviseTest: runId,
       escalationsDir,
       increment: "inc-live",
+      buildGuardFactory: offlineBuildGuardFactory,
       innerLoopReads: { corpus: realFixture.corpusStore, ledger: new InMemoryStore() },
       ensureDb,
     });

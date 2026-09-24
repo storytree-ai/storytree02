@@ -1,3 +1,4 @@
+import { offlineBuildGuardFactory } from "./real-chain-fixture.js";
 import assert from "node:assert/strict";
 import { rm } from "node:fs/promises";
 import path from "node:path";
@@ -582,6 +583,7 @@ test("the-live-curator-never-runs-from-a-test: a GREEN --real chain that injects
         repoRoot: repo.root,
         verdictStore: "memory",
         increment: "inc-live",
+        buildGuardFactory: offlineBuildGuardFactory,
         innerLoopReads: { corpus, ledger: new InMemoryStore() },
         promote: false,
         authorOverride: scriptedAuthors({ "cap-a": scopeFor("cap-a") }),

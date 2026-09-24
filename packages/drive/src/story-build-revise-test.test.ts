@@ -1,3 +1,4 @@
+import { offlineBuildGuardFactory } from "./real-chain-fixture.js";
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -107,6 +108,7 @@ function realChainOpts(extra: {
     repoRoot: fx.repoRoot,
     verdictStore: "memory",
     increment: "inc-live",
+    buildGuardFactory: offlineBuildGuardFactory,
     innerLoopReads: { corpus: fx.corpus, ledger: extra.ledger ?? new InMemoryStore() },
     promote: false,
     escalationsDir: fx.escalationsDir,

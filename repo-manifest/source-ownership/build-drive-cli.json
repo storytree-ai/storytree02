@@ -6,6 +6,7 @@
       "packages/cli/src/node-extend.ts": "build-drive-cli",
       "packages/cli/src/node-peek.ts": "build-drive-cli",
       "packages/drive/src/backstop-report.ts": "build-drive-cli",
+      "packages/drive/src/build-activity.ts": "build-drive-cli",
       "packages/drive/src/build-guard.ts": "build-drive-cli",
       "packages/drive/src/build-hold.ts": "build-drive-cli",
       "packages/drive/src/build-peek.ts": "build-drive-cli",

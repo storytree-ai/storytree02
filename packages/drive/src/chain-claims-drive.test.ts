@@ -1,3 +1,4 @@
+import { offlineBuildGuardFactory } from "./real-chain-fixture.js";
 // The chain claims its nodes — proven THROUGH the drive, not only in the pure module.
 //
 // THE RED, and every case below fails on the pre-change `story build`:
@@ -335,6 +336,7 @@ test("a REAL chain refused at a member's claim points at another member's paid b
       verdictStore: "memory",
       corpusStore: corpus,
       increment: "inc-live",
+      buildGuardFactory: offlineBuildGuardFactory,
       innerLoopReads: { corpus, ledger: new InMemoryStore() },
       claim: { store: fakeLedger([{ unitId: "cap-b", sessionId: "sibling" }]) },
       identity: IDENTITY,
