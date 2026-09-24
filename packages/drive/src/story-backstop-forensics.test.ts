@@ -1,3 +1,4 @@
+import { offlineBuildGuardFactory } from "./real-chain-fixture.js";
 import { execFile } from "node:child_process";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -294,6 +295,7 @@ test(
         repoRoot: repo.root,
         verdictStore: "memory",
         increment: "inc-live",
+        buildGuardFactory: offlineBuildGuardFactory,
         innerLoopReads: { corpus, ledger: new InMemoryStore() },
         realNodeBuilder,
       });
@@ -366,6 +368,7 @@ test(
         repoRoot: repo.root,
         verdictStore: "memory",
         increment: "inc-live",
+        buildGuardFactory: offlineBuildGuardFactory,
         innerLoopReads: { corpus, ledger: new InMemoryStore() },
         realNodeBuilder,
       });

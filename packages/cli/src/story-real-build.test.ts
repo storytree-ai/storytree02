@@ -20,6 +20,14 @@ import type { NodeSpec } from "@storytree/orchestrator";
 // Every --real chain here injects a scripted curator: a green chain's DEFAULT is the live SDK
 // librarian-curator enacting on the live store, which a test process is refused.
 import { LIVE_CURATION_FROM_A_TEST, ScriptedCuratorRunner, silentBuildProgress, storyBuild } from "@storytree/drive";
+import type { BuildGuardFactory } from "@storytree/drive";
+
+// These scripted chains exercise the real build walk without claiming the live shared ledger.
+const offlineBuildGuardFactory: BuildGuardFactory = async ({ runId }) => ({
+  ok: true,
+  runId,
+  guard: { assertHeld: async () => {}, noteActivity: async () => {}, release: async () => {} },
+});
 
 /**
  * The corpus the leaf's per-phase system prompts render from, INJECTED rather than opened.
@@ -227,6 +235,7 @@ test("--real chains capabilities topo-ordered over ONE worktree; cap-b builds on
       verdictStore: "memory", // internal test seam (ADR-0081): in-memory store, no DB — NOT a CLI option
       increment: "inc-live",
       innerLoopReads: { corpus, ledger: new InMemoryStore() },
+      buildGuardFactory: offlineBuildGuardFactory,
       promote: false, // exercise the chain without touching a remote
       authorOverride: scriptedAuthors({ "cap-a": scopeFor("cap-a"), "cap-b": scopeFor("cap-b") }),
     });
@@ -273,6 +282,7 @@ test("a GREEN --real chain in a test process that injects no curator is refused 
         verdictStore: "memory",
         increment: "inc-live",
         innerLoopReads: { corpus, ledger: new InMemoryStore() },
+        buildGuardFactory: offlineBuildGuardFactory,
         promote: false,
         authorOverride: scriptedAuthors({ "cap-a": scopeFor("cap-a") }),
       }),
@@ -309,6 +319,7 @@ test("--real HALTS the chain when a node fails closed; the later node never runs
       verdictStore: "memory", // internal test seam (ADR-0081): in-memory store, no DB — NOT a CLI option
       increment: "inc-live",
       innerLoopReads: { corpus, ledger: new InMemoryStore() },
+      buildGuardFactory: offlineBuildGuardFactory,
       promote: false,
       authorOverride: scriptedAuthors({
         "cap-a": scopeFor("cap-a"),
@@ -349,6 +360,7 @@ test("--real promotes ONCE at the stacked HEAD; cap-a's verdict commit is an anc
       verdictStore: "memory", // internal test seam (ADR-0081): in-memory store, no DB — NOT a CLI option
       increment: "inc-live",
       innerLoopReads: { corpus, ledger: new InMemoryStore() },
+      buildGuardFactory: offlineBuildGuardFactory,
       // promote defaults to true; the fixture origin keeps the push local.
       authorOverride: scriptedAuthors({ "cap-a": scopeFor("cap-a"), "cap-b": scopeFor("cap-b") }),
     });
@@ -402,6 +414,7 @@ test("--real HALT parks the proven prefix LOCAL-ONLY — never pushed, never a l
       verdictStore: "memory", // internal test seam (ADR-0081): in-memory store, no DB — NOT a CLI option
       increment: "inc-live",
       innerLoopReads: { corpus, ledger: new InMemoryStore() },
+      buildGuardFactory: offlineBuildGuardFactory,
       authorOverride: scriptedAuthors({
         "cap-a": scopeFor("cap-a"),
         "cap-bad": scopeFor("cap-bad"),

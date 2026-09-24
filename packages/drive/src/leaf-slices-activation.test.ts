@@ -1,3 +1,4 @@
+import { offlineBuildGuardFactory } from "./real-chain-fixture.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { rm } from "node:fs/promises";
@@ -96,6 +97,7 @@ test("the-leaf-slices-observer-fires-with-the-canned-run-accounting: a --real ch
       repoRoot: repo.root,
       verdictStore: "memory", // internal test seam (ADR-0081): in-memory store, no DB
       increment: "inc-live",
+      buildGuardFactory: offlineBuildGuardFactory,
       innerLoopReads: { corpus, ledger: new InMemoryStore() },
       promote: false,
       authorOverride: scriptedAuthors({ "cap-a": scopeFor("cap-a") }),
@@ -134,6 +136,7 @@ test("no-live-author-override-leaves-the-observer-silent: authorOverride alone (
       repoRoot: repo.root,
       verdictStore: "memory",
       increment: "inc-live",
+      buildGuardFactory: offlineBuildGuardFactory,
       innerLoopReads: { corpus, ledger: new InMemoryStore() },
       promote: false,
       authorOverride: scriptedAuthors({ "cap-a": scopeFor("cap-a") }),
@@ -169,6 +172,7 @@ test("a-canned-live-author-cannot-move-a-verdict: a canned success-shaped run ac
       repoRoot: repo.root,
       verdictStore: "memory",
       increment: "inc-live",
+      buildGuardFactory: offlineBuildGuardFactory,
       innerLoopReads: { corpus, ledger: new InMemoryStore() },
       promote: false,
       authorOverride: scriptedAuthors({ "cap-bad": scopeFor("cap-bad") }),
@@ -288,6 +292,7 @@ test("each-chained-node-reports-its-own-slices: a two-node --real chain reports 
       repoRoot: repo.root,
       verdictStore: "memory",
       increment: "inc-live",
+      buildGuardFactory: offlineBuildGuardFactory,
       innerLoopReads: { corpus, ledger: new InMemoryStore() },
       promote: false,
       authorOverride: scriptedAuthors({ "cap-a": scopeFor("cap-a"), "cap-b": scopeFor("cap-b") }),
