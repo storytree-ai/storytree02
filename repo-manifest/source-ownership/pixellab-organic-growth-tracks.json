@@ -1,7 +1,0 @@
-{
-  "sourceOwnership": {
-    "subtrees": {
-      "packages/app-surface/src/organic-pose-to-pose-*.ts": "pixellab-organic-growth-tracks"
-    }
-  }
-}

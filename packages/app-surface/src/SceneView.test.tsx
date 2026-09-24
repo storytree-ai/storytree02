@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 //
-// Stage-1 red-green of the studio scene MAPPER (ADR-0093 Unit 2b): the role → studio-class
-// translation, the focus/hidden composition, the per-node handlers, and the skips (the
-// delegation hit layer is the website's, never the studio's). The VISUAL PARITY (the inline
-// render vs `?render=scene`) is operator-attested (ADR-0070); the GEOMETRY is the core's
-// (forest-world/scene.test.ts). Here we trust both and pin the React translation.
+// Stage-1 red-green of the studio scene MAPPER (ADR-0093 Unit 2b), as the map's INTERACTION layer
+// since ADR-0608: the role → studio-class translation for what this layer still draws (nameplates,
+// wisps, hit geometry, caves, the selection lanes and shore rings), the per-node handlers, and the
+// SKIPS — the flat picture the 3D land now draws is not rendered here at all. The GEOMETRY is the
+// core's (forest-world/scene.test.ts); here we trust it and pin the React translation.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, fireEvent, cleanup } from '@testing-library/react';
@@ -20,12 +20,11 @@ import {
   type SceneTerritoryInput,
   type SceneTrailsInput,
 } from '@storytree/forest-world';
-import { arrivalGrowPlan } from './trailReveal.js';
 import { neighbourHighlightPlan } from './neighbourHighlight.js';
 import { laneLayout } from './laneLayout.js';
-import type { SpriteStyleSheet } from './sprite-sheet.js';
 import { SceneView, litLaneWidth, laneDrawSeconds, type SceneCtx } from './SceneView.js';
-import { shippedCtx, shippedTerritory, withoutParcels, withoutSpriteSheet } from './scene-fixture.js';
+import type { NativePropTargetRenderLayer } from './native-prop-targets.js';
+import { shippedCtx, shippedTerritory } from './scene-fixture.js';
 
 afterEach(cleanup);
 
@@ -129,17 +128,14 @@ function mkInput(
     wheatSets: [new Set()],
     trails: mkTrails(),
     // SHIPPED-MAP SHAPED (`render-fixtures-default-to-the-shipped-map`): `relaxedCells` non-null AND
-    // the island carrying the `parcels` the studio sends for every capability-bearing story. Both
-    // gates must be open or this fixture renders the public WEBSITE's art — conifer decor + the
-    // one-plant-per-cap ring — which the studio map has not drawn since forest-parcels inc 1.
-    // `withoutParcels` is the named way back to that render.
+    // the island carrying the `parcels` the studio sends for every capability-bearing story, so the
+    // capability's ground parcel — its hit geometry on this layer — is present.
     territories: [shippedTerritory(territory)],
   };
 }
 
-/** The SHIPPED map's ctx for this file: `shippedCtx`'s defaults (an `artStyle` sprite sheet is
- *  present, because the clean-URL studio always resolves one) plus this suite's focus class, legend
- *  filter and spies. */
+/** The shipped map's ctx for this file: `shippedCtx`'s defaults plus this suite's focus class,
+ *  legend filter and spies. */
 function mkCtx(over: Partial<SceneCtx> = {}): SceneCtx {
   return shippedCtx({
     territoryClassById: (id, status) => `hex-territory st-${status}${id === 'lib' ? ' is-focus' : ''}`,
@@ -173,68 +169,116 @@ function renderScene(
   return mountScene(mkInput(wispPhase, claimState, claimGrade, departures, claimPhase), mkCtx(over));
 }
 
-/**
- * The public WEBSITE's render, asked for BY NAME: `parcels` stripped (so the conifer decor and the
- * one-plant-per-cap ring come back) and no sprite sheet (so every object draws its procedural vector
- * body). This is exactly what {@link renderScene} used to produce by DEFAULT — every assertion that
- * moved here is one that was pinning art the studio map no longer draws.
- */
-function renderWebsiteScene(over: Partial<SceneCtx> = {}): { root: HTMLElement; ctx: SceneCtx } {
-  const input = mkInput();
-  return mountScene(
-    { ...input, territories: input.territories.map(withoutParcels) },
-    withoutSpriteSheet(mkCtx(over)),
-  );
+// ---------- a realistic three-island forest (ADR-0608's retirement fixture) ----------
+
+const tri = (x: number, y: number): { x: number; y: number }[] => [
+  { x, y },
+  { x: x + 10, y },
+  { x: x + 5, y: y + 10 },
+];
+
+/** One island of the realistic forest. `a` carries decor + plants and NO parcels (so the core emits
+ *  its conifers and its one-plant-per-cap flora), `lib` carries parcels (so it emits parcel flora) and
+ *  UAT criteria (so it emits the tall flowers), `b` is a plain parcels island. */
+function forestIsland(id: string, dx: number, over: Partial<SceneTerritoryInput> = {}): SceneTerritoryInput {
+  return {
+    id,
+    status: 'healthy',
+    caps: 1,
+    centroid: { x: dx + 15, y: 15 },
+    groundRadius: 18,
+    screenRadius: 18,
+    treeSpot: { x: dx + 15, y: 12 },
+    labelY: 35,
+    coastGroundLoops: [[{ x: dx, y: 0 }, { x: dx + 30, y: 0 }, { x: dx + 30, y: 30 }, { x: dx, y: 30 }]],
+    decor: [{ x: dx + 5, y: 5, seed: 5 }],
+    plants: [{ id: `${id}#c`, status: 'unhealthy', x: dx + 10, y: 20, title: `${id} cap` }],
+    treeTitle: `${id} — healthy`,
+    wisps: [],
+    claims: [],
+    plate: { w: 30, h: 14, rx: 3, idY: 6, subY: 11, idText: id, subText: 'healthy', title: id },
+    ...over,
+  };
+}
+
+/** A forest carrying EVERY picture kind ADR-0608 retired from this layer: the empty board, hero trees
+ *  (procedural, or — with `vegetation` — the baked `<use>` hero and its defs), conifers, plant flora,
+ *  parcel flora, the three UAT flower states, and the four road passes. */
+function realisticForestInput(withVegetation: boolean): SceneInput {
+  const input: SceneInput = {
+    offset: { x: 0, y: 0 },
+    width: 200,
+    height: 60,
+    empties: [
+      { q: 0, r: 0, owner: 0 },
+      { q: 4, r: 4 },
+    ],
+    relaxedCells: [
+      { owner: 0, poly: tri(0, 0), variant: 0, wheat: false },
+      { owner: 0, poly: tri(10, 10), variant: 1, wheat: true },
+      { owner: 1, poly: tri(50, 0), variant: 0, wheat: false },
+      { owner: 1, poly: tri(60, 10), variant: 2, wheat: false },
+      { owner: 2, poly: tri(90, 0), variant: 1, wheat: false },
+    ],
+    drawTiles: [],
+    wheatSets: [new Set(), new Set(), new Set()],
+    trails: mkTrails(),
+    territories: [
+      forestIsland('a', 0),
+      shippedTerritory(
+        forestIsland('lib', 50, {
+          uatCriteria: [
+            { id: 'lib:c1', state: 'proven' },
+            { id: 'lib:c2', state: 'pending' },
+            { id: 'lib:c3', state: 'failing' },
+          ],
+        }),
+      ),
+      shippedTerritory(forestIsland('b', 90)),
+    ],
+  };
+  if (withVegetation) {
+    input.vegetation = {
+      heroTrees: {
+        healthy: {
+          nodes: [{ el: 'polygon', points: '-12,2 12,2 0,-40', fill: '#85583a', stroke: '#6a563c', strokeWidth: 1 }],
+          width: 24,
+          height: 42,
+        },
+      },
+    };
+  }
+  return input;
+}
+
+/** Every `d` drawn by a node inside a subtree of the given kinds — the geometry a retired kind would
+ *  leak into the DOM if the skip were lost. */
+function dsUnder(node: SceneNode, kinds: ReadonlySet<string>, inside = false): string[] {
+  const here = inside || (node.kind !== undefined && kinds.has(node.kind));
+  const own = here && 'd' in node && typeof node.d === 'string' ? [node.d] : [];
+  const kids = node.el === 'g' ? node.children.flatMap((c) => dsUnder(c, kinds, here)) : [];
+  return [...own, ...kids];
+}
+
+/** Every kind anywhere in the scene tree. */
+function kindsIn(node: SceneNode): Set<string> {
+  const out = new Set<string>(node.kind ? [node.kind] : []);
+  if (node.el === 'g') for (const c of node.children) for (const k of kindsIn(c)) out.add(k);
+  return out;
 }
 
 describe('SceneView — the studio scene mapper', () => {
-  // ---- the shared default IS the shipped map (`render-fixtures-default-to-the-shipped-map`) ----
-  //
-  // The red→green pins for the fixture inversion. Neither could be written honestly before: the old
-  // default rendered the public WEBSITE's art — no `parcels` on the island and no `spriteSheet` key in
-  // the ctx at all — so a green assertion here was evidence about a path the studio map has not drawn
-  // since forest-parcels inc 1 and the 2026-07-23 storybook attestation respectively. Their mirrors
-  // pin the named opt-out still reaching the legacy render, so neither absence lock is weakened.
-
-  it('the SHARED DEFAULT input is SHIPPED-MAP shaped — parcel ground + flora, not the retired ring', () => {
-    const { root } = renderScene();
-    expect(root.querySelector('.parcel')).toBeTruthy();
-    expect(root.querySelector('.parcel-flora')).toBeTruthy();
-    expect(root.querySelector('.garden-flora')).toBeNull(); // the one-plant-per-cap ring is retired
-    expect(root.querySelector('.conifer-body')).toBeNull(); // so is the decorative conifer decor
-  });
-
-  it('the SHARED DEFAULT ctx is SHIPPED-MAP shaped — the tree resolves THROUGH the sprite sheet', () => {
-    // `renderNode` consults `trySprite` BEFORE the generic path and returns its own `<image>` without
-    // recursing, so on the real map a covered object never reaches the vector branch. A ctx with no
-    // `spriteSheet` cannot observe that at all — which is how a growth transform written only on the
-    // generic path shipped doing nothing for every sheet-covered object.
-    const { root } = renderScene();
-    expect(root.querySelector('.story-tree')?.tagName.toLowerCase()).toBe('image');
-    expect(root.querySelector('g.story-tree')).toBeNull();
-    expect(root.querySelector('.story-trunk')).toBeNull();
-  });
-
-  it('preserves the human-witness signpost across the sprite swap — the shipped map must not erase the seal', () => {
-    // `shipped-map-render-path-drops-three-delivered-behaviours` defect 1: `sign-blank` is a child of
-    // the `tree` wrapper, but `collectPreservedDescendants` preserved only the transient verdict
-    // bloom that used to ride alongside it. On the shipped map the sprite swap silently dropped the
-    // signpost, so a human-witnessed proof and an unwitnessed one looked identical on the map — the
-    // one semantic this arc exists to protect. Renderer choice may change artwork; it must never
-    // erase witness semantics. (ADR-0529/0536 retired the bloom, so the signpost is now the ONLY
-    // preserved descendant and this test is the whole of that guarantee.)
-    const { root } = renderScene();
-    expect(root.querySelector('.story-tree')?.tagName.toLowerCase()).toBe('image'); // the swap did happen
-    expect(root.querySelector('.story-sign.sign-blank')).toBeTruthy();
-  });
-
-  it('the NAMED opt-out still reaches the website + vector render — omission is no longer the route', () => {
-    const { root } = renderWebsiteScene();
-    expect(root.querySelector('.garden-flora')).toBeTruthy();
-    expect(root.querySelector('.conifer-body')).toBeTruthy();
-    expect(root.querySelector('.parcel-flora')).toBeNull();
-    expect(root.querySelector('.story-tree')?.tagName.toLowerCase()).toBe('g');
-    expect(root.querySelector('.story-trunk')).toBeTruthy();
+  it('the SHARED default ctx classes every island by its folded status — the nameplate and ground hooks', () => {
+    // `shippedCtx()` with NO override is what a mapper test gets by default; its island class must
+    // carry the status the scene folded, or the status-keyed nameplate rules read nothing.
+    const input = realisticForestInput(true);
+    const { root } = mountScene(input, shippedCtx());
+    const islands = [...root.querySelectorAll('g.hex-flora[data-story-id]')];
+    expect(islands.length).toBe(input.territories.length);
+    for (const t of input.territories) {
+      const g = root.querySelector(`g.hex-flora[data-story-id="${t.id}"]`);
+      expect(g?.getAttribute('class')).toContain(`hex-territory st-${t.status}`);
+    }
   });
 
   it('is React.memo-wrapped so a pan (identical scene + ctx) skips the O(nodes) re-walk (ADR-0069)', () => {
@@ -246,109 +290,12 @@ describe('SceneView — the studio scene mapper', () => {
     expect((SceneView as { $$typeof?: symbol }).$$typeof).toBe(Symbol.for('react.memo'));
   });
 
-  it('clips the real SVG island and renders separate registered organic poses at planted anchors after trails', () => {
-    const { root } = renderScene({
-      nativeIslandGrowthLayer: {
-        storyId: 'lib',
-        worldAnchor: { x: 50, y: 50 },
-        radius: { x: 40, y: 28 },
-        progress: 0.5,
-      },
-      organicPoseLayers: [
-        {
-          trackId: 'hero-tree',
-          src: '/assets/tree-04.png',
-          frameIndex: 4,
-          canvas: { width: 192, height: 192 },
-          assetAnchor: { x: 96, y: 188 },
-          worldAnchor: { x: 100, y: 120 },
-          scale: 0.5,
-          depthSlot: 'hero-tree-organic',
-        },
-        {
-          trackId: 'plant-sample',
-          src: '/assets/plant-02.png',
-          frameIndex: 2,
-          canvas: { width: 96, height: 96 },
-          assetAnchor: { x: 48, y: 92 },
-          worldAnchor: { x: 130, y: 134 },
-          scale: 0.25,
-          depthSlot: 'ground-plant-organic',
-        },
-      ],
-    });
-    const tree = root.querySelector('image[data-organic-track="hero-tree"]');
-    const plant = root.querySelector('image[data-organic-track="plant-sample"]');
-    expect(tree?.getAttribute('href')).toBe('/assets/tree-04.png');
-    expect(tree?.getAttribute('x')).toBe('52.0');
-    expect(tree?.getAttribute('y')).toBe('26.0');
-    expect(tree?.getAttribute('width')).toBe('96.0');
-    expect(tree?.getAttribute('height')).toBe('96.0');
-    expect(tree?.getAttribute('image-rendering')).toBe('pixelated');
-    expect(tree?.getAttribute('data-depth-slot')).toBe('hero-tree-organic');
-    expect(plant?.getAttribute('data-depth-slot')).toBe('ground-plant-organic');
-
-    const clip = root.querySelector(
-      'clipPath[id^="organic-pose-native-island-"] ellipse',
-    );
-    expect(clip?.getAttribute('rx')).toBe('20.0');
-    expect(clip?.getAttribute('ry')).toBe('14.0');
-    expect(root.querySelector('[data-native-island-story="lib"][clip-path]')).toBeTruthy();
-
-    const siblings = Array.from(tree!.parentElement!.children);
-    const trailLayer = root.querySelector('.trail-net')!.parentElement!;
-    const floraLayer = root.querySelector('.hex-flora')!.parentElement!;
-    expect(siblings.indexOf(tree!)).toBeGreaterThan(siblings.indexOf(trailLayer));
-    expect(siblings.indexOf(tree!)).toBeLessThan(siblings.indexOf(floraLayer));
-    expect(siblings.indexOf(plant!)).toBe(siblings.indexOf(tree!) + 1);
-  });
-
-  it('maps roles to the studio classes, folding status + variant', () => {
+  it('applies the focus-aware island class to the island nameplate group', () => {
     const { root } = renderScene();
-    // the central tree keeps its class hooks through the sprite swap the shipped sheet performs.
-    expect(root.querySelector('.story-tree.st-healthy')).toBeTruthy();
-    // the shipped ground: each capability's cells wrapped in its own transparent `parcel` group and
-    // tinted by the CAP's status, not the island's.
-    expect(root.querySelector('.parcel.st-unhealthy')).toBeTruthy();
-    expect(root.querySelector('.relaxed-cell.st-unhealthy')).toBeTruthy();
-    // ... and the capability's land grows the themed parcel flora.
-    expect(root.querySelector('.parcel-flora.theme-meadow.st-unhealthy')).toBeTruthy();
-  });
-
-  it('maps the WEBSITE vocabulary too — the parcels-absent, vector art asked for BY NAME', () => {
-    const { root } = renderWebsiteScene();
-    // mesh cells carry their variant / wheat class (a parcel re-tint drops both).
-    expect(root.querySelector('.relaxed-cell.v-1')).toBeTruthy();
-    expect(root.querySelector('.relaxed-cell.is-wheat')).toBeTruthy();
-    // conifer colour band = seed % 3 (5 % 3 = 2).
-    expect(root.querySelector('.conifer-body.c-2')).toBeTruthy();
-    // the human-witness signpost (blank, unsigned) — a CHILD of the tree wrapper, so a sprite swap
-    // discards it and only this vector fixture can see it. See the sprite-swap note above
-    // `renderWebsiteScene`.
-    expect(root.querySelector('.story-sign.sign-blank')).toBeTruthy();
-  });
-
-  it('applies the focus-aware island class + the legend status filter', () => {
-    const { root } = renderScene();
-    // the island group folds in territoryClassById (focus) ...
+    // the island group folds in territoryClassById (focus)
     const terr = root.querySelector('.hex-flora');
     expect(terr?.classList.contains('is-focus')).toBe(true);
-    // ... and a visible status never wears is-filtered.
-    expect(root.querySelector('.story-tree')?.classList.contains('is-filtered')).toBe(false);
-  });
-
-  it('the legend status filter reaches the WEBSITE plant ring', () => {
-    // `withFilter` composes `is-filtered` for the `flora` (one-plant-per-cap) kind.
-    const { root } = renderWebsiteScene();
-    expect(root.querySelector('.garden-flora.st-unhealthy.is-filtered')).toBeTruthy();
-  });
-
-  it('the legend status filter also reaches the SHIPPED map parcel-flora, not just the retired plant ring', () => {
-    // `shipped-map-render-path-drops-three-delivered-behaviours` defect 2: `withFilter` composed
-    // `is-filtered` for the `flora` kind only, which the shipped map retires in favour of `parcel-flora`
-    // — so a legend-filtered capability's land kept drawing as though unfiltered.
-    const { root } = renderScene();
-    expect(root.querySelector('.parcel-flora.st-unhealthy.is-filtered')).toBeTruthy();
+    expect(terr?.getAttribute('data-story-id')).toBe('lib');
   });
 
   it('renders the generous per-story hit rect at the BACK — transparent, behind the flora', () => {
@@ -364,6 +311,17 @@ describe('SceneView — the studio scene mapper', () => {
     // clicks: the nameplate (a flora descendant) must FOLLOW the hit rect in the document.
     const plate = root.querySelector('.world-plate-bg')!;
     expect(hit!.compareDocumentPosition(plate) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('slots the hit layer directly before the island ground, so the ground and parcels win their own clicks', () => {
+    const { root } = renderScene();
+    const world = root.querySelector('svg > g')!;
+    const order = [...world.children].map((el) => el.getAttribute('class') ?? '');
+    const hits = [...world.children].findIndex((el) => el.querySelector(':scope > .world-story-hit'));
+    // `buildScene` appends the hit layer LAST; the mapper moves it to sit right before the ground.
+    expect(hits).toBeGreaterThan(-1);
+    expect(order[hits + 1]).toBe('relaxed-land');
+    expect(hits).toBeLessThan(order.length - 1);
   });
 
   it('selects the story when its generous hit rect is clicked (forgiving node-click)', () => {
@@ -547,17 +505,6 @@ describe('SceneView — the studio scene mapper', () => {
     expect(onSelectStory).toHaveBeenCalledWith('lib');
   });
 
-  it('selects the capability on a plant click (stopping propagation) — the WEBSITE plant ring', () => {
-    // `handlersFor` wires `onSelectCap` on the `flora` kind — see the SHIPPED map's own `parcel` route
-    // pinned right below, which is the fix for defect 3.
-    const onSelectStory = vi.fn();
-    const onSelectCap = vi.fn();
-    const { root } = renderWebsiteScene({ onSelectStory, onSelectCap });
-    fireEvent.click(root.querySelector('.garden-flora')!);
-    expect(onSelectCap).toHaveBeenCalledWith('lib', 'lib#c');
-    expect(onSelectStory).not.toHaveBeenCalled(); // stopPropagation
-  });
-
   it('selects the capability on a parcel click (stopping propagation) — the SHIPPED map parcel route', () => {
     // `shipped-map-render-path-drops-three-delivered-behaviours` defect 3: `handlersFor` wired
     // `onSelectCap` on the `flora` kind ONLY, but the shipped map's `parcel` groups (which carry the
@@ -571,15 +518,14 @@ describe('SceneView — the studio scene mapper', () => {
     expect(onSelectStory).not.toHaveBeenCalled(); // stopPropagation
   });
 
-  it('marks an arriving island across its per-island groups (arrival staging)', () => {
-    // 'lib' is the arriving island. (Trails are hidden by default per ADR-0169 §3, so
-    // arrival no longer draws a road on — the island layers alone stage the entrance.)
+  it('marks an arriving island on its nameplate group, and only there (arrival staging)', () => {
+    // 'lib' is the arriving island (the 3D layer stages the land; this layer stages the nameplate).
     const { root } = renderScene({ arrivalIds: new Set(['lib', 'b']) });
-    // the island's flora / coast / ground groups all wear arrive-island (the CSS
-    // keyframes stage coast → ground → flora off this one class per layer).
-    expect(root.querySelector('.hex-flora.arrive-island')).toBeTruthy();
-    expect(root.querySelector('.coast-fill-group.arrive-island')).toBeTruthy();
-    expect(root.querySelector('.relaxed-tile.arrive-island')).toBeTruthy();
+    const arriving = [...root.querySelectorAll('[class*="arrive"]')];
+    expect(arriving).toHaveLength(1);
+    expect(arriving[0]!.classList.contains('hex-flora')).toBe(true);
+    expect(arriving[0]!.classList.contains('arrive-island')).toBe(true);
+    expect(arriving[0]!.getAttribute('data-story-id')).toBe('lib');
   });
 
   it('renders zero arrival artifacts when no story is entering (the steady-state board)', () => {
@@ -603,61 +549,189 @@ describe('SceneView — the studio scene mapper', () => {
   });
 });
 
+// ADR-0608 D2/D3: the flat picture is the 3D land's now. Its kinds are SKIPPED — not hidden — so none
+// of their DOM exists, while the scene they come from is unchanged (the precondition in each case).
+describe('SceneView — the retired flat picture (ADR-0608)', () => {
+  const RETIRED = new Set([
+    'empties-layer',
+    'baked-defs',
+    'trail-shadow-pass',
+    'trail-casing-pass',
+    'trail-ghost-pass',
+    'tree',
+    'baked-art',
+    'flora',
+    'parcel-flora',
+    'conifer',
+    'tall-flower-proven',
+    'tall-flower-pending',
+    'tall-flower-failing',
+  ]);
+
+  for (const withVegetation of [false, true]) {
+    it(`renders none of the retired picture kinds on a realistic forest (${withVegetation ? 'baked hero trees' : 'procedural trees'})`, () => {
+      const input = realisticForestInput(withVegetation);
+      const scene = buildScene(input);
+      // precondition: the scene really does carry the picture — otherwise every absence is vacuous.
+      const kinds = kindsIn(scene);
+      const expected = withVegetation
+        ? ['empties-layer', 'baked-defs', 'baked-art', 'conifer', 'flora', 'parcel-flora', 'tall-flower-proven', 'tall-flower-pending', 'tall-flower-failing', 'trail-shadow-pass', 'trail-casing-pass', 'trail-ghost-pass']
+        : ['empties-layer', 'tree', 'conifer', 'flora', 'parcel-flora', 'tall-flower-proven', 'tall-flower-pending', 'tall-flower-failing', 'trail-shadow-pass', 'trail-casing-pass', 'trail-ghost-pass'];
+      for (const k of expected) expect(kinds.has(k), k).toBe(true);
+
+      const { root } = mountScene(input, mkCtx());
+      for (const sel of [
+        '.hex-empty',
+        '.story-tree',
+        '.conifer',
+        '.garden-flora',
+        '.parcel-flora',
+        '.tall-flower-marker',
+        '.trail-shadow-pass',
+        '.trail-casing-pass',
+        '.trail-ghost-pass',
+        'path.trail-fill',
+        'image',
+        'use',
+        'defs',
+      ]) {
+        expect(root.querySelector(sel), sel).toBeNull();
+      }
+      // no retired geometry reaches the DOM under ANY class — a lost skip would leak its paths even
+      // if it lost its class vocabulary too.
+      const drawn = new Set([...root.querySelectorAll('path')].map((p) => p.getAttribute('d')));
+      const retiredDs = dsUnder(scene, RETIRED);
+      expect(retiredDs.length).toBeGreaterThan(0);
+      for (const d of retiredDs) expect(drawn.has(d), d).toBe(false);
+      // the road fills ride the fill pass the lanes use, and are not drawn either.
+      const fillDs = dsUnder(scene, new Set(['trail-fill']));
+      expect(fillDs.length).toBeGreaterThan(0);
+      for (const d of fillDs) expect(drawn.has(d), d).toBe(false);
+    });
+  }
+
+  it('the world group holds exactly the interaction layers — no empty picture group is left behind', () => {
+    const { root } = mountScene(realisticForestInput(true), mkCtx());
+    const world = root.querySelector('svg > g')!;
+    // coast rings, the hit layer, the ground hit geometry, the trail net, the nameplate/wisp layer.
+    // A retired LAYER that lost its skip would add a classless group here even with nothing inside.
+    expect([...world.children].map((el) => el.getAttribute('class') ?? '')).toEqual([
+      'hex-coastland',
+      '',
+      'relaxed-land',
+      'trail-net',
+      '',
+    ]);
+    const trailNet = root.querySelector('.trail-net')!;
+    expect([...trailNet.children].map((el) => el.getAttribute('class'))).toEqual(['trail-fill-pass', 'trail-edges']);
+  });
+
+  it('draws the island ground as UNPAINTED hit geometry: transparent, classless leaves under classed groups', () => {
+    const onSelectStory = vi.fn();
+    const onSelectCap = vi.fn();
+    const { root } = mountScene(realisticForestInput(false), mkCtx({ onSelectStory, onSelectCap }));
+    const land = root.querySelector('.relaxed-land')!;
+    const leaves = [...land.querySelectorAll('path')];
+    expect(leaves.length).toBe(5); // every relaxed cell, parcel or not
+    for (const leaf of leaves) {
+      expect(leaf.getAttribute('fill')).toBe('transparent');
+      expect(leaf.getAttribute('class')).toBeNull();
+    }
+    // the per-island ground groups keep their class and story id …
+    const grounds = [...land.querySelectorAll(':scope > g')];
+    expect(grounds.map((g) => g.getAttribute('data-story-id'))).toEqual(['a', 'lib', 'b']);
+    for (const g of grounds) expect(g.classList.contains('relaxed-tile')).toBe(true);
+    // … and so do the capability parcels, with the cap's own folded status.
+    const parcel = land.querySelector('.parcel[data-cap-id="lib#c"]')!;
+    expect(parcel.getAttribute('data-story-id')).toBe('lib');
+    expect(parcel.classList.contains('st-unhealthy')).toBe(true);
+    // a click on an island's bare ground selects the story; on a parcel leaf, the capability only.
+    fireEvent.click(grounds[0]!.querySelector('path')!);
+    expect(onSelectStory).toHaveBeenCalledWith('a');
+    onSelectStory.mockClear();
+    fireEvent.click(parcel.querySelector('path')!);
+    expect(onSelectCap).toHaveBeenCalledWith('lib', 'lib#c');
+    expect(onSelectStory).not.toHaveBeenCalled();
+  });
+
+  it('draws no coast at rest, and a shore RING for the selection and its one-hop neighbours only', () => {
+    const rest = mountScene(realisticForestInput(false), mkCtx()).root;
+    expect(rest.querySelector('.hex-coastland')!.children).toHaveLength(0);
+    cleanup();
+
+    const ringed = (id: string, status: string): string =>
+      `hex-territory st-${status}${id === 'lib' ? ' is-selected' : id === 'a' ? ' is-upstream' : ''}`;
+    const { root } = mountScene(realisticForestInput(false), mkCtx({ territoryClassById: ringed }));
+    const coasts = [...root.querySelectorAll('.hex-coastland > g')];
+    expect(coasts).toHaveLength(2);
+    expect(coasts.map((c) => c.classList.contains('coast-fill-group'))).toEqual([true, true]);
+    expect(root.querySelector('.coast-fill-group.is-upstream')).toBeTruthy();
+    expect(root.querySelector('.coast-fill-group.is-selected')).toBeTruthy();
+    // the ring is the shore's STROKE: the leaf keeps its class and never fills.
+    for (const shore of root.querySelectorAll('.coast-fill-group > path')) {
+      expect(shore.classList.contains('coast-fill')).toBe(true);
+      expect((shore as SVGElement).style.fill).toBe('none');
+      expect(shore.getAttribute('fill')).toBeNull();
+    }
+    cleanup();
+
+    const downstream = mountScene(
+      realisticForestInput(false),
+      mkCtx({ territoryClassById: (id, s) => `hex-territory st-${s}${id === 'b' ? ' is-downstream' : ''}` }),
+    ).root;
+    expect(downstream.querySelectorAll('.hex-coastland > g')).toHaveLength(1);
+    expect(downstream.querySelector('.coast-fill-group.is-downstream')).toBeTruthy();
+  });
+
+  it('a regrow layer withholds a hidden story`s nameplate, hit region and ground — and nothing else', () => {
+    const layer = { hiddenStoryIds: new Set(['lib']), hiddenSegmentIds: new Set<string>() };
+    const ringAll = (id: string, s: string): string => `hex-territory st-${s} is-selected`;
+    const { root } = mountScene(realisticForestInput(false), mkCtx({ forestRegrowLayer: layer, territoryClassById: ringAll }));
+    expect(root.querySelector('[data-story-id="lib"]')).toBeNull();
+    expect(root.querySelector('[data-cap-id="lib#c"]')).toBeNull();
+    expect(root.querySelector('.world-plate-id')?.textContent).not.toBe('lib');
+    // the other islands are untouched: ground, hit rect and nameplate each
+    for (const id of ['a', 'b']) {
+      expect(root.querySelector(`.relaxed-tile[data-story-id="${id}"]`), id).toBeTruthy();
+      expect(root.querySelector(`.world-story-hit[data-story-id="${id}"]`), id).toBeTruthy();
+      expect(root.querySelector(`.hex-flora[data-story-id="${id}"]`), id).toBeTruthy();
+    }
+    // and the hidden island's shore ring is withheld with it (two rings, not three)
+    expect(root.querySelectorAll('.coast-fill-group')).toHaveLength(2);
+  });
+
+  it('a regrow layer withholds the lit lane on a segment that has not arrived', () => {
+    const plan = neighbourHighlightPlan(mkTrails(), 'lib');
+    const layer = { hiddenStoryIds: new Set<string>(), hiddenSegmentIds: new Set(['tseg1']) };
+    const { root } = renderScene({ neighbours: plan, forestRegrowLayer: layer });
+    expect([...root.querySelectorAll('.trail-lit')].map((l) => l.getAttribute('data-id'))).toEqual(['tseg2']);
+  });
+
+  it('paints the native plant targets after the trails layer and before the nameplate layer', () => {
+    const targets: NativePropTargetRenderLayer = {
+      origin: { x: 0, y: 0 },
+      targets: [{ storyId: 'lib', capabilityId: 'lib#c', status: 'unhealthy', bounds: { minX: 55, maxX: 65, minY: 5, maxY: 25 } }],
+    };
+    const { root } = mountScene(realisticForestInput(false), mkCtx({ nativePropTargetLayer: targets }));
+    const world = root.querySelector('svg > g')!;
+    const order = [...world.children].map((el) => el.getAttribute('class') ?? '');
+    const at = order.indexOf('native-prop-targets');
+    expect(at).toBe(order.indexOf('trail-net') + 1);
+    // the very next layer is the nameplate / wisp layer, which stays on top of the targets
+    expect(world.children[at + 1]!.querySelector('.hex-flora .world-plate')).toBeTruthy();
+    expect(at + 1).toBe(order.length - 1);
+    const rect = world.children[at]!.querySelector('rect')!;
+    expect(rect.getAttribute('data-cap-id')).toBe('lib#c');
+    expect(rect.getAttribute('class')).toBe('native-prop-target st-unhealthy is-filtered');
+  });
+});
+
 describe('SceneView — the ADR-0169 trail network mapping', () => {
-  it('maps the cased passes, stamping the reveal hooks (data-id/usage/edges) on every segment', () => {
-    const { root } = renderScene();
-    // visible segments draw once per pass — shadow, casing, fill (2 visible here) …
-    expect(root.querySelectorAll('.trail-shadow-pass .trail-shadow')).toHaveLength(2);
-    expect(root.querySelectorAll('.trail-casing-pass .trail-casing')).toHaveLength(2);
-    expect(root.querySelectorAll('.trail-fill-pass .trail-fill')).toHaveLength(2);
-    // … and the hidden under-island run lands ONLY in the ghost pass.
-    expect(root.querySelectorAll('.trail-ghost-pass .trail-ghost')).toHaveLength(1);
-    expect(root.querySelector('.trail-fill[data-id="tseg3"]')).toBeNull();
-    const fill = root.querySelector('.trail-fill[data-id="tseg1"]')!;
-    expect(fill.getAttribute('data-usage')).toBe('1');
-    expect(fill.getAttribute('data-edges')).toBe('a->lib');
-  });
-
-  it('dashes a spur fill (usage 1) and keeps a trunk fill solid — computed, never authored', () => {
-    const { root } = renderScene();
-    expect(root.querySelector('.trail-fill[data-id="tseg1"]')!.classList.contains('is-spur')).toBe(true);
-    expect(root.querySelector('.trail-fill[data-id="tseg2"]')!.classList.contains('is-spur')).toBe(false);
-    // shadow/casing never carry the spur dash (the casing rule keeps the base solid).
-    expect(root.querySelector('.trail-casing.is-spur')).toBeNull();
-  });
-
   it('emits the per-edge reveal metadata (from/to/ordered chain) for every edge', () => {
     const { root } = renderScene();
     const edge = root.querySelector('.trail-edge[data-from="a"][data-to="lib"]')!;
     expect(edge).toBeTruthy();
     expect(edge.getAttribute('data-segments')).toBe('tseg1:F,tseg2:F');
-  });
-
-  it('draws every trail by default (always visible): no growing class, no mask, no world focus', () => {
-    const { root } = renderScene(); // reveal: null (nothing arriving)
-    expect(root.querySelector('.is-growing')).toBeNull();
-    expect(root.querySelector('[mask]')).toBeNull();
-    expect(root.querySelector('.world-has-focus')).toBeNull();
-    // the trails ARE in the DOM (drawn), not gated away behind a click
-    expect(root.querySelector('.trail-fill[data-id="tseg1"]')).toBeTruthy();
-    expect(root.querySelector('.trail-fill[data-id="tseg2"]')).toBeTruthy();
-  });
-
-  it('an arriving island`s incident trails draw on: is-growing + mask on its direct segments', () => {
-    // lib ARRIVES → its direct edges (a→lib, lib→b) draw on from lib; no world dim.
-    const plan = arrivalGrowPlan(mkTrails(), new Set(['lib']));
-    const { root } = renderScene({ reveal: plan });
-    expect(root.querySelector('.world-has-focus')).toBeNull();
-    const fill1 = root.querySelector('.trail-fill[data-id="tseg1"]')!;
-    const fill2 = root.querySelector('.trail-fill[data-id="tseg2"]')!;
-    expect(fill1.classList.contains('is-growing')).toBe(true);
-    expect(fill2.getAttribute('mask')).toBe('url(#trail-m-tseg2)');
-    // the ghost run of lib→b draws on too
-    const ghost = root.querySelector('.trail-ghost[data-id="tseg3"]')!;
-    expect(ghost.classList.contains('is-growing')).toBe(true);
-    // the road draws on to its GLOBAL width (tseg2 usage 2 → the ONE width rule), not a
-    // revealed subset — the arrival grows the trail as it actually is.
-    expect(Number(fill2.getAttribute('stroke-width'))).toBeCloseTo(trailFillWidth(2), 3);
   });
 
   it('renders the cave portal as an island prop wearing the folded island status', () => {
@@ -674,27 +748,28 @@ describe('SceneView — the ADR-0169 trail network mapping', () => {
   });
 });
 
-// ADR-0242: selecting a story lights the trail segments on its OWN one-hop edges with a lane
-// drawn over the road. The selector itself is pinned in neighbourHighlight.test.ts; here we pin
-// the RENDER half — that a lane exists, that it is narrower than the road it rides (the merge
-// honesty), that it paints after the fills, and that absent a selection the pass is untouched.
-// The look of the lane is owner-attested (ADR-0070), never asserted.
+// ADR-0242: selecting a story lights the trail segments on its OWN one-hop edges with a lane. The
+// selector itself is pinned in neighbourHighlight.test.ts; here we pin the RENDER half — that a lane
+// exists, that it is narrower than the road it rides (the merge honesty), and that absent a selection
+// there is no lane. The road itself is the 3D layer's (ADR-0608). The look of the lane is
+// owner-attested (ADR-0070), never asserted.
 describe('SceneView — the ADR-0242 lit lane', () => {
   it('emits no lane at all when nothing is selected', () => {
     const { root } = renderScene(); // neighbours: absent
     expect(root.querySelectorAll('.trail-lit')).toHaveLength(0);
   });
 
-  it('lights the selected story`s own segments — one lane each, over the fill pass', () => {
+  it('lights the selected story`s own segments — one lane each, alone on the fill pass', () => {
     // `lib` stands on `a` (segments tseg1 + tseg2) and is stood on by `b` (the hidden tseg3).
     const plan = neighbourHighlightPlan(mkTrails(), 'lib');
     const { root } = renderScene({ neighbours: plan });
     const lanes = [...root.querySelectorAll('.trail-fill-pass .trail-lit')];
     expect(lanes.map((l) => l.getAttribute('data-id'))).toEqual(['tseg1', 'tseg2']);
-    // painted AFTER every fill, so a lane is never buried under a later trunk
+    // the pass carries the lanes and NOTHING else — the road fills are the 3D layer's
     const pass = root.querySelector('.trail-fill-pass')!;
-    const kinds = [...pass.children].map((c) => c.classList.contains('trail-lit'));
-    expect(kinds).toEqual([false, false, true, true]);
+    expect([...pass.children].map((c) => c.getAttribute('class'))).toEqual(['trail-lit', 'trail-lit']);
+    // each lane follows its road's own geometry
+    expect(lanes[0]!.getAttribute('d')).toBe(mkTrails().segments[0]!.d);
   });
 
   it('draws ONE lane per ROUTE when a layout is present, superseding the per-segment pass', () => {
@@ -749,12 +824,16 @@ describe('SceneView — the ADR-0242 lit lane', () => {
 
   it('draws the lane NARROWER than the road it rides — so a shared trunk still reads shared', () => {
     const plan = neighbourHighlightPlan(mkTrails(), 'lib');
+    const scene = buildScene(mkInput());
     const { root } = renderScene({ neighbours: plan });
     const lane = root.querySelector('.trail-lit[data-id="tseg2"]')!; // usage 2 — a trunk
-    const road = root.querySelector('.trail-fill[data-id="tseg2"]')!;
+    // the road is no longer in this layer's DOM (ADR-0608), so read its width off the scene it comes from
+    const findRoad = (n: SceneNode): SceneNode | undefined =>
+      n.kind === 'trail-fill' && n.id === 'tseg2' ? n : n.el === 'g' ? n.children.map(findRoad).find(Boolean) : undefined;
+    const road = findRoad(scene)!;
     const laneW = Number(lane.getAttribute('stroke-width'));
-    const roadW = Number(road.getAttribute('stroke-width'));
-    // the lane wears the road's own stroke factor (the 2D drawing strokes the ONE width rule ×
+    const roadW = road.strokeWidth!;
+    // the lane wears the road's own stroke factor (the drawing strokes the ONE width rule ×
     // TRAIL_STROKE_SCALE on the derived tile, ADR-0528), so it stays narrower than the road it rides
     expect(laneW).toBeCloseTo(litLaneWidth(2) * (roadW / trailFillWidth(2)), 3);
     expect(laneW).toBeLessThan(roadW);
@@ -781,26 +860,11 @@ describe('SceneView — the ADR-0242 lit lane', () => {
     const { root } = renderScene({ neighbours: plan });
     expect(root.querySelectorAll('.trail-lit')).toHaveLength(0);
   });
-
-  it('keeps the arrival draw-on: a lane on a growing segment wears the same mask', () => {
-    const plan = neighbourHighlightPlan(mkTrails(), 'lib');
-    const reveal = arrivalGrowPlan(mkTrails(), new Set(['lib']));
-    const { root } = renderScene({ neighbours: plan, reveal });
-    expect(root.querySelector('.trail-lit[data-id="tseg2"]')!.getAttribute('mask')).toBe(
-      'url(#trail-m-tseg2)',
-    );
-  });
 });
 
-// forest-parcels inc 1: the studio mapper translates the core's parcel drawables → the studio's frozen
-// parcel class vocabulary (a parallel lane writes the CSS against these names). GEOMETRY is the core's;
-// here we pin the role → class translation (kind → same-named class, per-cell status, theme, variant).
+// forest-parcels inc 1: the per-capability ground group is the capability's hit geometry on the map.
+// GEOMETRY is the core's; here we pin the group's class, status fold and its capId title.
 describe('SceneView — capability parcels (forest-parcels inc 1)', () => {
-  // Three parcels with distinct seeds so the equal-weight Voronoi assigns each its own cell; the themes
-  // + statuses are chosen so all four flora marks, both variant facets, and both statuses appear:
-  //   a — meadow / healthy  → parcel-blade (guaranteed 3 blades/item)
-  //   b — woodland / unhealthy → parcel-stem + parcel-flower, and the parcel/cell wear st-unhealthy
-  //   c — heath / healthy   → parcel-shrub (v-0 + v-1) + parcel-flower
   function mkParcelInput(): SceneInput {
     return {
       offset: { x: 0, y: 0 },
@@ -844,7 +908,6 @@ describe('SceneView — capability parcels (forest-parcels inc 1)', () => {
   function renderParcels(): HTMLElement {
     const ctx: SceneCtx = {
       territoryClassById: (id, status) => `hex-territory st-${status}`,
-      reveal: null,
       hidden: new Set(),
       onSelectStory: vi.fn(),
       onSelectCap: vi.fn(),
@@ -865,486 +928,5 @@ describe('SceneView — capability parcels (forest-parcels inc 1)', () => {
     // the group carries the capId as a <title> (the hover hook the frozen vocabulary specifies).
     const titles = [...root.querySelectorAll('.parcel > title')].map((t) => t.textContent);
     expect(titles).toContain('lib#a');
-  });
-
-  it('folds the PER-CELL status onto the ground cells (st-<status>, no new ground CSS)', () => {
-    const root = renderParcels();
-    // each cell is the existing `relaxed-cell v-N` kind now ALSO carrying its assigned cap's status.
-    expect(root.querySelector('.relaxed-cell.st-healthy')).toBeTruthy();
-    expect(root.querySelector('.relaxed-cell.st-unhealthy')).toBeTruthy();
-    // the variant facet survives (the per-cell tone), e.g. still a `v-<n>` class.
-    expect(root.querySelector('.relaxed-cell[class*="v-"]')).toBeTruthy();
-  });
-
-  it('maps each placed flora item to `parcel-flora` carrying its theme + status', () => {
-    const root = renderParcels();
-    expect(root.querySelector('.parcel-flora.theme-meadow.st-healthy')).toBeTruthy();
-    expect(root.querySelector('.parcel-flora.theme-woodland.st-unhealthy')).toBeTruthy();
-    expect(root.querySelector('.parcel-flora.theme-heath.st-healthy')).toBeTruthy();
-  });
-
-  it('maps the generic flora marks to same-named classes with the `v-<n>` variant facet', () => {
-    const root = renderParcels();
-    expect(root.querySelector('.parcel-blade')).toBeTruthy(); // meadow blades
-    expect(root.querySelector('.parcel-stem')).toBeTruthy(); // woodland/heath stems
-    expect(root.querySelector('.parcel-flower')).toBeTruthy(); // heath berries / woodland flecks
-    // heath emits BOTH variant facets of the shrub dome → proves the v-<n> suffix per node.
-    expect(root.querySelector('.parcel-shrub.v-0')).toBeTruthy();
-    expect(root.querySelector('.parcel-shrub.v-1')).toBeTruthy();
-  });
-});
-
-// forest-parcels inc 2 (tall flowers, grounded-art inc 7): the studio mapper translates the core's
-// scattered flower-marker drawables → the studio's `.tall-flower-*` class vocabulary (the CSS is keyed
-// off these names). GEOMETRY (the id-seeded scatter + keep-outs) is the core's; here we pin the role →
-// class translation.
-describe('SceneView — the UAT marker flowers (forest-parcels inc 2; grounded-art inc 7)', () => {
-  function mkMarkerInput(): SceneInput {
-    return {
-      offset: { x: 0, y: 0 },
-      width: 200,
-      height: 200,
-      empties: [],
-      relaxedCells: [],
-      drawTiles: [],
-      wheatSets: [new Set()],
-      trails: { segments: [], edges: [], caves: [], dropped: [] },
-      territories: [
-        {
-          id: 'lib',
-          status: 'healthy',
-          caps: 3,
-          centroid: { x: 50, y: 40 },
-          groundRadius: 60,
-          screenRadius: 60,
-          treeSpot: { x: 50, y: 40 },
-          labelY: 120,
-          coastGroundLoops: [],
-          decor: [],
-          plants: [],
-          uatCriteria: [
-            { id: 'lib:c1', state: 'proven' },
-            { id: 'lib:c2', state: 'pending' },
-            { id: 'lib:c3', state: 'failing' },
-          ],
-          treeTitle: 'lib — healthy',
-          wisps: [],
-          claims: [],
-          plate: { w: 60, h: 33, rx: 7, idY: 14, subY: 27, idText: 'lib', subText: 'healthy · 3 caps', title: 'Library' },
-        },
-      ],
-    };
-  }
-  function renderMarkers(): HTMLElement {
-    const ctx: SceneCtx = {
-      territoryClassById: (id, status) => `hex-territory st-${status}`,
-      reveal: null,
-      hidden: new Set(),
-      onSelectStory: vi.fn(),
-      onSelectCap: vi.fn(),
-    };
-    const { container } = render(
-      <svg>
-        <SceneView scene={buildScene(mkMarkerInput())} ctx={ctx} />
-      </svg>,
-    );
-    return container;
-  }
-
-  it('maps one flower-marker wrapper per criterion, composing the shared base + its state class', () => {
-    const root = renderMarkers();
-    expect(root.querySelector('.tall-flower-marker.tall-flower-proven')).toBeTruthy();
-    expect(root.querySelector('.tall-flower-marker.tall-flower-pending')).toBeTruthy();
-    expect(root.querySelector('.tall-flower-marker.tall-flower-failing')).toBeTruthy();
-    // no walk group and no bed — the flowers are scattered drawables (owner call 2026-07-18).
-    expect(root.querySelector('.uat-walk')).toBeNull();
-    expect(root.querySelector('.walk-path')).toBeNull();
-  });
-
-  it('maps the flower body child kinds to their own classes; the verdict is read from FORM', () => {
-    const root = renderMarkers();
-    // every flower has a stem + leaves.
-    const proven = root.querySelector('.tall-flower-marker.tall-flower-proven')!;
-    expect(proven.querySelector('.tall-flower-stem')).toBeTruthy();
-    expect(proven.querySelector('.tall-flower-leaf')).toBeTruthy();
-    // PROVEN = a bloomed daisy: petals + a centre + the soft warm glow.
-    expect(proven.querySelector('.tall-flower-petal')).toBeTruthy();
-    expect(proven.querySelector('.tall-flower-center')).toBeTruthy();
-    expect(proven.querySelector('.tall-flower-glow')).toBeTruthy();
-    // FAILING = a wilted head: petals + centre, but never a glow (not a bloom).
-    const failing = root.querySelector('.tall-flower-marker.tall-flower-failing')!;
-    expect(failing.querySelector('.tall-flower-petal')).toBeTruthy();
-    expect(failing.querySelector('.tall-flower-glow')).toBeNull();
-    // PENDING = a closed bud: no petals, no centre, no glow — dormant reads as the absence of bloom.
-    const pending = root.querySelector('.tall-flower-marker.tall-flower-pending')!;
-    expect(pending.querySelector('.tall-flower-bud')).toBeTruthy();
-    expect(pending.querySelector('.tall-flower-petal')).toBeNull();
-    expect(pending.querySelector('.tall-flower-glow')).toBeNull();
-  });
-
-  it('reuses the existing flora-shadow mapping for the marker shadow (no special-case needed)', () => {
-    const root = renderMarkers();
-    expect(
-      root.querySelector('.tall-flower-marker.tall-flower-proven')!.querySelector('.flora-shadow'),
-    ).toBeTruthy();
-  });
-
-  it('carries the resolved per-node glow opacity through untouched (the soft-halo depth cue)', () => {
-    const root = renderMarkers();
-    const glows = [...root.querySelectorAll('.tall-flower-marker.tall-flower-proven .tall-flower-glow')];
-    expect(glows.length).toBeGreaterThan(1);
-    const opacities = new Set(glows.map((g) => g.getAttribute('opacity')));
-    // the layered halo carries DISTINCT per-layer opacities — the mapper must never collapse them to
-    // one shared value.
-    expect(opacities.size).toBeGreaterThan(1);
-  });
-
-  it('renders nothing marker-related when the story has no uatCriteria', () => {
-    const { root } = renderScene();
-    expect(root.querySelector('.tall-flower-marker')).toBeNull();
-  });
-});
-
-// sprite-art-sheets: the render mode that re-skins a covered wrapper node as an `<image>` from a
-// sprite STYLE SHEET instead of drawing its procedural vector body. NOT default-off — an absent
-// `artStyle` has resolved to the owner-attested `storybook` sheet since 2026-07-23
-// (`apps/studio/src/lib/worldSettings.ts`), so the clean-URL map always has one; `vector` is the
-// explicit opt-out. The cases below deliberately drive a sheet PER TEST rather than through the shared
-// fixture: hand-built minimal `SceneNode` fixtures (SceneView takes a `SceneNode` directly — no need
-// to route through buildScene) keep each case isolated to exactly the wrapper kind under test.
-describe('SceneView — the sprite art-style render mode', () => {
-  function baseCtx(spriteSheet?: SpriteStyleSheet | null): SceneCtx {
-    const ctx: SceneCtx = {
-      territoryClassById: (id, status) => `hex-territory st-${status}`,
-      reveal: null,
-      hidden: new Set(),
-      onSelectStory: vi.fn(),
-      onSelectCap: vi.fn(),
-    };
-    if (spriteSheet !== undefined) ctx.spriteSheet = spriteSheet;
-    return ctx;
-  }
-
-  /** A tree wrapper with a MEASURABLE vector body (sprite-sizing derives the sprite's size from it):
-   *  shadow ellipse (±8, y 0±3) + trunk + crown circle (±10, y −60..−40) → content box
-   *  x ∈ [−10, 10], y ∈ [−60, 3] — height 63, centred on x 0, grounded at y 3. */
-  function treeScene(): SceneNode {
-    return {
-      el: 'g',
-      kind: 'world',
-      children: [
-        {
-          el: 'g',
-          kind: 'tree',
-          status: 'healthy',
-          transform: 'translate(10.0 20.0)',
-          children: [
-            { el: 'ellipse', kind: 'shadow', cx: 0, cy: 0, rx: 8, ry: 3 },
-            { el: 'path', kind: 'trunk', d: 'M 0 0 Z' },
-            { el: 'circle', kind: 'crown-hi', cx: 0, cy: -50, r: 10 },
-          ],
-        },
-      ],
-    };
-  }
-
-  function renderTree(sheet?: SpriteStyleSheet | null, ctxOverride: Partial<SceneCtx> = {}): HTMLElement {
-    const ctx: SceneCtx = { ...baseCtx(sheet), ...ctxOverride };
-    const { container } = render(
-      <svg>
-        <SceneView scene={treeScene()} ctx={ctx} />
-      </svg>,
-    );
-    return container;
-  }
-
-  it('is fully inert with no sprite sheet — vector renders exactly as before (byte-identical default)', () => {
-    const root = renderTree();
-    expect(root.querySelector('.story-tree')).toBeTruthy();
-    expect(root.querySelector('.story-trunk')).toBeTruthy();
-    expect(root.querySelector('image')).toBeNull();
-  });
-
-  it('swaps a covered kind:status for an `<image>` FITTED to the vector body it replaces, with NO child recursion', () => {
-    const sheet: SpriteStyleSheet = {
-      name: 'test-sheet',
-      label: 'Stub A',
-      sprites: {
-        'tree:healthy': { href: '/art-sheets/test-sheet/tree-healthy.svg', w: 40, h: 60, anchorX: 0.5, anchorY: 1 },
-      },
-    };
-    const root = renderTree(sheet);
-    const img = root.querySelector('image');
-    expect(img).toBeTruthy();
-    expect(img?.getAttribute('href')).toBe('/art-sheets/test-sheet/tree-healthy.svg');
-    // the wrapper's OWN ground-anchor transform rides unchanged.
-    expect(img?.getAttribute('transform')).toBe('translate(10.0 20.0)');
-    // DERIVED sizing (sprite-sizing.ts): the content box is x ∈ [−10,10], y ∈ [−60,3] → height 63,
-    // width 63·(40/60) = 42, centred on x 0 (x −21), bottom-aligned at y 3 (y = 3 − 63 = −60). The
-    // manifest's 40×60 is an aspect ratio here, NOT the rendered size.
-    expect(img?.getAttribute('x')).toBe('-21.0');
-    expect(img?.getAttribute('y')).toBe('-60.0');
-    expect(img?.getAttribute('width')).toBe('42.0');
-    expect(img?.getAttribute('height')).toBe('63.0');
-    // NO recursion into the wrapper's vector children — the sprite REPLACES the whole object.
-    // The semantic class intentionally survives ON the image for hit-testing; no vector `<g>` survives.
-    expect(root.querySelector('g.story-tree')).toBeNull();
-    expect(img?.classList.contains('story-tree')).toBe(true);
-    expect(root.querySelector('.story-trunk')).toBeNull();
-  });
-
-  it('the artScale world-setting dial multiplies the fitted size around the same ground line', () => {
-    const sheet: SpriteStyleSheet = {
-      name: 'test-sheet',
-      label: 'Stub A',
-      sprites: {
-        'tree:healthy': { href: '/art-sheets/test-sheet/tree-healthy.svg', w: 40, h: 60, anchorX: 0.5, anchorY: 1 },
-      },
-    };
-    const root = renderTree(sheet, { artScale: 0.5 });
-    const img = root.querySelector('image');
-    // fitted 42×63 halved → 21×31.5, still centred (x −10.5) and grounded at y 3 (y = 3 − 31.5).
-    expect(img?.getAttribute('width')).toBe('21.0');
-    expect(img?.getAttribute('height')).toBe('31.5');
-    expect(img?.getAttribute('x')).toBe('-10.5');
-    expect(img?.getAttribute('y')).toBe('-28.5');
-  });
-
-  it('an unmeasurable body falls back to the manifest native box seated by its anchor (never zero-height)', () => {
-    const scene: SceneNode = {
-      el: 'g',
-      kind: 'world',
-      children: [
-        {
-          el: 'g',
-          kind: 'conifer',
-          transform: 'translate(5.0 6.0)',
-          children: [{ el: 'path', kind: 'conifer-body', d: 'M 0 0 Z' }], // degenerate: a single point
-        },
-      ],
-    };
-    const sheet: SpriteStyleSheet = {
-      name: 'test-sheet',
-      label: 'Stub A',
-      sprites: { conifer: { href: '/x.svg', w: 10, h: 20, anchorX: 0.5, anchorY: 1 } },
-    };
-    const { container } = render(
-      <svg>
-        <SceneView scene={scene} ctx={baseCtx(sheet)} />
-      </svg>,
-    );
-    const img = container.querySelector('image');
-    expect(img?.getAttribute('width')).toBe('10.0');
-    expect(img?.getAttribute('height')).toBe('20.0');
-    expect(img?.getAttribute('x')).toBe('-5.0');
-    expect(img?.getAttribute('y')).toBe('-20.0');
-  });
-
-  it('a baked-use hero sizes from its baked-def geometry when the def is in the scene (ADR-0227 trees)', () => {
-    const scene: SceneNode = {
-      el: 'g',
-      kind: 'world',
-      children: [
-        {
-          el: 'g',
-          kind: 'baked-defs',
-          children: [
-            {
-              el: 'baked-def',
-              defId: 'veg-hero-autumn-tree-healthy',
-              // def geometry: x ∈ [−12, 12], y ∈ [−40, 2] → height 42, centred on x 0, ground at y 2.
-              nodes: [
-                { el: 'polygon', points: '-12,2 12,2 0,-40', fill: '#85583a', stroke: '#6a563c', strokeWidth: 1 },
-              ],
-            },
-          ],
-        },
-        { el: 'baked-use', kind: 'baked-art', defId: 'veg-hero-autumn-tree-healthy', transform: 'translate(1.0 2.0)' },
-      ],
-    };
-    const sheet: SpriteStyleSheet = {
-      name: 'test-sheet',
-      label: 'Stub A',
-      sprites: {
-        'autumn-tree:healthy': { href: '/art-sheets/test-sheet/tree-healthy.svg', w: 40, h: 60, anchorX: 0.5, anchorY: 1 },
-      },
-    };
-    const { container } = render(
-      <svg>
-        <SceneView scene={scene} ctx={baseCtx(sheet)} />
-      </svg>,
-    );
-    const img = container.querySelector('image');
-    // height 42, width 42·(40/60) = 28, centred (x −14), bottom at y 2 (y = 2 − 42 = −40).
-    expect(img?.getAttribute('height')).toBe('42.0');
-    expect(img?.getAttribute('width')).toBe('28.0');
-    expect(img?.getAttribute('x')).toBe('-14.0');
-    expect(img?.getAttribute('y')).toBe('-40.0');
-  });
-
-  it('a sprite-swapped hero keeps its class and story delegation hook (default-sheet nodes stay clickable)', () => {
-    const onSelectStory = vi.fn();
-    const scene: SceneNode = {
-      el: 'g',
-      kind: 'territory',
-      id: 'lib',
-      children: [
-        {
-          el: 'baked-use',
-          kind: 'baked-art',
-          defId: 'veg-hero-autumn-tree-healthy',
-          transform: 'translate(1.0 2.0)',
-        },
-      ],
-    };
-    const sheet: SpriteStyleSheet = {
-      name: 'test-sheet',
-      label: 'Stub A',
-      sprites: {
-        'autumn-tree:healthy': {
-          href: '/art-sheets/test-sheet/tree-healthy.svg',
-          w: 40,
-          h: 60,
-          anchorX: 0.5,
-          anchorY: 1,
-        },
-      },
-    };
-    const { container } = render(
-      <svg>
-        <SceneView scene={scene} ctx={{ ...baseCtx(sheet), onSelectStory }} />
-      </svg>,
-    );
-    const img = container.querySelector('image')!;
-    expect(img.classList.contains('baked-art')).toBe(true);
-    expect(img.getAttribute('data-story-id')).toBe('lib');
-    fireEvent.click(img);
-    expect(onSelectStory).toHaveBeenCalledWith('lib');
-  });
-
-  it('falls back to vector for an UNCOVERED kind (a partial sheet still works everywhere else)', () => {
-    const sheet: SpriteStyleSheet = {
-      name: 'test-sheet',
-      label: 'Stub A',
-      sprites: { conifer: { href: '/x.svg', w: 10, h: 10, anchorX: 0.5, anchorY: 1 } },
-    };
-    const root = renderTree(sheet);
-    expect(root.querySelector('.story-tree')).toBeTruthy();
-    expect(root.querySelector('image')).toBeNull();
-  });
-
-  it('a kind-only sprite covers a status the manifest has no exact entry for', () => {
-    const sheet: SpriteStyleSheet = {
-      name: 'test-sheet',
-      label: 'Stub A',
-      sprites: { tree: { href: '/art-sheets/test-sheet/tree.svg', w: 10, h: 10, anchorX: 0.5, anchorY: 1 } },
-    };
-    const root = renderTree(sheet);
-    expect(root.querySelector('image')?.getAttribute('href')).toBe('/art-sheets/test-sheet/tree.svg');
-  });
-
-  it('resolves a baked-art GARDEN HERO (cottage/gazebo) by its defId, not the shared "baked-art" kind', () => {
-    const scene: SceneNode = {
-      el: 'g',
-      kind: 'world',
-      children: [
-        { el: 'baked-use', kind: 'baked-art', defId: 'garden-hero-cottage', id: 'garden-cottage', transform: 'translate(1.0 2.0)' },
-        { el: 'baked-use', kind: 'baked-art', defId: 'garden-hero-stepping-stone', id: 'garden-walk-0', transform: 'translate(3.0 4.0)' },
-      ],
-    };
-    const sheet: SpriteStyleSheet = {
-      name: 'test-sheet',
-      label: 'Stub A',
-      sprites: { cottage: { href: '/art-sheets/test-sheet/cottage.svg', w: 20, h: 20, anchorX: 0.5, anchorY: 1 } },
-    };
-    const { container } = render(
-      <svg>
-        <SceneView scene={scene} ctx={baseCtx(sheet)} />
-      </svg>,
-    );
-    const images = [...container.querySelectorAll('image')];
-    // only cottage is covered — the uncovered stepping-stone stays its vector `<use>` placement.
-    expect(images.length).toBe(1);
-    expect(images[0]?.getAttribute('href')).toBe('/art-sheets/test-sheet/cottage.svg');
-    expect(container.querySelector('use[href="#garden-hero-stepping-stone"]')).toBeTruthy();
-  });
-
-  it('resolves the tree-spread `autumn-tree` colourway by STATUS, stripped from its per-status defId (ADR-0227)', () => {
-    const scene: SceneNode = {
-      el: 'g',
-      kind: 'world',
-      children: [
-        { el: 'baked-use', kind: 'baked-art', defId: 'veg-hero-autumn-tree-unhealthy', id: 'veg-tree-lib', transform: 'translate(1.0 2.0)' },
-      ],
-    };
-    const sheet: SpriteStyleSheet = {
-      name: 'test-sheet',
-      label: 'Stub A',
-      sprites: {
-        'autumn-tree:unhealthy': { href: '/art-sheets/test-sheet/tree-unhealthy.svg', w: 20, h: 20, anchorX: 0.5, anchorY: 1 },
-      },
-    };
-    const { container } = render(
-      <svg>
-        <SceneView scene={scene} ctx={baseCtx(sheet)} />
-      </svg>,
-    );
-    expect(container.querySelector('image')?.getAttribute('href')).toBe('/art-sheets/test-sheet/tree-unhealthy.svg');
-  });
-
-  it('keeps the node title as an accessible `<title>` child of the sprite image (text/a11y stays in the DOM)', () => {
-    const scene: SceneNode = {
-      el: 'g',
-      kind: 'world',
-      children: [
-        {
-          el: 'g',
-          kind: 'flora',
-          status: 'healthy',
-          id: 'lib#c',
-          title: 'cap c',
-          transform: 'translate(1.0 2.0)',
-          children: [],
-        },
-      ],
-    };
-    const sheet: SpriteStyleSheet = {
-      name: 'test-sheet',
-      label: 'Stub A',
-      sprites: { flora: { href: '/art-sheets/test-sheet/flora.svg', w: 10, h: 10, anchorX: 0.5, anchorY: 1 } },
-    };
-    const { container } = render(
-      <svg>
-        <SceneView scene={scene} ctx={baseCtx(sheet)} />
-      </svg>,
-    );
-    const img = container.querySelector('image')!;
-    expect(img.querySelector('title')?.textContent).toBe('cap c');
-  });
-
-  it('keeps a sprite-swapped capability plant clickable (interactivity preserved across the swap)', () => {
-    const onSelectCap = vi.fn();
-    const scene: SceneNode = {
-      el: 'g',
-      kind: 'territory',
-      id: 'lib',
-      children: [
-        { el: 'g', kind: 'flora', status: 'healthy', id: 'lib#c', transform: 'translate(1.0 2.0)', children: [] },
-      ],
-    };
-    const sheet: SpriteStyleSheet = {
-      name: 'test-sheet',
-      label: 'Stub A',
-      sprites: { flora: { href: '/art-sheets/test-sheet/flora.svg', w: 10, h: 10, anchorX: 0.5, anchorY: 1 } },
-    };
-    const ctx: SceneCtx = { ...baseCtx(sheet), onSelectCap };
-    const { container } = render(
-      <svg>
-        <SceneView scene={scene} ctx={ctx} />
-      </svg>,
-    );
-    const img = container.querySelector('image')!;
-    fireEvent.click(img);
-    expect(onSelectCap).toHaveBeenCalledWith('lib', 'lib#c');
   });
 });

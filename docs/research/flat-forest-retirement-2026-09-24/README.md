@@ -1,5 +1,7 @@
 # Flat forest retirement: the pieces before the switch
 
+> **Retired 2026-09-24 (laneV).** Every piece below landed, and the flat look was retired in one step, in the studio and on the website. What went, what stayed and the before/after pictures are in [`retired/README.md`](retired/README.md). The inventory below is kept as the record of how the pieces were assembled; its "not ready" statements describe the state before that landing.
+
 Inventory taken against `8ad24c2929025fb40b56d920975a8213387768d4` and the current full live ADR-0608 on 24 September 2026. The static mounted look is approved. **Retirement is not ready:** coverage plants still live in SVG, and neither public website map mounts the 3D consumer. Nothing in this inventory authorizes a partial removal.
 
 The live predecessor arc is closed with no open increments or questions. Its last row, `the-3d-regrow-settles-reduces-and-survives-unwatched`, records [merged PR #2049](https://github.com/storytree-ai/Storytree/pull/2049). The two open rows on `mount-the-land-on-a-real-surface-arc` remain the retirement and coverage-plant work. The entry claim was granted to `laneK-retire`; the separate drive-machinery claims are outside this work.

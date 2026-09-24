@@ -5,7 +5,7 @@ story: app-surface
 arc: chapter2-real-app-surface-arc
 title: "A query-gated Studio demo stages the semantic-growth witness"
 outcome: "An explicit `?semanticGrowth=demo` Studio flag mounts the public semantic-growth view over one five-frame fixture composed through Studio's real world geometry, substrate, parcels, vegetation and representative framing; its primary selection reuses the existing drawn route lanes while the clean Studio route remains unchanged."
-status: proposed
+status: retired
 proof_mode: integration-test
 depends_on: [semantic-growth-replay-view]
 decisions: [237, 93, 213, 215, 230, 70]
@@ -45,30 +45,21 @@ decisions: [237, 93, 213, 215, 230, 70]
 # dropped the `signed-proof` frame with it — no replacement marker (option B declined), and step five
 # does NOT inherit healthy's answer early (option C declined). The criteria that named the bloom are
 # REWRITTEN, never deleted (ADR-0536 D5).
-proof:
-  command:
-    file: pnpm
-    args: ["--filter", "studio", "test"]
-  scope:
-    testGlobs: ["apps/studio/src/components/TreeViewShell.test.tsx"]
-    sourceGlobs: ["apps/studio/src/components/TreeView.tsx", "apps/studio/src/components/SemanticGrowthDemo.tsx"]
-  real:
-    testFile: "apps/studio/src/components/TreeViewShell.test.tsx"
-    sourceFile: "apps/studio/src/components/SemanticGrowthDemo.tsx"
-    editsExisting: true
-    scope:
-      testGlobs: ["apps/studio/src/components/TreeViewShell.test.tsx"]
-      sourceGlobs: ["apps/studio/src/components/TreeView.tsx", "apps/studio/src/components/SemanticGrowthDemo.tsx"]
-    install: true
-    proofCommand:
-      file: pnpm
-      args: ["--filter", "studio", "test"]
-    typecheck:
-      file: pnpm
-      args: ["--filter", "studio", "typecheck"]
+# RETIRED 2026-09-24 under ADR-0608 ("The mounted 3D land becomes the forest, and the flat forest
+# look is retired"). This capability's whole surface was the flat Chapter-2 picture — the painted SVG
+# island, its growth/accretion track, the flat vegetation and PixelLab sprite tracks, and the
+# query-gated `?semanticGrowth=demo` / `?organicGrowth=*` lab routes that staged them. ADR-0608 D2
+# retires that picture and D3 deletes the code that only painted it, with its tests, as engineering
+# follow-through (ADR-0605). The `proof:` binding that stood here named files that no longer exist, so
+# it is REMOVED (the `status: retired` flip alone clears nothing — `check:verification-decay`'s
+# contract-binding-drift instrument filters on the binding, not on status). The node is KEPT as a
+# browsable row with its body as history; the implementation is recoverable from git history.
 ---
 
 # A query-gated Studio demo stages the semantic-growth witness
+
+> **RETIRED 2026-09-24 under ADR-0608.** The flat forest picture this capability painted is retired;
+> the mounted 3D land is the forest. Its code and tests were deleted, and everything below is history.
 
 **Outcome —** An explicit `?semanticGrowth=demo` Studio flag mounts the public semantic-growth view
 over one five-frame fixture composed through Studio's real world geometry, substrate, parcels,

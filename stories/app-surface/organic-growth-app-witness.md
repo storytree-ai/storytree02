@@ -5,37 +5,28 @@ story: app-surface
 arc: chapter2-pixellab-organic-growth-arc
 title: "The real app consumer stages the corrected organic-growth witness"
 outcome: "An exact query-gated mode of Studio's real shared-app consumer presents app-native SVG land growth beneath registered local organic tracks through the public product player while ordinary routes remain unchanged."
-status: proposed
+status: retired
 proof_mode: integration-test
 depends_on: [semantic-growth-studio-demo, pixellab-organic-growth-tracks]
 decisions: [274, 237, 219, 230, 70]
 # The host stages an acceptance instrument inside the real consumer. It supplies representative
 # read-only inputs to the public product component; it owns no renderer, semantic cursor, frame
 # selector or clock. Hosted deployment is machine evidence; LOOK remains owner-attested.
-proof:
-  command:
-    file: pnpm
-    args: ["--filter", "studio", "test"]
-  scope:
-    testGlobs: ["apps/studio/src/components/TreeViewShell.test.tsx"]
-    sourceGlobs: ["apps/studio/src/components/TreeView.tsx", "apps/studio/src/components/SemanticGrowthDemo.tsx"]
-  real:
-    testFile: "apps/studio/src/components/TreeViewShell.test.tsx"
-    sourceFile: "apps/studio/src/components/SemanticGrowthDemo.tsx"
-    editsExisting: true
-    scope:
-      testGlobs: ["apps/studio/src/components/TreeViewShell.test.tsx"]
-      sourceGlobs: ["apps/studio/src/components/TreeView.tsx", "apps/studio/src/components/SemanticGrowthDemo.tsx"]
-    install: true
-    proofCommand:
-      file: pnpm
-      args: ["--filter", "studio", "test"]
-    typecheck:
-      file: pnpm
-      args: ["--filter", "studio", "typecheck"]
+# RETIRED 2026-09-24 under ADR-0608 ("The mounted 3D land becomes the forest, and the flat forest
+# look is retired"). This capability's whole surface was the flat Chapter-2 picture — the painted SVG
+# island, its growth/accretion track, the flat vegetation and PixelLab sprite tracks, and the
+# query-gated `?semanticGrowth=demo` / `?organicGrowth=*` lab routes that staged them. ADR-0608 D2
+# retires that picture and D3 deletes the code that only painted it, with its tests, as engineering
+# follow-through (ADR-0605). The `proof:` binding that stood here named files that no longer exist, so
+# it is REMOVED (the `status: retired` flip alone clears nothing — `check:verification-decay`'s
+# contract-binding-drift instrument filters on the binding, not on status). The node is KEPT as a
+# browsable row with its body as history; the implementation is recoverable from git history.
 ---
 
 # The real app consumer stages the corrected organic-growth witness
+
+> **RETIRED 2026-09-24 under ADR-0608.** The flat forest picture this capability painted is retired;
+> the mounted 3D land is the forest. Its code and tests were deleted, and everything below is history.
 
 **Outcome —** An exact query-gated mode of Studio's real shared-app consumer presents app-native SVG
 land growth beneath registered local organic tracks through the public product player while ordinary

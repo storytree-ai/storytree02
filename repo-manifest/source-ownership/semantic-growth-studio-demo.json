@@ -1,7 +1,0 @@
-{
-  "sourceOwnership": {
-    "subtrees": {
-      "apps/studio/src/components/SemanticGrowthDemo.tsx": "semantic-growth-studio-demo"
-    }
-  }
-}

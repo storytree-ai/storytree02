@@ -5,37 +5,28 @@ story: app-surface
 arc: chapter2-pixellab-organic-growth-arc
 title: "The existing SVG island grows in place through the public product player"
 outcome: "The public app surface maps normalized semantic progress onto app-native growth of the existing SVG island, coast and ground geometry while preserving the established camera, coordinates, painter order and retained final land under navigation and reduced motion."
-status: proposed
+status: retired
 proof_mode: integration-test
 depends_on: [semantic-growth-replay-view]
 decisions: [274, 237, 230, 70]
 # This capability owns only native-land behaviour through the existing player/renderer. PixelLab
 # organic assets are a dependent capability; generated land, a complete-scene composite and a second
 # renderer are explicit non-goals.
-proof:
-  command:
-    file: pnpm
-    args: ["--filter", "@storytree/app-surface", "test"]
-  scope:
-    testGlobs: ["packages/app-surface/src/svg-island-accretion.test.tsx", "packages/app-surface/src/SemanticGrowthWorldView.test.tsx", "packages/app-surface/src/SceneView.test.tsx"]
-    sourceGlobs: ["packages/app-surface/src/svg-island-accretion.ts", "packages/app-surface/src/SemanticGrowthWorldView.tsx", "packages/app-surface/src/semantic-growth.css", "packages/app-surface/src/SceneView.tsx", "packages/app-surface/src/index.ts"]
-  real:
-    testFile: "packages/app-surface/src/svg-island-accretion.test.tsx"
-    sourceFile: "packages/app-surface/src/svg-island-accretion.ts"
-    editsExisting: true
-    scope:
-      testGlobs: ["packages/app-surface/src/svg-island-accretion.test.tsx", "packages/app-surface/src/SemanticGrowthWorldView.test.tsx", "packages/app-surface/src/SceneView.test.tsx"]
-      sourceGlobs: ["packages/app-surface/src/svg-island-accretion.ts", "packages/app-surface/src/SemanticGrowthWorldView.tsx", "packages/app-surface/src/semantic-growth.css", "packages/app-surface/src/SceneView.tsx", "packages/app-surface/src/index.ts"]
-    install: true
-    proofCommand:
-      file: pnpm
-      args: ["--filter", "@storytree/app-surface", "test"]
-    typecheck:
-      file: pnpm
-      args: ["--filter", "@storytree/app-surface", "typecheck"]
+# RETIRED 2026-09-24 under ADR-0608 ("The mounted 3D land becomes the forest, and the flat forest
+# look is retired"). This capability's whole surface was the flat Chapter-2 picture — the painted SVG
+# island, its growth/accretion track, the flat vegetation and PixelLab sprite tracks, and the
+# query-gated `?semanticGrowth=demo` / `?organicGrowth=*` lab routes that staged them. ADR-0608 D2
+# retires that picture and D3 deletes the code that only painted it, with its tests, as engineering
+# follow-through (ADR-0605). The `proof:` binding that stood here named files that no longer exist, so
+# it is REMOVED (the `status: retired` flip alone clears nothing — `check:verification-decay`'s
+# contract-binding-drift instrument filters on the binding, not on status). The node is KEPT as a
+# browsable row with its body as history; the implementation is recoverable from git history.
 ---
 
 # The existing SVG island grows in place through the public product player
+
+> **RETIRED 2026-09-24 under ADR-0608.** The flat forest picture this capability painted is retired;
+> the mounted 3D land is the forest. Its code and tests were deleted, and everything below is history.
 
 **Outcome —** The public app surface maps normalized semantic progress onto app-native growth of the
 existing SVG island, coast and ground geometry while preserving the established camera, coordinates,

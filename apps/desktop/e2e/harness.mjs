@@ -495,14 +495,16 @@ export async function resetToForest(win) {
  * 99 points on the rendered map matched the old predicate while being unselectable by the app. A
  * candidate the app cannot select must be SKIPPED (try the next island), never returned.
  *
- * Candidate points come from each island's central tree — a `g.story-tree` (flag-off / pre-hero), or
- * a `.baked-art` node: a `<use>` before ADR-0292, a `<g>` wrapping the growth-track `<image>` since.
- * That swap widened the candidate box (a padded frame canvas, not the tree's own geometry) and so
- * moved its CENTRE, which is what started landing centres on the rim in the first place.
+ * Candidate points come from each island's NAMEPLATE (`.world-plate-bg` inside its `g.hex-flora`).
+ * They used to come from the island's central tree, a `g.story-tree` or a `.baked-art` node, but
+ * ADR-0608 retired the flat hero tree: the 3D land draws the forest, and the nameplate is the SVG
+ * mark a member reads and clicks to select a story.
  */
 export const findStoryTarget = (win) =>
   win.evaluate(() => {
-    const trees = [...document.querySelectorAll('g.story-tree, .baked-art')]
+    // ADR-0608: the flat hero trees are gone — the 3D land draws the forest — so a story node is found
+    // by its NAMEPLATE, the SVG mark a member reads and clicks to select the story.
+    const trees = [...document.querySelectorAll('g.hex-flora[data-story-id] .world-plate-bg')]
       .map((t) => t.getBoundingClientRect())
       .filter((r) => r.width > 6 && r.left > 40 && r.top > 110 && r.bottom < window.innerHeight - 60);
     for (const r of trees) {
@@ -520,7 +522,7 @@ export const findStoryTarget = (win) =>
  *  and pan gestures. Returns null if the view is fully covered (then the caller skips that assertion). */
 export const findEmptyPoint = (win) =>
   win.evaluate(() => {
-    const ON = 'g.hex-flora,g.story-tree,.baked-art,.relaxed-tile,.coast-fill-group,.world-story-hit,[data-story-id],.shared-islands-panel,.tree-detail,.panel-drawer';
+    const ON = 'g.hex-flora,.relaxed-tile,.coast-fill-group,.world-story-hit,.native-prop-targets,[data-story-id],.shared-islands-panel,.tree-detail,.panel-drawer,.land-view-notice';
     for (let y = 130; y < window.innerHeight - 120; y += 17) {
       for (let x = 320; x < window.innerWidth - 20; x += 17) {
         const el = document.elementFromPoint(x, y);

@@ -10,8 +10,8 @@
 
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { useAct2Intro, type Act2IntroClock } from './act2Intro.js';
-import type { ForestRegrowStory, ForestRegrowTrailEdge } from '@storytree/app-surface';
+import { useAct2Intro, useStableForestRegrowLayer, type Act2IntroClock } from './act2Intro.js';
+import type { ForestRegrowState, ForestRegrowStory, ForestRegrowTrailEdge } from '@storytree/app-surface';
 
 afterEach(cleanup);
 
@@ -401,5 +401,41 @@ describe('a run survives being unwatched (ADR-0469)', () => {
     expect(result.current.progress).toBeCloseTo(midRun, 6);
     elapse(duration / 4);
     expect(result.current.progress - midRun, 'twice the pace from here on').toBeCloseTo(0.5, 2);
+  });
+});
+
+describe('useStableForestRegrowLayer', () => {
+  const state = (absent: string[], hidden: string[]): ForestRegrowState => ({
+    progress: 0.5,
+    settled: false,
+    landedStoryIds: new Set<string>(),
+    growing: [],
+    presentStoryIds: new Set<string>(),
+    absentStoryIds: new Set(absent),
+    hiddenSegmentIds: new Set(hidden),
+    drawingSegments: [],
+    arrivalStoryIds: [],
+  });
+
+  it('hands back NO layer unless a run is active AND has a state — a settled map carries none', () => {
+    const s = state(['a'], ['s1']);
+    expect(renderHook(() => useStableForestRegrowLayer(s, false)).result.current).toBeNull();
+    expect(renderHook(() => useStableForestRegrowLayer(null, true)).result.current).toBeNull();
+    const live = renderHook(() => useStableForestRegrowLayer(s, true)).result.current;
+    expect(live?.hiddenStoryIds).toBe(s.absentStoryIds);
+    expect(live?.hiddenSegmentIds).toBe(s.hiddenSegmentIds);
+  });
+
+  it('holds ONE layer object while the absence sets are unchanged, and a new one when they shrink', () => {
+    let current = state(['a', 'b'], ['s1']);
+    const hook = renderHook(() => useStableForestRegrowLayer(current, true));
+    const first = hook.result.current;
+    current = state(['a', 'b'], ['s1']);
+    hook.rerender();
+    expect(hook.result.current).toBe(first);
+    current = state(['a'], ['s1']);
+    hook.rerender();
+    expect(hook.result.current).not.toBe(first);
+    expect(hook.result.current?.hiddenStoryIds.has('b')).toBe(false);
   });
 });

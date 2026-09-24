@@ -39,7 +39,6 @@
       "apps/studio/src/lib/pannable.ts": "studio",
       "apps/studio/src/lib/poll.ts": "studio",
       "apps/studio/src/lib/sceneExport.ts": "studio",
-      "apps/studio/src/lib/sprite-sheet.ts": "studio",
       "apps/studio/src/lib/trailReveal.ts": "studio",
       "apps/studio/src/lib/traversalIndex.ts": "studio",
       "apps/studio/src/lib/traversalKnowledgeAxis.ts": "studio",

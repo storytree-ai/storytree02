@@ -5,7 +5,7 @@ story: app-surface
 arc: chapter2-real-app-surface-arc
 title: "The shared world view plays and replays one honest semantic growth sequence"
 outcome: "A public app-surface growth view presents the five supplied world frames at one representative world framing and applies their deltas through the app's existing arrival, growth and claim transforms: land alone emerges slowly and in place from nothing through the shared CSS renderer, while identity arrivals remain separately timed, with deterministic Next, Back, Replay and reduced-motion rendering."
-status: proposed
+status: retired
 proof_mode: integration-test
 depends_on: [studio-app-surface-adapter]
 decisions: [237, 93, 213, 215, 230, 70]
@@ -58,30 +58,21 @@ decisions: [237, 93, 213, 215, 230, 70]
 # that named the bloom are REWRITTEN, never deleted (ADR-0536 D5): the one-shot pulse becomes a
 # finiteness-and-rest requirement over EVERY surviving arrival profile, and the bloom-only-on-frame-5
 # rule becomes exact-frame qualification over the surviving roles with NO arrival after `claimed`.
-proof:
-  command:
-    file: pnpm
-    args: ["--filter", "@storytree/app-surface", "test"]
-  scope:
-    testGlobs: ["packages/app-surface/src/SemanticGrowthWorldView.test.tsx", "packages/app-surface/src/SceneView.test.tsx"]
-    sourceGlobs: ["packages/app-surface/src/SemanticGrowthWorldView.tsx", "packages/app-surface/src/semantic-growth.css", "packages/app-surface/src/index.ts", "packages/app-surface/src/SceneView.tsx"]
-  real:
-    testFile: "packages/app-surface/src/SemanticGrowthWorldView.test.tsx"
-    sourceFile: "packages/app-surface/src/semantic-growth.css"
-    editsExisting: true
-    scope:
-      testGlobs: ["packages/app-surface/src/SemanticGrowthWorldView.test.tsx", "packages/app-surface/src/SceneView.test.tsx"]
-      sourceGlobs: ["packages/app-surface/src/SemanticGrowthWorldView.tsx", "packages/app-surface/src/semantic-growth.css", "packages/app-surface/src/index.ts", "packages/app-surface/src/SceneView.tsx"]
-    install: true
-    proofCommand:
-      file: pnpm
-      args: ["--filter", "@storytree/app-surface", "test"]
-    typecheck:
-      file: pnpm
-      args: ["--filter", "@storytree/app-surface", "typecheck"]
+# RETIRED 2026-09-24 under ADR-0608 ("The mounted 3D land becomes the forest, and the flat forest
+# look is retired"). This capability's whole surface was the flat Chapter-2 picture — the painted SVG
+# island, its growth/accretion track, the flat vegetation and PixelLab sprite tracks, and the
+# query-gated `?semanticGrowth=demo` / `?organicGrowth=*` lab routes that staged them. ADR-0608 D2
+# retires that picture and D3 deletes the code that only painted it, with its tests, as engineering
+# follow-through (ADR-0605). The `proof:` binding that stood here named files that no longer exist, so
+# it is REMOVED (the `status: retired` flip alone clears nothing — `check:verification-decay`'s
+# contract-binding-drift instrument filters on the binding, not on status). The node is KEPT as a
+# browsable row with its body as history; the implementation is recoverable from git history.
 ---
 
 # The shared world view plays and replays one honest semantic growth sequence
+
+> **RETIRED 2026-09-24 under ADR-0608.** The flat forest picture this capability painted is retired;
+> the mounted 3D land is the forest. Its code and tests were deleted, and everything below is history.
 
 **Outcome —** A public app-surface growth view presents the five supplied world frames at one
 representative world framing and applies their deltas through the app's existing arrival, growth and

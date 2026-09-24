@@ -53,13 +53,6 @@ const DB_STATUS = '/api/db/status';
 const DB_START = '/api/db/start';
 const DB_WAKE = '/api/db/wake';
 
-// The map's optional art-style sheet. NOT an api route, and NOT what any suite here is about — but
-// the real `TreeView` asks for it, and the double fails closed, so it has to be DECLARED rather
-// than left to surface as an unrouted-request refusal. It answers 404, which is the studio's
-// tolerated case: "art-style sheet failed to load; keeping the current render". Under module
-// mocking this fetch went out to jsdom and nothing in the suite ever knew it existed.
-const ART_SHEET = '/art-sheets/storybook/manifest.json';
-
 let http: HttpDouble;
 
 /**
@@ -232,7 +225,6 @@ beforeEach(() => {
   window.sessionStorage.setItem(ACT2_INTRO_SESSION_KEY, '1');
   navigate('#/tree');
   http = installHttpDouble();
-  http.get(ART_SHEET, () => new Response('', { status: 404 }));
 });
 
 afterEach(() => {

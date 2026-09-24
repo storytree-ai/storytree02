@@ -92,8 +92,8 @@ export type ControlValue = number | boolean | string;
 // The schema. Defaults + clamps MIRROR TreeView's RIVER_TUNING / the readers.
 // ---------------------------------------------------------------------------
 
-// (the 'Layout' group retired with its only control — ADR-0283 D2)
-const GROUP_ART = 'Art style';
+// (the 'Layout' group retired with its only control — ADR-0283 D2; the 'Art style' group with the
+// sprite art sheets — ADR-0608)
 const GROUP_SELECTION = 'Selection';
 /** ADR-0286: the Act 2 regrow's owner-facing home. Holds the speed dial below and — supplied by
  *  TreeView, not by this schema — the "Regrow the forest" ACTION, which has no URL state to bind. */
@@ -107,18 +107,6 @@ export function normalizeSelectionMotion(raw: string | null): string {
   if (raw === null) return 'draw';
   if (raw === 'none' || raw === 'still' || raw === 'off') return 'off';
   return (SELECTION_MOTION_NAMES as readonly string[]).includes(raw) ? raw : 'draw';
-}
-
-/** artStyle aliases (sprite-art-sheets arc). Absence resolves to the owner-attested `storybook`
- *  default; a recognized explicit value resolves as written, including the still-supported procedural
- *  `vector` render. Unknown/retired explicit values keep the prior fail-safe and resolve to `vector`, so
- *  a stale or bad `?artStyle=` param can never trigger a broken manifest fetch. The three coherent
- *  nano-banana sheets were produced whole-sheet → content-aware slice → crown recolour and attested
- *  2026-07-23; adding a sheet only touches this list + the CONTROLS options below. */
-const ART_STYLE_NAMES = ['storybook', 'daylight', 'watercolor', 'vector'] as const;
-function normalizeArtStyle(raw: string | null): string {
-  if (raw === null) return 'storybook';
-  return (ART_STYLE_NAMES as readonly string[]).includes(raw) ? raw : 'vector';
 }
 
 // The forest-map dials (owner ask 2026-06-18). Since the river-trail road system was
@@ -159,50 +147,6 @@ export const CONTROLS: readonly ControlSpec[] = [
   // PERMANENT world art — no longer a gear toggle at all, so the last grounded-art switch is gone and
   // the "World art" gear section retires with it. Vegetation is always composed (TreeView's
   // `useVegetation`), so there is nothing left to dial here.
-
-  // ---- Art style (sprite-art-sheets arc) ----
-  // Instead of drawing an object's procedural vector body, the studio mapper can re-skin it from a
-  // sprite STYLE SHEET — a manifest of images keyed by drawable kind (+ status), fetched from
-  // `apps/studio/public/art-sheets/<name>/manifest.json` (see `./sprite-sheet.ts` for the contract).
-  // The owner attested Storybook on 2026-07-23, so it is now the clean-URL default; `?artStyle=vector`
-  // explicitly selects the preserved procedural render. Every sheet re-skins each COVERED kind and
-  // leaves uncovered kinds as vector. The three sheets are the coherent nano-banana set (one whole-sheet
-  // generation per style, content-aware sliced, per-status trees recoloured from one master, unhealthy =
-  // the withered form). Adding/removing a sheet touches only this options list + the names alias above,
-  // never the reader/mapper.
-  {
-    kind: 'select',
-    key: 'artStyle',
-    label: 'Art style',
-    group: GROUP_ART,
-    hint: 'Re-skin the map from a sprite art sheet instead of the procedural vector shapes. Storybook is the approved warm default; Daylight is brighter, Watercolour a soft hand-painted wash, and Vector keeps the original procedural render.',
-    default: 'storybook',
-    options: [
-      { value: 'storybook', label: 'Storybook — warm (default)' },
-      { value: 'daylight', label: 'Daylight — bright' },
-      { value: 'watercolor', label: 'Watercolour — soft wash' },
-      { value: 'vector', label: 'Vector — procedural' },
-    ],
-    normalize: normalizeArtStyle,
-  },
-
-  // Sprite size dial (owner verdict 2026-07-23: the first cosy render read "way too big"). Sprites now
-  // DERIVE their size from the vector body they replace (see the studio's `sprite-sizing.ts`), and this
-  // dial multiplies that fit — 1 (default, no param) = match the vector footprint exactly; nudge up or
-  // down to taste. Only meaningful when an Art style sheet is active; inert in vector mode.
-  {
-    kind: 'number',
-    key: 'artScale',
-    label: 'Art scale',
-    group: GROUP_ART,
-    hint: 'Sprite size relative to the vector art it replaces — 1 matches the vector footprint; raise or lower to taste. Only applies when an Art style sheet is selected.',
-    default: 1,
-    min: 0.4,
-    max: 2.5,
-    step: 0.05,
-    clampMin: 0.05,
-    clampMax: 10,
-  },
 
   // ---- Selection (the two-lane neighbour highlight, owner-directed 2026-07-27) ----
   // Selecting an island lights its one-hop routes as LANES in the relation's hue. This dial
@@ -364,28 +308,12 @@ export function buildShareUrl(origin: string, search: string, hash: string): str
   return `${origin}${search}${hash}`;
 }
 
-/**
- * ADR-0093 Unit D: the shared scene-graph (the studio React mapper, `SceneView`) is now the
- * DEFAULT forest-world render — absence ⇒ scene. The studio-only chrome that was inline-only
- * (the distributed-consumer building stamps, the per-nameplate identity-key glyph) is layered ON
- * TOP of `<SceneView>` as sibling `<g>` (ADR-0093 Decision 2), so nothing regresses. The inline
- * `<g>` render is kept
- * reachable for ONE release as a safety net via the `?render=legacy` / `?render=inline` escape
- * hatch — once the scene render is operator-attested across a release it can be deleted outright.
- *
- * Returns `true` to render the scene (the default + explicit `?render=scene`), `false` only for the
- * legacy/inline escape. Deliberately NOT a `CONTROLS` gear dial: it is a transient escape hatch, not
- * a user-facing setting.
- */
-export function readRenderScene(search: string): boolean {
-  const render = new URLSearchParams(search).get('render');
-  // The one-release escape hatch back to the inline render; everything else (incl. absence and an
-  // unknown value) is the scene default.
-  return render !== 'legacy' && render !== 'inline';
-}
+/* ADR-0608 retired the `?render=legacy` / `?render=inline` escape hatch (`readRenderScene`) with the
+ * flat forest look it fell back to, and the sprite art-sheet dials (`artStyle`, `artScale`) with the
+ * flat sprites they re-skinned. The shared scene-graph mapper is the map's only interaction layer. */
 
 /* ADR-0228 retired the default-off `readCosyIsland` (`?cosy`) and `readGardenIsland` (`?garden`)
  * grounded-art flags. ADR-0231 then retired `readVegetationVocab` (`?veg=off`) too: the unified
  * vegetation vocabulary (ADR-0226) is now the PERMANENT studio world art — always composed
- * (TreeView's `useVegetation`), never a flag. No grounded-art render toggle remains. The public
+ * (TreeView's `VEGETATION`), never a flag. No grounded-art render toggle remains. The public
  * website fold never sent `vegetation`, so its render is unchanged (the core's absence lock holds). */

@@ -57,10 +57,7 @@ const scene = (): SceneNode => buildScene(input());
 function regrowHiding(storyIds: readonly string[]): ForestRegrowRenderLayer {
   return {
     hiddenStoryIds: new Set(storyIds),
-    hiddenEmptyStoryIds: new Set(storyIds),
     hiddenSegmentIds: new Set(),
-    accretionByStory: new Map(),
-    cellRevealById: new Map(),
   };
 }
 
@@ -91,7 +88,7 @@ describe('nativePropTargetRects', () => {
 });
 
 describe('the native plant target layer in the world walk', () => {
-  it('paints after the roads and before the flora layer, so a crown beats the ground but not the nameplates', () => {
+  it('paints after the trails layer and before the nameplate layer, so a crown beats the ground but not the nameplates', () => {
     const { container } = render(
       <svg>
         <WorldSceneView model={normalizeWorldPresentationModel({ scene: scene(), nativePropTargetLayer: LAYER })} />
@@ -105,8 +102,9 @@ describe('the native plant target layer in the world walk', () => {
     expect(targets).toBeGreaterThan(-1);
     expect(trails).toBeGreaterThan(-1);
     expect(targets).toBe(trails + 1);
-    // Everything after the targets is the flora layer (plants, signposts, wisps, nameplates).
-    expect(world.children[targets + 1]?.querySelector('[data-cap-id="cap-a"]')).not.toBeNull();
+    // Everything after the targets is the nameplate layer (nameplates, wisps, caves).
+    expect(world.children[targets + 1]?.querySelector('.hex-flora[data-story-id="story-a"] .world-plate')).not.toBeNull();
+    expect(targets + 1).toBe(world.children.length - 1);
 
     const rects = [...container.querySelectorAll('g.native-prop-targets > rect')];
     expect(rects.map((r) => r.getAttribute('data-cap-id'))).toEqual(['cap-far', 'cap-mid', 'cap-near']);
