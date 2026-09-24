@@ -1135,16 +1135,34 @@ describe("the seeded faults the adversarial pass landed at exit 0", () => {
       { name: "alpha", scripts: ["uat"] },
       { name: "beta", scripts: ["test"] },
     ]);
-    const twoPkgs = probe("## Reliability Gates", "1. _(gate: observe)_ `pnpm --filter alpha --filter gamma uat`.");
+    const twoPkgs = probe("## Reliability Gates", "1. _(gate: observe)_ `pnpm --filter alpha --filter gamma --filter delta uat`.");
     assert.equal(
       judgeOne(twoPkgs, resolve).unrun[0]?.coverage.detail,
-      "no workspace package is named gamma, so nothing can run its `uat` script.",
+      "no workspace package is named gamma, delta, so nothing can run its `uat` script.",
     );
-    const twoScripts = probe("## Reliability Gates", "1. _(gate: observe)_ `pnpm --filter alpha --filter beta uat`.");
+    const twoScripts = probe("## Reliability Gates", "1. _(gate: observe)_ `pnpm --filter alpha --filter beta --filter epsilon uat`.");
+    const withEpsilon = workspaceScriptResolver([
+      { name: "alpha", scripts: ["uat"] },
+      { name: "beta", scripts: ["test"] },
+      { name: "epsilon", scripts: [] },
+    ]);
     assert.equal(
-      judgeOne(twoScripts, resolve).unrun[0]?.coverage.detail,
-      "beta declares no `uat` script, so every leg that would run it skips it silently.",
+      judgeOne(twoScripts, withEpsilon).unrun[0]?.coverage.detail,
+      "beta, epsilon declares no `uat` script, so every leg that would run it skips it silently.",
     );
+  });
+
+  it("the resolver answers all three ways", () => {
+    const resolve = workspaceScriptResolver([{ name: "alpha", scripts: ["uat"] }]);
+    assert.equal(resolve("alpha", "uat"), "declared");
+    assert.equal(resolve("alpha", "test"), "no-script");
+    assert.equal(resolve("beta", "uat"), "no-package");
+  });
+
+  it("an item naming NO command is skipped, not crashed on", () => {
+    const text = probe("## Reliability Gates", "1. _(gate: build-tests)_ the suite gets written first.");
+    assert.deepEqual(declaredGatesIn("stories/zz-probe/story.md", text), []);
+    assert.equal(judgeOne(text).storiesWithBlock, 1, "it still declares a block");
   });
 });
 
@@ -1198,8 +1216,14 @@ describe("isRetiredNode", () => {
     // Prose that QUOTES the line is not a status.
     assert.equal(isRetiredNode(["---", "id: s", "---", "", "status: retired"].join(LF)), false);
     assert.equal(isRetiredNode(["# S", "", "status: retired"].join(LF)), false);
+    // A body `---` rule after a status-shaped line is not a frontmatter block either.
+    assert.equal(isRetiredNode(["# S", "status: retired", "---"].join(LF)), false);
     // An unclosed block is not frontmatter.
     assert.equal(isRetiredNode(["---", "status: retired"].join(LF)), false);
+    assert.equal(isRetiredNode(["---", "status: retired", ""].join(LF)), false);
+    // Any run of spaces around the value, including none.
+    assert.equal(isRetiredNode(["---", "status:retired", "---"].join(LF)), true);
+    assert.equal(isRetiredNode(["---", "status:  retired  ", "---"].join(LF)), true);
     // A value that merely STARTS with the word is not the status.
     assert.equal(isRetiredNode(["---", "status: retired-ish", "---"].join(LF)), false);
     assert.equal(isRetiredNode(["---", "old_status: retired", "---"].join(LF)), false);

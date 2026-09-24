@@ -168,6 +168,9 @@ export function parsePackageScriptCommand(command: string): PackageScriptCommand
       continue;
     }
     if (token.startsWith("-")) {
+      // Stryker disable next-line AssignmentOperator: NON-TERMINATING — `-=` walks the index backwards
+      // over the same flag forever, so the mutant can only ever be reported as a timeout, which the
+      // rung's own vocabulary calls UNPROVEN and refuses to score either way.
       index += VALUE_FLAGS.has(token) ? 2 : 1;
       continue;
     }
@@ -237,8 +240,8 @@ export function declaredGatesIn(story: string, storyText: string): DeclaredGate[
 }
 
 /** Does a LIVE story declare any reliability gate at all, as the library reads it? */
-function declaresGates(storyText: string): boolean {
-  return !isRetiredNode(storyText) && parseReliabilityGates("s", normalizeEol(storyText)).length > 0;
+function declaresGates(story: string, storyText: string): boolean {
+  return !isRetiredNode(storyText) && parseReliabilityGates(story, normalizeEol(storyText)).length > 0;
 }
 
 /** A frontmatter `status: retired` line, inside the leading `---` block. */
@@ -557,7 +560,7 @@ export function judgeReliabilityGateParity(input: {
   const judged: JudgedGate[] = [];
   let storiesWithBlock = 0;
   for (const story of stories) {
-    if (declaresGates(story.text)) storiesWithBlock += 1;
+    if (declaresGates(story.path, story.text)) storiesWithBlock += 1;
     for (const gate of declaredGatesIn(story.path, story.text)) {
       const coverage = unrunnable(gate, resolveScript) ?? judgeCoverage(gate, targeted, repoWide);
       judged.push({
