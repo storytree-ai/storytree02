@@ -172,7 +172,9 @@ test('r3f-coverage-flora-preserves-grounded-capability-semantics: every core cov
   // This is deliberately a real true-ground SceneInput, not a forged scene fragment: the core owns
   // the parcel-flora wrapper's grounding semantics. The two islands vary capability, theme, folded
   // status, and test count, so identity cannot be accidentally borrowed from one territory-wide
-  // value. `landAreaPerCapability: null` leaves the core's direct coordinates intact.
+  // value. The real world offset must be composed with each containing-basis anchor once;
+  // `landAreaPerCapability: null` leaves those world coordinates intact.
+  const offset = { x: 609, y: 1406 };
   const drawTiles: DrawTile[] = [
     { h: { q: 0, r: 0 }, owner: 0 },
     { h: { q: 1, r: 0 }, owner: 0 },
@@ -181,6 +183,7 @@ test('r3f-coverage-flora-preserves-grounded-capability-semantics: every core cov
   ];
   const scene = buildScene(
     mkInput({
+      offset,
       cameraElevationDeg: PLAN_VIEW_ELEVATION_DEG,
       drawTiles,
       wheatSets: [new Set<string>(), new Set<string>()],
@@ -264,7 +267,7 @@ test('r3f-coverage-flora-preserves-grounded-capability-semantics: every core cov
       descriptor,
       {
         kind: 'coverage-flora',
-        transform: { x: source.groundAnchor.x, y: 0, z: source.groundAnchor.y },
+        transform: { x: offset.x + source.groundAnchor.x, y: 0, z: offset.y + source.groundAnchor.y },
         group: 'coverage-flora',
         capability: source.id,
         island: source.island,
@@ -272,9 +275,34 @@ test('r3f-coverage-flora-preserves-grounded-capability-semantics: every core cov
         theme: source.theme,
         floraScale: source.floraScale,
       },
-      `coverage wrapper ${i} is transported without recovering SVG transform data`,
+      `coverage wrapper ${i} composes its world offset once without recovering SVG transform data`,
     );
   }
+
+  // Isolate the boundary at the wrapper: its pivot-scale-pivot transform must not add
+  // the pivot again through childXY. The known ancestor translation still applies.
+  const translatedFlora: SceneG = {
+    el: 'g', kind: 'territory', id: 'translated-island', transform: 'translate(609 1406)',
+    children: [{
+      el: 'g', kind: 'parcel-flora', id: 'translated-capability', status: 'building', theme: 'woodland',
+      groundAnchor: { x: -47.4, y: -45.2 }, floraScale: 0.4,
+      transform: 'translate(-47.4 -45.2) scale(0.4) translate(47.4 45.2)', children: [],
+    }],
+  };
+  assert.deepEqual(
+    worldTo3D(translatedFlora, { landAreaPerCapability: null }).filter((descriptor) => descriptor.kind === 'coverage-flora'),
+    [{
+      kind: 'coverage-flora',
+      transform: { x: 561.6, y: 0, z: 1360.8 },
+      group: 'coverage-flora',
+      capability: 'translated-capability',
+      island: 'translated-island',
+      material: 'building',
+      theme: 'woodland',
+      floraScale: 0.4,
+    }],
+    'the ancestor translation and semantic anchor compose once, without the wrapper pivot transform',
+  );
 
   // A malformed semantic wrapper is not an invitation to parse its SVG transform or invent a
   // capability: it remains a visible skip, making the malformed source observable to callers.

@@ -579,9 +579,10 @@ function walkNode(
       break;
 
     case 'parcel-flora': {
-      // Coverage flora is semantic transport, not SVG recovery: the core carries the capability,
-      // absolute ground anchor, theme, status, and scale on the wrapper itself. A malformed
-      // wrapper is visible to callers as a skip rather than guessed from its drawing transform.
+      // The core carries the capability, containing-basis ground anchor, theme, status, and scale.
+      // Compose the ancestor translation through parentXY: childXY also adds the wrapper's
+      // first pivot translation, so using it would count the semantic anchor's pivot twice.
+      // A malformed wrapper remains a visible skip rather than an anchor guessed from SVG.
       if (
         node.id === undefined ||
         node.status === undefined ||
@@ -595,7 +596,7 @@ function walkNode(
       }
       out.push({
         kind: 'coverage-flora',
-        transform: { x: node.groundAnchor.x, y: 0, z: node.groundAnchor.y },
+        transform: { x: parentXY.x + node.groundAnchor.x, y: 0, z: parentXY.y + node.groundAnchor.y },
         group: 'coverage-flora',
         capability: node.id,
         island,
