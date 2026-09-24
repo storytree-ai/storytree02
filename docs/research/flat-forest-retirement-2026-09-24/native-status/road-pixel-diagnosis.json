@@ -1,0 +1,45 @@
+{
+  "method": "Offline exact RGBA comparison of saved original PNGs, plus full saved Line2 object records. Uniform road RGBA sampled from actual visible road at (790,150); this colour mask does not claim all antialiased edge pixels.",
+  "roadRGBA": [
+    176,
+    164,
+    142,
+    255
+  ],
+  "visibleRoadColourPixels": 13920,
+  "dimmedRoadColourPixels": 13920,
+  "maskSymmetricDifference": 0,
+  "changedAtBaselineRoadColourMask": 0,
+  "lineObjectCountBefore": 109,
+  "lineObjectCountDimmed": 109,
+  "lineObjectRecordsExactlyEqual": false,
+  "sample": {
+    "xy": [
+      790,
+      150
+    ],
+    "visible": [
+      176,
+      164,
+      142,
+      255
+    ],
+    "dimmed": [
+      176,
+      164,
+      142,
+      255
+    ]
+  },
+  "lineRecordDifferenceFields": {
+    "geometryId": 109
+  },
+  "lineObjectDrawingStateEqualExcludingGeometryId": true,
+  "roadRGBWithAllPositiveAlpha": {
+    "visiblePixels": 14886,
+    "dimmedPixels": 14886,
+    "changedRGBAAtMask": 0,
+    "maskSymmetricDifference": 0
+  },
+  "sourceCause": "TrailStrip in ForestWorldCanvas.tsx1258\u20131267 passes fixed #b0a48e and no legend state to Line; trails derive from stable ground at1700\u20131703. The109 geometry UUIDs change because TrailStrip maps a fresh points array and installed Drei Line.js22\u201336 memoizes geometry by that array; all remaining saved road drawing fields are exact."
+}
