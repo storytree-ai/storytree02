@@ -23,6 +23,8 @@
  * just resolves the referenced node and renames the unit.
  */
 
+import { randomUUID } from "node:crypto";
+
 import type { PhaseAuthor } from "@storytree/agent";
 import type { ReliabilityGate } from "@storytree/library";
 import type { Store } from "@storytree/storage-protocol";
@@ -57,6 +59,7 @@ import type { Envelope } from "./envelope.js";
 import {
   innerLoopRefusalEnvelope,
   liveBuildProgress,
+  preflightGuardedPaidBuild,
   preflightPaidBuild,
   readTestRevision,
   realConfigRefusal,
@@ -73,9 +76,12 @@ import {
   resolveVerdictStore,
 } from "@storytree/drive";
 import type {
+  BuildGuard,
+  BuildGuardFactory,
   BuildProgress,
   InnerLoopReadHandles,
   RealBuildArgs,
+  RealBuildResult,
   RevisionWrite,
   StoryRealNodeBuilder,
 } from "@storytree/drive";
@@ -154,8 +160,8 @@ export interface GateBuildDriverDeps {
   /**
    * ADR-0575 D1 / ADR-0576: the arc increment this gate attempt is filed under (`--increment <id>`).
    * A missing or blank id refuses as argument validation, before the prompt render or the decision
-   * sweep (ADR-0576 D1); a resolved id then passes the attempt-ledger policy after the sweep and
-   * before any spend, and the walk records under it.
+   * sweep (ADR-0576 D1); a resolved id then passes the attempt-ledger policy under the held run
+   * lease, before the prompt render, the sweep and any spend, and the walk records under it.
    */
   increment?: string | undefined;
   /**
@@ -180,6 +186,12 @@ export interface GateBuildDriverDeps {
    * `resolveStoryRealNodeBuilder` — the same default-by-identity the story chain uses).
    */
   realNodeBuilder?: StoryRealNodeBuilder | undefined;
+  /**
+   * The run-lease factory the drive acquires its gate-id lease from before the authoritative policy
+   * read or any spend. Production omits it and the public `sharedBuildGuardFactory` opens the shared
+   * store; hermetic callers always inject it.
+   */
+  buildGuardFactory?: BuildGuardFactory | undefined;
 }
 
 /**
@@ -351,9 +363,8 @@ export async function driveBuildTestsGate(
 
   // 5b. ADR-0576 D1: a missing or blank `--increment` is ARGUMENT VALIDATION — refused before the
   //     prompt render or the decision sweep, with no ledger or corpus touched beyond what the
-  //     resolver itself needs to name the refusal. The same preflight input serves this check and the
-  //     full preflight after the sweep (6c): the gate id is the unit, and a revision run pairs with a
-  //     live grant's kind (ADR-0576 D6).
+  //     resolver itself needs to name the refusal. The guarded preflight (6) then takes the same
+  //     inputs: the gate id is the unit, and a revision run pairs with a live grant's kind (ADR-0576 D6).
   const preflightInput = {
     incrementId: deps.increment,
     unitIds: [gate.id],
@@ -366,12 +377,39 @@ export async function driveBuildTestsGate(
     if (!missing.ok) return innerLoopRefusalEnvelope(missing.state);
   }
 
-  // 6. Assemble the live SDK leaf's per-phase system prompts from the Library (offline-safe — reads
-  //    the seed). Fail-loud before any spend; the offline driver test injects authorOverride, but the
-  //    prompts are still rendered (a missing red-builder/green-builder agent must refuse, not degrade).
   // Every leg past here can sit for minutes — name each one so a backgrounded drive's log tells
   // "slow but progressing" from "wedged on a precondition" (`diagnosis-honesty-arc`).
   const progress = deps.progress ?? liveBuildProgress();
+
+  // 6. The shared run lease on the GATE id (never the referenced build node's): the cheap increment
+  //    resolves first, then the lease is acquired, and only then is the authoritative attempt policy
+  //    folded — all before the prompt render, the decision sweep, the store, the worktree and the
+  //    leaf. The captured guard is held by the outer `finally` through every exit below.
+  const runId = `gate-real-${randomUUID()}`;
+  let buildGuard: BuildGuard | undefined;
+  try {
+  const admission = await progress.stage(
+    "inner-loop preflight (the increment and the attempt ledger, before any spend)",
+    () =>
+      preflightGuardedPaidBuild({
+        incrementId: deps.increment,
+        unitIds: [gate.id],
+        revise: testRevision !== undefined,
+        reads: deps.innerLoopReads,
+        runId,
+        factory: deps.buildGuardFactory,
+        acquired: (guard) => {
+          buildGuard = guard;
+        },
+      }),
+  );
+  if (!admission.ok) return admission.refusal;
+  const preflight = admission.preflight;
+  const heldGuard = buildGuard!;
+
+  // 6a. Assemble the live SDK leaf's per-phase system prompts from the Library (offline-safe — reads
+  //    the seed). Fail-loud before any spend; the offline driver test injects authorOverride, but the
+  //    prompts are still rendered (a missing red-builder/green-builder agent must refuse, not degrade).
   const rendered = await progress.stage(
     "library agent prompts (red-builder + green-builder, from the live store)",
     () => renderLeafPhasePrompts(deps.corpusStore),
@@ -392,14 +430,6 @@ export async function driveBuildTestsGate(
   if (!sweep.clear) {
     return { ok: false, body: blockedHaltReport(sweep), next: [retryCmd] };
   }
-
-  // 6c. ADR-0576 D1/D4-D6: the full increment + attempt-ledger preflight, now the sweep is clear but
-  //     before any spend (no DB brought up, no worktree cut, no SDK leaf).
-  const preflight = await progress.stage(
-    "inner-loop preflight (the increment and the attempt ledger, before any spend)",
-    () => preflightPaidBuild(preflightInput),
-  );
-  if (!preflight.ok) return innerLoopRefusalEnvelope(preflight.state);
 
   const phasePrompts = threadResolutions(rendered.prompts, sweep);
 
@@ -448,7 +478,6 @@ export async function driveBuildTestsGate(
     closeStore = storeChoice.close;
   }
 
-  const runId = `gate-real-${Date.now().toString(36)}`;
   let worktree: BuildWorktree | undefined;
   try {
     // The fresh detached worktree of this repo (the referenced node's real source at its real paths).
@@ -484,6 +513,10 @@ export async function driveBuildTestsGate(
           // id, and a named revision reaches this drive's AUTHOR_TEST brief.
           testRevision,
           escalationsDir,
+          // The drive's held lease is BORROWED by the walk (it never releases it), and its awaited
+          // checkpoint runs before each controlled step, outside advisory phase reporting.
+          buildGuard: heldGuard,
+          beforePhase: () => heldGuard.assertHeld(),
         };
         if (dbProofEnv !== undefined) realArgs.dbProofEnv = dbProofEnv;
         if (override !== undefined) realArgs.authorOverride = override;
@@ -494,7 +527,13 @@ export async function driveBuildTestsGate(
         realArgs.holdGraceMs = holdGrace.ms;
         return resolveStoryRealNodeBuilder(deps.realNodeBuilder)(realArgs);
       },
-    );
+    ).catch((err: unknown): RealBuildResult => {
+      // A walk that THROWS (a lost lease re-raised by the walk's activity observer on its way out,
+      // or any other builder fault) fails closed as an unsigned result — never an escaped throw that
+      // skips the report.
+      const reason = err instanceof Error ? err.message : String(err);
+      return { result: { ok: false, failedAt: "AUTHOR_TEST", reason, phasesVisited: [] } };
+    });
 
     const events = await store.readEvents();
     const derived = rollupStatus(gate.id, events);
@@ -556,6 +595,9 @@ export async function driveBuildTestsGate(
   } finally {
     if (worktree !== undefined) await worktree.remove();
     await closeStore();
+  }
+  } finally {
+    await buildGuard?.release();
   }
 }
 
