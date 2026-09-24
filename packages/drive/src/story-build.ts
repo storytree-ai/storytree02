@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 
 import type { LiveRuntime, PhaseAuthor } from "@storytree/agent";
@@ -56,8 +57,8 @@ import type { Envelope } from "./envelope.js";
 import {
   buildNodeReal,
   driveNode,
-  innerLoopRefusalEnvelope,
-  preflightPaidBuild,
+  preflightGuardedPaidBuild,
+  type BuildGuardFactory,
   readTestRevision,
   realConfigRefusal,
   renderForensicPreservation,
@@ -104,7 +105,7 @@ import type { EmitWispArgs, EmitWispDeps, GateEmitWispOpts } from "./wisp-smoke.
 import { staleExistenceClaimRefusal } from "./stale-existence-claim.js";
 import { resolveHoldsDir } from "./build-hold.js";
 import { chooseHoldGraceMs, chooseTimeBudgetMs } from "./time-budget.js";
-import type { BuildGuard, BuildGuardResult } from "./build-guard.js";
+import type { BuildGuard } from "./build-guard.js";
 
 /**
  * ADR-0082: the story's OWN UAT crown rolled up from its per-test signed verdicts, as a report line.
@@ -669,7 +670,7 @@ export interface StoryBuildOpts {
    */
   progress?: BuildProgress;
   /** Paid-entry seam: one lease for the story and all members it drives. */
-  buildGuardFactory?: (input: { runId: string; unitIds: readonly string[] }) => Promise<BuildGuardResult>;
+  buildGuardFactory?: BuildGuardFactory;
 }
 
 /** `storytree story build <story-id>` — the whole Phase-E walk, returned as one envelope. */
@@ -989,25 +990,23 @@ export async function storyBuild(
     testRevision = read.revision;
   }
 
+  const runId = real ? `story-real-${randomUUID()}` : `story-${mode}-${Date.now().toString(36)}`;
+  let buildGuard: BuildGuard | undefined;
+  try {
   let incrementId: string | undefined;
   // Stryker disable next-line ArrayDeclaration: EQUIVALENT — renderIncrementLines renders nothing while incrementId is undefined, and the one path that sets incrementId sets these warnings with it
   let incrementWarnings: readonly string[] = [];
   if (real) {
-    const preflightUnitIds = Array.from(new Set([story.id, ...driveOrder.map((n) => n.id)]));
-    const preflight = await progress.stage(
+    const preflightUnitIds = [...new Set([story.id, ...driveOrder.map((n) => n.id)])];
+    const admission = await progress.stage(
       "inner-loop preflight (the increment and the attempt ledger, before any spend)",
-      () =>
-        preflightPaidBuild({
-          incrementId: opts.increment,
-          unitIds: preflightUnitIds,
-          // ADR-0576 D6: a revision run pairs with a live grant's kind, exactly as on `node build`.
-          revise: testRevision !== undefined,
-          reads: opts.innerLoopReads,
-        }),
+      () => preflightGuardedPaidBuild({ incrementId: opts.increment, unitIds: preflightUnitIds,
+        revise: testRevision !== undefined, reads: opts.innerLoopReads, runId,
+        factory: opts.buildGuardFactory, acquired: (guard) => { buildGuard = guard; } }),
     );
-    if (!preflight.ok) return innerLoopRefusalEnvelope(preflight.state);
-    incrementId = preflight.incrementId;
-    incrementWarnings = preflight.warnings;
+    if (!admission.ok) return admission.refusal;
+    incrementId = admission.preflight.incrementId;
+    incrementWarnings = admission.preflight.warnings;
   }
 
   if (needsDb) {
@@ -1079,7 +1078,6 @@ export async function storyBuild(
   const claimStore = opts.claim?.store !== undefined ? opts.claim.store : storeChoice.claim;
   const claimIdentity = opts.identity !== undefined ? opts.identity : deriveIdentity();
 
-  const runId = `story-${mode}-${Date.now().toString(36)}`;
   // ADR-0130: no USD ceiling by default — `--budget` is opt-in. Unset → undefined → runStoryBuild
   // runs unbounded (the per-slice turn cap is the brake). A dry-run never carries a budget.
   const budgetUsd = live || real ? opts.budgetUsd : undefined;
@@ -1089,25 +1087,10 @@ export async function storyBuild(
   // worktree add`, or a `pnpm install` failure it tears down and rethrows), and a throw before this
   // try would leak the Cloud SQL pool for the process lifetime.
   let worktree: BuildWorktree | undefined;
-  let buildGuard: BuildGuard | undefined;
   /** Every claim this chain is holding, each tagged with whether its take CREATED the row or borrowed it. */
   let claimsHeld: HeldClaim[] = [];
   const claimCaller = `story build ${story.id} ${real ? "--real" : live ? "--live" : "--dry-run"}`;
   try {
-    if (real && opts.buildGuardFactory !== undefined) {
-      const acquired = await opts.buildGuardFactory({
-        runId,
-        unitIds: [...new Set([story.id, ...driveOrder.map((node) => node.id)])].sort(),
-      });
-      if (!acquired.ok) {
-        return {
-          ok: false,
-          body: `build lease refused for ${acquired.refusal.unitId}; held by ${acquired.refusal.holderRunId}`,
-          next: [],
-        };
-      }
-      buildGuard = acquired.guard;
-    }
     // Refuse a duplicate concurrent build of any MEMBER before cutting a worktree or spending
     // (ADR-0121) — the ENFORCING twin of presence, now at the grain the duplication actually happens
     // at. A sibling driving disjoint members of the same story is no longer refused (ADR-0270 D1).
@@ -1171,6 +1154,7 @@ export async function storyBuild(
     let innerLoop: InnerLoopRecording | undefined;
     // incrementId is set exactly when this is a REAL chain whose preflight passed above.
     if (incrementId !== undefined) {
+      await buildGuard!.assertHeld();
       try {
         await appendInnerLoopEvent(
           store,
@@ -1212,6 +1196,7 @@ export async function storyBuild(
       // could not distinguish a chain on its seventh node from one wedged on its first.
       buildNode: async (spec, index, remainingUsd) =>
         progress.stage(`node ${index + 1}/${driveOrder.length}: ${spec.id}`, async () => {
+          await buildGuard?.assertHeld();
           if (real) {
             // The REAL per-node build in the SHARED worktree (promote:false — the chain promotes once
             // at the end). Each node walks the full prove-it-gate, INCLUDING its own pre-signature
@@ -1247,10 +1232,9 @@ export async function storyBuild(
               // phase it stalled in.
               onPhase: (phase) => progress.note(phase),
             };
-            const heldBuildGuard = buildGuard;
-            if (heldBuildGuard !== undefined) {
-              realArgs.beforePhase = () => heldBuildGuard.assertHeld();
-            }
+            // REAL admission above guarantees this one held guard for every member.
+            realArgs.buildGuard = buildGuard!;
+            realArgs.beforePhase = () => buildGuard!.assertHeld();
             if (dbProofEnv !== undefined) realArgs.dbProofEnv = dbProofEnv;
             if (override !== undefined) realArgs.authorOverride = override;
             if (liveOverride !== undefined) realArgs.liveAuthorOverride = liveOverride;
@@ -1361,6 +1345,7 @@ export async function storyBuild(
         // CONCURRENTLY (bounded — the dev-box OOM trap; chain-backstop.ts). Latency-only: `anyRed`
         // is still the OR over every observation and the lines keep their order, so a red in ANY
         // package withholds the push exactly as the serial loop did.
+        await buildGuard!.assertHeld();
         const backstop = await progress.stage(
           // Stryker disable next-line StringLiteral: NOT OBSERVED BY DESIGN — a stage name is stderr liveness chatter; every hermetic chain test injects `silentBuildProgress` and asserts the envelope, never the chatter
           "chain-end push gate (package typecheck over the stacked HEAD)",
@@ -1381,6 +1366,7 @@ export async function storyBuild(
         // the push, so openPr can't fire on it.
         if (opts.openPr === true && !anyRed) promoteArgs.openPr = true;
         if (opts.prTitle !== undefined) promoteArgs.prTitle = opts.prTitle;
+        await buildGuard!.assertHeld();
         promotion = await promoteRealPass(promoteArgs);
         // ADR-0576 D7: a signed pass is recorded for the STORY only when the chain passed AND its
         // promotion ran UNWITHHELD — a withheld push is no landing candidate, and recording a pass
@@ -1389,6 +1375,7 @@ export async function storyBuild(
         // Stryker disable next-line ConditionalExpression,LogicalOperator: NOT OBSERVABLE HERMETICALLY — a REAL chain that reaches its promotion recorded its attempt above, so innerLoop is always set here, and these replacements differ only on a red chain-end push gate, which needs an install-bearing member (a real pnpm install in the chain's worktree) that no hermetic chain test drives
         if (!anyRed && innerLoop !== undefined) {
           const attemptIncrementId = innerLoop.incrementId;
+          await buildGuard!.assertHeld();
           try {
             await appendInnerLoopEvent(
               store,
@@ -1404,6 +1391,7 @@ export async function storyBuild(
       } else if (!run.passed) {
         // HALT with a proven prefix: park LOCAL-ONLY (preservation over loss, ADR-0031), NEVER
         // pushed — a partial story is never a landing candidate (no `gh pr create` next-line below).
+        await buildGuard!.assertHeld();
         promotion = await promoteRealPass({
           repoRoot: rootDir,
           unitId: story.id,
@@ -1667,7 +1655,6 @@ export async function storyBuild(
       ],
     };
   } finally {
-    if (buildGuard !== undefined) await buildGuard.release();
     // Put down the member claims (ADR-0121) — but ONLY the rows this chain's own takes created; one
     // the launching session already held was borrowed, not taken, so the chain leaves it (else the
     // session's declaration silently vanishes across its own builds — the ADR-0199 class). Reported
@@ -1684,6 +1671,9 @@ export async function storyBuild(
     }
     if (worktree !== undefined) await worktree.remove();
     await storeChoice.close();
+  }
+  } finally {
+    await buildGuard?.release();
   }
 }
 
