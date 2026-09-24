@@ -35,6 +35,7 @@ import type { InstanceDescriptor, Descriptor3D } from './world-to-3d.js';
 import type { ForestRegrowPresentation } from './ForestWorldCanvas.regrow.js';
 import { islandGrowthProgress, regrowTrailPoints } from './ForestWorldCanvas.causal.js';
 import {
+  SHIPPED_ELEVATION_DEG,
   frameWorld,
   orthographicZoomFor,
   restingWorldFraming,
@@ -83,6 +84,8 @@ import { CONTACT_SPREAD, SHADOW_CONTACT_BAND, type ContactBand } from './contact
 import { SHADOW_DEPTH, SHADOW_EDGE, type ShadowDepthOptions } from './shadow-rung.js';
 import { kitMeshes, loadEmbeddedKit, roleFootprints, roleHeights, type LoadedKit } from './kit-mesh.js';
 import { deriveKitStatusPresentation } from './kit-status-presentation.js';
+import type { NativePropHitEnvelope } from './native-prop-hit-projection.js';
+import { nativePropTargets } from './native-prop-targets.js';
 import {
   KIT_FOOTPRINTS_2026_08_29,
   KIT_HEIGHTS_2026_08_29,
@@ -1162,14 +1165,28 @@ function KitProps({
   islandByPlacement,
   layout,
   growth,
+  targets,
+  onTargets,
 }: {
   placements: readonly KitPlacement[];
   alphaByPlacement: ReadonlyMap<KitPlacement, number>;
   islandByPlacement: GroundInput['islandByPlacement'];
   layout: GroundInput['growthLayout'];
   growth: GrowthTexture;
+  targets: readonly NativePropHitEnvelope[] | null;
+  onTargets: ((targets: readonly NativePropHitEnvelope[]) => void) | undefined;
 }) {
   const [loaded, setLoaded] = useState<LoadedKit | null>(null);
+  // THE TARGETS ARE OFFERED ONLY WHILE THE PLANTS THEY STAND FOR ARE DRAWN: not before the kit has
+  // loaded, not after a kit failure, and withdrawn when this layer unmounts. A host target over a
+  // plant nobody can see would select something invisible.
+  useEffect(() => {
+    if (loaded === null || targets === null || onTargets === undefined) return undefined;
+    onTargets(targets);
+    return () => {
+      onTargets(NO_TARGETS);
+    };
+  }, [loaded, targets, onTargets]);
   useEffect(() => {
     let live = true;
     // A kit that fails to parse must not take the MAP down with it: the ground is the thing that
@@ -1327,6 +1344,14 @@ export interface ForestWorldCanvasProps {
    * composition would change what every comparison page in `harness/` measures.
    */
   viewport?: FramingViewport;
+  /**
+   * THE HOST'S CLICK TARGETS FOR THE NATIVE PLANTS — data handed out, never a picker. Called with
+   * every attributed tree, dead tree and coverage plant as a projected hit envelope (host drawing
+   * space, back to front) once the props are actually drawn, and with an empty list when they stop
+   * being drawn. The canvas stays pointer-inert; the host renders the targets into its own layer
+   * and keeps its own hit-test and select route. Pass a STABLE function.
+   */
+  onNativePropTargets?: (targets: readonly NativePropHitEnvelope[]) => void;
   /**
    * REGISTERED-UNDERLAY MODE — present ⇒ this canvas is the LAND BENEATH A HOST'S OWN
    * INTERACTIVE LAYER, and the host owns the camera.
@@ -1594,6 +1619,7 @@ function GrowthTextureUpload({ growth, values }: { growth: GrowthTexture; values
 }
 
 const NO_HIDDEN_STATUSES: ReadonlySet<string> = new Set();
+const NO_TARGETS: readonly NativePropHitEnvelope[] = Object.freeze([]);
 
 /**
  * The minimal R3F canvas of the spike: descriptors → placeholder meshes under drei
@@ -1609,6 +1635,7 @@ export function ForestWorldCanvas({
   viewport,
   registered,
   regrow,
+  onNativePropTargets,
 }: ForestWorldCanvasProps) {
   const [documentVisible, setDocumentVisible] = useState(
     () => typeof document === 'undefined' || document.visibilityState === 'visible',
@@ -1679,6 +1706,13 @@ export function ForestWorldCanvas({
     foldedStatusByIslandCapability,
     hiddenStatuses,
   }), [foldedStatusByIslandCapability, ground, hiddenStatuses]);
+  // The host's click targets for the SAME placements the props draw, projected at this canvas's own
+  // elevation. Keyed on the ground and its status sidecar only, so legend toggles, clock ticks and
+  // wisp-only polls never re-derive them. Nothing is computed for a host that did not ask.
+  const targets = useMemo(
+    () => (onNativePropTargets === undefined ? null : nativePropTargets(ground, foldedStatusByIslandCapability, SHIPPED_ELEVATION_DEG)),
+    [foldedStatusByIslandCapability, ground, onNativePropTargets],
+  );
   // The presentation is already wall-clock derived by the app.  This merely uploads its current
   // values into the stable island table; it owns neither a frame loop nor a second schedule.
   const growth = useMemo(() => createGrowthTexture(ground.growthLayout.size + 1), [ground]);
@@ -1756,6 +1790,8 @@ export function ForestWorldCanvas({
           islandByPlacement={ground.islandByPlacement}
           layout={ground.growthLayout}
           growth={growth}
+          targets={targets}
+          onTargets={onNativePropTargets}
         />
       )}
       {compose.trails &&

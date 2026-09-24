@@ -38,6 +38,7 @@ import {
   type Descriptor3D,
   type ForestRegrowCursor,
   type ForestRegrowPresentation,
+  type NativePropHitEnvelope,
 } from '@storytree/forest-world-r3f';
 import type { RegisteredUnderlay } from '@storytree/forest-world-r3f/canvas';
 
@@ -55,6 +56,8 @@ export interface LandMountCanvasProps {
   regrow: ForestRegrowPresentation | null;
   /** Whether the host route is active. The registered canvas handles parking. */
   active: boolean;
+  /** The host's receiver for the native plants' click targets; absent ⇒ none are computed. */
+  onNativePropTargets?: (targets: readonly NativePropHitEnvelope[]) => void;
 }
 
 /** The real canvas, in its own chunk — the same chunk `LandView` loads, so opening both costs one. */
@@ -63,10 +66,17 @@ const ForestWorldCanvas = lazy(async () => {
   return { default: mod.ForestWorldCanvas };
 });
 
-function DefaultMountCanvas({ descriptors, hiddenStatuses, registered, regrow, active }: LandMountCanvasProps) {
+function DefaultMountCanvas({ descriptors, hiddenStatuses, registered, regrow, active, onNativePropTargets }: LandMountCanvasProps) {
   return (
     <Suspense fallback={null}>
-      <ForestWorldCanvas descriptors={descriptors} hiddenStatuses={hiddenStatuses} registered={registered} regrow={regrow} active={active} />
+      <ForestWorldCanvas
+        descriptors={descriptors}
+        hiddenStatuses={hiddenStatuses}
+        registered={registered}
+        regrow={regrow}
+        active={active}
+        {...(onNativePropTargets === undefined ? {} : { onNativePropTargets })}
+      />
     </Suspense>
   );
 }
@@ -93,6 +103,12 @@ export interface LandViewMountProps {
   active?: boolean;
   /** Draw the kit props as well as the ground — the staging arm, off by default. */
   drawProps?: boolean;
+  /**
+   * Receives the native plants' click targets while the props arm is drawn (and an empty list when
+   * it stops), for the host to render into its OWN hit layer. The canvas stays inert: this is data,
+   * never a second picker. Must be a stable function.
+   */
+  onNativePropTargets?: (targets: readonly NativePropHitEnvelope[]) => void;
   /** The canvas seam, so the mount is provable in jsdom. Absent ⇒ the real, lazily-loaded one. */
   renderCanvas?: (props: LandMountCanvasProps) => React.ReactNode;
 }
@@ -149,6 +165,7 @@ export function LandViewMount({
   regrowCursor = null,
   active = true,
   drawProps = false,
+  onNativePropTargets,
   renderCanvas = DefaultMountCanvas,
 }: LandViewMountProps): React.JSX.Element {
   const [ref, frame] = useMeasuredFrame();
@@ -179,7 +196,14 @@ export function LandViewMount({
     const withProps: RegisteredUnderlay = drawProps ? { ...registeredProps, props: true } : registeredProps;
     return {
       state: 'drawn' as const,
-      node: renderCanvas({ descriptors: stream.descriptors, hiddenStatuses, registered: withProps, regrow, active }),
+      node: renderCanvas({
+        descriptors: stream.descriptors,
+        hiddenStatuses,
+        registered: withProps,
+        regrow,
+        active,
+        ...(onNativePropTargets === undefined ? {} : { onNativePropTargets }),
+      }),
     };
   })();
 

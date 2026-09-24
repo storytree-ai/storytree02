@@ -204,9 +204,11 @@ import {
   deriveForestRegrowAccretionPlans,
   deriveIslandVegetationPlans,
   WorldSceneView,
+  type NativePropTargetRenderLayer,
   type WorldPresentationEvents,
   type WorldPresentationModel,
 } from '@storytree/app-surface';
+import type { NativePropHitEnvelope } from '@storytree/forest-world-r3f';
 import { parseStyleSheet, type SpriteStyleSheet } from '../lib/sprite-sheet.js';
 import { SemanticGrowthDemo } from './SemanticGrowthDemo.js';
 import {
@@ -1315,6 +1317,9 @@ function layoutSubdag(story: TreeStory): SubLayout {
 // at all (not merely a stub returning null — the property is simply absent), so guard it in exactly
 // the same defensive spirit as the existing `typeof document === 'undefined'` check: a genuine DOM
 // always has the real method and this is a no-op there.
+/** The empty native-target list, one frozen identity so an idle map re-renders nothing. */
+const NO_NATIVE_TARGETS: readonly NativePropHitEnvelope[] = Object.freeze([]);
+
 if (typeof document !== 'undefined' && typeof document.elementFromPoint !== 'function') {
   document.elementFromPoint = () => null;
 }
@@ -2902,6 +2907,18 @@ export function TreeView({
   const onStampClickStable = useCallback((id: string): void => {
     setHighlightShared(id);
   }, []);
+  // THE NATIVE PLANTS' CLICK TARGETS (ADR-0608). The mounted canvas hands its projected plant
+  // envelopes up once the props are drawn; they join the scene walk as this map's OWN hit layer, so
+  // the coordinate hit-test and the per-node click keep one picking authority. Only under the mount,
+  // and only while the canvas actually reports plants.
+  const [nativePropTargets, setNativePropTargets] = useState<readonly NativePropHitEnvelope[]>(NO_NATIVE_TARGETS);
+  const nativePropTargetLayer = useMemo<NativePropTargetRenderLayer | null>(
+    () =>
+      landMount && world && nativePropTargets.length > 0
+        ? { origin: world.offset, targets: nativePropTargets }
+        : null,
+    [landMount, world, nativePropTargets],
+  );
   const worldPresentationModel = useMemo<WorldPresentationModel | null>(
     () =>
       scene
@@ -2919,10 +2936,12 @@ export function TreeView({
             artScale,
             forestRegrowLayer: act2RegrowLayer,
             vegetationLayer,
+            nativePropTargetLayer,
           })
         : null,
     [
       scene,
+      nativePropTargetLayer,
       selectedStory,
       hidden,
       arrivalIds,
@@ -3215,6 +3234,7 @@ export function TreeView({
               drawProps={landMountProps}
               regrowCursor={act2Player.regrowing ? act2Player.state : null}
               active={active}
+              onNativePropTargets={setNativePropTargets}
             />
           )}
           <svg

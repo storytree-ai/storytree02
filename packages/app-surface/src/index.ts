@@ -76,6 +76,12 @@ export {
   type WorldPresentationModelInput,
 } from './WorldSceneView.js';
 export {
+  nativePropTargetRects,
+  type NativePropTarget,
+  type NativePropTargetRect,
+  type NativePropTargetRenderLayer,
+} from './native-prop-targets.js';
+export {
   parseStyleSheet,
   resolveSprite,
   spriteKeyFor,

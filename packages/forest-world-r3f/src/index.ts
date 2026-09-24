@@ -119,3 +119,5 @@ export {
   projectNativePropHitEnvelope,
   type NativePropHitEnvelope,
 } from './native-prop-hit-projection.js';
+
+export { nativePropTargets } from './native-prop-targets.js';

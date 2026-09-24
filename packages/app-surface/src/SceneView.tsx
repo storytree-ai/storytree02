@@ -37,6 +37,7 @@ import type {
 import type { VegetationRender } from './island-vegetation-growth.js';
 import type { VegetationRenderLayer } from './vegetation-render.js';
 import { organicLayerBox } from './land-camera.js';
+import { nativePropTargetRects, type NativePropTargetRenderLayer } from './native-prop-targets.js';
 
 export interface OrganicPoseRenderLayer {
   readonly trackId: string;
@@ -168,6 +169,10 @@ export interface SceneCtx {
   vegetationLayer?: VegetationRenderLayer | null;
   /** Registered organic pose images planted into the canonical world painter order. */
   organicPoseLayers?: readonly OrganicPoseRenderLayer[] | null;
+  /** The mounted 3D plants' click targets (`native-prop-targets.ts`), painted after the roads and
+   *  before the flora layer — so a 3D crown wins over the ground and roads behind it, while the
+   *  nameplates, signposts and wisps in the flora layer stay on top. Absent/null ⇒ nothing drawn. */
+  nativePropTargetLayer?: NativePropTargetRenderLayer | null;
   /** INTERNAL (set by `SceneView` itself, never by TreeView): per-scene `baked-def` geometry bounds,
    *  so a `baked-use` hero (the ADR-0227 status trees, the garden cottage/gazebo) sizes from its real
    *  def geometry. Memoized once per scene in the component below. */
@@ -1403,6 +1408,9 @@ function renderNode(
       if (node.kind === 'world' && c.kind === 'trails-layer' && ctx.organicPoseLayers) {
         rendered.push(...ctx.organicPoseLayers.map(organicPoseImage));
       }
+      if (node.kind === 'world' && c.kind === 'trails-layer' && ctx.nativePropTargetLayer) {
+        rendered.push(nativePropTargetGroup(ctx.nativePropTargetLayer, ctx));
+      }
     });
     if (node.kind === 'tree' || node.kind === 'flora' || node.kind === 'plate') {
       // Motion-safe inner wrapper (semantic-growth.css `arrive-pop`): `tree`/`flora`/`plate` are
@@ -1432,6 +1440,40 @@ function renderNode(
   // `<use>`, ADR-0218); every other node keeps its own element name.
   const elName = node.el === 'g' && node.kind === 'baked-defs' ? 'defs' : node.el;
   return React.createElement(elName, props, ...kids);
+}
+
+/**
+ * The native plants' targets as transparent, HITTABLE rects: `fill="transparent"` is painted for
+ * `pointer-events: visiblePainted`, so each one is found by the host's coordinate hit-test and by a
+ * clean click alike. Each carries the ids that hit-test reads, and its own click selects the
+ * capability through the same `onSelectCap` route a parcel uses.
+ */
+function nativePropTargetGroup(layer: NativePropTargetRenderLayer, ctx: SceneCtx): React.ReactNode {
+  const rects = nativePropTargetRects(layer, {
+    hiddenStoryIds: ctx.forestRegrowLayer?.hiddenStoryIds ?? null,
+    hiddenStatuses: ctx.hidden,
+  });
+  return React.createElement(
+    'g',
+    { key: '__native-prop-targets', className: 'native-prop-targets', 'aria-hidden': true },
+    ...rects.map((rect) =>
+      React.createElement('rect', {
+        key: rect.key,
+        className: rect.className,
+        x: fmt(rect.x),
+        y: fmt(rect.y),
+        width: fmt(rect.width),
+        height: fmt(rect.height),
+        fill: 'transparent',
+        'data-story-id': rect.storyId,
+        'data-cap-id': rect.capabilityId,
+        onClick: (e: React.MouseEvent) => {
+          e.stopPropagation();
+          ctx.onSelectCap(rect.storyId, rect.capabilityId);
+        },
+      }),
+    ),
+  );
 }
 
 /**
