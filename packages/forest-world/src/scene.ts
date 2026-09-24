@@ -280,8 +280,9 @@ export interface SceneNodeBase {
    *  `theme-<t>` class so meadow / woodland / heath flora read as distinct country. Carried on the
    *  `parcel-flora` item group; the colour itself stays CSS-side (ADR-0093 §4). */
   theme?: SurfaceTheme;
-  /** The absolute ground-space pivot for a coverage-flora item's tile-art scale. Carried only by
-   *  `parcel-flora`, so consumers need not reverse-engineer the SVG pivot transform. */
+  /** The containing-scene-basis pivot for a coverage-flora item's tile-art scale. Carried only by
+   *  `parcel-flora`, so consumers need not reverse-engineer the SVG pivot transform; a downstream
+   *  mapper composes ancestor translation once to obtain its world position. */
   groundAnchor?: Pt;
   /** The tile-art scale applied about {@link groundAnchor}. Carried only by `parcel-flora`. */
   floraScale?: number;
@@ -1874,8 +1875,8 @@ function parcelGround(cells: ParcelCell[], status: SceneStatus, rand: () => numb
 // function consumes `rand` in the DESIGNER's exact order, so it stays pure + deterministic (the
 // scene determinism test enforces identical output for identical input).
 
-/** Wrap a theme's absolute-coord marks as one placed `parcel-flora` item at painter-anchor `y`. The
- *  capId is stamped later (in `buildTerritorySurface`, where the parcel identity is known). */
+/** Wrap a theme's containing-scene-basis marks as one placed `parcel-flora` item at painter-anchor
+ *  `y`. The capId is stamped later (in `buildTerritorySurface`, where the parcel identity is known). */
 /**
  * THE PARCEL FLORA'S DRAWING SCALE (ADR-0528 D2) — the designer surfaces (`meadow.js` / `woodland.js`
  * / `heath.js`) draw their marks in ABSOLUTE coordinates around each drift-bed spot, at sizes judged

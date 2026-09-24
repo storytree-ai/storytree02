@@ -2,7 +2,18 @@
   "sourceOwnership": {
     "subtrees": {
       "packages/cli/src/*ground-space*.ts": "render-core",
-      "packages/forest-world/src": "render-core"
+      "packages/forest-world/src/camera.ts": "render-core",
+      "packages/forest-world/src/coast.ts": "render-core",
+      "packages/forest-world/src/hex.ts": "render-core",
+      "packages/forest-world/src/index.ts": "render-core",
+      "packages/forest-world/src/ranking.ts": "render-core",
+      "packages/forest-world/src/resting-view.ts": "render-core",
+      "packages/forest-world/src/rng.ts": "render-core",
+      "packages/forest-world/src/routing.ts": "render-core",
+      "packages/forest-world/src/scene-fixture.ts": "render-core",
+      "packages/forest-world/src/scene.ts": "render-core",
+      "packages/forest-world/src/sizing.ts": "render-core",
+      "packages/forest-world/src/substrate.ts": "render-core"
     }
   }
 }
