@@ -76,7 +76,9 @@ try {
     page.on('console', (m) => { if (m.type() === 'error') receipt.arms[arm].errors.push(m.text()); });
     const shot = async (file, surface, extra = {}, opts = {}) => {
       const p = path.join(out, file);
-      if (opts.locator) await page.locator(opts.locator).screenshot({ path: p }); else await page.screenshot({ path: p, ...(opts.clip ? { clip: opts.clip } : {}) });
+      const options = { path: p };
+      if (opts.clip) options.clip = opts.clip;
+      if (opts.locator) await page.locator(opts.locator).screenshot({ path: p }); else await page.screenshot(options);
       receipt.shots.push({ arm, surface, file, sha256: sha(p), ...extra });
     };
     const landSettled = (sel) => hasLand
