@@ -23,9 +23,17 @@ import { act, render, cleanup, fireEvent, within } from '@testing-library/react'
 
 import { AppDataContext, type AppData } from '../lib/appData';
 import { HttpDouble, installHttpDouble } from '../test/httpDouble';
-import { TreeView, StudioSurfacesContext, type StudioSurfaces } from './TreeView';
+import { TreeView, StudioSurfacesContext, Act2ChoreographyContext, type Act2Choreography, type StudioSurfaces } from './TreeView';
 import { LandViewMount, type LandMountCanvasProps, type LandViewMountProps } from './LandViewMount';
-import { ACT2_INTRO_SESSION_KEY, markAct2IntroArrived } from './act2Intro';
+import {
+  ACT2_INTRO_SESSION_KEY,
+  markAct2IntroArrived,
+  useAct2Intro,
+  useStableForestRegrowLayer,
+  useStableVegetationLayer,
+  type Act2IntroPlayer,
+} from './act2Intro';
+import type { LandCanvasPhase } from '../lib/landViewStatus';
 
 // Two stories with a declared edge between them — a slightly more honest forest than one story, and
 // more markup for the byte-identity test to compare. ⚠ It does NOT make trails appear in this
@@ -616,5 +624,187 @@ describe('the land under the working map', () => {
     // The ordering above is scoped to `.has-land-mount` precisely so the ordinary map is untouched.
     const css = readStudioCss();
     expect(/\n\.world-scene\s*\{([^}]*)\}/.exec(css)![1]!).not.toMatch(/z-index|position/);
+  });
+});
+
+// ── THE OPENING (the-3d-map-opens-on-its-first-growth, ADR-0608 D1a) ──
+//
+// The first arrival's regrow used to start the moment the flat scene could accrete — seconds before
+// the 3D land could draw — so a member watched blank cream, then stray flat specks and a lone island
+// name, and the land popped in a third grown. The START anchor now waits for the mounted land to
+// settle its first status (ready, or a terminal can't-draw). Only the START moves: once running,
+// the cursor is the same wall-clock anchor it always was (ADR-0469), so an unwatched gap AFTER the
+// start still catches up.
+describe('the opening waits for the land it grows on', () => {
+  /** The injected app clock: the wall time it reports, and the one frame callback it is holding. */
+  interface OpeningClock {
+    now: number;
+    next: ((t: number) => void) | null;
+  }
+
+  interface OpeningHarness {
+    readonly players: Act2IntroPlayer[];
+    readonly phases: ((phase: LandCanvasPhase) => void)[];
+    readonly clock: OpeningClock;
+    readonly frame: (ms: number) => void;
+    readonly idle: (ms: number) => void;
+    readonly restore: () => void;
+  }
+
+  function openingHarness(): OpeningHarness {
+    window.sessionStorage.removeItem(ACT2_INTRO_SESSION_KEY);
+    const originalRect = Element.prototype.getBoundingClientRect;
+    const originalRO = Object.getOwnPropertyDescriptor(globalThis, 'ResizeObserver');
+    class RO {
+      constructor(private readonly callback: () => void) {}
+      observe() { this.callback(); }
+      disconnect() {}
+    }
+    Object.defineProperty(globalThis, 'ResizeObserver', { configurable: true, writable: true, value: RO });
+    Element.prototype.getBoundingClientRect = function getBoundingClientRect() {
+      return { x: 0, y: 0, left: 0, top: 0, right: 1600, bottom: 900, width: 1600, height: 900, toJSON: () => ({}) } as DOMRect;
+    };
+    const clock: OpeningClock = { now: 0, next: null };
+    const players: Act2IntroPlayer[] = [];
+    const phases: ((phase: LandCanvasPhase) => void)[] = [];
+    return {
+      players,
+      phases,
+      clock,
+      frame: (ms) => {
+        clock.now += ms;
+        const cb = clock.next;
+        clock.next = null;
+        if (cb) act(() => cb(clock.now));
+      },
+      idle: (ms) => {
+        clock.now += ms;
+      },
+      restore: () => {
+        cleanup();
+        window.sessionStorage.removeItem(ACT2_INTRO_SESSION_KEY);
+        Element.prototype.getBoundingClientRect = originalRect;
+        if (originalRO) Object.defineProperty(globalThis, 'ResizeObserver', originalRO);
+        else Reflect.deleteProperty(globalThis, 'ResizeObserver');
+      },
+    };
+  }
+
+  async function renderOpening(search: string, h: OpeningHarness): Promise<void> {
+    const choreography: Act2Choreography = {
+      useReducedMotion: () => false,
+      useAct2Intro: (input) => {
+        const player = useAct2Intro({
+          ...input,
+          clock: {
+            requestFrame: (callback) => {
+              h.clock.next = callback;
+              return 1;
+            },
+            cancelFrame: () => {
+              h.clock.next = null;
+            },
+            now: () => h.clock.now,
+          },
+        });
+        h.players.push(player);
+        return player;
+      },
+      useStableForestRegrowLayer,
+      useStableVegetationLayer,
+    };
+    const surfaces: Partial<StudioSurfaces> = {
+      LandViewMount: (props) => (
+        <LandViewMount
+          {...props}
+          renderCanvas={(canvas) => {
+            h.phases.push(canvas.onPhase);
+            return <div data-testid="native-canvas-slot" />;
+          }}
+        />
+      ),
+    };
+    window.history.replaceState(null, '', `/${search}`);
+    render(
+      <Act2ChoreographyContext.Provider value={choreography}>
+        <StudioSurfacesContext.Provider value={surfaces}>
+          <AppDataContext.Provider value={appData}>
+            <TreeView focus={null} />
+          </AppDataContext.Provider>
+        </StudioSurfacesContext.Provider>
+      </Act2ChoreographyContext.Provider>,
+    );
+    await act(async () => {});
+  }
+
+  it('holds the first growth at NOTHING until the 3D land is ready, then starts it from its first moment', async () => {
+    const h = openingHarness();
+    try {
+      await renderOpening('?landMount=1&landMountProps=1', h);
+      // The scene exists and the plan is derived — this is exactly the moment the old start fired.
+      expect(h.phases.length).toBeGreaterThan(0);
+      const waiting = h.players.at(-1)!;
+      expect(waiting.plan).not.toBeNull();
+      expect(waiting.playing).toBe(false);
+      expect(waiting.progress).toBe(0);
+      // Time passes while the renderer downloads and warms up. None of it is growth.
+      h.idle(8000);
+      await act(async () => {});
+      expect(h.players.at(-1)!.playing).toBe(false);
+      expect(h.players.at(-1)!.progress).toBe(0);
+
+      act(() => h.phases.at(-1)!({ kind: 'ready' }));
+      await act(async () => {});
+      const started = h.players.at(-1)!;
+      expect(started.playing).toBe(true);
+      // The START anchor is the ready moment: the 8 s of loading are not in the cursor.
+      expect(started.progress).toBe(0);
+      const duration = started.plan!.durationMs;
+      // …and from there it is the SAME wall-clock anchor (ADR-0469): an unwatched gap after the
+      // start is time that passed, caught up on the next frame, never paused.
+      // The default dial is 0.25× (ADR-0286), so one plan-duration of wall time is a quarter of the run.
+      // Anchored at page start instead, the 8 s of loading would be in this number too.
+      h.idle(duration - 16);
+      h.frame(16);
+      expect(h.players.at(-1)!.progress).toBeCloseTo(0.25, 6);
+    } finally {
+      h.restore();
+    }
+  });
+
+  it('starts anyway when this browser cannot draw the land — a notice, never a forest held at nothing', async () => {
+    const h = openingHarness();
+    try {
+      await renderOpening('?landMount=1&landMountProps=1', h);
+      expect(h.players.at(-1)!.playing).toBe(false);
+      act(() => h.phases.at(-1)!({ kind: 'unsupported' }));
+      await act(async () => {});
+      expect(h.players.at(-1)!.playing).toBe(true);
+    } finally {
+      h.restore();
+    }
+  });
+
+  it('starts anyway when the land FAILS to load', async () => {
+    const h = openingHarness();
+    try {
+      await renderOpening('?landMount=1&landMountProps=1', h);
+      act(() => h.phases.at(-1)!({ kind: 'failed', reason: 'the 3D code did not download' }));
+      await act(async () => {});
+      expect(h.players.at(-1)!.playing).toBe(true);
+    } finally {
+      h.restore();
+    }
+  });
+
+  it('waits for nothing without the mount flag — the shipped map opens exactly as before', async () => {
+    const h = openingHarness();
+    try {
+      await renderOpening('', h);
+      expect(h.phases).toHaveLength(0);
+      expect(h.players.at(-1)!.playing).toBe(true);
+    } finally {
+      h.restore();
+    }
   });
 });
