@@ -74,6 +74,7 @@ export {
   parseCodexJsonl,
   runPinnedCodexCli,
 } from "./codex-author.js";
+export { createCodexReplicaActivityReader } from "./codex-replica-activity.js";
 
 export type { WorkerTimeBudget, WorkerBoundClock } from "./worker-budget.js";
 // ADR-0587: the choice seam. The SPINE builds the parameter (it is the only side that knows what
