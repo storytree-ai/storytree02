@@ -1,0 +1,97 @@
+{
+  "threshold": 24,
+  "framings": {
+    "rest": {
+      "groundPixels": {
+        "all": 135896,
+        "yellow": 16283,
+        "green": 119613
+      },
+      "coveredPixels": {
+        "flat": {
+          "all": 9722,
+          "yellow": 1120,
+          "green": 8602
+        },
+        "w8": {
+          "all": 20871,
+          "yellow": 3309,
+          "green": 17562
+        },
+        "corrected": {
+          "all": 9200,
+          "yellow": 1461,
+          "green": 7739
+        }
+      },
+      "shareOfGround": {
+        "flat": {
+          "all": 0.0715,
+          "yellow": 0.0688,
+          "green": 0.0719
+        },
+        "w8": {
+          "all": 0.1536,
+          "yellow": 0.2032,
+          "green": 0.1468
+        },
+        "corrected": {
+          "all": 0.0677,
+          "yellow": 0.0897,
+          "green": 0.0647
+        }
+      },
+      "inkPerGroundPixel": {
+        "flat": 5.91,
+        "w8": 15.69,
+        "corrected": 6.63
+      }
+    },
+    "zoom": {
+      "groundPixels": {
+        "all": 286773,
+        "yellow": 45538,
+        "green": 241235
+      },
+      "coveredPixels": {
+        "flat": {
+          "all": 16041,
+          "yellow": 1673,
+          "green": 14368
+        },
+        "w8": {
+          "all": 47030,
+          "yellow": 8118,
+          "green": 38912
+        },
+        "corrected": {
+          "all": 19798,
+          "yellow": 2955,
+          "green": 16843
+        }
+      },
+      "shareOfGround": {
+        "flat": {
+          "all": 0.0559,
+          "yellow": 0.0367,
+          "green": 0.0596
+        },
+        "w8": {
+          "all": 0.164,
+          "yellow": 0.1783,
+          "green": 0.1613
+        },
+        "corrected": {
+          "all": 0.069,
+          "yellow": 0.0649,
+          "green": 0.0698
+        }
+      },
+      "inkPerGroundPixel": {
+        "flat": 4.77,
+        "w8": 17.07,
+        "corrected": 6.97
+      }
+    }
+  }
+}
