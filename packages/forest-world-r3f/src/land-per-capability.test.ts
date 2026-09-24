@@ -369,13 +369,13 @@ test('⚠ the whole stream follows the island: a bloom scales about its own isla
   assert.deepEqual(caveOut.transform, { x: 60, y: 0, z: 30 });
   assert.ok(Math.abs((caveOut.bearing as number) - 0.7) < 1e-12, 'isotropic: the rim normal does not turn');
   // a's coast at x = 70 is now at 60 (20 from a's centre, halved); b's coast at x = 240 stays (factor 1).
-  // The ribbon's first end shifts by −10, its last by 0, and the midpoint blends the two islands'
-  // displacements OF ITSELF by arc length: ½·(155 − 50)·(−½) + ½·(155 − 250)·0 = −26.25.
+  // The midpoint at 155 is 105 from a — past a's reach (20√2) and its band (one reach) — so it is
+  // open ground and stays exactly where the drawing put it.
   assert.ok(Math.abs(stripOut.points![0]!.x - 60) < 1e-9);
   assert.ok(Math.abs(stripOut.points![2]!.x - 240) < 1e-9);
-  assert.ok(Math.abs(stripOut.points![1]!.x - 128.75) < 1e-9, `the midpoint: ${stripOut.points![1]!.x}`);
+  assert.equal(stripOut.points![1]!.x, 155, `the midpoint: ${stripOut.points![1]!.x}`);
   assert.ok(stripOut.points!.every((q) => q.z === 30), 'nothing moved along z');
-  // The ribbon's transform moves by the MEAN of its points' shifts: (−10 − 26.25 + 0) / 3.
-  assert.ok(Math.abs(stripOut.transform.x - (155 - 36.25 / 3)) < 1e-9, `${stripOut.transform.x}`);
+  // The ribbon's transform moves by the MEAN of its points' shifts: (−10 + 0 + 0) / 3.
+  assert.ok(Math.abs(stripOut.transform.x - (155 - 10 / 3)) < 1e-9, `${stripOut.transform.x}`);
   assert.equal(stripOut.transform.z, 30);
 });

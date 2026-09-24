@@ -1,0 +1,23 @@
+{
+  "base": "http://127.0.0.1:18731",
+  "tag": "now",
+  "capturedAt": "2026-09-24T21:06:07.576Z",
+  "browser": "148.0.7778.96",
+  "surfaces": {
+    "forest": {
+      "segments": 117,
+      "onScreen": 79,
+      "undrawn": 45,
+      "edges": 90,
+      "edgesBroken": 74
+    },
+    "entry": {
+      "segments": 117,
+      "onScreen": 75,
+      "undrawn": 54,
+      "edges": 90,
+      "edgesBroken": 71
+    }
+  },
+  "webgl": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)"
+}
