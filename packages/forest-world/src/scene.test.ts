@@ -1186,7 +1186,7 @@ test('rc-coverage-flora-carries-semantic-ground-anchor-and-scale: every coverage
     const match = /^translate\((-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?)\) scale\((-?\d+(?:\.\d+)?)\) translate\(-?\d+(?:\.\d+)? -?\d+(?:\.\d+)?\)$/.exec(item.transform ?? '');
     assert.ok(match, `parcel flora keeps its canonical pivot-scale-pivot transform: ${item.transform}`);
     const [, x, y, scale] = match;
-    assert.deepEqual(item.groundAnchor, { x: Number(x), y: Number(y) }, `${item.id} exposes its absolute ground pivot`);
+    assert.deepEqual(item.groundAnchor, { x: Number(x), y: Number(y) }, `${item.id} exposes its containing-scene-basis pivot; the downstream mapper composes ancestor translation once`);
     assert.equal(item.floraScale, Number(scale), `${item.id} exposes the tile-art scale`);
   }
   assert.deepEqual(
