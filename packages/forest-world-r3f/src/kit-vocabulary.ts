@@ -312,6 +312,33 @@ export function kitObjectNames(): string[] {
 }
 
 /**
+ * THE MEASUREMENT THE COVERAGE PLANT'S WIDTH IS DERIVED FROM, 2026-09-24 — kept as the inputs rather
+ * than only the answer, so a re-measurement changes these three numbers and the width follows.
+ *
+ * Taken on the real forest (one frozen live snapshot, the same mounted camera, at the studio's
+ * opening view and zoomed; `docs/research/flat-forest-retirement-2026-09-24/coverage-emphasis/`):
+ * `flatShare` is the share of island ground the FLAT coverage marks cover — the emphasis the owner
+ * approved (ADR-0608, option A), 7.2% opening and 5.6% zoomed; `trialShare` is what the 3D plants
+ * and their shadows cover at `trialWidth`, 7.25% and 7.44%. Both are the mean of the two views.
+ */
+export const COVERAGE_EMPHASIS_2026_09_24 = {
+  flatShare: 0.064,
+  trialWidth: 4,
+  trialShare: 0.0735,
+} as const;
+
+/**
+ * The width at which a plant layer covers `targetShare` of the ground, given one trial.
+ *
+ * There is one plant per flat mark, so the COUNT is fixed and only the width is free; the covered
+ * share goes as the width squared, so the matching width is `trialWidth x sqrt(target / trial)`.
+ * It is rounded to a quarter unit, because the measurement is not finer than that.
+ */
+export function widthForGroundShare(trialWidth: number, trialShare: number, targetShare: number): number {
+  return Math.round(trialWidth * Math.sqrt(targetShare / trialShare) * 4) / 4;
+}
+
+/**
  * HOW BIG EACH ROLE IS, in ground units — and WHICH AXIS that number is about.
  *
  * ⚠⚠ SCALING A FLAT PROP BY ITS HEIGHT BLOWS UP ITS FOOTPRINT. `Red_Flower_01` is 0.98 units
@@ -355,7 +382,24 @@ export const KIT_ROLE_SIZE = {
   // one witnessed passing, and shrinking it would say it were. What tells them apart is
   // {@link KIT_ROLE_TILT}.
   wilt: { axis: 'width', units: 4 },
-  coverageFlora: { axis: 'width', units: 8 },
+  // ⚠⚠ THE COVERAGE PLANT IS SIZED TO THE FLAT MARK IT REPLACES, BY MEASUREMENT — the emphasis the
+  // owner approved (ADR-0608, option A: the flat marks as he saw them), derived from
+  // {@link COVERAGE_EMPHASIS_2026_09_24}: `4 x sqrt(0.064 / 0.0735) = 3.73 -> 3.75`. The 8 it
+  // replaced was a staging width chosen only to clear the widest decorative bush, and on the real
+  // map it covered 15.9% of the island ground against the flat marks' 6.4% — it carpeted the islands.
+  // ⚠ TWO THINGS THIS WIDTH GIVES UP, stated rather than hidden. It is BELOW the object floor
+  // ({@link MIN_PROP_WIDTH}): one plant is texture at the overview, as the approved flat tufts were —
+  // what it reports is carried by how MANY stand, not by any one. And it sits INSIDE the decorative
+  // bush's delivered range (3.23-6.22 on all-healthy islands), on the same leafy-plant objects, so
+  // bulk no longer tells coverage from cover; status tint and placement do.
+  coverageFlora: {
+    axis: 'width',
+    units: widthForGroundShare(
+      COVERAGE_EMPHASIS_2026_09_24.trialWidth,
+      COVERAGE_EMPHASIS_2026_09_24.trialShare,
+      COVERAGE_EMPHASIS_2026_09_24.flatShare,
+    ),
+  },
   // ⚠⚠ THE BUSH AND THE TUFT ARE THE RECIPE'S OWN DELIVERED WIDTHS — the ROLE size, which
   // `cover-dressing.ts`'s size rung then multiplies. Each is the WIDEST assembly serving the role,
   // at its native kit width, times the MEAN of the scale `build_land.py` sprinkles it at, so rung 1
@@ -774,7 +818,7 @@ export const KIT_FOOTPRINTS_2026_08_29 = {
   // costs is computed in {@link KIT_ROLE_TILT}.
   bud: 2.6,
   wilt: 4,
-  coverageFlora: 8,
+  coverageFlora: 3.75,
   // ⚠ A WIDTH-SIZED ROLE'S FOOTPRINT IS ITS DECLARED WIDTH EXACTLY, by construction — every
   // assembly serving it is scaled TO that width, so the widest is that width. These three restate
   // `KIT_ROLE_SIZE` for the same reason the two pines' heights do, and the test holds them to it.
@@ -818,7 +862,8 @@ export const KIT_HEIGHTS_2026_08_29 = {
   //   wilt  4   x 0.599 / 0.980 = 2.445, the bloom's own — they are the same size upright
   bud: 1.589,
   wilt: 2.445,
-  coverageFlora: 4.535,
+  // `Leafy_Plant_02`, the taller leafy form, at the coverage width: 3.75 x 4.535 / 8 = 2.126.
+  coverageFlora: 2.126,
   // ⚠ THE THREE GROUND-COVER HEIGHTS FALL OUT OF THEIR PROPORTIONS, exactly as the bloom's does —
   // `declared width x (assembly height / assembly width)`, the TALLEST assembly winning, off the
   // 2026-09-03 re-export's own world bounds:

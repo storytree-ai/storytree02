@@ -1,0 +1,567 @@
+{
+  "startedAt": "2026-09-24T10:05:59.594Z",
+  "query": "?landMount=1&landMountProps=1&act2=intro&sceneExport=1",
+  "viewport": {
+    "width": 1800,
+    "height": 1100
+  },
+  "zoomSteps": 8,
+  "anchor": [
+    0.6,
+    0.45
+  ],
+  "arms": [
+    {
+      "name": "flat",
+      "origin": "http://127.0.0.1:5301",
+      "dir": "/home/mickh/code/Storytree/.claude/worktrees/laneQ-flat",
+      "head": "c5b16fa1f6ef42fc991fe73671fd7fc4a00d4baf",
+      "scratchDiffSha256": "98b7d5f252686838f0e4f124dc7fff3b37a97297ceaa965590634a03ee0ecfd6",
+      "scratchDiff": "diff --git a/packages/forest-world-r3f/src/map-dressing.ts b/packages/forest-world-r3f/src/map-dressing.ts\nindex 93ce0cf6..4b04e69e 100644\n--- a/packages/forest-world-r3f/src/map-dressing.ts\n+++ b/packages/forest-world-r3f/src/map-dressing.ts\n@@ -311,6 +311,7 @@ function dressMap(\n \n   for (const descriptor of descriptors) {\n     if (descriptor.kind !== 'coverage-flora') continue;\n+    if (descriptor.kind === 'coverage-flora') continue; // laneQ SCRATCH: flat arm draws no 3D coverage plants\n     const coverage = descriptor as CoverageFloraDescriptor;\n     const placement: KitPlacement = {\n       role: 'coverageFlora',"
+    },
+    {
+      "name": "w8",
+      "origin": "http://127.0.0.1:5302",
+      "dir": "/home/mickh/code/Storytree/.claude/worktrees/laneQ-w8",
+      "head": "c5b16fa1f6ef42fc991fe73671fd7fc4a00d4baf",
+      "scratchDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "scratchDiff": ""
+    },
+    {
+      "name": "corrected",
+      "origin": "http://127.0.0.1:5303",
+      "dir": "/home/mickh/code/Storytree/.claude/worktrees/laneQ-emphasis",
+      "head": "74d0238c489797bfb85d2962e4c1fbece01ebb0a",
+      "scratchDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "scratchDiff": ""
+    }
+  ],
+  "health": {
+    "flat": {
+      "store": "pg",
+      "db": "ok",
+      "schema": {
+        "code": 9,
+        "db": 9
+      },
+      "pid": 186307,
+      "code": {
+        "startedAt": "c5b16fa1f6ef42fc991fe73671fd7fc4a00d4baf",
+        "head": "c5b16fa1f6ef42fc991fe73671fd7fc4a00d4baf",
+        "stale": false,
+        "directory": "/home/mickh/code/Storytree/.claude/worktrees/laneQ-flat",
+        "branch": "HEAD"
+      }
+    },
+    "w8": {
+      "store": "pg",
+      "db": "ok",
+      "schema": {
+        "code": 9,
+        "db": 9
+      },
+      "pid": 186310,
+      "code": {
+        "startedAt": "c5b16fa1f6ef42fc991fe73671fd7fc4a00d4baf",
+        "head": "c5b16fa1f6ef42fc991fe73671fd7fc4a00d4baf",
+        "stale": false,
+        "directory": "/home/mickh/code/Storytree/.claude/worktrees/laneQ-w8",
+        "branch": "HEAD"
+      }
+    },
+    "corrected": {
+      "store": "pg",
+      "db": "ok",
+      "schema": {
+        "code": 9,
+        "db": 9
+      },
+      "pid": 197174,
+      "code": {
+        "startedAt": "74d0238c489797bfb85d2962e4c1fbece01ebb0a",
+        "head": "74d0238c489797bfb85d2962e4c1fbece01ebb0a",
+        "stale": false,
+        "directory": "/home/mickh/code/Storytree/.claude/worktrees/laneQ-emphasis",
+        "branch": "claude/lane-q-plant-emphasis"
+      }
+    }
+  },
+  "captures": {
+    "flat-rest": {
+      "canvasRect": {
+        "x": 0,
+        "y": 0,
+        "width": 1800,
+        "height": 1100
+      },
+      "rawFile": "flat-rest-land-mount-raw.png",
+      "rawSha256": "276705415841f6dbaa2ecbca178b7bb4dd85474cf7d4c134dc450ad8fdf4533d",
+      "fullFile": "flat-rest-full.png",
+      "hiddenFile": "flat-rest-flat-hidden-full.png",
+      "camera": {
+        "position": [
+          484.5,
+          2534.741948985368,
+          3685.50029581578
+        ],
+        "zoom": 1.9084281662531688,
+        "projectionMatrix": [
+          0.0021204757402812986,
+          0,
+          0,
+          0,
+          0,
+          0.0034698693931875797,
+          0,
+          0,
+          0,
+          0,
+          -0.0004849186507627249,
+          0,
+          0,
+          0,
+          -1.6045330750382587,
+          1
+        ],
+        "matrixWorld": [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0.6427876096865395,
+          -0.766044443118978,
+          0,
+          0,
+          0.766044443118978,
+          0.6427876096865395,
+          0,
+          484.5,
+          2534.741948985368,
+          3685.50029581578,
+          1
+        ]
+      },
+      "host": "translate(-24.633446549660334 -1728.5798382308672) scale(1.9084281662531688)",
+      "flatMarkCount": 2576
+    },
+    "flat-zoom": {
+      "canvasRect": {
+        "x": 0,
+        "y": 0,
+        "width": 1800,
+        "height": 1100
+      },
+      "rawFile": "flat-zoom-land-mount-raw.png",
+      "rawSha256": "e5129f8f54cfdc7235dd15a0cdd30378ab89c48ca84c63ac6b30577931c54220",
+      "fullFile": "flat-zoom-full.png",
+      "hiddenFile": "flat-zoom-flat-hidden-full.png",
+      "camera": {
+        "position": [
+          534.8182007373019,
+          2534.741948985368,
+          3665.429651195943
+        ],
+        "zoom": 4.090885261869115,
+        "projectionMatrix": [
+          0.004545428068743461,
+          0,
+          0,
+          0,
+          0,
+          0.007437973203398391,
+          0,
+          0,
+          0,
+          0,
+          -0.0004849186507627249,
+          0,
+          0,
+          0,
+          -1.6045330750382587,
+          1
+        ],
+        "matrixWorld": [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0.6427876096865395,
+          -0.766044443118978,
+          0,
+          0,
+          0.766044443118978,
+          0.6427876096865395,
+          0,
+          534.8182007373019,
+          2534.741948985368,
+          3665.429651195943,
+          1
+        ]
+      },
+      "host": "translate(-1287.8798951755862 -4271.4408593733) scale(4.090885261869115)",
+      "flatMarkCount": 2576
+    },
+    "w8-rest": {
+      "canvasRect": {
+        "x": 0,
+        "y": 0,
+        "width": 1800,
+        "height": 1100
+      },
+      "rawFile": "w8-rest-land-mount-raw.png",
+      "rawSha256": "985991bf691f85e3034a84fbc8ff10fde2178c8dc91496e7ca9fa72b42c8df02",
+      "fullFile": "w8-rest-full.png",
+      "hiddenFile": "w8-rest-flat-hidden-full.png",
+      "camera": {
+        "position": [
+          484.5,
+          2534.741948985368,
+          3685.50029581578
+        ],
+        "zoom": 1.9084281662531688,
+        "projectionMatrix": [
+          0.0021204757402812986,
+          0,
+          0,
+          0,
+          0,
+          0.0034698693931875797,
+          0,
+          0,
+          0,
+          0,
+          -0.0004849186507627249,
+          0,
+          0,
+          0,
+          -1.6045330750382587,
+          1
+        ],
+        "matrixWorld": [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0.6427876096865395,
+          -0.766044443118978,
+          0,
+          0,
+          0.766044443118978,
+          0.6427876096865395,
+          0,
+          484.5,
+          2534.741948985368,
+          3685.50029581578,
+          1
+        ]
+      },
+      "host": "translate(-24.633446549660334 -1728.5798382308672) scale(1.9084281662531688)",
+      "flatMarkCount": 2576
+    },
+    "w8-zoom": {
+      "canvasRect": {
+        "x": 0,
+        "y": 0,
+        "width": 1800,
+        "height": 1100
+      },
+      "rawFile": "w8-zoom-land-mount-raw.png",
+      "rawSha256": "1a406c86e78f5e43a3fc9b0d73c67b0752c9c08b62fae0882775fe6d2954fff3",
+      "fullFile": "w8-zoom-full.png",
+      "hiddenFile": "w8-zoom-flat-hidden-full.png",
+      "camera": {
+        "position": [
+          534.8182007373019,
+          2534.741948985368,
+          3665.429651195943
+        ],
+        "zoom": 4.090885261869115,
+        "projectionMatrix": [
+          0.004545428068743461,
+          0,
+          0,
+          0,
+          0,
+          0.007437973203398391,
+          0,
+          0,
+          0,
+          0,
+          -0.0004849186507627249,
+          0,
+          0,
+          0,
+          -1.6045330750382587,
+          1
+        ],
+        "matrixWorld": [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0.6427876096865395,
+          -0.766044443118978,
+          0,
+          0,
+          0.766044443118978,
+          0.6427876096865395,
+          0,
+          534.8182007373019,
+          2534.741948985368,
+          3665.429651195943,
+          1
+        ]
+      },
+      "host": "translate(-1287.8798951755862 -4271.4408593733) scale(4.090885261869115)",
+      "flatMarkCount": 2576
+    },
+    "w8-zoom-legend-dimmed": {
+      "canvasRect": {
+        "x": 0,
+        "y": 0,
+        "width": 1800,
+        "height": 1100
+      },
+      "rawFile": "w8-zoom-legend-dimmed-land-mount-raw.png",
+      "rawSha256": "aabbeea8d3c97e80bf0a44543bc36a384a697ee4ab0bff3559a469b9775e6ebf",
+      "fullFile": "w8-zoom-legend-dimmed-full.png",
+      "hiddenFile": "w8-zoom-legend-dimmed-flat-hidden-full.png",
+      "camera": {
+        "position": [
+          534.8182007373019,
+          2534.741948985368,
+          3665.429651195943
+        ],
+        "zoom": 4.090885261869115,
+        "projectionMatrix": [
+          0.004545428068743461,
+          0,
+          0,
+          0,
+          0,
+          0.007437973203398391,
+          0,
+          0,
+          0,
+          0,
+          -0.0004849186507627249,
+          0,
+          0,
+          0,
+          -1.6045330750382587,
+          1
+        ],
+        "matrixWorld": [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0.6427876096865395,
+          -0.766044443118978,
+          0,
+          0,
+          0.766044443118978,
+          0.6427876096865395,
+          0,
+          534.8182007373019,
+          2534.741948985368,
+          3665.429651195943,
+          1
+        ]
+      },
+      "host": "translate(-1287.8798951755862 -4271.4408593733) scale(4.090885261869115)",
+      "flatMarkCount": 2576
+    },
+    "corrected-rest": {
+      "canvasRect": {
+        "x": 0,
+        "y": 0,
+        "width": 1800,
+        "height": 1100
+      },
+      "rawFile": "corrected-rest-land-mount-raw.png",
+      "rawSha256": "29d6d023036fdd2baa99bac3583069fc93c2c7b9f03cb041b2f797fa8de97264",
+      "fullFile": "corrected-rest-full.png",
+      "hiddenFile": "corrected-rest-flat-hidden-full.png",
+      "camera": {
+        "position": [
+          484.5,
+          2534.741948985368,
+          3685.50029581578
+        ],
+        "zoom": 1.9084281662531688,
+        "projectionMatrix": [
+          0.0021204757402812986,
+          0,
+          0,
+          0,
+          0,
+          0.0034698693931875797,
+          0,
+          0,
+          0,
+          0,
+          -0.0004849186507627249,
+          0,
+          0,
+          0,
+          -1.6045330750382587,
+          1
+        ],
+        "matrixWorld": [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0.6427876096865395,
+          -0.766044443118978,
+          0,
+          0,
+          0.766044443118978,
+          0.6427876096865395,
+          0,
+          484.5,
+          2534.741948985368,
+          3685.50029581578,
+          1
+        ]
+      },
+      "host": "translate(-24.633446549660334 -1728.5798382308672) scale(1.9084281662531688)",
+      "flatMarkCount": 2576
+    },
+    "corrected-zoom": {
+      "canvasRect": {
+        "x": 0,
+        "y": 0,
+        "width": 1800,
+        "height": 1100
+      },
+      "rawFile": "corrected-zoom-land-mount-raw.png",
+      "rawSha256": "dbe41fcd9dceda1b3aa36ef5f7d078b38d90a9ad84c86719b49692a48a51395f",
+      "fullFile": "corrected-zoom-full.png",
+      "hiddenFile": "corrected-zoom-flat-hidden-full.png",
+      "camera": {
+        "position": [
+          534.8182007373019,
+          2534.741948985368,
+          3665.429651195943
+        ],
+        "zoom": 4.090885261869115,
+        "projectionMatrix": [
+          0.004545428068743461,
+          0,
+          0,
+          0,
+          0,
+          0.007437973203398391,
+          0,
+          0,
+          0,
+          0,
+          -0.0004849186507627249,
+          0,
+          0,
+          0,
+          -1.6045330750382587,
+          1
+        ],
+        "matrixWorld": [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0.6427876096865395,
+          -0.766044443118978,
+          0,
+          0,
+          0.766044443118978,
+          0.6427876096865395,
+          0,
+          534.8182007373019,
+          2534.741948985368,
+          3665.429651195943,
+          1
+        ]
+      },
+      "host": "translate(-1287.8798951755862 -4271.4408593733) scale(4.090885261869115)",
+      "flatMarkCount": 2576
+    },
+    "corrected-zoom-legend-dimmed": {
+      "canvasRect": {
+        "x": 0,
+        "y": 0,
+        "width": 1800,
+        "height": 1100
+      },
+      "rawFile": "corrected-zoom-legend-dimmed-land-mount-raw.png",
+      "rawSha256": "cee0da5947e25934196ac1450220325adbde4ff2dc6793681815c6e921f064ff",
+      "fullFile": "corrected-zoom-legend-dimmed-full.png",
+      "hiddenFile": "corrected-zoom-legend-dimmed-flat-hidden-full.png",
+      "camera": {
+        "position": [
+          534.8182007373019,
+          2534.741948985368,
+          3665.429651195943
+        ],
+        "zoom": 4.090885261869115,
+        "projectionMatrix": [
+          0.004545428068743461,
+          0,
+          0,
+          0,
+          0,
+          0.007437973203398391,
+          0,
+          0,
+          0,
+          0,
+          -0.0004849186507627249,
+          0,
+          0,
+          0,
+          -1.6045330750382587,
+          1
+        ],
+        "matrixWorld": [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0.6427876096865395,
+          -0.766044443118978,
+          0,
+          0,
+          0.766044443118978,
+          0.6427876096865395,
+          0,
+          534.8182007373019,
+          2534.741948985368,
+          3665.429651195943,
+          1
+        ]
+      },
+      "host": "translate(-1287.8798951755862 -4271.4408593733) scale(4.090885261869115)",
+      "flatMarkCount": 2576
+    }
+  },
+  "errors": [],
+  "browser": "148.0.7778.96",
+  "snapshot": {
+    "source": "corrected",
+    "frozenAt": "2026-09-24T10:06:29.124Z",
+    "sha256": "b856b06d44c2925488701d7e6e0700e5b1dd7772a123a65a819ce13c6a8dd2c6",
+    "storyCount": 47
+  },
+  "sameMountedCamera-rest": true,
+  "sameMountedCamera-zoom": true,
+  "status": "CAPTURED",
+  "finishedAt": "2026-09-24T10:07:31.187Z"
+}

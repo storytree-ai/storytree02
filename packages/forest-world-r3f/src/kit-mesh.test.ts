@@ -1086,19 +1086,19 @@ test('coverage measurements include both leafy forms at their own width scale', 
   ];
   assert.deepEqual(Object.keys(roleFootprints(kit)), expectedRoles);
   assert.deepEqual(Object.keys(roleHeights(kit)), expectedRoles);
-  assert.equal(roleFootprints(kit).coverageFlora, 8);
-  assert.ok(Math.abs(roleHeights(kit).coverageFlora - 6.4) < 1e-9);
+  assert.equal(roleFootprints(kit).coverageFlora, 3.75);
+  assert.ok(Math.abs(roleHeights(kit).coverageFlora - 3) < 1e-9);
 
-  for (const [name, height] of [['plant-a', 4], ['plant-b', 6.4]] as const) {
+  for (const [name, height] of [['plant-a', 1.875], ['plant-b', 3]] as const) {
     const extent = placementExtent(kit, placement({ role: 'coverageFlora', assembly: name }));
-    assert.equal(extent.width, 8);
+    assert.equal(extent.width, 3.75);
     assert.ok(Math.abs(extent.height - height) < 1e-9);
   }
 
   // Either arm may become the tallest after a re-export; its height cannot come from the other.
   kit.assemblies.set('plant-a', assembly(2, 6, 2));
-  assert.equal(roleFootprints(kit).coverageFlora, 8);
-  assert.equal(roleHeights(kit).coverageFlora, 24);
+  assert.equal(roleFootprints(kit).coverageFlora, 3.75);
+  assert.equal(roleHeights(kit).coverageFlora, 11.25);
 });
 
 test('coverage hex tints use the foliage map mean and cache separately from pine state tints', () => {
