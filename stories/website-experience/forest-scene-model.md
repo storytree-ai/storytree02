@@ -200,21 +200,28 @@ input maps deterministically to typed 3D descriptors that carry the semantic lay
 
 ## Proof walkthrough
 
-The core already emits one `parcel-flora` wrapper for each actual coverage mark. Its new
-`groundAnchor` and `floraScale` are the semantic source of placement; the mapper must transport
-them, never recover them by parsing the SVG drawing transform.
+The core already emits one `parcel-flora` wrapper for each actual coverage mark. Its
+containing-scene-basis `groundAnchor` and `floraScale` are the semantic source of placement; the
+mapper must transport them, never recover them by parsing the SVG drawing transform.
 
 1. Build one real true-ground `SceneInput` with at least two territories and parcels that vary
    capability id, theme, folded status and test count. Pass `landAreaPerCapability: null` so the
-   mapper receives the core's direct coordinates. Collect the source `parcel-flora` wrappers in
-   scene traversal order, then collect `coverage-flora` descriptors. The test must first fail
-   because the existing mapper has no `coverage-flora` family.
+   mapper receives the core's direct coordinates. Give the real fixture a non-zero
+   `offset: { x: 609, y: 1406 }`. Collect the source `parcel-flora` wrappers in scene traversal
+   order, then collect `coverage-flora` descriptors. Before the correction, this fixture exposed
+   the dropped ancestor translation: the first wrapper was actual `(9.8, -3.9)` where the
+   containing-basis anchor plus offset requires `(618.8, 1402.1)`.
 2. Make exactly one descriptor for every source wrapper, in the same order. Each descriptor carries
-   `groundAnchor.x → transform.x`, `groundAnchor.y → transform.z`, `transform.y = 0`, the exact
-   `floraScale`, the wrapper's theme and folded status/material, the capability from that wrapper's
-   own `id`, and the enclosing territory's island id. Later placement supplies `landHeight`; this
-   mapper does not claim grounding or appearance. The generic island sizing path remains attributable: turning
-   its normal sizing back on must not erase or substitute the wrapper's capability identity.
+   the wrapper's **containing-ancestor translation plus** its semantic `groundAnchor`:
+   `(parentXY.x + groundAnchor.x) → transform.x`,
+   `(parentXY.y + groundAnchor.y) → transform.z`, and `transform.y = 0`. `parentXY` is the
+   accumulated translation before the wrapper; do not use the wrapper's own
+   `translate(p) scale(s) translate(-p)` as a positional transform, since `p` is already the
+   semantic anchor and would be counted twice. Preserve the exact `floraScale`, theme, folded
+   status/material, own capability id and enclosing territory island id. Later placement supplies
+   `landHeight`; this mapper does not claim grounding or appearance. The generic island sizing path
+   remains attributable: turning its normal sizing back on must not erase or substitute the
+   wrapper's capability identity.
 3. A hand-built malformed `parcel-flora` node with missing required semantic fields must be visible
    in the mapper result as an explicit `skipped` descriptor, never silently invented from a
    transform and never a throw. Do not change parcel geometry, SVG, JSX, clocks, art direction or
@@ -266,9 +273,10 @@ carry those names. The capability was renamed; its contract ids were not, and mu
    becomes one attributable, typed placement descriptor
    - **asserts —** a real, multi-island true-ground `buildScene` input yields `coverage-flora`
      descriptors whose count and traversal order equal the source `parcel-flora` wrappers; each
-     copies that wrapper's exact anchor-to-`x/z`, zero `y`, scale, theme, folded status/material and
-     own capability id, while its island comes from the enclosing territory. Later placement owns
-     land height and appearance. Missing semantic fields
+     composes the wrapper's ancestor scene translation with its exact anchor-to-`x/z` (and zero
+     `y`), preserves scale, theme, folded status/material, own capability id and enclosing
+     territory island. The wrapper's pivot-scale-pivot SVG transform is never parsed or applied as
+     a second translation. Later placement owns land height and appearance. Missing semantic fields
      skip visibly and do not trigger transform parsing or invented identity.
    - **covers —** `packages/forest-world-r3f/src/world-to-3d.ts` — test:
      `packages/forest-world-r3f/src/world-to-3d.test.ts` (added by this re-armed proof)
