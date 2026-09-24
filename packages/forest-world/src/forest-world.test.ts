@@ -34,7 +34,9 @@ test('rand01 is deterministic and in [0, 1)', () => {
 
 // ---------- hex math ----------
 
-test('pixelToHex(hexCenter(h)) round-trips for a patch of the lattice', () => {
+// test-removed: `pixelToHex(hexCenter(h)) round-trips for a patch of the lattice` was renamed to bind its declared contract; the unchanged predicate is covered by the title below.
+// test-updated (refactor): `pixelToHex(hexCenter(h)) round-trips for a patch of the lattice` gained only its declared-contract title prefix; its assertions are unchanged.
+test('rc-hex-and-sizing-geometry: pixelToHex(hexCenter(h)) round-trips for a patch of the lattice', () => {
   for (let q = -4; q <= 4; q++) {
     for (let r = -4; r <= 4; r++) {
       const h: Axial = { q, r };
@@ -75,7 +77,9 @@ test('hexCorners returns 6 points on the camera ground ellipse of radius R', () 
 
 // ---------- sizing ----------
 
-test('crownRadius grows with capability count and is clamped to 32', () => {
+// test-removed: `crownRadius grows with capability count and is clamped to 32` was renamed to bind its declared contract; the unchanged predicate is covered by the title below.
+// test-updated (refactor): `crownRadius grows with capability count and is clamped to 32` gained only its declared-contract title prefix; its assertions are unchanged.
+test('rc-hex-and-sizing-geometry: crownRadius grows with capability count and is clamped to 32', () => {
   assert.ok(crownRadius(0) < crownRadius(3));
   assert.ok(crownRadius(3) < crownRadius(6));
   assert.equal(crownRadius(100), 32); // clamp
@@ -111,7 +115,9 @@ test('storyEdges unions declared depends_on with derived cross-story capability 
   assert.ok(derived && derived.via.length === 1, 'derived edge carries its capability trace');
 });
 
-test('rankStories: a dependent ranks strictly above every dependency', () => {
+// test-removed: `rankStories: a dependent ranks strictly above every dependency` was renamed to bind its declared contract; the unchanged predicate is covered by the title below.
+// test-updated (refactor): `rankStories: a dependent ranks strictly above every dependency` gained only its declared-contract title prefix; its assertions are unchanged.
+test('rc-longest-path-ranking-cycle-safe: rankStories: a dependent ranks strictly above every dependency', () => {
   const edges = storyEdges(RANK_FIXTURE);
   const depsOf = new Map<string, string[]>(RANK_FIXTURE.map((s) => [s.id, []]));
   for (const e of edges) depsOf.get(e.to)?.push(e.from);
@@ -122,7 +128,9 @@ test('rankStories: a dependent ranks strictly above every dependency', () => {
   assert.equal(ranks.get('base'), 0);
 });
 
-test('rankStories is cycle-safe (a bad-frontmatter cycle stays finite)', () => {
+// test-removed: `rankStories is cycle-safe (a bad-frontmatter cycle stays finite)` was renamed to bind its declared contract; the unchanged predicate is covered by the title below.
+// test-updated (refactor): `rankStories is cycle-safe (a bad-frontmatter cycle stays finite)` gained only its declared-contract title prefix; its assertions are unchanged.
+test('rc-longest-path-ranking-cycle-safe: rankStories is cycle-safe (a bad-frontmatter cycle stays finite)', () => {
   const cyclic = [
     { id: 'a' },
     { id: 'b' },
@@ -160,7 +168,9 @@ test('boundaryRingLoops chains segments into one closed loop', () => {
   assert.equal(loops[0]!.length, 4); // trailing duplicate dropped
 });
 
-test('chaikinClosed roughly doubles the vertex count per pass and stays closed', () => {
+// test-removed: `chaikinClosed roughly doubles the vertex count per pass and stays closed` was renamed to bind its declared contract; the unchanged predicate is covered by the title below.
+// test-updated (refactor): `chaikinClosed roughly doubles the vertex count per pass and stays closed` gained only its declared-contract title prefix; its assertions are unchanged.
+test('rc-coastline-chaikin-smoothed: chaikinClosed roughly doubles the vertex count per pass and stays closed', () => {
   const loop = boundaryRingLoops(SQUARE)[0]!;
   const once = chaikinClosed(loop, 1);
   assert.equal(once.length, loop.length * 2);
@@ -192,7 +202,9 @@ function blobTiles(): DrawTile[] {
   return [centre, ...ring].map((h) => ({ h, owner: 0 }));
 }
 
-test('buildRelaxedCells (mesh) is deterministic — same input → byte-identical cells', () => {
+// test-removed: `buildRelaxedCells (mesh) is deterministic — same input → byte-identical cells` was renamed to bind its declared contract; the unchanged predicate is covered by the title below.
+// test-updated (refactor): `buildRelaxedCells (mesh) is deterministic — same input → byte-identical cells` gained only its declared-contract title prefix; its assertions are unchanged.
+test('rc-mesh-substrate-deterministic: buildRelaxedCells (mesh) is deterministic — same input → byte-identical cells', () => {
   const tiles = blobTiles();
   const wheat: ReadonlySet<string>[] = [new Set<string>()];
   const a = buildRelaxedCells(tiles, wheat, 'mesh');
