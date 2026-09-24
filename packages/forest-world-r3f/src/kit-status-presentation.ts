@@ -16,11 +16,14 @@ export interface KitStatusPresentation {
 /** Presentation is deliberately a sidecar: placement and its attribution remain canonical input. */
 export function deriveKitStatusPresentation(input: KitStatusPresentationInput): KitStatusPresentation {
   const alphaByPlacement = new Map<KitPlacement, number>();
+  // A missing lookup is not a hidden status. This read-only view permits asking the set about
+  // undefined without a redundant guard; the supplied Set<string> cannot contain that value.
+  const hiddenStatuses: ReadonlySet<string | undefined> = input.hiddenStatuses;
   for (const placement of input.placements) {
     const island = input.islandByPlacement.get(placement);
     const status = island === undefined ? undefined : input.foldedStatusByIslandCapability.get(`${island}::${placement.capId}`);
     const isAttributedFlora = placement.role === 'tree' || placement.role === 'deadTree' || placement.role === 'coverageFlora';
-    alphaByPlacement.set(placement, isAttributedFlora && status !== undefined && input.hiddenStatuses.has(status) ? 0.12 : 1);
+    alphaByPlacement.set(placement, isAttributedFlora && hiddenStatuses.has(status) ? 0.12 : 1);
   }
   return { alphaByPlacement };
 }
@@ -47,6 +50,6 @@ export function presentationMaterial(
   material.customProgramCacheKey = function customProgramCacheKey() {
     return `${sourceKey.call(this)}|storytree-kit-status-alpha-${alpha}`;
   };
-  material.needsUpdate = true;
+  // This is a fresh, never-uploaded clone; its first renderer use compiles the installed hooks.
   return material;
 }

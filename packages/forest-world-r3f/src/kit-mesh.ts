@@ -622,7 +622,6 @@ export function kitMeshes(
 ): THREE.Mesh[] {
   const byMaterial = new Map<string, MergeBucket>();
   const tints = new Map<string, THREE.MeshStandardMaterial>();
-  const presentations = new Map<string, THREE.MeshStandardMaterial>();
   const m = new THREE.Matrix4();
   const q = new THREE.Quaternion();
   const e = new THREE.Euler(0, 0, 0, 'YXZ');
@@ -651,14 +650,13 @@ export function kitMeshes(
       onTransformedPart?.(placement, geometry);
       const tinted = tintedMaterial(kit, part.material, part.materialName, placement.tint, tints);
       const alpha = alphaByPlacement?.get(placement) ?? 1;
-      const presentationKey = `${part.materialName}::${placement.tint ?? 'base'}::${alpha}`;
-      const cached = presentations.get(presentationKey);
-      const material = cached ?? presentationMaterial(tinted, alpha);
-      if (!cached) presentations.set(presentationKey, material);
-      const key = presentationKey;
+      // Bark ignores placement tint, so it still shares one bucket across crown states.
+      const effectiveTint = tinted === part.material ? null : placement.tint;
+      const key = `${part.materialName}::${effectiveTint}::${alpha}`;
       const bucket = byMaterial.get(key);
       if (bucket) bucket.parts.push(geometry);
-      else byMaterial.set(key, { material, parts: [geometry] });
+      // The merge bucket already owns the material: allocate it once, when that bucket is born.
+      else byMaterial.set(key, { material: presentationMaterial(tinted, alpha), parts: [geometry] });
     }
   }
 

@@ -82,6 +82,7 @@ import { SHADOW_PENUMBRA, type ShadowCaster } from './land-shadow.js';
 import { CONTACT_SPREAD, SHADOW_CONTACT_BAND, type ContactBand } from './contact-shade.js';
 import { SHADOW_DEPTH, SHADOW_EDGE, type ShadowDepthOptions } from './shadow-rung.js';
 import { kitMeshes, loadEmbeddedKit, roleFootprints, roleHeights, type LoadedKit } from './kit-mesh.js';
+import { deriveKitStatusPresentation } from './kit-status-presentation.js';
 import {
   KIT_FOOTPRINTS_2026_08_29,
   KIT_HEIGHTS_2026_08_29,
@@ -1157,11 +1158,13 @@ function stampGrowthAttributes(
 
 function KitProps({
   placements,
+  alphaByPlacement,
   islandByPlacement,
   layout,
   growth,
 }: {
   placements: readonly KitPlacement[];
+  alphaByPlacement: ReadonlyMap<KitPlacement, number>;
   islandByPlacement: GroundInput['islandByPlacement'];
   layout: GroundInput['growthLayout'];
   growth: GrowthTexture;
@@ -1197,10 +1200,21 @@ function KitProps({
     }
     const built = kitMeshes(loaded, placements, (placement, geometry) => {
       stampGrowthAttributes(geometry, islandByPlacement.get(placement), layout);
-    });
-    for (const mesh of built) mesh.material = cloneGrowthMaterial(mesh.material as import('three').MeshStandardMaterial, growth);
+    }, alphaByPlacement);
+    const sharedMaterials = new Set(
+      [...loaded.assemblies.values()].flatMap((assembly) => assembly.objects.map((part) => part.material)),
+    );
+    const ownedMaterials = new Set<import('three').MeshStandardMaterial>();
+    for (const mesh of built) {
+      const material = mesh.material as import('three').MeshStandardMaterial;
+      mesh.material = cloneGrowthMaterial(material, growth);
+      if (!sharedMaterials.has(material)) ownedMaterials.add(material);
+    }
+    // Growth owns the delivered clones. Release intermediate tint/status materials without
+    // disposing the kit singleton's shared materials or any of their textures.
+    for (const material of ownedMaterials) material.dispose();
     return built;
-  }, [growth, islandByPlacement, layout, loaded, placements]);
+  }, [alphaByPlacement, growth, islandByPlacement, layout, loaded, placements]);
 
   // ⚠ THE MERGED GEOMETRY IS DISPOSED, THE KIT'S OWN IS NOT. `kitMeshes` clones every part and
   // bakes its transform in, so each mesh here owns geometry nothing else refers to; the kit's
@@ -1283,6 +1297,8 @@ export interface ForestWorldCanvasProps {
   /** The pure mapping's output (`worldTo3D(buildScene(input))`). Skips are ignored
    *  here — they are audit records, not drawables. */
   descriptors: readonly Descriptor3D[];
+  /** Legend dimming affects only attributed kit props; ground and casters keep their inputs. */
+  hiddenStatuses?: ReadonlySet<string>;
   /**
    * The app clock's current presentation. This is deliberately only the consumption seam: the
    * renderer owns no clock or schedule; its stable geometry consumes this presentation directly.
@@ -1574,6 +1590,8 @@ function GrowthTextureUpload({ growth, values }: { growth: GrowthTexture; values
   return null;
 }
 
+const NO_HIDDEN_STATUSES: ReadonlySet<string> = new Set();
+
 /**
  * The minimal R3F canvas of the spike: descriptors → placeholder meshes under drei
  * `MapControls` (pan / zoom a top-down-ish world map — NOT rotate; the projection is fixed
@@ -1582,6 +1600,7 @@ function GrowthTextureUpload({ growth, values }: { growth: GrowthTexture; values
  */
 export function ForestWorldCanvas({
   descriptors,
+  hiddenStatuses = NO_HIDDEN_STATUSES,
   showTrails = false,
   active = true,
   viewport,
@@ -1630,6 +1649,33 @@ export function ForestWorldCanvas({
   const cacheRef = useRef<((d: readonly Descriptor3D[]) => GroundInput) | null>(null);
   cacheRef.current ??= createGroundInputCache(SHIPPED_GROUND_INPUT);
   const ground = cacheRef.current(descriptors);
+  // The ground cache includes cell/coverage material and attribution, so its stable identity is
+  // also the status-map invalidation boundary. Clock and wisp-only descriptor churn cannot
+  // rebuild this sidecar or the prop meshes; the host's hidden set never enters the ground cache.
+  const statusRef = useRef<{
+    ground: GroundInput;
+    foldedStatusByIslandCapability: ReadonlyMap<string, string>;
+  } | null>(null);
+  if (statusRef.current?.ground !== ground) {
+    const statuses = new Map<string, string>();
+    for (const descriptor of descriptors) {
+      if (descriptor.kind !== 'cell-ground' && descriptor.kind !== 'coverage-flora') continue;
+      const capability = descriptor.kind === 'coverage-flora' && 'capability' in descriptor
+        ? descriptor.capability
+        : descriptor.parcel;
+      if (descriptor.island !== undefined && capability !== undefined && descriptor.material !== undefined) {
+        statuses.set(`${descriptor.island}::${capability}`, descriptor.material);
+      }
+    }
+    statusRef.current = { ground, foldedStatusByIslandCapability: statuses };
+  }
+  const { foldedStatusByIslandCapability } = statusRef.current;
+  const presentation = useMemo(() => deriveKitStatusPresentation({
+    placements: ground.placements,
+    islandByPlacement: ground.islandByPlacement,
+    foldedStatusByIslandCapability,
+    hiddenStatuses,
+  }), [foldedStatusByIslandCapability, ground, hiddenStatuses]);
   // The presentation is already wall-clock derived by the app.  This merely uploads its current
   // values into the stable island table; it owns neither a frame loop nor a second schedule.
   const growth = useMemo(() => createGrowthTexture(ground.growthLayout.size + 1), [ground]);
@@ -1703,6 +1749,7 @@ export function ForestWorldCanvas({
       {compose.props && (
         <KitProps
           placements={ground.placements}
+          alphaByPlacement={presentation.alphaByPlacement}
           islandByPlacement={ground.islandByPlacement}
           layout={ground.growthLayout}
           growth={growth}
