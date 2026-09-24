@@ -1,0 +1,298 @@
+{
+  "startedAt": "2026-09-24T21:49:47.108Z",
+  "viewport": {
+    "width": 1800,
+    "height": 1100
+  },
+  "anchor": [
+    0.5,
+    0.5
+  ],
+  "arms": [
+    {
+      "name": "after",
+      "origin": "http://127.0.0.1:5197",
+      "dir": "/home/mickh/code/Storytree/.claude/worktrees/laneZ-pathways",
+      "head": "59229c90adb16d263fad9c7a78e38c6ac1925581",
+      "query": "",
+      "dirty": "?? docs/research/pathways-scale-with-zoom-2026-09-25/detail.png\n?? docs/research/pathways-scale-with-zoom-2026-09-25/sheet.png\n?? docs/research/pathways-scale-with-zoom-2026-09-25/studio/"
+    }
+  ],
+  "health": {
+    "after": {
+      "store": "pg",
+      "db": "ok",
+      "schema": {
+        "code": 9,
+        "db": 9
+      },
+      "pid": 917772,
+      "code": {
+        "startedAt": "59229c90adb16d263fad9c7a78e38c6ac1925581",
+        "head": "59229c90adb16d263fad9c7a78e38c6ac1925581",
+        "stale": false,
+        "directory": "/home/mickh/code/Storytree/.claude/worktrees/laneZ-pathways",
+        "branch": "claude/lane-z-pathways-zoom"
+      }
+    }
+  },
+  "captures": {
+    "after-rest": {
+      "host": "translate(-46.79104115967948 -1796.2630488220357) scale(1.9724813357493323)",
+      "camera": {
+        "position": [
+          480,
+          2537.1581336873146,
+          3681.7081085079644
+        ],
+        "zoom": 1.9724813357493323
+      },
+      "svg": {
+        "svgScale": 1.972481369972229,
+        "islandWidthPx": 118.940673828125,
+        "islandsInView": 14,
+        "laneCount": 0,
+        "laneWidthPx": null
+      },
+      "roads3d": {
+        "count": 124,
+        "worldUnits": [
+          false
+        ],
+        "declaredWidth": {
+          "min": 1.5,
+          "max": 12.295945205344156
+        },
+        "changedPixels": 25811,
+        "projectedLength": 4165.761263164187,
+        "dpr": 1,
+        "measuredWidthPx": 6.195986368262194
+      },
+      "ratios": {
+        "road3dToIsland": 0.05209308278525219,
+        "lanesToIsland": null
+      },
+      "rawFile": "after-rest-land-raw.png",
+      "rawSha256": "f6463d4c428b0b0a11f380c151ed72e50b2f6aea5396c49b372ab94b6ce134cd",
+      "fullFile": "after-rest.png"
+    },
+    "after-in": {
+      "host": "translate(-1129.5306812381396 -4479.423216771403) scale(4.228188919246124)",
+      "camera": {
+        "position": [
+          480,
+          2537.1581336873146,
+          3681.7081085079644
+        ],
+        "zoom": 4.228188919246124
+      },
+      "svg": {
+        "svgScale": 4.228188991546631,
+        "islandWidthPx": 254.9598388671875,
+        "islandsInView": 6,
+        "laneCount": 0,
+        "laneWidthPx": null
+      },
+      "roads3d": {
+        "count": 124,
+        "worldUnits": [
+          false
+        ],
+        "declaredWidth": {
+          "min": 1.5,
+          "max": 24.063336961492304
+        },
+        "changedPixels": 52134,
+        "projectedLength": 4110.777040800252,
+        "dpr": 1,
+        "measuredWidthPx": 12.682273809199584
+      },
+      "ratios": {
+        "road3dToIsland": 0.04974224123120024,
+        "lanesToIsland": null
+      },
+      "rawFile": "after-in-land-raw.png",
+      "rawSha256": "5a6304398e8717dac5227259d041f377c1e4c6fbad36966c557c2c3d526adce5",
+      "fullFile": "after-in.png"
+    },
+    "after-out": {
+      "host": "translate(765.4404432132964 216.54509577127772) scale(0.2803324099722992)",
+      "camera": {
+        "position": [
+          480.0000000000001,
+          2537.1581336873146,
+          3681.7081085079644
+        ],
+        "zoom": 0.2803324099722992
+      },
+      "svg": {
+        "svgScale": 0.28033238649368286,
+        "islandWidthPx": 15.97894287109375,
+        "islandsInView": 36,
+        "laneCount": 0,
+        "laneWidthPx": null
+      },
+      "roads3d": {
+        "count": 124,
+        "worldUnits": [
+          false
+        ],
+        "declaredWidth": {
+          "min": 1,
+          "max": 1.7438072512302663
+        },
+        "changedPixels": 2960,
+        "projectedLength": 1792.4031548516,
+        "dpr": 1,
+        "measuredWidthPx": 1.6514141876999038
+      },
+      "ratios": {
+        "road3dToIsland": 0.10334940183604682,
+        "lanesToIsland": null
+      },
+      "rawFile": "after-out-land-raw.png",
+      "rawSha256": "bf64c7643d8bca83387f5234a3400b4d1c89e5ef958f4df305912fd0049e860a",
+      "fullFile": "after-out.png"
+    },
+    "after-sel-rest": {
+      "host": "translate(-46.79104115967948 -1796.2630488220357) scale(1.9724813357493323)",
+      "camera": {
+        "position": [
+          480,
+          2537.1581336873146,
+          3681.7081085079644
+        ],
+        "zoom": 1.9724813357493323
+      },
+      "svg": {
+        "svgScale": 1.972481369972229,
+        "islandWidthPx": 118.940673828125,
+        "islandsInView": 14,
+        "laneCount": 14,
+        "laneWidthPx": {
+          "min": 4.733955287933349,
+          "median": 5.917444109916687,
+          "max": 5.917444109916687
+        }
+      },
+      "roads3d": {
+        "count": 124,
+        "worldUnits": [
+          false
+        ],
+        "declaredWidth": {
+          "min": 1.5,
+          "max": 12.295945205344156
+        },
+        "changedPixels": 25811,
+        "projectedLength": 4165.761263164187,
+        "dpr": 1,
+        "measuredWidthPx": 6.195986368262194
+      },
+      "ratios": {
+        "road3dToIsland": 0.05209308278525219,
+        "lanesToIsland": 0.04975122403012176
+      },
+      "rawFile": "after-sel-rest-land-raw.png",
+      "rawSha256": "f6463d4c428b0b0a11f380c151ed72e50b2f6aea5396c49b372ab94b6ce134cd",
+      "fullFile": "after-sel-rest.png"
+    },
+    "after-sel-in": {
+      "host": "translate(-1129.5306812381396 -4479.423216771403) scale(4.228188919246124)",
+      "camera": {
+        "position": [
+          480,
+          2537.1581336873146,
+          3681.7081085079644
+        ],
+        "zoom": 4.228188919246124
+      },
+      "svg": {
+        "svgScale": 4.228188991546631,
+        "islandWidthPx": 254.9598388671875,
+        "islandsInView": 6,
+        "laneCount": 14,
+        "laneWidthPx": {
+          "min": 10.147653579711914,
+          "median": 12.684566974639893,
+          "max": 12.684566974639893
+        }
+      },
+      "roads3d": {
+        "count": 124,
+        "worldUnits": [
+          false
+        ],
+        "declaredWidth": {
+          "min": 1.5,
+          "max": 24.063336961492304
+        },
+        "changedPixels": 52134,
+        "projectedLength": 4110.777040800252,
+        "dpr": 1,
+        "measuredWidthPx": 12.682273809199584
+      },
+      "ratios": {
+        "road3dToIsland": 0.04974224123120024,
+        "lanesToIsland": 0.04975123545339028
+      },
+      "rawFile": "after-sel-in-land-raw.png",
+      "rawSha256": "5a6304398e8717dac5227259d041f377c1e4c6fbad36966c557c2c3d526adce5",
+      "fullFile": "after-sel-in.png"
+    },
+    "after-sel-out": {
+      "host": "translate(765.4404432132964 216.54509577127772) scale(0.2803324099722992)",
+      "camera": {
+        "position": [
+          480.0000000000001,
+          2537.1581336873146,
+          3681.7081085079644
+        ],
+        "zoom": 0.2803324099722992
+      },
+      "svg": {
+        "svgScale": 0.28033238649368286,
+        "islandWidthPx": 15.97894287109375,
+        "islandsInView": 36,
+        "laneCount": 14,
+        "laneWidthPx": {
+          "min": 0.6727977275848388,
+          "median": 0.8409971594810486,
+          "max": 0.8409971594810486
+        }
+      },
+      "roads3d": {
+        "count": 124,
+        "worldUnits": [
+          false
+        ],
+        "declaredWidth": {
+          "min": 1,
+          "max": 1.7438072512302663
+        },
+        "changedPixels": 2960,
+        "projectedLength": 1792.4031548516,
+        "dpr": 1,
+        "measuredWidthPx": 1.6514141876999038
+      },
+      "ratios": {
+        "road3dToIsland": 0.10334940183604682,
+        "lanesToIsland": 0.052631589352661774
+      },
+      "rawFile": "after-sel-out-land-raw.png",
+      "rawSha256": "bf64c7643d8bca83387f5234a3400b4d1c89e5ef958f4df305912fd0049e860a",
+      "fullFile": "after-sel-out.png"
+    }
+  },
+  "errors": [],
+  "browser": "148.0.7778.96",
+  "snapshot": {
+    "loadedFrom": "/tmp/laneZ-snap.json",
+    "storyCount": 47,
+    "sha256": "0801e4917996e919c158b6658267390aa1c94f63682cd31eb55205120ec17a7d",
+    "storiesWithVerdict": 32
+  },
+  "selected": "library",
+  "status": "CAPTURED",
+  "finishedAt": "2026-09-24T21:50:28.260Z"
+}

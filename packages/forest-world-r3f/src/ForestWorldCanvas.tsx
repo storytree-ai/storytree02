@@ -49,6 +49,7 @@ import {
   type LinearRgb,
 } from './cell-ground-geometry.js';
 import { SHIPPED_COAST, clipToCoast } from './coast-clip.js';
+import { scaleRibbonWithZoom, type ZoomScaledRibbon } from './trail-ribbon-width.js';
 import { LAND_RELIEF_AMPLITUDE } from './land-relief.js';
 import { SHIPPED_SHORE, shoreRelief } from './shore-fall.js';
 import { shoreArmRingPlan } from './shore-ring.js';
@@ -1285,13 +1286,23 @@ function KitProps({
 
 function TrailStrip({ strip, regrow }: { strip: InstanceDescriptor; regrow: ForestRegrowPresentation | null | undefined }) {
   const pts = regrowTrailPoints(strip, regrow ?? null) ?? [];
-  if (pts.length < 2) return null;
+  const width = strip.width ?? 3;
+  // ⚠ A ROAD SCALES WITH THE LAND (owner, 2026-09-25: "pathways get thicker as you zoom out which is
+  // not something we want"). drei's `lineWidth` is SCREEN pixels, so on its own the ribbon stayed the
+  // same width at every zoom and grew to a third of an island's width zoomed out. The width is set
+  // from the camera of each draw instead (`trail-ribbon-width.ts`), on the renderer's own per-object
+  // hook so the host's synchronous camera draw gets it too; `lineWidth` below is only the first value.
+  const line = useRef<ZoomScaledRibbon | null>(null);
+  const drawn = pts.length >= 2;
+  useLayoutEffect(() => (drawn && line.current ? scaleRibbonWithZoom(line.current, width) : undefined), [drawn, width]);
+  if (!drawn) return null;
   return (
     <Line
+      ref={line as never}
       points={pts.map((p) => [p.x, p.y + 0.2, p.z] as [number, number, number])}
       color="#b0a48e"
       // width from the ONE shared rule (trailFillWidth, baked into the descriptor)
-      lineWidth={strip.width ?? 3}
+      lineWidth={width}
     />
   );
 }
