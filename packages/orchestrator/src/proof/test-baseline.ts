@@ -168,12 +168,21 @@ const MARKER_HELP =
  */
 export function reviewTestChanges(input: TestChangeReview): TestChangeRecord {
   const markers = markersAddedBy(input.beforeSource, input.afterSource);
-  const now = new Map(input.after.map((t) => [keyOf(t.path), t] as const));
+  // A title path is not a unique identity: static reads retain mutually exclusive declarations with
+  // the same title. Pair each baseline occurrence with the next current occurrence in source order,
+  // so one duplicate cannot overwrite or conceal its sibling.
+  const now = new Map<string, BaselineTest[]>();
+  for (const test of input.after) {
+    const key = keyOf(test.path);
+    const occurrences = now.get(key);
+    if (occurrences === undefined) now.set(key, [test]);
+    else occurrences.push(test);
+  }
   const changes: TestChange[] = [];
   const findings: PerTestFinding[] = [];
 
   for (const was of input.before) {
-    const still = now.get(keyOf(was.path));
+    const still = now.get(keyOf(was.path))?.shift();
     const rewritten =
       still !== undefined &&
       was.bodyHash !== undefined &&
