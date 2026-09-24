@@ -1374,10 +1374,11 @@ export interface RegisteredUnderlay {
 /** WHAT REGISTERED MODE CHANGES — every one of the canvas's delivery decisions, as one object. */
 export interface UnderlayComposition {
   /** Extra `<Canvas>` props. Presentable canvases render on demand; parked or hidden ones never
-   * paint. Registered canvases also use a transparent drawing buffer. */
+   * paint. Registered canvases use a transparent drawing buffer and are pointer-inert. */
   readonly canvasProps: {
     readonly frameloop: 'demand' | 'never';
     readonly gl?: { readonly alpha: boolean };
+    readonly style?: { readonly pointerEvents: 'none' };
   };
   /** Paint this canvas's own dark board behind the world. */
   readonly backdrop: boolean;
@@ -1451,7 +1452,9 @@ export function underlayComposition(
     };
   }
   return {
-    canvasProps: { frameloop, gl: { alpha: true } },
+    // R3F's wrapper explicitly defaults to pointer-events:auto, overriding the host's inherited
+    // none. Set its own style so the registered canvas stays outside hit testing beneath the SVG.
+    canvasProps: { frameloop, gl: { alpha: true }, style: { pointerEvents: 'none' } },
     backdrop: false,
     props: registered.props === true,
     // ⚠ NOT `registered.showTrails` AND NOT A FIELD — see the doc comment. Mounted means the 3D

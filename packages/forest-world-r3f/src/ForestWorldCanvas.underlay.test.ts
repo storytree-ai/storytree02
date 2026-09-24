@@ -50,13 +50,20 @@ test('standalone: the canvas keeps everything it draws, and its own camera contr
   // A presentable standalone canvas paints only when its content or controls invalidate it.
   assert.equal(c.canvasProps.frameloop, 'demand');
   assert.equal(c.canvasProps.gl, undefined);
+  assert.equal(c.canvasProps.style, undefined, 'standalone keeps R3F pointer interaction');
 });
 
-test('registered: it gives up its camera controls, so the host owns pan and zoom', () => {
+test('registered: it gives up camera controls and pointer eligibility, so the host owns interaction', () => {
   // ⚠ THE SINGLE MOST IMPORTANT FENCE HERE (ADR-0380 D6 fence 3). `MapControls` binds its own
   // pointer and wheel listeners to the canvas element, so leaving it mounted under a host would
   // give the map two cameras fighting over one gesture — and it would look fine at rest.
-  assert.equal(underlayComposition(REGISTERED).controls, false);
+  for (const registered of [REGISTERED, { ...REGISTERED, props: true }]) {
+    const c = underlayComposition(registered);
+    assert.equal(c.controls, false);
+    // An outer pointer-events:none is insufficient: R3F writes auto on its own wrapper. This is
+    // the style actually spread into Canvas, covering both the ground-only and dressed arms.
+    assert.deepEqual(c.canvasProps.style, { pointerEvents: 'none' });
+  }
 });
 
 test('registered: it runs no render loop, which is what makes it honest about reduced motion', () => {

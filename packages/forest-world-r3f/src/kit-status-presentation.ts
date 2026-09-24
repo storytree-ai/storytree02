@@ -42,7 +42,9 @@ export function presentationMaterial(
   const sourceKey = source.customProgramCacheKey;
   material.opacity = source.opacity * alpha;
   material.alphaTest = source.alphaTest * alpha;
-  material.transparent = false;
+  // The opaque route forces fragment alpha to 1 and disables normal blending. A legend
+  // fade must enter the transparent pass; the scaled alpha test still keeps its cutout.
+  material.transparent = true;
   material.depthWrite = true;
   material.onBeforeCompile = function onBeforeCompile(shader, renderer) {
     sourceHook.call(this, shader, renderer);

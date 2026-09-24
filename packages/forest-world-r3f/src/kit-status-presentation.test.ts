@@ -130,6 +130,14 @@ test('native-status-presentation-batches-delivered-materials-by-alpha: actual ki
   assert.equal(foliage.length, 2, 'three foliage props form full and dimmed material buckets, never one mesh per prop');
   assert.deepEqual(foliage.map((mesh) => mesh.geometry.getAttribute('position').count).sort((a, b) => a - b), [24, 48]);
   assert.deepEqual(foliage.map((mesh) => (mesh.material as THREE.MeshStandardMaterial).opacity).sort(), [0.12, 1]);
+  // The real-browser regression delivered opacity .12 but identical pixels because these
+  // materials stayed opaque. Both bark and foliage need the actual blending route.
+  for (const mesh of meshes) {
+    const material = mesh.material as THREE.MeshStandardMaterial;
+    assert.equal(material.transparent, material.opacity === 0.12);
+    assert.equal(material.blending, THREE.NormalBlending);
+    assert.equal(material.depthWrite, true);
+  }
 });
 
 test('native-status-presentation-batches-delivered-materials-by-alpha: absent alpha keeps full materials and bark batching across foliage tints', () => {
@@ -248,7 +256,10 @@ test('native-status-presentation-keeps-dimmed-cutouts-and-existing-hooks: dimmed
   assert.equal(source.onBeforeCompile, sourceHook);
   assert.equal(source.customProgramCacheKey(), sourceKey);
   assert.equal(dimmed.opacity, 0.12);
-  assert.equal(dimmed.transparent, false);
+  assert.equal(source.transparent, false, 'the full-alpha shared cutout remains opaque');
+  assert.equal(dimmed.transparent, true, 'legend alpha must reach blending rather than the opaque fragment override');
+  assert.equal(growth.transparent, true, 'the actual final growth clone must retain the blending route');
+  assert.equal(growth.blending, THREE.NormalBlending);
   assert.equal(dimmed.depthWrite, true);
   assert.equal(dimmed.alphaTest, 0.06, 'the authored 0.5 cutout is scaled by the dimmed alpha');
   for (const texelAlpha of [0, 0.49, 0.5, 1]) {
