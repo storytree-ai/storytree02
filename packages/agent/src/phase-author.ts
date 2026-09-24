@@ -20,6 +20,15 @@
 export type AuthoringPhase = "AUTHOR_TEST" | "IMPLEMENT";
 
 /**
+ * A recorded C8 reason may admit an existing affected test as this call's AUTHOR_TEST change.
+ * It is deliberately data for one call, never author state or a broader write permission.
+ */
+export type AuthoringRepairAdmission = {
+  kind: "c8-existing-test-reason";
+  targets: readonly string[];
+};
+
+/**
  * The admitted live leaves (ADR-0232), plus pi (`pi-harness-admission-arc`, ADR-0449).
  *
  * `"pi"` WAS in the type before it was in the CLI, deliberately — increment 2 built `PiPhaseAuthor`
@@ -59,7 +68,11 @@ export type AuthorResult =
  * fails closed). It must NOT run tests to decide success — the spine observes red/green itself.
  */
 export interface PhaseAuthor {
-  author(phase: AuthoringPhase, prompt: string): Promise<AuthorResult>;
+  author(
+    phase: AuthoringPhase,
+    prompt: string,
+    repairAdmission?: AuthoringRepairAdmission,
+  ): Promise<AuthorResult>;
 }
 
 /**
