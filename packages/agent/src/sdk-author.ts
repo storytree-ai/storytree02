@@ -579,6 +579,7 @@ interface ResultLike {
   usage?: unknown;
   modelUsage?: unknown;
   errors?: string[];
+  result?: unknown;
 }
 
 /** A finite number or nothing — the defensive floor every usage field is read through. */
@@ -1010,6 +1011,20 @@ export class ClaudeAgentAuthor implements PhaseAuthor {
         ? { ok: false, exhausted: true, error }
         : { ok: false, error };
     }
+    // A `success` that no model answered is not a success. Measured 2026-09-24: a bundled Claude Code
+    // too old for the requested model returned subtype `success`, `is_error` false, an API-error string
+    // as its text, and an EMPTY `modelUsage` — a slice that authored nothing reading as a clean pass.
+    // Only a PRESENT-and-empty split trips this; a result carrying no `modelUsage` at all (an old or
+    // scripted runtime) stays additive, never fail-closed.
+    if (noModelAnswered(result.modelUsage)) {
+      const text = typeof result.result === "string" ? `: ${result.result}` : "";
+      return { ok: false, error: `SDK session reported success but no model answered (empty modelUsage)${text}` };
+    }
     return { ok: true };
   }
+}
+
+/** True when the SDK reported a per-model split and it names no model at all. */
+function noModelAnswered(modelUsage: unknown): boolean {
+  return typeof modelUsage === "object" && modelUsage !== null && Object.keys(modelUsage).length === 0;
 }
