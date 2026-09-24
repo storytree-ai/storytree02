@@ -96,6 +96,35 @@ test('public-ground-scene-is-coherent-and-deterministic: published ground facts 
     assert.ok(first.relaxedCells!.some((cell) => cell.owner === first.territories.indexOf(island)));
     assert.ok(island.coastGroundLoops.length > 0);
   }
+
+  const changedRings = composePublicGroundScene({
+    ...facts,
+    islands: facts.islands.map((island, index) => index === 0 ? { ...island, rings: island.rings + 1 } : island),
+  });
+  for (const scene of [first, changedRings]) {
+    assert.deepEqual(scene.offset, facts.offset);
+    assert.equal(scene.width, facts.width);
+    assert.equal(scene.height, facts.height);
+    for (const [index, source] of facts.islands.entries()) {
+      const territory = scene.territories[index]!;
+      assert.deepEqual(territory.centroid, source.centre);
+      assert.equal(territory.groundRadius, source.groundRadius);
+      assert.deepEqual(territory.treeSpot, source.treeSpot);
+      assert.equal(territory.labelY, source.labelY);
+      assert.deepEqual(territory.plate, source.plate);
+      assert.equal(territory.treeTitle, source.treeTitle);
+    }
+  }
+  assert.notDeepEqual(
+    changedRings.relaxedCells!.filter((cell) => cell.owner === 0).map((cell) => cell.poly),
+    first.relaxedCells!.filter((cell) => cell.owner === 0).map((cell) => cell.poly),
+    'supplied ring topology changes the island mesh at a fixed centre, radius and capability count',
+  );
+  assert.notDeepEqual(
+    changedRings.territories[0]!.coastGroundLoops,
+    first.territories[0]!.coastGroundLoops,
+    'supplied ring topology changes the island coast at a fixed centre, radius and capability count',
+  );
 });
 
 test('public-ground-scene-preserves-published-capability-ground: every published capability remains an ordered attributed parcel', () => {
