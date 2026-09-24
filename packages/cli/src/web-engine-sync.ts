@@ -241,20 +241,63 @@ export function detectEngineDrift(
 // siblings over the same absent submodule already declare `GATE_SKIP_EXIT_CODE`; this adopts the
 // vocabulary that already existed rather than inventing a second one.
 //
+// Two more compare nothing and REFUSE rather than skip (friction
+// `web-engine-red-prescribes-the-wrong-repair`, 2026-09-24): a checkout that is not on the commit
+// this branch records for `web/`, and one whose commit cannot be read — see {@link checkoutPinSight}.
+//
 // The DECISION lives here, in the pure core, for the same reason every other judgement in this
 // module does: the shell's copy of it could only be exercised by arranging a `web/` checkout state
 // on disk, which is precisely the environment the check cannot control. Tests drive this with
 // literals.
 
 /**
- * What one `--check` run was actually able to COMPARE. The three cases are exhaustive over
- * {@link ENGINE_PACKAGES}: no checkout to look in, a checkout in which no package has been adopted,
- * or a real comparison over at least one adopted dir.
+ * What one `--check` run was actually able to COMPARE. The cases are exhaustive over
+ * {@link ENGINE_PACKAGES}: no checkout to look in; a checkout that is not on the commit this branch
+ * records, or whose commit could not be read (both refuse before comparing anything); a checkout in
+ * which no package has been adopted; or a real comparison over at least one adopted dir.
  */
 export type EngineCheckSight =
   | { readonly kind: "no-web-checkout" }
+  | { readonly kind: "off-pin"; readonly pin: string; readonly checkedOut: string }
+  | { readonly kind: "pin-unreadable"; readonly what: string }
   | { readonly kind: "no-adopted-package" }
   | { readonly kind: "compared"; readonly files: number; readonly dirs: readonly string[] };
+
+/** What the shell read about `web/`'s commit, for {@link checkoutPinSight}; `null` = unreadable. */
+export interface CheckoutPinReading {
+  /** The `web` gitlink this branch records — read from the INDEX, which is what
+   *  `git submodule update` restores and what a staged bump already records. */
+  readonly pin: string | null;
+  /** The commit `web/` is actually checked out at. */
+  readonly checkedOut: string | null;
+}
+
+/**
+ * Is `web/` checked out at the commit this branch records for it? `null` when it is — the source
+ * comparison may go ahead — and otherwise the sight that stops it.
+ *
+ * WHY THIS COMES FIRST. The comparison reads whatever commit sits under `web/`, while CI checks out
+ * the RECORDED one. On a reused worktree the two can differ, and a difference then proves neither
+ * that the parent packages moved nor that a sync is safe. Measured 2026-08-28: a branch that touched
+ * no forest-world file redded on five r3f files because `web/` sat on an older commit, and the
+ * remedy printed (sync, commit, bump) would have put a spurious website commit and pin bump on an
+ * unrelated pull request — and gone GREEN doing it. So an off-pin checkout refuses before anything
+ * is compared, and so does an unreadable one: a comparison over an unknown checkout proves nothing.
+ */
+export function checkoutPinSight(read: CheckoutPinReading): EngineCheckSight | null {
+  if (read.pin === null) {
+    return { kind: "pin-unreadable", what: "the web gitlink this branch records (`git rev-parse :web`)" };
+  }
+  if (read.checkedOut === null) {
+    return { kind: "pin-unreadable", what: "the commit web/ is checked out at (`git -C web rev-parse HEAD`)" };
+  }
+  return read.pin === read.checkedOut ? null : { kind: "off-pin", pin: read.pin, checkedOut: read.checkedOut };
+}
+
+/** A commit as a reader matches it by eye. */
+function short(sha: string): string {
+  return sha.slice(0, 8);
+}
 
 /**
  * The gate-facing status. `skip` is the DECLARED opt-out the runner renders as SKIP and names in
@@ -264,7 +307,7 @@ export type EngineCheckStatus = "ok" | "skip" | "fail";
 
 export interface EngineCheckVerdict {
   readonly status: EngineCheckStatus;
-  /** The single line the shell prints — stderr for `fail`, stdout otherwise. */
+  /** What the shell prints — stderr for `fail`, stdout otherwise. */
   readonly message: string;
 }
 
@@ -287,9 +330,12 @@ export interface EngineCheckVerdict {
  * red, which is this arc's own defect wearing the opposite sign: a report meaning something to its
  * reader that its author did not intend. So the message still says plainly that nothing was
  * compared — the CI log stays honest — while the exit code speaks the vocabulary the CI mode
- * understands. Letting a check DECLARE which of its skips CI accepts is ADR-0606 D1's per-check
- * declaration (`gate-checks-found-like-tests-arc` inc-03); until then, the honest code here is the
- * one that does not lie to the run reading it.
+ * understands. ADR-0606 D1 has since let a check DECLARE a skip CI accepts (`inCi: accepted`), but
+ * `check-web-engine.ts` declares `inCi: failure`; while it does, withholding the code on the one
+ * blind branch that can fire in CI stays the answer that does not lie to the run reading it.
+ *
+ * `off-pin` and `pin-unreadable` are failures in BOTH places: neither is an opt-in state, and CI,
+ * which checks out the recorded commit, should never meet either.
  */
 export function judgeEngineCheck(
   sight: EngineCheckSight,
@@ -310,6 +356,24 @@ export function judgeEngineCheck(
               "check:web-engine — SKIP: web/ submodule not checked out " +
               "(run `git submodule update --init web` to enable this check locally).",
           };
+    case "off-pin":
+      return {
+        status: "fail",
+        message:
+          `check:web-engine — BLOCKED: web/ is checked out at ${short(sight.checkedOut)}, but this branch ` +
+          `records ${short(sight.pin)} for it, so nothing was compared: the copy on disk is not the one CI ` +
+          "checks, and a difference in it would say nothing about the parent packages.\n" +
+          "  RUN:  git submodule update --init web   — puts web/ back on the recorded commit (fetching it " +
+          "if this clone lacks it); it changes nothing in this repository.\n" +
+          "  Do not sync or re-pin to make this pass: the difference is in the checkout, not the packages.",
+      };
+    case "pin-unreadable":
+      return {
+        status: "fail",
+        message:
+          `check:web-engine — BLOCKED: could not read ${sight.what}, so it cannot tell whether web/ is on ` +
+          "the commit this branch records, and a comparison over an unknown checkout proves nothing.",
+      };
     case "no-adopted-package": {
       const what =
         "no synced package dir is present in web/ yet, so nothing was compared (the site has " +
