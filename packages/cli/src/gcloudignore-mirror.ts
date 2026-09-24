@@ -167,11 +167,9 @@ function unnegated(pattern: string): string {
 export function judgeGcloudignoreMirror(gitignore: string, gcloudignore: string): MirrorVerdict {
   const subjects = requiredMirror(gitignore);
   // No CRLF normalisation step: splitting on "\n" numbers the lines identically either way, and the
-  // `trim()` below already strips a CRLF file's trailing "\r" from every line.
-  const lines = gcloudignore
-    .split("\n")
-    .map((text, i) => ({ line: i + 1, text: text.trim() }))
-    .filter((l) => isPattern(l.text));
+  // `trim()` below already strips a CRLF file's trailing "\r" from every line. Blank and comment lines
+  // are not filtered out: every subject is a non-empty, non-`#` pattern, so neither can ever match one.
+  const lines = gcloudignore.split("\n").map((text, i) => ({ line: i + 1, text: text.trim() }));
   const missing: MirrorGap[] = [];
   for (const subject of subjects) {
     const path = unnegated(subject.pattern);
