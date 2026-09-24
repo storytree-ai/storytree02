@@ -169,8 +169,15 @@ export interface GatePlanStep extends GateStep {
  * or anything it depends on changed, and a branch that cannot reach the studio pays nothing. A full
  * scope runs it as declared. Its minutes cost is DECLARED on the leg, which is what keeps the shared
  * environment after it — the ordering axes read the declaration, not the command text.
+ *
+ * THE SCRIPT NAME HAS ONE HOME. The narrowed rewrite runs it under `--if-present`, which runs NOTHING
+ * at exit 0 in a scope where no package declares the named script — so a narrowed form that spelled
+ * its own copy of the name would, after a rename, make every affected-scope PR run no journey and
+ * report green. Both forms read this constant.
  */
-export const STUDIO_UAT_STEP = "pnpm --filter studio uat";
+export const STUDIO_UAT_SCRIPT = "uat";
+/** The declared form of the studio journey's leg — built from {@link STUDIO_UAT_SCRIPT}, never retyped. */
+export const STUDIO_UAT_STEP = `pnpm --filter studio ${STUDIO_UAT_SCRIPT}`;
 
 /**
  * The gate's FIXED legs, in the three slots the derived plan places around the checks (ADR-0606 D1:

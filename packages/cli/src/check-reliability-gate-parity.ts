@@ -52,6 +52,7 @@ import {
   judgeReliabilityGateParity,
   UNRUN_GATE_BASELINE,
   VacuousReliabilitySweep,
+  workspaceScriptResolver,
 } from "./reliability-gate-parity.js";
 
 const TAG = "[check:reliability-gate-parity]";
@@ -92,14 +93,29 @@ function gatherStories(root: string): StoryFile[] {
   return out.sort((a, b) => a.path.localeCompare(b.path));
 }
 
+/**
+ * Every workspace package's name and declared scripts — what a declared gate's command can actually
+ * reach. Read from the same project discovery the gate's scope classifier uses.
+ */
+function gatherManifests(root: string, dirs: readonly string[]): { name: string; scripts: string[] }[] {
+  return dirs.map((dir) => {
+    const manifest = JSON.parse(readFileSync(join(root, dir, "package.json"), "utf8")) as {
+      name: string;
+      scripts?: Record<string, unknown>;
+    };
+    return { name: manifest.name, scripts: Object.keys(manifest.scripts ?? {}) };
+  });
+}
+
 function main(): void {
   const stories = gatherStories(repoRoot);
+  const projectDirs = discoverWorkspaceProjects(repoRoot).map((project) => project.dir);
 
   // The WHOLE plan, every placement, found exactly as `pnpm gate` finds it (ADR-0606 D1). CI runs this
   // same plan through `pnpm gate --ci` (D3), so there is no second source to read.
   const loaded = loadGatePlan(
     repoRoot,
-    discoverWorkspaceProjects(repoRoot).map((project) => project.dir),
+    projectDirs,
     BUILT_IN_LEGS,
   );
   if (!loaded.ok) {
@@ -111,6 +127,7 @@ function main(): void {
     stories,
     steps: loaded.plan,
     baseline: UNRUN_GATE_BASELINE,
+    resolveScript: workspaceScriptResolver(gatherManifests(repoRoot, projectDirs)),
   });
 
   const body = formatReliabilityGateParity(parity);

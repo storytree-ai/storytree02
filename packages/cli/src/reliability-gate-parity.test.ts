@@ -11,13 +11,15 @@ import {
   formatReliabilityGateParity,
   judgeCoverage,
   judgeReliabilityGateParity,
+  isRetiredNode,
   parsePackageScriptCommand,
-  reliabilityGatesBlock,
   repoWideScripts,
+  type ScriptResolver,
   targetedInvocations,
   targetKey,
   UNRUN_GATE_BASELINE,
   VacuousReliabilitySweep,
+  workspaceScriptResolver,
 } from "./reliability-gate-parity.js";
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
@@ -40,6 +42,12 @@ function plan(...commands: string[]): GateStep[] {
 function legPlan(): GateStep[] {
   return plan("pnpm -r --no-bail typecheck", "pnpm -r --no-bail test");
 }
+
+/**
+ * A workspace in which every filtered package exists and declares every script — the resolver for
+ * tests about COVERAGE rather than existence. The existence precondition has its own tests below.
+ */
+const ALL_DECLARED: ScriptResolver = () => "declared";
 
 /**
  * Line endings BUILT AT RUNTIME rather than typed as escapes.
@@ -152,10 +160,9 @@ const GOLDEN_STALE_GHOST = [
   "[check:reliability-gate-parity]   Edit UNRUN_GATE_BASELINE in packages/cli/src/reliability-gate-parity.ts.",
 ].join(LF);
 
-const GOLDEN_BLOCK_LAST = "\n\n1. _(gate: observe)_ `pnpm --filter studio uat`.\n";
 
-describe("reliabilityGatesBlock", () => {
-  it("slices the declared block and stops at the next heading", () => {
+describe("declaredGatesIn — reads what the library parser reads", () => {
+  it("reads the declared block only: neither the criteria section above nor the proof section below", () => {
     const story = [
       "# A story",
       "",
@@ -168,38 +175,47 @@ describe("reliabilityGatesBlock", () => {
       "",
       "## Proof",
       "",
-      "The story proves only when `pnpm --filter studio uat` passes.",
-    ].join("\n");
-
-    const block = reliabilityGatesBlock(story);
-    assert.notEqual(block, null);
-    assert.ok(block?.includes("pnpm --filter studio uat"));
-    // Bounded at both ends: neither the criteria section above nor the proof section below.
-    assert.equal(block?.includes("ghost"), false);
-    assert.equal(block?.includes("The story proves only when"), false);
+      "The story proves only when `pnpm --filter desktop uat` passes.",
+    ].join(LF);
+    assert.deepEqual(
+      declaredGatesIn("stories/s/story.md", story).map((g) => g.command),
+      ["pnpm --filter studio uat"],
+    );
   });
 
-  it("returns null for a story declaring no block", () => {
-    assert.equal(reliabilityGatesBlock("# A story\n\n## Proof\n\nnothing declared.\n"), null);
+  it("returns nothing for a story declaring no block", () => {
+    assert.deepEqual(declaredGatesIn("stories/s/story.md", `# A story${LF}${LF}## Proof${LF}${LF}nothing declared.${LF}`), []);
   });
 
   it("reads a CRLF story identically to an LF one", () => {
     // The guard against this arc's OWN sibling defect (`uat-parser-normalises-line-endings`): a
-    // reader that splits or offsets on a bare "\n" parses a CRLF story to nothing, and a check that
-    // judges nothing PASSES. A CRLF story must never be able to declare zero gates as a legal answer.
-    const lf = "# S\n\n## Reliability Gates\n\n1. _(gate: observe)_ `pnpm --filter studio uat`.\n\n## Proof\n\nx\n";
-    const crlf = lf.replace(/\n/g, "\r\n");
-
-    const fromLf = declaredGatesIn("stories/s/story.md", lf);
-    const fromCrlf = declaredGatesIn("stories/s/story.md", crlf);
-
+    // reader that splits on a bare LF parses a CRLF story to nothing, and a check that judges nothing
+    // PASSES. The library's item pattern does not tolerate a trailing CR, so the normalisation here is
+    // what keeps a CRLF story from declaring zero gates as a legal answer.
+    const lf = ["# S", "", "## Reliability Gates", "", "1. _(gate: observe)_ `pnpm --filter studio uat`.", "", "## Proof", "", "`pnpm --filter desktop uat`", ""];
+    const fromLf = declaredGatesIn("stories/s/story.md", lf.join(LF));
+    const fromCrlf = declaredGatesIn("stories/s/story.md", lf.join(CR + LF));
     assert.equal(fromLf.length, 1);
     assert.deepEqual(
-      fromCrlf.map((g) => g.parsed),
-      fromLf.map((g) => g.parsed),
+      fromCrlf.map((g) => g.command),
+      fromLf.map((g) => g.command),
     );
-    // And the block boundary still holds under CRLF, rather than swallowing the rest of the file.
-    assert.equal(reliabilityGatesBlock(crlf)?.includes("## Proof"), false);
+  });
+
+  it("skips a gate RETIRED IN PLACE — it is no longer an obligation", () => {
+    const story = [
+      "# S",
+      "",
+      "## Reliability Gates",
+      "",
+      "1. _(gate: observe)_ (retired) `pnpm --filter desktop uat`.",
+      "2. _(gate: observe)_ `pnpm --filter studio uat`.",
+      "",
+    ].join(LF);
+    assert.deepEqual(
+      declaredGatesIn("stories/s/story.md", story).map((g) => g.command),
+      ["pnpm --filter studio uat"],
+    );
   });
 });
 
@@ -248,7 +264,6 @@ describe("parsePackageScriptCommand", () => {
       null,
     );
     assert.equal(parsePackageScriptCommand("pnpm --filter studio dlx something"), null);
-    assert.equal(parsePackageScriptCommand("pnpm --filter studio run test"), null);
   });
 
   it("refuses anything that is not a pnpm invocation", () => {
@@ -333,34 +348,21 @@ describe("parsePackageScriptCommand — the distinctions the mutation rung found
   });
 });
 
-describe("reliabilityGatesBlock — the boundary cases the mutation rung found unproven", () => {
-  it("returns the REST of the file when its block is the last section", () => {
-    // Both the no-following-heading branch and the slice itself survived: with a `## Proof` below,
-    // the mutated and unmutated forms agreed closely enough that nothing distinguished them.
-    const story = STORY_BLOCK_LAST;
-    const block = reliabilityGatesBlock(story);
-    assert.ok(block?.includes("pnpm --filter studio uat"));
-    // And it is the TAIL, not the whole file: the heading and everything above it stay out.
-    assert.equal(block?.includes("# S"), false);
-    assert.equal(block?.includes("## Reliability Gates"), false);
+describe("declaredGatesIn — the boundary cases the mutation rung found unproven", () => {
+  it("reads a block that is the LAST section of the file", () => {
+    assert.deepEqual(
+      declaredGatesIn("stories/s/story.md", STORY_BLOCK_LAST).map((g) => g.command),
+      ["pnpm --filter studio uat"],
+    );
   });
 
   it("normalises a BARE carriage return, not only a CRLF pair", () => {
-    // The EOL regex was unproven against the CRLF-only form, because the CRLF test never produced a
-    // lone CR. A file with classic-Mac endings would keep every CR, the newline-anchored `## `
-    // boundary probe would never match, and the block would swallow the rest of the file.
-    const block = reliabilityGatesBlock(STORY_BARE_CR);
-    assert.ok(block?.includes("pnpm --filter studio uat"));
-    assert.equal(block?.includes("## Proof"), false, "the boundary must hold under a bare CR too");
+    // A file with classic-Mac endings would otherwise present the library parser with ONE line, and
+    // it would find no heading at the start of any line.
     assert.equal(declaredGatesIn("stories/s/story.md", STORY_BARE_CR).length, 1);
   });
 
-  it("declaredGatesIn returns nothing for a blockless story, rather than reading the whole file", () => {
-    // The null guard survived because every judge test supplied a block. Without it the `null` flows
-    // into `matchAll` and throws, so a corpus holding ONE blockless story crashes the rung — and
-    // `stories/**` is mostly blockless files.
-    assert.equal(reliabilityGatesBlock(STORY_NO_BLOCK), null);
-    assert.doesNotThrow(() => declaredGatesIn("stories/s/story.md", STORY_NO_BLOCK));
+  it("returns nothing for a blockless story, rather than reading the whole file", () => {
     assert.deepEqual(declaredGatesIn("stories/s/story.md", STORY_NO_BLOCK), []);
   });
 });
@@ -381,7 +383,7 @@ describe("formatReliabilityGateParity — WHOLE-STRING goldens", () => {
    * wrote the code.
    */
   const judge = (declared: string, extraSteps: string[], baseline: BaselinedGate[]) =>
-    judgeReliabilityGateParity({
+    judgeReliabilityGateParity({ resolveScript: ALL_DECLARED,
       stories: [
         { path: "stories/s/story.md", text: `# S${LF}${LF}## Reliability Gates${LF}${LF}1. _(gate: observe)_ \`${declared}\`.${LF}` },
       ],
@@ -427,7 +429,7 @@ describe("formatReliabilityGateParity — WHOLE-STRING goldens", () => {
   it("the covered/carried/charged counts are arithmetic, not a restatement of one number", () => {
     // The count line survived two ArithmeticOperator mutants because no test read it. Three
     // declarations in three states make the three numbers mutually distinguishable.
-    const parity = judgeReliabilityGateParity({
+    const parity = judgeReliabilityGateParity({ resolveScript: ALL_DECLARED,
       stories: [
         {
           path: "stories/s/story.md",
@@ -463,7 +465,7 @@ describe("the judge's partitions, which the rung found unproven", () => {
   it("a baseline entry matches on story AND command, never on either alone", () => {
     // The lookup's `&&` survived as `||`: with one entry whose story and command both matched,
     // the two are indistinguishable. These two entries each match exactly one half.
-    const parity = judgeReliabilityGateParity({
+    const parity = judgeReliabilityGateParity({ resolveScript: ALL_DECLARED,
       stories: [story("pnpm --filter studio uat")],
       steps: legPlan(),
       baseline: [
@@ -480,7 +482,7 @@ describe("the judge's partitions, which the rung found unproven", () => {
   it("a COVERED gate never lands in the baselined list, even when the baseline names it", () => {
     // The partition's `&&` survived as `||`: without the coverage half a covered-and-baselined gate
     // would be reported as CARRIED — a run that is actually fine described as carrying debt.
-    const parity = judgeReliabilityGateParity({
+    const parity = judgeReliabilityGateParity({ resolveScript: ALL_DECLARED,
       stories: [story("pnpm --filter studio uat")],
       steps: [...legPlan(), ...plan("pnpm --filter studio uat")],
       baseline: [{ story: "stories/s/story.md", command: "pnpm --filter studio uat", blocker: "z".repeat(90) }],
@@ -617,7 +619,7 @@ describe("judgeReliabilityGateParity", () => {
   });
 
   it("passes when every declared package-script gate is run", () => {
-    const parity = judgeReliabilityGateParity({
+    const parity = judgeReliabilityGateParity({ resolveScript: ALL_DECLARED,
       stories: [story("pnpm --filter studio test")],
       steps: legPlan(),
       baseline: [],
@@ -628,7 +630,7 @@ describe("judgeReliabilityGateParity", () => {
   });
 
   it("fails on a declared gate nothing runs, and names it", () => {
-    const parity = judgeReliabilityGateParity({
+    const parity = judgeReliabilityGateParity({ resolveScript: ALL_DECLARED,
       stories: [story("pnpm --filter studio uat")],
       steps: legPlan(),
       baseline: [],
@@ -641,7 +643,7 @@ describe("judgeReliabilityGateParity", () => {
   it("passes the SAME declaration once the plan is wired to run it", () => {
     // The two tests above and this one are the whole rung: the declaration did not change, only
     // whether anything runs it.
-    const parity = judgeReliabilityGateParity({
+    const parity = judgeReliabilityGateParity({ resolveScript: ALL_DECLARED,
       stories: [story("pnpm --filter studio uat")],
       steps: [...legPlan(), ...plan("pnpm --filter studio uat")],
       baseline: [],
@@ -650,7 +652,7 @@ describe("judgeReliabilityGateParity", () => {
   });
 
   it("ignores declarations that name no package script", () => {
-    const parity = judgeReliabilityGateParity({
+    const parity = judgeReliabilityGateParity({ resolveScript: ALL_DECLARED,
       stories: [
         {
           path: "stories/s/story.md",
@@ -670,7 +672,7 @@ describe("judgeReliabilityGateParity", () => {
   });
 
   it("reads build-tests items as well as observe ones", () => {
-    const parity = judgeReliabilityGateParity({
+    const parity = judgeReliabilityGateParity({ resolveScript: ALL_DECLARED,
       stories: [
         {
           path: "stories/s/story.md",
@@ -686,7 +688,7 @@ describe("judgeReliabilityGateParity", () => {
   it("THROWS rather than passing when the story walk found nothing", () => {
     assert.throws(
       () =>
-        judgeReliabilityGateParity({
+        judgeReliabilityGateParity({ resolveScript: ALL_DECLARED,
           stories: [],
           steps: legPlan(),
           baseline: [],
@@ -700,7 +702,7 @@ describe("judgeReliabilityGateParity", () => {
     // report as unrun. A blind read must not be reported as a breach.
     assert.throws(
       () =>
-        judgeReliabilityGateParity({
+        judgeReliabilityGateParity({ resolveScript: ALL_DECLARED,
           stories: [story("pnpm --filter studio test")],
           steps: plan("pnpm check:boundaries"),
           baseline: [],
@@ -723,7 +725,7 @@ describe("UNRUN_GATE_BASELINE", () => {
   const entry = { story: "stories/s/story.md", command: "pnpm --filter studio uat", blocker: "held: a red journey" };
 
   it("carries a declared breach instead of charging it, and keeps the verdict green", () => {
-    const parity = judgeReliabilityGateParity({
+    const parity = judgeReliabilityGateParity({ resolveScript: ALL_DECLARED,
       stories: [story("pnpm --filter studio uat")],
       steps: legPlan(),
       baseline: [entry],
@@ -736,7 +738,7 @@ describe("UNRUN_GATE_BASELINE", () => {
 
   it("prints a carried breach on a PASSING run, so a baseline nobody sees cannot become permanent", () => {
     const body = formatReliabilityGateParity(
-      judgeReliabilityGateParity({
+      judgeReliabilityGateParity({ resolveScript: ALL_DECLARED,
         stories: [story("pnpm --filter studio uat")],
         steps: legPlan(),
         baseline: [entry],
@@ -747,7 +749,7 @@ describe("UNRUN_GATE_BASELINE", () => {
   });
 
   it("FAILS on an entry whose gate is now run — the blocker cleared, so the entry is a lie", () => {
-    const parity = judgeReliabilityGateParity({
+    const parity = judgeReliabilityGateParity({ resolveScript: ALL_DECLARED,
       stories: [story("pnpm --filter studio uat")],
       // The plan now runs it, so the baseline entry must go.
       steps: [...legPlan(), ...plan("pnpm --filter studio uat")],
@@ -761,7 +763,7 @@ describe("UNRUN_GATE_BASELINE", () => {
   });
 
   it("FAILS on a GHOST entry whose declaration no longer exists", () => {
-    const parity = judgeReliabilityGateParity({
+    const parity = judgeReliabilityGateParity({ resolveScript: ALL_DECLARED,
       stories: [story("pnpm --filter studio test")],
       steps: legPlan(),
       baseline: [entry],
@@ -772,7 +774,7 @@ describe("UNRUN_GATE_BASELINE", () => {
 
   it("names the stale entry and where to edit it", () => {
     const body = formatReliabilityGateParity(
-      judgeReliabilityGateParity({
+      judgeReliabilityGateParity({ resolveScript: ALL_DECLARED,
         stories: [story("pnpm --filter studio test")],
         steps: legPlan(),
         baseline: [entry],
@@ -796,7 +798,7 @@ describe("UNRUN_GATE_BASELINE", () => {
 
 describe("formatReliabilityGateParity", () => {
   const judge = (declared: string) =>
-    judgeReliabilityGateParity({
+    judgeReliabilityGateParity({ resolveScript: ALL_DECLARED,
       stories: [
         { path: "stories/s/story.md", text: `# S\n\n## Reliability Gates\n\n1. _(gate: observe)_ \`${declared}\`.\n` },
       ],
@@ -823,17 +825,11 @@ describe("formatReliabilityGateParity", () => {
 });
 
 describe("the remaining strings and branches nothing had read", () => {
-  it("the block-is-last slice is pinned WHOLE, to the byte", () => {
-    // `includes` assertions could not separate `slice(afterHeading)` from `slice(afterHeading, -1)`:
-    // dropping the final character leaves every substring claim true. Only the whole value does.
-    assert.equal(reliabilityGatesBlock(STORY_BLOCK_LAST), GOLDEN_BLOCK_LAST);
-  });
-
   it("every NON_SCRIPT_HEAD is refused, not just the three anyone thought to test", () => {
     // Three of the six were exercised, so emptying any of the other three changed nothing. A head
     // that stops being excluded is read as a SCRIPT NAME, and the declaration then claims a gate on
     // a script that does not exist.
-    for (const head of ["exec", "dlx", "run", "install", "add", "why"]) {
+    for (const head of ["exec", "dlx", "install", "add", "why"]) {
       assert.equal(
         parsePackageScriptCommand(`pnpm --filter studio ${head} something`),
         null,
@@ -893,7 +889,7 @@ describe("the remaining strings and branches nothing had read", () => {
     // The count's own condition survived as `true`, which would report every story file as declaring
     // a block — and that number is what tells a reader whether an empty judged set means "nothing
     // decidable" or "nothing read".
-    const parity = judgeReliabilityGateParity({
+    const parity = judgeReliabilityGateParity({ resolveScript: ALL_DECLARED,
       stories: [
         { path: "stories/a/story.md", text: STORY_BLOCK_LAST },
         { path: "stories/b/story.md", text: STORY_NO_BLOCK },
@@ -910,7 +906,7 @@ describe("the remaining strings and branches nothing had read", () => {
     // Both messages were asserted only by their exception TYPE. The type tells a reader the check is
     // blind; only the message tells them which read broke, and the two repairs are different.
     const noStories = () =>
-      judgeReliabilityGateParity({
+      judgeReliabilityGateParity({ resolveScript: ALL_DECLARED,
         stories: [],
         steps: legPlan(),
         baseline: [],
@@ -923,7 +919,7 @@ describe("the remaining strings and branches nothing had read", () => {
     });
 
     const noLegs = () =>
-      judgeReliabilityGateParity({
+      judgeReliabilityGateParity({ resolveScript: ALL_DECLARED,
         stories: [{ path: "stories/a/story.md", text: STORY_BLOCK_LAST }],
         steps: plan("pnpm check:boundaries"),
         baseline: [],
@@ -1049,5 +1045,180 @@ describe("the real corpus", () => {
       gates.map((g) => g.parsed),
       [{ packages: ["studio"], script: "uat" }],
     );
+  });
+});
+
+/**
+ * THE ADVERSARIAL PASS'S SEEDED FAULTS (2026-09-24, `instrument-escape-repair-arc`), each rebuilt as
+ * the throwaway story the lane used. Every one exited 0 against the old reader while
+ * `parseReliabilityGates` returned the command — so each test here declares an UNRUN gate (`uat`,
+ * which the leg plan does not run) and asserts the rung CHARGES it. Against the old reader each of
+ * these judged nothing and passed.
+ */
+describe("the seeded faults the adversarial pass landed at exit 0", () => {
+  const judgeOne = (text: string, resolveScript: ScriptResolver = ALL_DECLARED, extra: string[] = []) =>
+    judgeReliabilityGateParity({
+      stories: [{ path: "stories/zz-probe/story.md", text }],
+      steps: [...legPlan(), ...plan(...extra)],
+      baseline: [],
+      resolveScript,
+    });
+  const probe = (heading: string, item: string, intro: string[] = []) =>
+    ["# Probe", "", ...intro, heading, "", item, ""].join(LF);
+
+  const cases: [string, string][] = [
+    ["(a) a lowercase heading", probe("## reliability gates", "1. _(gate: observe)_ `pnpm --filter studio uat`.")],
+    ["(a) a TAB after the hashes", probe(`##${String.fromCharCode(9)}Reliability Gates`, "1. _(gate: observe)_ `pnpm --filter studio uat`.")],
+    [
+      "(a) the heading quoted in intro prose before the real one",
+      probe("## Reliability Gates", "1. _(gate: observe)_ `pnpm --filter studio uat`.", [
+        "The gates live under `## Reliability Gates` below.",
+        "",
+        "## Notes",
+        "",
+        "`pnpm --filter studio test`",
+        "",
+      ]),
+    ],
+    ["(b) a command wrapped across lines", probe("## Reliability Gates", `1. _(gate: observe)_ \`pnpm --filter${LF}   studio uat\`.`)],
+    ["(c) the explicit `run` form", probe("## Reliability Gates", "1. _(gate: observe)_ `pnpm --filter studio run uat`.")],
+    ["(c) the `-F` short filter", probe("## Reliability Gates", "1. _(gate: observe)_ `pnpm -F studio uat`.")],
+    ["(c) a flag before the script", probe("## Reliability Gates", "1. _(gate: observe)_ `pnpm --filter studio --if-present uat`.")],
+  ];
+  for (const [name, text] of cases) {
+    it(`${name} is judged, and an unrun gate there is CHARGED`, () => {
+      const parity = judgeOne(text);
+      assert.equal(parity.judged.length, 1, "the declaration must be read at all");
+      assert.deepEqual(parity.judged[0]?.parsed, { packages: ["studio"], script: "uat" });
+      assert.equal(parity.verdict, "fail");
+      assert.equal(parity.unrun.length, 1);
+    });
+  }
+
+  it("(d) tier 2 does not credit a script the package does not declare", () => {
+    // The probe: `pnpm --filter @storytree/cli build` against a plan whose monorepo build leg is
+    // `pnpm -r build`. The CLI declares no `build`, so `-r` skips it without a word — and the old
+    // rung credited the declaration to that leg.
+    const text = probe("## Reliability Gates", "1. _(gate: observe)_ `pnpm --filter @storytree/cli build`.");
+    const resolve = workspaceScriptResolver([{ name: "@storytree/cli", scripts: ["test", "typecheck"] }]);
+    const parity = judgeOne(text, resolve, ["pnpm -r build"]);
+    assert.equal(parity.verdict, "fail");
+    assert.equal(
+      parity.unrun[0]?.coverage.detail,
+      "@storytree/cli declares no `build` script, so every leg that would run it skips it silently.",
+    );
+    // The control: declared, it IS covered by the same leg.
+    const declared = workspaceScriptResolver([{ name: "@storytree/cli", scripts: ["build"] }]);
+    assert.equal(judgeOne(text, declared, ["pnpm -r build"]).verdict, "pass");
+  });
+
+  it("(d) tier 2 does not credit a package that does not exist", () => {
+    const text = probe("## Reliability Gates", "1. _(gate: observe)_ `pnpm --filter @storytree/nope test`.");
+    const parity = judgeOne(text, workspaceScriptResolver([{ name: "@storytree/cli", scripts: ["test"] }]));
+    assert.equal(parity.verdict, "fail");
+    assert.equal(
+      parity.unrun[0]?.coverage.detail,
+      "no workspace package is named @storytree/nope, so nothing can run its `test` script.",
+    );
+  });
+
+  it("(d) tier 1 is held to the same precondition — a targeted step cannot run a missing script either", () => {
+    const text = probe("## Reliability Gates", "1. _(gate: observe)_ `pnpm --filter studio uat`.");
+    const noUat = workspaceScriptResolver([{ name: "studio", scripts: ["test"] }]);
+    assert.equal(judgeOne(text, noUat, ["pnpm --filter studio uat"]).verdict, "fail");
+    const withUat = workspaceScriptResolver([{ name: "studio", scripts: ["uat"] }]);
+    assert.equal(judgeOne(text, withUat, ["pnpm --filter studio uat"]).verdict, "pass");
+  });
+
+  it("names the MISSING package among several, and the missing script among several", () => {
+    const resolve = workspaceScriptResolver([
+      { name: "alpha", scripts: ["uat"] },
+      { name: "beta", scripts: ["test"] },
+    ]);
+    const twoPkgs = probe("## Reliability Gates", "1. _(gate: observe)_ `pnpm --filter alpha --filter gamma uat`.");
+    assert.equal(
+      judgeOne(twoPkgs, resolve).unrun[0]?.coverage.detail,
+      "no workspace package is named gamma, so nothing can run its `uat` script.",
+    );
+    const twoScripts = probe("## Reliability Gates", "1. _(gate: observe)_ `pnpm --filter alpha --filter beta uat`.");
+    assert.equal(
+      judgeOne(twoScripts, resolve).unrun[0]?.coverage.detail,
+      "beta declares no `uat` script, so every leg that would run it skips it silently.",
+    );
+  });
+});
+
+describe("parsePackageScriptCommand — every spelling pnpm accepts", () => {
+  it("reads `-F`, `-F=`, `--filter=`, and filters on either side of a switch", () => {
+    assert.deepEqual(parsePackageScriptCommand("pnpm -F studio uat"), { packages: ["studio"], script: "uat" });
+    assert.deepEqual(parsePackageScriptCommand("pnpm -F=studio uat"), { packages: ["studio"], script: "uat" });
+    assert.deepEqual(parsePackageScriptCommand("pnpm --silent --filter a -F b test"), { packages: ["a", "b"], script: "test" });
+  });
+
+  it("steps over ONE `run`, and reads a second as the script", () => {
+    assert.deepEqual(parsePackageScriptCommand("pnpm --filter studio run test"), { packages: ["studio"], script: "test" });
+    assert.deepEqual(parsePackageScriptCommand("pnpm run --filter studio test"), { packages: ["studio"], script: "test" });
+    assert.deepEqual(parsePackageScriptCommand("pnpm --filter studio run run"), { packages: ["studio"], script: "run" });
+  });
+
+  it("a value-taking flag consumes its value, so the value is never read as the script", () => {
+    assert.deepEqual(
+      parsePackageScriptCommand("pnpm --filter studio --workspace-concurrency 1 test"),
+      { packages: ["studio"], script: "test" },
+    );
+    assert.deepEqual(parsePackageScriptCommand("pnpm -C apps --filter studio test"), { packages: ["studio"], script: "test" });
+    // A switch does not: the next token is the script.
+    assert.deepEqual(parsePackageScriptCommand("pnpm --filter studio --if-present uat"), { packages: ["studio"], script: "uat" });
+    // The `=` spelling carries its value in the same token.
+    assert.deepEqual(parsePackageScriptCommand("pnpm --reporter=silent --filter studio test"), { packages: ["studio"], script: "test" });
+  });
+
+  it("each VALUE_FLAG consumes a value, not just the ones anyone thought to test", () => {
+    for (const flag of ["-C", "--dir", "--workspace-concurrency", "--reporter", "--test-pattern", "--changed-files-ignore-pattern", "--resume-from"]) {
+      assert.deepEqual(
+        parsePackageScriptCommand(`pnpm --filter studio ${flag} value uat`),
+        { packages: ["studio"], script: "uat" },
+        `${flag} must consume its value`,
+      );
+    }
+  });
+
+  it("a filtered command naming nothing after its flags names no script", () => {
+    assert.equal(parsePackageScriptCommand("pnpm --filter studio run"), null);
+    assert.equal(parsePackageScriptCommand("pnpm -F studio --if-present"), null);
+    assert.equal(parsePackageScriptCommand("pnpm -F"), null);
+  });
+});
+
+describe("isRetiredNode", () => {
+  it("reads `status: retired` from the leading frontmatter only", () => {
+    assert.equal(isRetiredNode(["---", "id: s", "status: retired", "---", "", "# S"].join(LF)), true);
+    assert.equal(isRetiredNode(["---", "id: s", "status: retired", "---"].join(CR + LF)), true);
+    assert.equal(isRetiredNode(["---", "id: s", "status: proposed", "---"].join(LF)), false);
+    // Prose that QUOTES the line is not a status.
+    assert.equal(isRetiredNode(["---", "id: s", "---", "", "status: retired"].join(LF)), false);
+    assert.equal(isRetiredNode(["# S", "", "status: retired"].join(LF)), false);
+    // An unclosed block is not frontmatter.
+    assert.equal(isRetiredNode(["---", "status: retired"].join(LF)), false);
+    // A value that merely STARTS with the word is not the status.
+    assert.equal(isRetiredNode(["---", "status: retired-ish", "---"].join(LF)), false);
+    assert.equal(isRetiredNode(["---", "old_status: retired", "---"].join(LF)), false);
+  });
+
+  it("a retired story's gates are not obligations — the three real stories whose packages died with them", () => {
+    const story = ["---", "status: retired", "---", "", "## Reliability Gates", "", "1. _(gate: observe)_ `pnpm --filter @storytree/gone test`.", ""].join(LF);
+    assert.deepEqual(declaredGatesIn("stories/s/story.md", story), []);
+    const parity = judgeReliabilityGateParity({
+      stories: [{ path: "stories/s/story.md", text: story }],
+      steps: legPlan(),
+      baseline: [],
+      resolveScript: workspaceScriptResolver([]),
+    });
+    assert.equal(parity.verdict, "pass");
+    assert.equal(parity.storiesWithBlock, 0, "a retired story is not counted as declaring a block");
+    for (const id of ["model-judged-uat", "model-uat-pilot", "model-uat-witness"]) {
+      const text = readFileSync(path.join(repoRoot, "stories", id, "story.md"), "utf8");
+      assert.equal(isRetiredNode(text), true, `${id} is retired on disk`);
+    }
   });
 });
