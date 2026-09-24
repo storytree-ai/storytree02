@@ -77,6 +77,15 @@ interface ProbeContext {
   getExtension?: (name: string) => { loseContext?: () => void } | null;
 }
 
+/** The probe's context, or `null` when it cannot be created — including when creating it throws. */
+function probeContext(probe: WebGL2Probe): ProbeContext | null {
+  try {
+    return (probe.createElement('canvas').getContext('webgl2') as ProbeContext | null | undefined) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Whether this browser can create a WebGL 2 context — asked ONCE, before any renderer code is
  * fetched, so an old browser never downloads the 3D chunk only to fail in it. A probe that throws
@@ -84,14 +93,8 @@ interface ProbeContext {
  */
 export function detectWebGL2(probe: WebGL2Probe = browserWebGL2Probe()): boolean {
   if (!probe.hasWebGL2Api) return false;
-  let context: ProbeContext | null | undefined;
-  try {
-    context = probe.createElement('canvas').getContext('webgl2') as ProbeContext | null | undefined;
-    // Stryker disable next-line BlockStatement: EQUIVALENT — an emptied catch leaves `context` undefined, which the guard below turns into the same `false`.
-  } catch {
-    return false;
-  }
-  if (context === null || context === undefined) return false;
+  const context = probeContext(probe);
+  if (context === null) return false;
   // Hand the probe's context straight back: browsers cap live contexts, and this one draws nothing.
   context.getExtension?.('WEBGL_lose_context')?.loseContext?.();
   return true;
