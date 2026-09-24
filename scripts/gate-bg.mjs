@@ -41,7 +41,7 @@
 // a command that ran for ten minutes and then reported a status — was.
 
 import { spawn } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -164,6 +164,18 @@ try {
   mkdirSync(path.dirname(log), { recursive: true });
 } catch (err) {
   console.error(`gate:bg: cannot create the log directory for ${log}: ${String(err)}`);
+  process.exit(1);
+}
+
+// A STALE SENTINEL IS A FALSE VERDICT. Re-dispatching at the same `GATE_BG_LOG` path left the
+// PREVIOUS run's `<log>.exit` in place until the new run finished, so `storytree dispatch <log> --wait`
+// right after the handle printed returned the OLD verdict at once. Removed synchronously, before the
+// spawn and so before the handle is printed; a removal that fails for any reason but "not there"
+// refuses the dispatch rather than print a handle already carrying an answer.
+try {
+  rmSync(`${log}.exit`, { force: true });
+} catch (err) {
+  console.error(`gate:bg: cannot remove the previous run's ${log}.exit: ${String(err)} — nothing was dispatched.`);
   process.exit(1);
 }
 

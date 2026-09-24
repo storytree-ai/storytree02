@@ -55,6 +55,9 @@ fi
 exit_file="$log.exit"
 
 mkdir -p "$(dirname "$log")" || exit 1
+# A previous run's sentinel at this same path would read as THIS run's verdict until it finishes.
+# (`gate-bg.mjs` already removes it before printing the handle; this covers a direct invocation.)
+rm -f "$exit_file" || exit 1
 
 printf 'gate:bg log:       %s\n' "$log"
 printf 'gate:bg exit-file: %s\n' "$exit_file"

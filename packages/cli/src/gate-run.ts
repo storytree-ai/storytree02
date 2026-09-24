@@ -47,7 +47,6 @@
 // completion contract they already were.
 
 import { spawn, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -99,6 +98,7 @@ import {
   GATE_RUN_RECORD_FILE,
   type GateRunRecord,
   compareRerun,
+  computeTreeDigest,
   encodeGateRunRecord,
   parseGateRunRecord,
   parseSelectionRequest,
@@ -146,47 +146,39 @@ function gitHead(): string | null {
 }
 
 /**
- * A digest of the working tree, or `null` when any input could not be read.
- *
- * ITS ONLY CONSUMER IS THE FLAKE CLAIM. `gate-rerun.ts` may call a fail→pass a `flake-signature` only
- * when this digest is byte-identical across the two runs, so the question it has to answer is "could
- * ANYTHING the gate reads have changed?" — and `null` (cannot tell) must stay distinguishable from
- * equality, never collapse into it.
- *
- * THE APERTURE, STATED (`asset:an-observable-is-evidence-only-for-what-it-observes`). Three inputs:
- * the porcelain status covers WHICH paths are dirty or untracked, `git diff HEAD` covers the exact
- * CONTENT of every tracked change, and hashing the untracked files closes the content of the
- * remainder — the one gap the first two leave, and the one that would matter, since a session editing
- * a brand-new file would otherwise get an unchanged digest and a false `flake-signature`. GITIGNORED
- * files are outside all three, deliberately: `.gate-logs/` is itself ignored and is rewritten by every
- * run, so a digest that saw it could never be equal to itself.
+ * A digest of the working tree AND its installed dependencies, or `null` when any input could not be
+ * read. The aperture and why each input is in it are `computeTreeDigest`'s (`gate-rerun.ts`); this
+ * only supplies the git and filesystem reads.
  */
 function treeDigest(): string | null {
-  const status = git(["status", "--porcelain", "-uall"]);
-  if (!status.ok) return null;
-  const diff = git(["diff", "HEAD"]);
-  if (!diff.ok) return null;
-  const others = git(["ls-files", "--others", "--exclude-standard"]);
-  if (!others.ok) return null;
-
-  let untrackedContent = "";
-  if (others.stdout.trim() !== "") {
-    const hashed = spawnSync("git", ["hash-object", "--stdin-paths"], {
-      cwd: repoRoot,
-      encoding: "utf8",
-      input: others.stdout,
-    });
-    if (hashed.error !== undefined || hashed.status !== 0) return null;
-    untrackedContent = hashed.stdout;
-  }
-
-  return createHash("sha256")
-    .update(status.stdout)
-    .update("\0")
-    .update(diff.stdout)
-    .update("\0")
-    .update(untrackedContent)
-    .digest("hex");
+  return computeTreeDigest({
+    status: () => {
+      const res = git(["status", "--porcelain", "-uall"]);
+      return res.ok ? res.stdout : null;
+    },
+    diff: () => {
+      const res = git(["diff", "HEAD"]);
+      return res.ok ? res.stdout : null;
+    },
+    untrackedContent: () => {
+      const others = git(["ls-files", "--others", "--exclude-standard"]);
+      if (!others.ok) return null;
+      if (others.stdout.trim() === "") return "";
+      const hashed = spawnSync("git", ["hash-object", "--stdin-paths"], {
+        cwd: repoRoot,
+        encoding: "utf8",
+        input: others.stdout,
+      });
+      return hashed.error === undefined && hashed.status === 0 ? hashed.stdout : null;
+    },
+    installedLockfile: () => {
+      try {
+        return readFileSync(path.join(repoRoot, "node_modules", ".pnpm", "lock.yaml"), "utf8");
+      } catch (err) {
+        return (err as NodeJS.ErrnoException).code === "ENOENT" ? undefined : null;
+      }
+    },
+  });
 }
 
 /** The recorded whole-gate run, or `null` when there is none this build understands. */

@@ -129,6 +129,59 @@ test("order is NOT compared while the entry sets disagree — no spurious shift 
   assert.deepEqual(found.map((d) => d.kind), ["missing-entry"]);
 });
 
+test("a duplicate-key mirror row carrying a wrong value is a divergence, not last-row-wins", () => {
+  // The seeded escape: an extra `c` row with a wrong title inserted just before the real last
+  // entry. The per-key maps kept only the last `c` and the order walk stopped at reference.length,
+  // so this compared EQUAL.
+  const found = compareMirrors(
+    [doc("a"), doc("b"), doc("c")],
+    [doc("a"), doc("b"), doc("c", { title: "WRONG" }), doc("c")],
+    SPEC,
+    "fixture",
+  );
+  assert.deepEqual(
+    found.map((d) =>
+      d.kind === "duplicate-key" ? [d.kind, d.side, d.keys] : d.kind === "length" ? [d.kind, d.reference, d.mirror] : [d.kind],
+    ),
+    [
+      ["duplicate-key", "mirror", ["c"]],
+      ["length", 3, 4],
+    ],
+  );
+  const line = formatDivergence(SPEC, found[0] as (typeof found)[number]);
+  assert.match(line, /desktop carries DUPLICATE entry key\(s\) c$/);
+});
+
+test("a duplicate key on the REFERENCE side is reported against the reference", () => {
+  const found = compareMirrors([doc("a"), doc("a")], [doc("a"), doc("a")], SPEC, "fixture");
+  assert.deepEqual(
+    found.map((d) => (d.kind === "duplicate-key" ? [d.side, d.keys] : d.kind)),
+    [
+      ["reference", ["a"]],
+      ["mirror", ["a"]],
+    ],
+  );
+});
+
+test("the duplicate-key and length lines name the right SIDE and every key, asserted by exact text", () => {
+  // Two duplicated keys on each side, so the `, ` join is observable, and both sides, so the line
+  // must pick the reference's name for one and the mirror's for the other.
+  const found = compareMirrors(
+    [doc("a"), doc("a"), doc("b"), doc("b")],
+    [doc("a"), doc("a"), doc("b"), doc("b"), doc("b")],
+    SPEC,
+    "fixture",
+  );
+  assert.deepEqual(
+    found.map((d) => formatDivergence(SPEC, d)),
+    [
+      "[fixture] studio carries DUPLICATE entry key(s) a, b",
+      "[fixture] desktop carries DUPLICATE entry key(s) a, b",
+      "[fixture] entry count diverges: studio has 4, desktop has 5",
+    ],
+  );
+});
+
 test("an allowlisted reference-only field is exempted", () => {
   const studio = [doc("a", { hostedOnly: "x" }), doc("b")];
   const desktop = [doc("a"), doc("b")];

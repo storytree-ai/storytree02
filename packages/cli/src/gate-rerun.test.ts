@@ -13,7 +13,9 @@ import {
   GATE_RUN_RECORD_VERSION,
   type GateRunRecord,
   type GateSelection,
+  INSTALLED_LOCKFILE_ABSENT,
   compareRerun,
+  computeTreeDigest,
   encodeGateRunRecord,
   parseGateRunRecord,
   parseSelectionRequest,
@@ -579,4 +581,83 @@ test("treeChangedSince answers null whenever either side is missing, never false
   assert.equal(treeChangedSince(rec, "abc1234", null), null);
   assert.equal(treeChangedSince(rec, null, "digest-A"), null);
   assert.equal(treeChangedSince({ ...rec, treeDigest: null }, "abc1234", "digest-A"), null);
+});
+
+// ── the digest folds in the INSTALLED dependency state ───────────────────────
+//
+// The escape: fail → `pnpm install` → pass changes nothing git can see, so a git-only digest stayed
+// equal and the re-run called the install's fix a FLAKE SIGNATURE ("nothing was fixed in between").
+
+const gitParts = {
+  status: () => " M packages/cli/src/a.ts\n",
+  diff: () => "diff --git a/packages/cli/src/a.ts b/packages/cli/src/a.ts\n",
+  untrackedContent: () => "",
+};
+
+test("computeTreeDigest: a changed INSTALLED lockfile moves the digest even when git sees nothing", () => {
+  const before = computeTreeDigest({ ...gitParts, installedLockfile: () => "lockfileVersion: '9.0'\nold\n" });
+  const after = computeTreeDigest({ ...gitParts, installedLockfile: () => "lockfileVersion: '9.0'\nnew\n" });
+  assert.ok(before !== null && after !== null);
+  assert.notEqual(before, after, "a `pnpm install` between the runs is a change, not a flake");
+
+  // Carried through to the verdict: the recorded run and this one differ only by the install.
+  const rec = { ...record({}), head: "abc1234", treeDigest: before };
+  assert.equal(treeChangedSince(rec, "abc1234", after), true);
+  assert.equal(treeChangedSince(rec, "abc1234", before), false, "an untouched install is still equal");
+});
+
+test("computeTreeDigest: an ABSENT installed lockfile is its own state, distinct from any content", () => {
+  const absent = computeTreeDigest({ ...gitParts, installedLockfile: () => undefined });
+  const empty = computeTreeDigest({ ...gitParts, installedLockfile: () => "" });
+  const constant = computeTreeDigest({ ...gitParts, installedLockfile: () => INSTALLED_LOCKFILE_ABSENT });
+  assert.ok(absent !== null);
+  assert.notEqual(absent, empty);
+  assert.notEqual(absent, constant, "the absent marker is not hashed as if it were file content");
+  assert.equal(absent, computeTreeDigest({ ...gitParts, installedLockfile: () => undefined }), "deterministic");
+  // A file whose content is the word the reader returns for "absent" is still a PRESENT file.
+  assert.notEqual(absent, computeTreeDigest({ ...gitParts, installedLockfile: () => "undefined" }));
+  // The marker's exact text: an empty marker would still differ from every content, so only the
+  // text itself pins it.
+  assert.equal(INSTALLED_LOCKFILE_ABSENT, "installed-lockfile:absent");
+});
+
+test("computeTreeDigest: is a sha256 hex digest, and moving a BOUNDARY between two inputs moves it", () => {
+  const digest = (status: string, diff: string, untracked: string, lock: string | undefined) =>
+    computeTreeDigest({
+      status: () => status,
+      diff: () => diff,
+      untrackedContent: () => untracked,
+      installedLockfile: () => lock,
+    });
+  assert.match(String(digest("s", "d", "u", "l")), /^[0-9a-f]{64}$/);
+  // Each pair concatenates to the same bytes, so only the separator between the two fields tells
+  // them apart — one pair per separator.
+  assert.notEqual(digest("ab", "c", "u", "l"), digest("a", "bc", "u", "l"), "status | diff");
+  assert.notEqual(digest("s", "ab", "c", "l"), digest("s", "a", "bc", "l"), "diff | untracked");
+  assert.notEqual(
+    digest("s", "d", "xinstalled-lockfile:content:", "c"),
+    digest("s", "d", "x", "installed-lockfile:content:c"),
+    "untracked | installed lockfile",
+  );
+});
+
+test("computeTreeDigest: any unreadable input is null (cannot tell), never a digest", () => {
+  assert.equal(computeTreeDigest({ ...gitParts, installedLockfile: () => null }), null);
+  assert.equal(computeTreeDigest({ ...gitParts, status: () => null, installedLockfile: () => "x" }), null);
+  assert.equal(computeTreeDigest({ ...gitParts, diff: () => null, installedLockfile: () => "x" }), null);
+  assert.equal(computeTreeDigest({ ...gitParts, untrackedContent: () => null, installedLockfile: () => "x" }), null);
+});
+
+test("computeTreeDigest: git-visible changes still move the digest", () => {
+  const base = computeTreeDigest({ ...gitParts, installedLockfile: () => "x" });
+  assert.notEqual(base, computeTreeDigest({ ...gitParts, diff: () => "other", installedLockfile: () => "x" }));
+  assert.notEqual(base, computeTreeDigest({ ...gitParts, untrackedContent: () => "h\n", installedLockfile: () => "x" }));
+  assert.notEqual(base, computeTreeDigest({ ...gitParts, status: () => "?? b.ts\n", installedLockfile: () => "x" }));
+});
+
+test("gate-run.ts's treeDigest reads the installed lockfile node_modules/.pnpm/lock.yaml", () => {
+  // gate-run.ts is a script (top-level await), so the one filesystem read is asserted on its source.
+  const source = readFileSync(fileURLToPath(new URL("./gate-run.ts", import.meta.url)), "utf8");
+  assert.match(source, /installedLockfile: \(\) => \{[\s\S]*?"node_modules", "\.pnpm", "lock\.yaml"/);
+  assert.match(source, /code === "ENOENT" \? undefined : null/, "absent is a state; unreadable is null");
 });
