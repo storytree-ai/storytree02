@@ -3,6 +3,7 @@
     "subtrees": {
       "packages/app-surface/src/SceneView.tsx": "app-surface-world-view",
       "packages/app-surface/src/WorldSceneView.tsx": "app-surface-world-view",
+      "packages/app-surface/src/forest-regrow*.ts": "app-surface-world-view",
       "packages/app-surface/src/native-prop-targets.ts": "app-surface-world-view"
     }
   }

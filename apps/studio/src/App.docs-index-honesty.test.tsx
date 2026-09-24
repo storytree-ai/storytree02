@@ -27,6 +27,7 @@ import { act, cleanup, render, screen, waitFor, within } from '@testing-library/
 // Non-participating global chrome only — never TreeView or AssetView (both under test here).
 
 import { App, type AppSurfaces } from './App';
+import { ACT2_INTRO_SESSION_KEY } from './components/act2Intro';
 import { api } from './api';
 import { useAppData } from './lib/appData';
 
@@ -48,13 +49,6 @@ const ACTIVITY = '/api/activity';
 const DB_STATUS = '/api/db/status';
 const DB_START = '/api/db/start';
 const DB_WAKE = '/api/db/wake';
-
-// The map's optional art-style sheet. NOT an api route, and NOT what any suite here is about — but
-// the real `TreeView` asks for it, and the double fails closed, so it has to be DECLARED rather
-// than left to surface as an unrouted-request refusal. It answers 404, which is the studio's
-// tolerated case: "art-style sheet failed to load; keeping the current render". Under module
-// mocking this fetch went out to jsdom and nothing in the suite ever knew it existed.
-const ART_SHEET = '/art-sheets/storybook/manifest.json';
 
 let http: HttpDouble;
 
@@ -185,9 +179,13 @@ function navigate(hash: string): void {
 
 beforeEach(() => {
   window.localStorage.clear();
+  // This suite is about the map's DATA, not the first-arrival choreography. Mark this jsdom session
+  // as returning so the real TreeView paints the settled forest directly: a first arrival's regrow
+  // now waits for the mounted 3D land to settle its status (ADR-0608 D1a), and jsdom's land never
+  // gets a frame to settle on, so the first test in the file would otherwise see no island at all.
+  window.sessionStorage.setItem(ACT2_INTRO_SESSION_KEY, '1');
   navigate('#/tree');
   http = installHttpDouble();
-  http.get(ART_SHEET, () => new Response('', { status: 404 }));
 });
 
 afterEach(() => {
@@ -195,6 +193,7 @@ afterEach(() => {
   http.uninstall();
   vi.clearAllMocks();
   window.localStorage.clear();
+  window.sessionStorage.clear();
 });
 
 describe('a failed doc index is reported, and never blanks the map', () => {

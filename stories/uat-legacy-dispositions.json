@@ -123,9 +123,9 @@
     },
     {
       "legacyTestId": "app-surface#uat-10",
-      "reviewedAt": "2026-08-02",
-      "rationale": "Unresolved at cutover: the positional key alone cannot establish continuity across pre-ADR-0253 revisions. History is retained for review and earns no current proof credit.",
-      "disposition": "unresolved"
+      "reviewedAt": "2026-09-24",
+      "rationale": "Deleted by ADR-0608 (2026-09-24): the CLAIM IS WITHDRAWN with its subject, not relocated. `uatc_2693bf5955c1b6add7a8162c` (\"The hosted witness is viewable within its recorded browser budget\") measured the deployed exact-query organic-growth witness — the flat planted composition and its `?organicGrowth=*` / `?semanticGrowth=demo` routes. ADR-0608 D2 retires the flat forest picture and D3 deletes its code and the acceptance journeys that asserted it as engineering follow-through (ADR-0605), so there is nothing left to open in a browser. No lower-tier node is named because naming one would be a false citation (the ADR-0348 D6 precedent for a withdrawn subject). The ordinal is BURNED, not reused. The leg carried no `(detail:)` pointer, so no `uat-criterion` artifact is orphaned.",
+      "disposition": "superseded"
     },
     {
       "legacyTestId": "app-surface#uat-11",

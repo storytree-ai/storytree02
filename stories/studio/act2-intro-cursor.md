@@ -130,7 +130,8 @@ actually delivers unstated.
    is not decided here: `deriveForestRegrowPlan` (@storytree/app-surface) derives it from the real
    story graph, so this module never scripts a sequence (ADR-0282 D3/D8)."* What is app-surface's is
    WHAT grows and in what order; what is studio's is WHEN, how fast, and where the cursor is now.
-   The two `app-surface` capabilities that look nearest were both read and are a different journey:
+   The two `app-surface` capabilities that looked nearest were both read and are a different journey
+   (both since RETIRED with the flat forest picture, ADR-0608, 2026-09-24):
    [`semantic-growth-replay-view`](../app-surface/semantic-growth-replay-view.md) presents *six
    supplied world frames* with its own Next/Back/Replay, and
    [`semantic-growth-studio-demo`](../app-surface/semantic-growth-studio-demo.md) mounts that view
@@ -195,12 +196,13 @@ The test-proven leaf behaviours — each **one isolated automated test** with co
      feature, because this mounts on the REAL map
    - **asserts —** `?act2=intro` mounts the diagnostic control on the ONE exact value, and absence,
      an empty value and every near miss (`?act2=on`, `?act2=intro-x`) leave the clean Studio route
-     untouched; `?veg2=off` is the same exact-match shape for ADR-0292's LOOK kill switch, with
-     absence, empty and every near miss (`?veg2=false`, `?veg2=off-x`) leaving the growth ON. An
-     over-eager reader here would change the clean route for every visitor.
-   - **covers —** `apps/studio/src/components/act2Intro.ts:48-77`
-   - **proven by —** `apps/studio/src/components/act2Intro.test.ts:26`, `:31`, `:42`, `:47` (REAL,
-     passing)
+     untouched. An over-eager reader here would change the clean route for every visitor.
+     *(The `?veg2=off` kill switch for ADR-0292's vegetation growth, which this contract also named,
+     was deleted on 2026-09-24 with the flat vegetation layer it switched off — ADR-0608 D2/D3. The
+     cursor itself is unchanged; only the flat accretion / vegetation / road-mask animation it drove
+     was retired.)*
+   - **covers —** `apps/studio/src/components/act2Intro.ts:39-49`
+   - **proven by —** `apps/studio/src/components/act2Intro.test.ts:28`, `:33` (REAL, passing)
 2. **`first-arrival-is-recorded-once-and-fails-toward-playing`** — ADR-0286's play-on-first-arrival,
      and the hostile-storage path
    - **asserts —** the session flag is unset on arrival and set once recorded; recording twice still
@@ -208,8 +210,8 @@ The test-proven leaf behaviours — each **one isolated automated test** with co
      storage available it fails TOWARD playing and never throws on a hostile storage object. Failing
      toward playing is the deliberate direction: a missing `sessionStorage` should cost a repeated
      intro, never a silently dead one.
-   - **covers —** `apps/studio/src/components/act2Intro.ts:79-124`
-   - **proven by —** `apps/studio/src/components/act2Intro.test.ts:143`, `:151`, `:158` (REAL,
+   - **covers —** `apps/studio/src/components/act2Intro.ts:51-96`
+   - **proven by —** `apps/studio/src/components/act2Intro.test.ts:138`, `:146`, `:153` (REAL,
      passing)
 3. **`back-steps-to-the-top-of-the-current-wave-before-the-previous-one`** — the transport
      arithmetic every control button sits on
@@ -218,8 +220,8 @@ The test-proven leaf behaviours — each **one isolated automated test** with co
      rather than being skipped past; Back never steps past nothing; and repeated Back walks the
      whole forest back to nothing in a BOUNDED number of steps, so no input can leave the transport
      spinning.
-   - **covers —** `apps/studio/src/components/act2Intro.ts:342-366`
-   - **proven by —** `apps/studio/src/components/act2Intro.test.ts:82`, `:89`, `:97`, `:102` (REAL,
+   - **covers —** `apps/studio/src/components/act2Intro.ts:280-305`
+   - **proven by —** `apps/studio/src/components/act2Intro.test.ts:68`, `:75`, `:83`, `:88` (REAL,
      passing)
 4. **`the-plan-key-tracks-what-the-plan-reads-and-nothing-else`** — what makes a re-fetch invisible
      and a real change loud
@@ -228,8 +230,8 @@ The test-proven leaf behaviours — each **one isolated automated test** with co
      key would restart the run on every poll); it CHANGES when anything the plan reads changes; and
      it shrugs off a sub-unit float wobble in the routed geometry, so a rounding difference in a
      coordinate cannot masquerade as a new graph.
-   - **covers —** `apps/studio/src/components/act2Intro.ts:284-303`
-   - **proven by —** `apps/studio/src/components/act2Intro.test.ts:185`, `:193`, `:199`, `:227`
+   - **covers —** `apps/studio/src/components/act2Intro.ts:207-226`
+   - **proven by —** `apps/studio/src/components/act2Intro.test.ts:180`, `:188`, `:194`, `:222`
      (REAL, passing)
 5. **`the-speed-dial-scales-the-clock-not-the-schedule`** — the single-cursor property, fenced from
      the dial side
@@ -239,7 +241,7 @@ The test-proven leaf behaviours — each **one isolated automated test** with co
      regardless of speed. That last one is the discriminator: a second timeline beside the cursor
      would let the schedule drift from the clock, and only a fraction-of-run assertion catches it —
      a wall-clock assertion would pass either way.
-   - **covers —** `apps/studio/src/components/act2Intro.ts:368+` (the `useAct2Intro` clock loop)
+   - **covers —** `apps/studio/src/components/act2Intro.ts:306+` (the `useAct2Intro` clock loop)
    - **proven by —** `apps/studio/src/components/act2Intro.clock.test.tsx:94`, `:112`, `:123`,
      `:132` (REAL, passing)
 6. **`a-fresh-plan-never-opens-on-a-frame-of-the-grown-forest`** — the flash that actually shipped
@@ -248,7 +250,7 @@ The test-proven leaf behaviours — each **one isolated automated test** with co
      plan opens on nothing too. The first-plan case is called out separately because it is the one
      that actually flashed: the general pending rule held while the very first plan still painted a
      grown frame before the run began.
-   - **covers —** `apps/studio/src/components/act2Intro.ts:305-340`
+   - **covers —** `apps/studio/src/components/act2Intro.ts:306+` (the opening cursor inside `useAct2Intro`)
    - **proven by —** `apps/studio/src/components/act2Intro.clock.test.tsx:153`, `:160`, `:170`
      (REAL, passing)
 7. **`an-identical-re-fetch-does-not-restart-the-run`** — the single-cursor property, fenced from
@@ -259,6 +261,6 @@ The test-proven leaf behaviours — each **one isolated automated test** with co
      structurally identical copy of its own graph part-way through; without this the regrow would
      visibly restart on every confirm. Both halves are required — keeping the cursor across a REAL
      change would leave the map animating a graph it no longer has.
-   - **covers —** `apps/studio/src/components/act2Intro.ts:284-303,368+`
+   - **covers —** `apps/studio/src/components/act2Intro.ts:207-226,306+`
    - **proven by —** `apps/studio/src/components/act2Intro.clock.test.tsx:187`, `:212` (REAL,
      passing)

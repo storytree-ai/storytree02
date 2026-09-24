@@ -2,11 +2,9 @@
   "sourceOwnership": {
     "subtrees": {
       "packages/app-surface/*.ts": "app-surface",
-      "packages/app-surface/src/chapter2-round3-tree-candidates.ts": "app-surface",
       "packages/app-surface/src/index.ts": "app-surface",
       "packages/app-surface/src/laneLayout.ts": "app-surface",
       "packages/app-surface/src/neighbourHighlight.ts": "app-surface",
-      "packages/app-surface/src/sprite-*.ts": "app-surface",
       "packages/app-surface/src/trailReveal.ts": "app-surface"
     }
   }

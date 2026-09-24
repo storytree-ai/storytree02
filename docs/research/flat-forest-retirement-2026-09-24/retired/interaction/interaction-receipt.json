@@ -1,0 +1,65 @@
+{
+  "startedAt": "2026-09-24T12:56:11.551Z",
+  "origin": "http://127.0.0.1:5412",
+  "dir": "/home/mickh/code/Storytree/.claude/worktrees/laneV-retire",
+  "head": "30978a3c4728d57ac90b2a5bf391efa957c5d8f6",
+  "checks": {
+    "reducedMotion": {
+      "settled": true,
+      "nameplates": 36,
+      "regrowing": false
+    },
+    "focus": {
+      "reachedByTab": true,
+      "ariaLabel": "story forest map (pan and zoom)"
+    },
+    "keyboard": {
+      "before": "translate(-24.633446549660334 -1728.5798382308672) scale(1.9084281662531688)",
+      "after": "translate(35.366553450339666 -1668.5798382308672) scale(1.9084281662531688)",
+      "moved": true
+    },
+    "wisps": {
+      "claim": 17,
+      "claimHit": 17,
+      "hover": 0,
+      "queue": 0,
+      "departing": 0,
+      "build": 0
+    },
+    "nameplate": {
+      "id": "drive-machinery",
+      "x": 826.791748046875,
+      "y": 228.77938079833984,
+      "selected": true,
+      "lanes": 13,
+      "rings": 1,
+      "hash": "#/tree/drive-machinery"
+    },
+    "plant": {
+      "x": 861.8114013671875,
+      "y": 1012.7331512451171,
+      "cap": "guided-setup-repair",
+      "story": "cli",
+      "hash": "#/tree/cli",
+      "selected": false
+    },
+    "legend": {
+      "shown": {
+        "targets": 2794,
+        "filtered": 0
+      },
+      "faded": {
+        "targets": 2794,
+        "filtered": 2495
+      },
+      "restored": {
+        "targets": 2794,
+        "filtered": 0
+      }
+    }
+  },
+  "errors": [],
+  "browser": "148.0.7778.96",
+  "status": "DONE",
+  "finishedAt": "2026-09-24T12:56:42.059Z"
+}

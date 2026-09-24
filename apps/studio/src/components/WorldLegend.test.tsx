@@ -12,8 +12,7 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
-import { WorldLegend, legendFacts, treeForm } from './WorldLegend';
-import type { SpriteStyleSheet } from '../lib/sprite-sheet';
+import { WorldLegend, legendFacts } from './WorldLegend';
 import type { BuildActivity, ClaimActivity, TreeCapability, TreeStory, WorkStatus } from '../types';
 
 const cap = (
@@ -121,21 +120,13 @@ describe('legendFacts', () => {
     const facts = legendFacts([story('s', 'mapped', [cap('c', 'unhealthy')])]);
     expect('anyDeadFlora' in facts).toBe(false);
   });
-
-  it('a zero-cap story takes its status FORM (young / withered), not a distinct sapling', () => {
-    // The sapling state is gone (owner 2026-06-21): a claimed-but-empty story renders the
-    // SAME growth ladder as any other — proposed ⇒ young, unhealthy ⇒ withered. retired
-    // never reaches the legend (presentStories prunes it, ADR-0038).
-    expect(treeForm('proposed')).toBe('young');
-    expect(treeForm('unhealthy')).toBe('withered');
-    expect(treeForm('mapped')).toBe('full');
-    expect(treeForm('healthy')).toBe('full');
-  });
+  // ADR-0608 retired the flat hero tree and its growth ladder (`treeForm`: young / full / withered),
+  // so there is no per-status tree form left to pin.
 });
 
 describe('WorldLegend (adaptive bar)', () => {
-  it('mounted land reads story status from nameplate text instead of tree silhouettes', () => {
-    const { container } = renderLegend(offlineWorld(), { storyStatusFromNameplate: true });
+  it('story status is read from nameplate text — the row carries no tree silhouette (ADR-0608)', () => {
+    const { container } = renderLegend(offlineWorld());
 
     const statusButton = screen.getByRole('button', { name: 'story status' });
     expect(statusButton.querySelector('svg')).toBeNull();
@@ -153,7 +144,7 @@ describe('WorldLegend (adaptive bar)', () => {
 
   it('offline world: no orbiting (building) entry; proof stays and explains the under-claim', () => {
     renderLegend(offlineWorld());
-    for (const label of ['story trees', 'test coverage', 'proof']) {
+    for (const label of ['story status', 'test coverage', 'proof']) {
       expect(screen.getByRole('button', { name: label })).toBeTruthy();
     }
     expect(screen.queryByRole('button', { name: 'decoration' })).toBeNull();
@@ -176,14 +167,16 @@ describe('WorldLegend (adaptive bar)', () => {
   it('explains provenance separately from proof (ADR-0395)', () => {
     renderLegend(offlineWorld());
 
-    fireEvent.click(screen.getByRole('button', { name: 'story trees' }));
-    const treeCopy = screen.getByRole('region', { name: 'legend — story trees' }).textContent ?? '';
-    expect(treeCopy).toMatch(/amber[^.]*greenfield[^.]*never established[^.]*baseline/i);
-    expect(treeCopy).toMatch(/authored [“"]healthy[”"][^.]*proposed/i);
-    expect(treeCopy).toMatch(/withered[^.]*unhealthy[^.]*proof failed/i);
-    expect(treeCopy).toMatch(/brown[^.]*inherited brownfield[^.]*adoption/i);
-    expect(treeCopy).not.toMatch(/authored [“"]healthy[”"][^.]*(?:renders|waits)[^.]*brown/i);
-    fireEvent.click(screen.getByRole('button', { name: 'story trees' }));
+    fireEvent.click(screen.getByRole('button', { name: 'story status' }));
+    const treeCopy = screen.getByRole('region', { name: 'legend — story status' }).textContent ?? '';
+    // ADR-0608: the amber/brown/withered tree vocabulary retired with the flat hero tree; the
+    // provenance split is now taught against the nameplate's status word.
+    expect(treeCopy).toMatch(/healthy[^.]*signed proof[^.]*baseline/i);
+    expect(treeCopy).toMatch(/proposed[^;.]*new work[^;.]*without a proven baseline/i);
+    expect(treeCopy).toMatch(/mapped[^;.]*inherited work[^;.]*adoption/i);
+    expect(treeCopy).toMatch(/unhealthy[^.]*proof\s+failed/i);
+    expect(treeCopy).not.toMatch(/amber|brown|withered/i);
+    fireEvent.click(screen.getByRole('button', { name: 'story status' }));
 
     fireEvent.click(screen.getByRole('button', { name: 'test coverage' }));
     const floraCopy =
@@ -291,16 +284,16 @@ describe('WorldLegend (adaptive bar)', () => {
 
   it('Escape closes the drawer', () => {
     renderLegend(offlineWorld());
-    fireEvent.click(screen.getByRole('button', { name: 'story trees' }));
-    expect(screen.getByRole('region', { name: 'legend — story trees' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'story status' }));
+    expect(screen.getByRole('region', { name: 'legend — story status' })).toBeTruthy();
     fireEvent.keyDown(window, { key: 'Escape' });
-    expect(screen.queryByRole('region', { name: 'legend — story trees' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'legend — story status' })).toBeNull();
   });
 
   it('the status fan dims absent states and filters present ones', () => {
     const onToggleStatus = vi.fn();
     renderLegend(offlineWorld(), { onToggleStatus });
-    fireEvent.click(screen.getByRole('button', { name: 'story trees' }));
+    fireEvent.click(screen.getByRole('button', { name: 'story status' }));
     // healthy and story-only unhealthy do not occur in this world; both remain visible as dimmed
     // states in the complete story-status fan.
     expect(screen.getAllByText('not in world yet')).toHaveLength(2);
@@ -320,57 +313,24 @@ describe('WorldLegend (adaptive bar)', () => {
 
   it('a second click on the open entry closes the drawer', () => {
     renderLegend(offlineWorld());
-    const chip = screen.getByRole('button', { name: 'story trees' });
+    const chip = screen.getByRole('button', { name: 'story status' });
     fireEvent.click(chip);
-    expect(screen.getByRole('region', { name: 'legend — story trees' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'legend — story status' })).toBeTruthy();
     fireEvent.click(chip);
-    expect(screen.queryByRole('region', { name: 'legend — story trees' })).toBeNull();
+    expect(screen.queryByRole('region', { name: 'legend — story status' })).toBeNull();
   });
 });
 
-// ADR-0230: when an artStyle sprite sheet is active in the world, the legend renders the SAME sprites
-// the map draws instead of its vector CSS shapes — so the legend stays "the world's palette" in sprite
-// mode too. A `null` sheet (vector mode, the default) leaves every icon byte-identical; an icon whose
-// kind/status the sheet doesn't cover falls back to its vector shape.
-describe('WorldLegend — sprite art sheet (ADR-0230)', () => {
-  const spr = (href: string) => ({ href, w: 100, h: 120, anchorX: 0.5, anchorY: 1 });
-  // Covers the two remaining sprite-backed legend families: trees and test-coverage flora.
-  const sheet: SpriteStyleSheet = {
-    name: 'test-sheet',
-    label: 'Test sheet',
-    sprites: {
-      'tree:proposed': spr('/art-sheets/test/tree-proposed.png'),
-      'tree:mapped': spr('/art-sheets/test/tree-mapped.png'),
-      'tree:unhealthy': spr('/art-sheets/test/tree-withered.png'),
-      flora: spr('/art-sheets/test/flora.png'),
-      'flora:unhealthy': spr('/art-sheets/test/flora-dead.png'),
-    },
-  };
-  const spriteHrefs = (): string[] =>
-    [...document.querySelectorAll('image')].map((n) => n.getAttribute('href') ?? '');
-
-  it('default (no sheet) renders vector only — no sprite <image> anywhere in the legend', () => {
-    renderLegend(offlineWorld());
+// ADR-0230's sprite art sheets re-skinned the legend's tree and flora icons to match the flat map;
+// ADR-0608 retired the sheets with the flat forest look, so the legend draws no sprite anywhere and
+// no tree picture on the story-status row.
+describe('WorldLegend — no sprite sheet, no tree picture (ADR-0608)', () => {
+  it('renders no sprite <image> and no vector story tree anywhere in the legend', () => {
+    renderLegend([story('s', 'unhealthy', [cap('c', 'proposed')])]);
+    fireEvent.click(screen.getByRole('button', { name: 'story status' }));
     expect(document.querySelector('image')).toBeNull();
-  });
-
-  it('with a sheet, the chip-bar tree and test-coverage flora icons render sprite images', () => {
-    // offlineWorld has proposed + mapped stories/caps → the tree chip shows both and the flora chip
-    // shows the alive `flora` sprite.
-    renderLegend(offlineWorld(), { spriteSheet: sheet });
-    const hrefs = spriteHrefs();
-    expect(hrefs).toContain('/art-sheets/test/tree-proposed.png');
-    expect(hrefs).toContain('/art-sheets/test/tree-mapped.png');
-    expect(hrefs).toContain('/art-sheets/test/flora.png');
-    // the sprite swatches replaced the vector tree shape.
-    expect(document.querySelector('.legend-bar .story-tree')).toBeNull();
-  });
-
-  it('story unhealthy reaches the withered tree sprite but capability flora stays alive', () => {
-    renderLegend([story('s', 'unhealthy', [cap('c', 'proposed')])], { spriteSheet: sheet });
-    fireEvent.click(screen.getByRole('button', { name: 'story trees' }));
-    expect(spriteHrefs()).toContain('/art-sheets/test/tree-withered.png');
-    expect(spriteHrefs()).not.toContain('/art-sheets/test/flora-dead.png');
+    expect(document.querySelector('.story-tree')).toBeNull();
+    // the unhealthy tile is still offered — only its picture went.
     expect(screen.getByRole('button', { name: /^unhealthy/ })).toBeTruthy();
   });
 });

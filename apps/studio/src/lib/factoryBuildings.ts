@@ -27,7 +27,7 @@
 // able to enter the shared scene at all is a live question for the owner — see the
 // increment-5 notes — and deliberately NOT decided here.
 
-import type { BakedPaintNode, GardenHeroId, SceneGardenHero, SceneVegHeroTrees } from '@storytree/forest-world';
+import type { BakedPaintNode, GardenHeroId, SceneGardenHero } from '@storytree/forest-world';
 import { storyIcon } from './buildingLayout.js';
 
 /** One drawable of a baked building — the vector node vocabulary, already resolved. */
@@ -134,27 +134,6 @@ export function loadGardenHeroes(): Promise<Record<GardenHeroId, SceneGardenHero
     return byId;
   });
   return heroesPromise;
-}
-
-/** Resolved once — the per-status tree colourways for the tree-spread (ADR-0227). */
-let heroTreesPromise: Promise<SceneVegHeroTrees> | null = null;
-
-/**
- * Load the tree-spread's per-status `autumn-tree` colourways, keyed by status (ADR-0227). Fetched from
- * the SAME dynamic `kit.json` chunk as the garden heroes, so a studio load with `?veg` off pays nothing
- * for it. The core places one `<use>` per island referencing the def for the island's status, restoring
- * the per-status crown hue the uniform-brown tree-spread had lost.
- */
-export function loadHeroTreeVariants(): Promise<SceneVegHeroTrees> {
-  heroTreesPromise ??= import('@storytree/procedural-architecture/kit.json').then((m) => {
-    const kit = (m as { default?: KitAssetWithHeroes }).default ?? (m as KitAssetWithHeroes);
-    const byStatus: SceneVegHeroTrees = {};
-    for (const v of kit.heroTreeVariants ?? []) {
-      byStatus[v.status as keyof SceneVegHeroTrees] = { nodes: v.nodes, width: v.width, height: v.height };
-    }
-    return byStatus;
-  });
-  return heroTreesPromise;
 }
 
 /**
