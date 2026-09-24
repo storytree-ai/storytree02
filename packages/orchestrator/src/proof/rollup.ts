@@ -1,9 +1,9 @@
 import {
   SIGNING_EVENT_KIND,
-  Verdict,
   WORK_EVENT_KIND,
   WorkEventDoc,
 } from "@storytree/proof-protocol";
+import { parseVerdictDoc, parseWorkEventDoc } from "./rollup-parse.js";
 import type { Status } from "@storytree/proof-protocol";
 import type { StoreEvent } from "@storytree/storage-protocol";
 
@@ -93,7 +93,7 @@ export function workEvent(
 export function hasSignedVerdict(unitId: string, events: readonly RollupEvent[]): boolean {
   for (const e of events) {
     if (e.kind !== SIGNING_EVENT_KIND) continue;
-    const parsed = Verdict.safeParse(e.doc);
+    const parsed = parseVerdictDoc(e.doc);
     if (parsed.success && parsed.data.unitId === unitId) return true;
   }
   return false;
@@ -109,7 +109,7 @@ export function rollupStatus(
   const ordered = [...events].sort((a, b) => a.seq - b.seq);
   for (const e of ordered) {
     if (e.kind === WORK_EVENT_KIND) {
-      const parsed = WorkEventDoc.safeParse(e.doc);
+      const parsed = parseWorkEventDoc(e.doc);
       if (!parsed.success || parsed.data.unitId !== unitId) continue;
       if (parsed.data.event === "retired") {
         // An explicit, auditable withdrawal — it outranks proof and resets the baseline with it.
@@ -122,7 +122,7 @@ export function rollupStatus(
       status = parsed.data.event;
     } else if (e.kind === SIGNING_EVENT_KIND) {
       // Conservative: only a doc that parses as a full signed Verdict for THIS unit counts.
-      const parsed = Verdict.safeParse(e.doc);
+      const parsed = parseVerdictDoc(e.doc);
       if (!parsed.success || parsed.data.unitId !== unitId) continue;
       if (parsed.data.outcome === "pass") {
         status = "healthy";

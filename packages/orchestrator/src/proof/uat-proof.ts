@@ -1,10 +1,10 @@
 import {
-  CriterionVerdict,
   SIGNING_EVENT_KIND,
   Verdict,
   type CriterionBinding,
   type Status,
 } from "@storytree/proof-protocol";
+import { parseCriterionVerdictDoc, parseVerdictDoc } from "./rollup-parse.js";
 import type {
   LegacyUatDispositionLedger,
   UatTestCriterionWitness,
@@ -70,7 +70,7 @@ export function rollupCriterionStatus(
 
   for (const event of [...events].sort((a, b) => a.seq - b.seq)) {
     if (event.kind !== SIGNING_EVENT_KIND) continue;
-    const exact = CriterionVerdict.safeParse(event.doc);
+    const exact = parseCriterionVerdictDoc(event.doc);
     let verdict: Verdict | null = null;
     if (
       exact.success &&
@@ -79,7 +79,7 @@ export function rollupCriterionStatus(
     ) {
       verdict = exact.data;
     } else {
-      const legacy = Verdict.safeParse(event.doc);
+      const legacy = parseVerdictDoc(event.doc);
       if (
         legacy.success &&
         legacy.data.criterionId === undefined &&
