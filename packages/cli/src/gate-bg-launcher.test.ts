@@ -245,6 +245,31 @@ test("a PIPE on the launcher's stdout no longer holds the run — the measured r
   });
 });
 
+test("a re-dispatch at the SAME log path removes the previous run's sentinel before printing the handle", async () => {
+  // THE ESCAPE. The launcher never removed an existing `<log>.exit`, so re-dispatching at a fixed
+  // GATE_BG_LOG left the OLD verdict in place until the new run finished — `storytree dispatch <log>
+  // --wait` right after the handle printed returned the previous run's status at once. Load-independent
+  // for the same reason as the tests above: the new job cannot finish until the release file exists.
+  await withTempDir(async (dir) => {
+    const log = path.join(dir, "run.log");
+    const release = path.join(dir, "release");
+    writeFileSync(`${log}.exit`, "0\n"); // the previous run's GREEN
+    const res = spawnSync(nodeExecutable(), [launcher, ...releaseGatedJob(release, 5)], {
+      encoding: "utf8",
+      env: { ...process.env, GATE_BG_LOG: log },
+      cwd: repoRoot,
+    });
+    assert.equal(res.status, 0, `the re-dispatch itself failed:\n${res.stdout}${res.stderr}`);
+    assert.equal(
+      existsSync(`${log}.exit`),
+      false,
+      "a sentinel present once the handle is printed can only be the PREVIOUS run's verdict",
+    );
+    writeFileSync(release, "");
+    assert.equal(await awaitSentinel(`${log}.exit`), "5", "the verdict read is THIS run's");
+  });
+});
+
 // ---------- what the banner PRINTS, and what the launcher REFUSES ----------
 
 /**
