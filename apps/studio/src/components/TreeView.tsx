@@ -1357,6 +1357,7 @@ const PAN_FOLD_THRESHOLD_PX = 4000;
 // and with the same REAL DEFAULTS, so no production caller passes anything.
 export interface StudioSurfaces {
   WorldSceneView: React.ComponentType<React.ComponentProps<typeof WorldSceneView>>;
+  LandViewMount: React.ComponentType<React.ComponentProps<typeof LandViewMount>>;
   WorldSettingsPanel: React.ComponentType<React.ComponentProps<typeof WorldSettingsPanel>>;
   LibraryDrawer: React.ComponentType<React.ComponentProps<typeof LibraryDrawer>>;
   BottomDock: React.ComponentType<React.ComponentProps<typeof BottomDock>>;
@@ -1366,6 +1367,7 @@ export interface StudioSurfaces {
 
 const REAL_SURFACES: StudioSurfaces = {
   WorldSceneView,
+  LandViewMount,
   WorldSettingsPanel,
   LibraryDrawer,
   BottomDock,
@@ -3206,8 +3208,9 @@ export function TreeView({
               inherits the drag transform (ADR-0272 D2) and stays registered through a gesture with
               neither layer re-rasterising. */}
           {landMount && (
-            <LandViewMount
+            <surfaces.LandViewMount
               scene={scene}
+              hiddenStatuses={hidden}
               camera={presentedCam}
               drawProps={landMountProps}
               regrowCursor={act2Player.regrowing ? act2Player.state : null}

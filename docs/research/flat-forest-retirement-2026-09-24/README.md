@@ -118,3 +118,8 @@ The pure `native-semantic-hit-records` leaf (`real-41e0c56d-303c-453b-be58-5f066
 `deriveNativePropHitRecords` reads the existing `GroundInput.placements`, its island provenance and a supplied placement-keyed semantic-status lookup. Capability trees, dead trees and coverage flora yield immutable records containing story/capability/status, actual root and relief, and scaled canonical footprint width and height. Decorative and UAT props, or missing provenance/status, yield no guessed record. The placement list, attribution and caster inputs are unchanged. Status comes from the supplied semantics, never a material tint.
 
 This is selection data, not delivered interaction: no host target, camera, renderer, app clock or picture changes in this unit. Projection into the retained SVG surface, target ordering, actual click/keyboard/focus checks, status-filter persistence, public consumers and visible loading/failure states remain before the single retirement step. Appearance gains no new verdict from this pure proof.
+
+
+## Native legend presentation reaches actual materials
+
+The [native status evidence](native-status/index.html) shows a real healthy-status legend toggle fading the mounted kit props and restoring their exact original pixels. Both actual cameras and the full-alpha native canvases are unchanged across builds; ground and 251 retained story-target identities stay present. Registered Canvas pointer eligibility is now explicitly disabled, with actual element stacks and host click propagation verified. The [record](native-status/README.md) retains the observed opaque-material failure, ordinary red→green follow-through, mutation scope, draw statistics and appearance limits. No flat-picture removal or owner appearance attestation is claimed.

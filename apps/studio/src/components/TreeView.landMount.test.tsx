@@ -19,11 +19,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { act, render, cleanup } from '@testing-library/react';
+import { act, render, cleanup, fireEvent, within } from '@testing-library/react';
 
 import { AppDataContext, type AppData } from '../lib/appData';
 import { HttpDouble, installHttpDouble } from '../test/httpDouble';
-import { TreeView } from './TreeView';
+import { TreeView, StudioSurfacesContext, type StudioSurfaces } from './TreeView';
+import { LandViewMount, type LandMountCanvasProps, type LandViewMountProps } from './LandViewMount';
+import { ACT2_INTRO_SESSION_KEY, markAct2IntroArrived } from './act2Intro';
 
 // Two stories with a declared edge between them — a slightly more honest forest than one story, and
 // more markup for the byte-identity test to compare. ⚠ It does NOT make trails appear in this
@@ -103,12 +105,14 @@ const appData: AppData = {
   refreshAssets: async () => {},
 };
 
-async function renderTreeAt(search: string): Promise<HTMLElement> {
+async function renderTreeAt(search: string, surfaces: Partial<StudioSurfaces> | null = null): Promise<HTMLElement> {
   window.history.replaceState(null, '', `/${search}`);
   const { container } = render(
-    <AppDataContext.Provider value={appData}>
-      <TreeView focus={null} />
-    </AppDataContext.Provider>,
+    <StudioSurfacesContext.Provider value={surfaces}>
+      <AppDataContext.Provider value={appData}>
+        <TreeView focus={null} />
+      </AppDataContext.Provider>
+    </StudioSurfacesContext.Provider>,
   );
   await act(async () => {});
   return container;
@@ -304,6 +308,101 @@ describe('the land under the working map', () => {
       vp.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
     });
     expect(cameraTransform()).not.toBe(before);
+  });
+
+  it('sends a real legend toggle to the native mount while retained SVG story selection works', async () => {
+    const previousArrival = window.sessionStorage.getItem(ACT2_INTRO_SESSION_KEY);
+    // This is a settled-map interaction witness, using the real returning-visit state.
+    markAct2IntroArrived(window.sessionStorage);
+    const originalRect = Element.prototype.getBoundingClientRect;
+    const originalRO = Object.getOwnPropertyDescriptor(globalThis, 'ResizeObserver');
+    const originalHitTest = Object.getOwnPropertyDescriptor(document, 'elementFromPoint');
+    class RO {
+      constructor(private readonly callback: () => void) {}
+      observe() { this.callback(); }
+      disconnect() {}
+    }
+    Object.defineProperty(globalThis, 'ResizeObserver', { configurable: true, writable: true, value: RO });
+    Element.prototype.getBoundingClientRect = function getBoundingClientRect() {
+      return { x: 0, y: 0, left: 0, top: 0, right: 1600, bottom: 900, width: 1600, height: 900, toJSON: () => ({}) } as DOMRect;
+    };
+    const mountInputs: LandViewMountProps[] = [];
+    const canvasInputs: LandMountCanvasProps[] = [];
+    const captureCanvas = (props: LandMountCanvasProps) => {
+      canvasInputs.push(props);
+      return <div data-testid="native-canvas-slot" />;
+    };
+    const surfaces: Partial<StudioSurfaces> = {
+      LandViewMount: (props) => {
+        mountInputs.push(props);
+        return <LandViewMount {...props} renderCanvas={captureCanvas} />;
+      },
+    };
+    try {
+      const container = await renderTreeAt('?landMount=1&landMountProps=1', surfaces);
+      const viewport = container.querySelector('.world-viewport') as HTMLElement;
+      const layer = container.querySelector('[data-testid="land-mount"]')!;
+      expect(layer.getAttribute('data-state')).toBe('drawn');
+      expect(layer.getAttribute('aria-hidden')).toBe('true');
+      expect(layer.getAttribute('tabindex')).toBeNull();
+      expect(viewport.getAttribute('tabindex')).toBe('0');
+      expect(viewport.getAttribute('aria-label')).toBe('story forest map (pan and zoom)');
+      expect(/\.land-mount\s*\{([^}]*)\}/.exec(readStudioCss())![1]!).toMatch(/pointer-events:\s*none/);
+      const before = canvasInputs.at(-1)!;
+      expect(before.hiddenStatuses.size).toBe(0);
+      expect(before.registered.props).toBe(true);
+      const retainedTargets = () => [...container.querySelectorAll('svg.world-scene [data-story-id]')]
+        .map((node) => [node.getAttribute('data-story-id'), node.getAttribute('data-cap-id')]);
+      const beforeTargets = retainedTargets();
+      expect(beforeTargets.length).toBeGreaterThan(0);
+
+      fireEvent.click(within(container).getByRole('button', { name: 'story status', hidden: true }));
+      // presentStories folds the fixture's authored healthy to proposed: it has no signed verdict.
+      fireEvent.click(within(container).getByTitle('fade proposed'));
+      const dimmed = canvasInputs.at(-1)!;
+      expect(dimmed.hiddenStatuses).toBe(mountInputs.at(-1)!.hiddenStatuses);
+      expect([...dimmed.hiddenStatuses]).toEqual(['proposed']);
+      expect(dimmed.registered).toEqual(before.registered);
+      expect(dimmed.active).toBe(before.active);
+      expect(dimmed.regrow).toBe(before.regrow);
+      expect(retainedTargets()).toEqual(beforeTargets);
+
+      // The actual capability ground tile carries the story identity for coordinate selection.
+      // This fixture does not stamp a data-cap-id, so do not fabricate a capability hit target.
+      const targetSelector = 'svg.world-scene .relaxed-tile[data-story-id="forest-world"]';
+      const target = container.querySelector(targetSelector);
+      expect(target).toBeTruthy();
+      expect(target!.querySelector('title')!.textContent).toBe('forest-layout');
+      expect(target!.getAttribute('data-cap-id')).toBeNull();
+      const hitPoints: number[][] = [];
+      Object.defineProperty(document, 'elementFromPoint', {
+        configurable: true,
+        value: (x: number, y: number) => {
+          hitPoints.push([x, y]);
+          return target;
+        },
+      });
+      viewport.focus();
+      expect(document.activeElement).toBe(viewport);
+      fireEvent.click(viewport, { clientX: 140, clientY: 130 });
+      expect(hitPoints).toEqual([[140, 130]]);
+      expect(window.location.hash).toBe('#/tree/forest-world');
+      expect(container.querySelector(targetSelector)).toBe(target);
+
+      fireEvent.click(within(container).getByTitle('show proposed'));
+      expect(canvasInputs.at(-1)!.hiddenStatuses.size).toBe(0);
+      expect(canvasInputs.at(-1)!.hiddenStatuses).toBe(mountInputs.at(-1)!.hiddenStatuses);
+      expect(retainedTargets()).toEqual(beforeTargets);
+    } finally {
+      cleanup();
+      if (previousArrival === null) window.sessionStorage.removeItem(ACT2_INTRO_SESSION_KEY);
+      else window.sessionStorage.setItem(ACT2_INTRO_SESSION_KEY, previousArrival);
+      Element.prototype.getBoundingClientRect = originalRect;
+      if (originalRO) Object.defineProperty(globalThis, 'ResizeObserver', originalRO);
+      else Reflect.deleteProperty(globalThis, 'ResizeObserver');
+      if (originalHitTest) Object.defineProperty(document, 'elementFromPoint', originalHitTest);
+      else Reflect.deleteProperty(document, 'elementFromPoint');
+    }
   });
 
   it('suppresses BOTH SVG path passes, and keeps every edge identity in the DOM', () => {
