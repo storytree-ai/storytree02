@@ -3,7 +3,6 @@ import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import { test } from "node:test";
 
 // @ts-expect-error -- the committed Node reporter is intentionally plain .mjs with no declaration file.
@@ -124,7 +123,7 @@ test("later assertion failure", () => assert.equal(1, 2));
 test("later pass", () => assert.equal(1, 1));
 `,
     );
-    const reporter = pathToFileURL(new URL("./per-test-reporter.mjs", import.meta.url).pathname).href;
+    const reporter = new URL("./per-test-reporter.mjs", import.meta.url).href;
     const result = await runFixture(
       [
         "--test-reporter=spec",
@@ -136,7 +135,7 @@ test("later pass", () => assert.equal(1, 1));
       ],
       childEnvironment(),
     );
-    assert.equal(result.code, 1, "the fixture's intentional failures still exit red");
+    assert.ok(result.code !== null && result.code !== 0, "the fixture's intentional failures still exit red");
     assert.match(result.stdout, /later assertion failure/, "spec output remains readable beside JSONL");
     assert.match(result.stdout, /later pass/, "spec output includes the later passing test");
     const reportRows = (await readFile(report, "utf8")).trim().split("\n").map((line) => JSON.parse(line) as ReporterRecord);

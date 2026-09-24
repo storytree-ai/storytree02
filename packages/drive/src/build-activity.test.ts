@@ -76,7 +76,9 @@ test(`paid-build-activity-stamps-only-observed-source-test-or-phase-progress: qu
   const ignored = await put(root, "notes.txt");
   const log = await put(root, ".gate-logs/run.log");
   const dep = await put(root, "node_modules/dep/index.ts");
-  await fs.symlink(ignored, path.join(root, "packages/x/src/link.ts"));
+  const linkTarget = path.join(root, "link-target");
+  await fs.mkdir(linkTarget);
+  await fs.symlink(linkTarget, path.join(root, "packages/x/src/link.ts"), process.platform === "win32" ? "junction" : "dir");
   const observer = await createBuildActivityObserver({ root, includes: (p) => p.endsWith(".ts"), guard: held.guard, timers: clock.timers });
   try {
     assert.equal(clock.unrefed(), 1);
