@@ -48,7 +48,7 @@ async function* events(): AsyncGenerator<object> {
   yield { type: "test:pass", data: { name: "later pass" } };
 }
 
-function childEnvironment(): Record<string, string> {
+function childEnvironment() {
   const environment: Record<string, string> = {};
   for (const [name, value] of Object.entries(process.env)) {
     if (!name.startsWith("NODE_TEST") && value !== undefined) environment[name] = value;
