@@ -19,7 +19,7 @@ const world = {
     { storyId: 'story-alpha', islandId: 'island-cedar', x: 40, y: 60, radius: 20 },
     { storyId: 'story-bravo', islandId: 'island-pine', x: 210, y: 120, radius: 35 },
   ],
-} as unknown as ForestCaptureWorld;
+} satisfies ForestCaptureWorld;
 
 function resolve(target: ForestCaptureTarget, overrides: Partial<ForestCaptureCameraInput> = {}) {
   return resolveForestCaptureCamera({
@@ -95,7 +95,7 @@ describe('fccs-story-node-and-island-resolve-separately: real layout geometry', 
     expect(resolve({ kind: 'story-node', id: 'missing' })).toEqual({ ok: false, code: 'target-not-found' });
     expect(resolve({ kind: 'island', id: 'missing' })).toEqual({ ok: false, code: 'target-not-found' });
     expect(resolve({ kind: 'island', id: 'island-cedar' }, {
-      world: { territories: [{ storyId: 'story-alpha', islandId: 'island-cedar', x: 40, y: 60, radius: 0 }] } as unknown as ForestCaptureWorld,
+      world: { territories: [{ storyId: 'story-alpha', islandId: 'island-cedar', x: 40, y: 60, radius: 0 }] } satisfies ForestCaptureWorld,
     })).toEqual({ ok: false, code: 'invalid-target' });
 
     const pineDiameter = 70;

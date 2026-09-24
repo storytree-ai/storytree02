@@ -1,7 +1,7 @@
 ---
 id: "forest-capture-camera-seam"
 tier: capability
-story: frontend-builder-semantic-capture
+story: studio
 arc: frontend-builder-semantic-capture-arc
 title: "A named forest capture target resolves to one exact camera receipt"
 outcome: "A frontend builder's named forest capture target resolves through Studio to one exact applied camera receipt or a typed refusal."

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
 import { rmSync, writeFileSync } from "node:fs";
+import type { Dirent } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
@@ -312,6 +313,68 @@ test("paid-build-activity-stamps-only-observed-source-test-or-phase-progress: a 
     assert.deepEqual([...held.observed], []);
   } finally {
     await observer.stop().catch(() => {});
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("paid-build-activity-stamps-only-observed-source-test-or-phase-progress: Windows ENOENT directory races are normalized from the live path", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "build-activity-windows-race-"));
+  const marker = await put(root, "marker.ts");
+  const fileStat = await fs.lstat(marker);
+  const enoent = Object.assign(new Error("missing"), { code: "ENOENT" });
+  const denied = Object.assign(new Error("denied"), { code: "EPERM" });
+  const held = lease();
+  const clock = manualTimers();
+  try {
+    await assert.rejects(createBuildActivityObserver({
+      root,
+      includes: () => true,
+      guard: held.guard,
+      timers: clock.timers,
+      fileSystem: {
+        async readdir() { throw enoent; },
+        async lstat() { return fileStat; },
+      },
+    }), { code: "ENOTDIR" });
+
+    await assert.rejects(createBuildActivityObserver({
+      root,
+      includes: () => true,
+      guard: held.guard,
+      timers: clock.timers,
+      fileSystem: {
+        async readdir() { throw denied; },
+        async lstat() { return fileStat; },
+      },
+    }), { code: "EPERM" });
+
+    const child = { name: "child.ts" } as Dirent;
+    await assert.rejects(createBuildActivityObserver({
+      root,
+      includes: () => true,
+      guard: held.guard,
+      timers: clock.timers,
+      fileSystem: {
+        async readdir() { return [child]; },
+        async lstat(candidate: string) {
+          if (path.basename(candidate.toString()) === child.name) throw enoent;
+          return fileStat;
+        },
+      },
+    }), { code: "ENOTDIR" });
+
+    const vanishedObserver = await createBuildActivityObserver({
+      root,
+      includes: () => true,
+      guard: held.guard,
+      timers: clock.timers,
+      fileSystem: {
+        async readdir() { return [child]; },
+        async lstat() { throw enoent; },
+      },
+    });
+    await vanishedObserver.stop();
+  } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
 });

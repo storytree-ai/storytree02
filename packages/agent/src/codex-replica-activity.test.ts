@@ -31,10 +31,10 @@ test("codex-replica-reader-returns-only-new-declared-regular-file-mtimes: baseli
     const sourceTest = path.join(replica, "packages", "drive", "src", "x.test.ts");
     const unrelated = path.join(replica, "notes.txt");
     const log = path.join(replica, ".gate-logs", "leaf.log");
-    const dependencyTarget = path.join(checkout, "dependency-target.ts");
-    const dependencyLink = path.join(replica, "node_modules", "dep", "index.ts");
-    const linkedTarget = path.join(checkout, "linked-target.ts");
-    const linkedFile = path.join(replica, "packages", "drive", "src", "linked.ts");
+    const dependencyTarget = path.join(checkout, "dependency-target", "index.ts");
+    const dependencyLink = path.join(replica, "node_modules", "dep");
+    const linkedTarget = path.join(checkout, "linked-target", "linked.ts");
+    const linkedFile = path.join(replica, "packages", "drive", "src", "linked");
     const baseline = new Date("2026-01-01T00:00:00.000Z");
     const edit = new Date("2026-01-01T00:00:10.000Z");
     const ignoredEdit = new Date("2026-01-01T00:00:20.000Z");
@@ -48,8 +48,9 @@ test("codex-replica-reader-returns-only-new-declared-regular-file-mtimes: baseli
       writeText(linkedTarget, "linked\n"),
     ]);
     await fs.mkdir(path.dirname(dependencyLink), { recursive: true });
-    await fs.symlink(dependencyTarget, dependencyLink);
-    await fs.symlink(linkedTarget, linkedFile);
+    const directoryLinkType = process.platform === "win32" ? "junction" : "dir";
+    await fs.symlink(path.dirname(dependencyTarget), dependencyLink, directoryLinkType);
+    await fs.symlink(path.dirname(linkedTarget), linkedFile, directoryLinkType);
     await Promise.all([source, sourceTest, unrelated, log, dependencyTarget, linkedTarget].map((file) => setMtime(file, baseline)));
 
     const predicateCalls: string[] = [];
