@@ -123,3 +123,7 @@ This is selection data, not delivered interaction: no host target, camera, rende
 ## Native legend presentation reaches actual materials
 
 The [native status evidence](native-status/index.html) shows a real healthy-status legend toggle fading the mounted kit props and restoring their exact original pixels. Both actual cameras and the full-alpha native canvases are unchanged across builds; ground and 251 retained story-target identities stay present. Registered Canvas pointer eligibility is now explicitly disabled, with actual element stacks and host click propagation verified. The [record](native-status/README.md) retains the observed opaque-material failure, ordinary red→green follow-through, mutation scope, draw statistics and appearance limits. No flat-picture removal or owner appearance attestation is claimed.
+
+## Sixth prerequisite: native semantic records project into retained-surface bounds
+
+The pure `native-prop-hit-projection` leaf (`real-9bcba8f0-84a1-419d-9a45-d65a036b4691`) signed `ee37fd59bee0e6c76b52cbcc7775ba3b7fe39b58` with all three contracts covered; the package typecheck was green and the verdict was adjudicated LAND. `projectNativePropHitEnvelope` turns each immutable semantic record into immutable absolute drawing-world root and crown positions plus yaw-safe `minX`/`maxX`/`minY`/`maxY` bounds, using the existing core ground-flattening and upright-foreshortening helpers. This remains pure projection only: no host target delivery, camera, renderer, clock or flat-picture removal is included.
