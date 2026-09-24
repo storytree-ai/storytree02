@@ -31,10 +31,14 @@ export default async function* perTestReporter(source) {
         out.errorCode = err.code;
         const cause = err.cause;
         if (cause !== undefined && cause !== null) {
-          out.causeName = cause.name ?? cause.constructor?.name;
-          out.causeCode = cause.code;
-          const msg = typeof cause.message === "string" ? cause.message : String(cause);
-          out.causeMessage = msg.split("\n")[0];
+          try {
+            const msg = typeof cause.message === "string" ? cause.message : String(cause);
+            out.causeName = cause.name ?? cause.constructor?.name;
+            out.causeCode = cause.code;
+            out.causeMessage = msg.split("\n")[0];
+          } catch {
+            // A malformed cause must not prevent later test events from being reported.
+          }
         }
       }
     }
