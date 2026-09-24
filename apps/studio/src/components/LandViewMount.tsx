@@ -51,6 +51,8 @@ export interface LandMountCanvasProps {
   registered: RegisteredUnderlay;
   /** The app-owned cursor, adapted here for the canvas without creating another clock. */
   regrow: ForestRegrowPresentation | null;
+  /** Whether the host route is active. The registered canvas handles parking. */
+  active: boolean;
 }
 
 /** The real canvas, in its own chunk — the same chunk `LandView` loads, so opening both costs one. */
@@ -59,10 +61,10 @@ const ForestWorldCanvas = lazy(async () => {
   return { default: mod.ForestWorldCanvas };
 });
 
-function DefaultMountCanvas({ descriptors, registered, regrow }: LandMountCanvasProps) {
+function DefaultMountCanvas({ descriptors, registered, regrow, active }: LandMountCanvasProps) {
   return (
     <Suspense fallback={null}>
-      <ForestWorldCanvas descriptors={descriptors} registered={registered} regrow={regrow} />
+      <ForestWorldCanvas descriptors={descriptors} registered={registered} regrow={regrow} active={active} />
     </Suspense>
   );
 }
@@ -83,6 +85,8 @@ export interface LandViewMountProps {
   camera: Camera | null;
   /** The app-owned regrow cursor while the world is growing; absent after settlement. */
   regrowCursor?: ForestRegrowCursor | null;
+  /** The route's existing active state, forwarded without changing regrow ownership. */
+  active?: boolean;
   /** Draw the kit props as well as the ground — the staging arm, off by default. */
   drawProps?: boolean;
   /** The canvas seam, so the mount is provable in jsdom. Absent ⇒ the real, lazily-loaded one. */
@@ -136,6 +140,7 @@ export function LandViewMount({
   scene,
   camera,
   regrowCursor = null,
+  active = true,
   drawProps = false,
   renderCanvas = DefaultMountCanvas,
 }: LandViewMountProps): React.JSX.Element {
@@ -167,7 +172,7 @@ export function LandViewMount({
     const withProps: RegisteredUnderlay = drawProps ? { ...registeredProps, props: true } : registeredProps;
     return {
       state: 'drawn' as const,
-      node: renderCanvas({ descriptors: stream.descriptors, registered: withProps, regrow }),
+      node: renderCanvas({ descriptors: stream.descriptors, registered: withProps, regrow, active }),
     };
   })();
 

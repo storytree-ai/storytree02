@@ -95,6 +95,10 @@ export const CLI_AREAS = [
   // `definition` (`self-sustaining-sessions-arc`)? Offline, transcripts only, no store: it reports
   // promotion candidates and authors nothing.
   "vocabulary",
+  // `storytree test <files|package-dirs>` — run EXACTLY the named tests under each package's own
+  // declared runner, vitest packages included (`storytree-test-verb-covers-every-package`). Offline,
+  // no store: it spawns the package runners and refuses loudly whatever it cannot make exact.
+  "test",
   // `storytree dispatch <handle>` — the caller's half of the ADR-0328 D3 handback: read a
   // backgrounded job's verdict ONCE, and report RUNNING / UNVERIFIED as non-verdicts rather than
   // folding them into a pass. Read-only, offline, no store.

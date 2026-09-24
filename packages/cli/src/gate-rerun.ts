@@ -472,7 +472,8 @@ export function treeChangedSince(
  *
  * `store-unobserved` is the fourth, and it exists because an identical tree is NOT the same evidence
  * for every step. The tree digest's aperture is the repository; the shared live store sits outside it
- * (`LIVE_STORE_READING_CHECKS` in `gate-order.ts` names the ten steps whose verdicts read it). For
+ * (each check whose verdict reads it DECLARES the CI identity it reads it as, and `readsLiveStore` in
+ * `gate-order.ts` reads that declaration). For
  * one of those, "HEAD and the working tree are unchanged" rules out a code fix and rules out NOTHING
  * about the store — so a real store-side repair and an infrastructure flake are indistinguishable
  * from here, and the commonest cause is the repair. Calling that a `flake-signature` asserts "nothing
@@ -508,8 +509,8 @@ export function compareRerun(input: {
   readonly treeChanged: boolean | null;
   /**
    * Does this command's verdict read mutable live-store state? INJECTED, so this module stays pure
-   * and the classification has exactly one home (`readsLiveStore` over
-   * `LIVE_STORE_READING_CHECKS`) rather than a second copy here that could drift from the plan.
+   * and the classification has exactly one home (`readsLiveStore` over each check's declared
+   * `ciIdentity`) rather than a second copy here that could drift from the plan.
    *
    * A caller that cannot answer passes a predicate returning TRUE — the fail-closed direction, which
    * withholds the flake claim — never one returning false, which would re-assert the acquittal this

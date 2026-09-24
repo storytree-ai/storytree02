@@ -1,9 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 
-import type { GateStep } from "./gate-order.js";
+import type { GateStep, StepSkip } from "./gate-order.js";
 import {
   GATE_PARTIAL_EXIT_CODE,
   GATE_SKIP_EXIT_CODE,
@@ -23,6 +21,14 @@ function steps(...names: string[]): GateStep[] {
   return names.map((n) => ({ command: `pnpm ${n}`, check: n.startsWith("check:") ? n : undefined }));
 }
 
+/**
+ * The same stub, DECLARING a skip — the only kind of step whose exit 3 the runner reads as SKIP. A
+ * skip is an opt-in the check's own declaration makes (ADR-0606 D1), never inferred from the code.
+ */
+function skipping(name: string, inCi: StepSkip["inCi"] = "failure"): GateStep {
+  return { command: `pnpm ${name}`, check: name, skip: { when: "its input is absent here", inCi } };
+}
+
 /** An executor that reads exit codes off a table and RECORDS which steps it was actually asked to run. */
 function scripted(codes: Record<string, number>) {
   const ran: string[] = [];
@@ -31,15 +37,6 @@ function scripted(codes: Record<string, number>) {
     return { exitCode: codes[step.command] ?? 0 };
   };
   return { ran, execute };
-}
-
-/**
- * A `maySkip` declaring exactly the named checks skip-capable — the test-side stand-in for
- * `SKIP_CAPABLE_CHECKS`. Every skip test names its declaration: the runner accepts no undeclared skip.
- */
-function declares(...checks: string[]): (step: GateStep) => boolean {
-  const set = new Set(checks);
-  return (step) => set.has(step.check ?? "");
 }
 
 /** A monotonic fake clock — never a real timer (ADR-0276: wall clock is not a gate-tier assertion). */
@@ -109,9 +106,9 @@ test("a step exiting the reserved code reports SKIP, never PASS — the measured
   // silently opted out. PASS was computed from the exit code, so opting out and verifying were
   // indistinguishable. Today's live instance is `check:web-grounding` with no `web/` submodule.
   const { execute } = scripted({ "pnpm check:web-grounding": GATE_SKIP_EXIT_CODE });
-  const plan = steps("check:web-grounding", "check:boundaries");
+  const plan = [skipping("check:web-grounding"), ...steps("check:boundaries")];
 
-  const results = await runGate({ steps: plan, execute, maySkip: declares("check:web-grounding"), now: fakeClock() });
+  const results = await runGate({ steps: plan, execute, now: fakeClock() });
 
   assert.equal(byCommand(results, "pnpm check:web-grounding").status, "skip");
   assert.notEqual(
@@ -125,9 +122,8 @@ test("a step exiting the reserved code reports SKIP, never PASS — the measured
 test("a SKIP does not red the gate, and the summary says green is NARROWED", async () => {
   const { execute } = scripted({ "pnpm check:web-grounding": GATE_SKIP_EXIT_CODE });
   const results = await runGate({
-    steps: steps("check:web-grounding", "check:boundaries"),
+    steps: [skipping("check:web-grounding"), ...steps("check:boundaries")],
     execute,
-    maySkip: declares("check:web-grounding"),
     now: fakeClock(),
   });
 
@@ -141,9 +137,9 @@ test("a SKIP does not red the gate, and the summary says green is NARROWED", asy
 
 test("SKIP and NOT RUN stay distinct — same epistemic class, different cause", async () => {
   const { execute } = scripted({ "pnpm check:a": GATE_SKIP_EXIT_CODE, "pnpm check:b": 1 });
-  const plan = steps("check:a", "check:b", "check:c");
+  const plan = [skipping("check:a"), ...steps("check:b", "check:c")];
 
-  const results = await runGate({ steps: plan, execute, failFast: true, maySkip: declares("check:a"), now: fakeClock() });
+  const results = await runGate({ steps: plan, execute, failFast: true, now: fakeClock() });
 
   assert.equal(byCommand(results, "pnpm check:a").status, "skip", "asked, and answered 'nothing to check'");
   assert.equal(byCommand(results, "pnpm check:c").status, "not-run", "never asked at all");
@@ -152,9 +148,9 @@ test("SKIP and NOT RUN stay distinct — same epistemic class, different cause",
 
 test("a SKIP never stops the walk — only a real failure can, and only under --fail-fast", async () => {
   const { ran, execute } = scripted({ "pnpm check:a": GATE_SKIP_EXIT_CODE });
-  const plan = steps("check:a", "check:b", "check:c");
+  const plan = [skipping("check:a"), ...steps("check:b", "check:c")];
 
-  const results = await runGate({ steps: plan, execute, failFast: true, maySkip: declares("check:a"), now: fakeClock() });
+  const results = await runGate({ steps: plan, execute, failFast: true, now: fakeClock() });
 
   assert.deepEqual(ran, ["pnpm check:a", "pnpm check:b", "pnpm check:c"], "a skip is not a red");
   assert.equal(gateExitCode(results), 0);
@@ -170,78 +166,6 @@ test("the reserved skip code is not a value any ordinary failure produces", asyn
   const results = await runGate({ steps: steps("check:a", "check:b"), execute, now: fakeClock() });
   assert.equal(byCommand(results, "pnpm check:a").status, "fail");
   assert.equal(byCommand(results, "pnpm check:b").status, "fail");
-});
-
-// ── only a DECLARED skip-capable step may skip ───────────────────────────────
-//
-// The escape these close: the runner used to read the exit code alone, so ANY step exiting 3 —
-// `check:boundaries`, or the typecheck/test legs, which carry no `check` at all — became a SKIP and the
-// gate printed GATE GREEN, NARROWED over a check that never declared it could opt out.
-
-test("an exit 3 from a step NOT declared skip-capable is a FAIL naming why, and the gate is red", async () => {
-  const { execute } = scripted({ "pnpm check:boundaries": GATE_SKIP_EXIT_CODE });
-  const results = await runGate({
-    steps: steps("check:web-grounding", "check:boundaries"),
-    execute,
-    maySkip: declares("check:web-grounding"),
-    now: fakeClock(),
-  });
-  const boundaries = byCommand(results, "pnpm check:boundaries");
-  assert.equal(boundaries.status, "fail");
-  assert.equal(boundaries.exitCode, GATE_SKIP_EXIT_CODE);
-  assert.equal(boundaries.note, UNDECLARED_SKIP_NOTE);
-  // The note's TEXT, not just its identity with the constant: it must say where the declaration
-  // lives and why an undeclared exit 3 is a failure.
-  assert.equal(
-    boundaries.note,
-    "exit 3 from a step not declared skip-capable (SKIP_CAPABLE_CHECKS, gate-order.ts) — only a " +
-      "declared check may opt out, so an undeclared exit 3 is a failure, not a skip",
-  );
-  assert.equal(gateExitCode(results), 1);
-  assert.doesNotMatch(renderGateSummary(results).join("\n"), /GATE GREEN/);
-});
-
-test("a step with no check (the typecheck/test legs) exiting 3 is a FAIL, never a SKIP", async () => {
-  const results = await runGate({
-    steps: steps("-r typecheck", "-r test"),
-    execute: () => ({ exitCode: GATE_SKIP_EXIT_CODE }),
-    maySkip: declares("check:web-grounding"),
-    now: fakeClock(),
-  });
-  for (const r of results) {
-    assert.equal(r.status, "fail", r.command);
-    assert.equal(r.note, UNDECLARED_SKIP_NOTE, r.command);
-  }
-  assert.equal(gateExitCode(results), 1);
-});
-
-test("with no maySkip at all NOTHING may skip — the default is fail-closed", async () => {
-  const results = await runGate({
-    steps: steps("check:web-grounding"),
-    execute: () => ({ exitCode: GATE_SKIP_EXIT_CODE }),
-    now: fakeClock(),
-  });
-  assert.equal(byCommand(results, "pnpm check:web-grounding").status, "fail");
-  assert.equal(gateExitCode(results), 1);
-});
-
-test("under skipIsFailure an UNDECLARED exit 3 names the truer reason — it was never declared", async () => {
-  const results = await runGate({
-    steps: steps("check:boundaries"),
-    execute: () => ({ exitCode: GATE_SKIP_EXIT_CODE }),
-    skipIsFailure: true,
-    maySkip: declares("check:web-grounding"),
-    now: fakeClock(),
-  });
-  assert.equal(byCommand(results, "pnpm check:boundaries").note, UNDECLARED_SKIP_NOTE);
-});
-
-test("gate-run.ts wires the runner's maySkip to SKIP_CAPABLE_CHECKS", () => {
-  // gate-run.ts is a script (top-level await main), so its wiring is asserted on its source — the
-  // runner's fail-closed default means a dropped line would red every web/-less local gate, but a
-  // wrong predicate (e.g. `() => true`) would silently re-open the escape.
-  const source = readFileSync(fileURLToPath(new URL("./gate-run.ts", import.meta.url)), "utf8");
-  assert.match(source, /maySkip: \(step\) => SKIP_CAPABLE_CHECKS\.has\(step\.check \?\? ""\)/);
 });
 
 // ── NOT RUN is a third status, never collapsed into a neighbour ──────────────
@@ -482,17 +406,16 @@ test("a partial summary whose selected step failed points at FAILED rather than 
 
 // ── a CI run: the skip code is a failure (ADR-0606 D3) ───────────────────────
 //
-// `pnpm gate --ci` sets `skipIsFailure`, reproducing what CI always did: a plain workflow step read
-// ANY non-zero exit as a failure, and the checks whose skip CI accepts never exit 3 there. So in CI
-// the only exit 3 is a skip CI did not sanction — and it must red, loudly and with its reason.
+// `pnpm gate --ci` sets `ci`, reproducing what CI always did: a plain workflow step read ANY non-zero
+// exit as a failure, and the checks whose skip CI tolerates never exit 3 there. So in CI a declared
+// skip reds, loudly and with its reason — unless the check's own declaration accepts that skip in CI.
 
-test("ci-green-means-every-ci-step-passed: under skipIsFailure the reserved skip code is a FAIL carrying why, and the gate is red", async () => {
+test("ci-green-means-every-ci-step-passed: under ci a DECLARED skip is a FAIL carrying why, and the gate is red", async () => {
   const { execute } = scripted({ "pnpm check:land-art": GATE_SKIP_EXIT_CODE });
   const results = await runGate({
-    steps: steps("check:a", "check:land-art"),
+    steps: [...steps("check:a"), skipping("check:land-art")],
     execute,
-    skipIsFailure: true,
-    maySkip: declares("check:land-art"),
+    ci: true,
     now: fakeClock(),
   });
   const land = byCommand(results, "pnpm check:land-art");
@@ -508,18 +431,50 @@ test("ci-green-means-every-ci-step-passed: under skipIsFailure the reserved skip
   );
 });
 
-test("ci-green-means-every-ci-step-passed: without skipIsFailure the same exit is a SKIP with no refusal note — the local protocol is unchanged", async () => {
+test("ci-green-means-every-ci-step-passed: a skip the check declares ACCEPTABLE in CI stays a SKIP under ci", async () => {
+  const results = await runGate({
+    steps: [skipping("check:tolerant", "accepted"), skipping("check:strict")],
+    execute: scripted({ "pnpm check:tolerant": GATE_SKIP_EXIT_CODE, "pnpm check:strict": GATE_SKIP_EXIT_CODE }).execute,
+    ci: true,
+    now: fakeClock(),
+  });
+  const tolerant = byCommand(results, "pnpm check:tolerant");
+  assert.equal(tolerant.status, "skip");
+  assert.equal(tolerant.note, undefined);
+  assert.equal(byCommand(results, "pnpm check:strict").status, "fail", "the declaration decides, per check");
+});
+
+test("ci-green-means-every-ci-step-passed: an UNDECLARED exit 3 is a FAIL naming the missing declaration — in CI and locally alike", async () => {
+  for (const ci of [true, false]) {
+    const results = await runGate({
+      steps: steps("check:silent"),
+      execute: scripted({ "pnpm check:silent": GATE_SKIP_EXIT_CODE }).execute,
+      ci,
+      now: fakeClock(),
+    });
+    const silent = byCommand(results, "pnpm check:silent");
+    assert.equal(silent.status, "fail", `ci=${ci}: a skip is an opt-in, never inferred from an exit code`);
+    assert.equal(silent.exitCode, GATE_SKIP_EXIT_CODE);
+    assert.equal(silent.note, UNDECLARED_SKIP_NOTE);
+    assert.equal(gateExitCode(results), 1);
+  }
+  assert.equal(
+    UNDECLARED_SKIP_NOTE,
+    "exited 3 (the SKIP code) but declares no skip — a skip is an opt-in its own declaration makes, " +
+      "never inferred from an exit code, so this is a failure",
+  );
+});
+
+test("ci-green-means-every-ci-step-passed: without ci a declared skip is a SKIP with no refusal note — the local protocol is unchanged", async () => {
   const unset = await runGate({
-    steps: steps("check:land-art"),
+    steps: [skipping("check:land-art")],
     execute: scripted({ "pnpm check:land-art": GATE_SKIP_EXIT_CODE }).execute,
-    maySkip: declares("check:land-art"),
     now: fakeClock(),
   });
   const off = await runGate({
-    steps: steps("check:land-art"),
+    steps: [skipping("check:land-art")],
     execute: scripted({ "pnpm check:land-art": GATE_SKIP_EXIT_CODE }).execute,
-    skipIsFailure: false,
-    maySkip: declares("check:land-art"),
+    ci: false,
     now: fakeClock(),
   });
   for (const results of [unset, off]) {
@@ -530,12 +485,12 @@ test("ci-green-means-every-ci-step-passed: without skipIsFailure the same exit i
   }
 });
 
-test("ci-green-means-every-ci-step-passed: under skipIsFailure an ordinary red carries no refusal note, and a pass still passes", async () => {
+test("ci-green-means-every-ci-step-passed: under ci an ordinary red carries no refusal note, and a pass still passes", async () => {
   const { execute } = scripted({ "pnpm check:red": 1 });
   const results = await runGate({
-    steps: steps("check:red", "check:green"),
+    steps: [skipping("check:red"), ...steps("check:green")],
     execute,
-    skipIsFailure: true,
+    ci: true,
     now: fakeClock(),
   });
   assert.equal(byCommand(results, "pnpm check:red").status, "fail");
@@ -545,20 +500,19 @@ test("ci-green-means-every-ci-step-passed: under skipIsFailure an ordinary red c
 
 test("ci-green-means-every-ci-step-passed: a refused skip keeps the step's own note and adds the refusal after it", async () => {
   const results = await runGate({
-    steps: steps("check:web-engine"),
+    steps: [skipping("check:web-engine")],
     execute: () => ({ exitCode: GATE_SKIP_EXIT_CODE, note: "web/ absent" }),
-    skipIsFailure: true,
-    maySkip: declares("check:web-engine"),
+    ci: true,
     now: fakeClock(),
   });
   assert.equal(byCommand(results, "pnpm check:web-engine").note, `web/ absent; ${REFUSED_SKIP_NOTE}`);
 });
 
-test("ci-green-means-every-ci-step-passed: a killed step is still NOT RUN under skipIsFailure — the refusal is about skips, not kills", async () => {
+test("ci-green-means-every-ci-step-passed: a killed step is still NOT RUN under ci — the refusal is about skips, not kills", async () => {
   const results = await runGate({
-    steps: steps("check:slow"),
+    steps: [skipping("check:slow")],
     execute: () => ({ exitCode: null, unverified: true, note: "killed by SIGTERM" }),
-    skipIsFailure: true,
+    ci: true,
     now: fakeClock(),
   });
   const slow = byCommand(results, "pnpm check:slow");

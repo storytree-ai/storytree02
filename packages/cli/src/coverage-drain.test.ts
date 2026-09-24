@@ -16,7 +16,7 @@ import { classifyGateCoverage, projectCoverageGaps, sweepRealBuildCoverage } fro
  *
  * `check:coverage` was retired by ADR-0311 D2 and `coverage-drain.ts` beside this file carries the
  * UNWIRED banner, so this file LOOKS like a leftover. It is not. The `live corpus sweep` test at the
- * bottom runs inside `pnpm -r test` — GATE_PLAN step 6, which CI runs too — and is the ONLY
+ * bottom runs inside `pnpm -r test` — the gate's test leg, which CI runs too — and is the ONLY
  * surviving enforcement of the contract-coverage ceiling (ADR-0252 D3): it sweeps the real
  * `stories/` tree and asserts the drain verdict is not red, so the uncovered/unbound backlog cannot
  * grow past its ceiling unnoticed.

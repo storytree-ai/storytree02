@@ -198,6 +198,16 @@ export {
 // disagree about the same command.
 export type { ProofRoute, ProofRouteBasis } from "./proof/proof-route.js";
 export { classifyProofRoute, namesTestFile } from "./proof/proof-route.js";
+// The worker's existing-test runner (ADR-0581 D3 / ADR-0587), exported so `storytree test` derives
+// each package's runner from the SAME reader rather than a second copy that could disagree with it.
+export type { RunnableSuite } from "./proof/test-suite-runner.js";
+export {
+  listTestFiles,
+  namedSubsetRunner,
+  readTestScript,
+  splitScriptSegments,
+  testSelectionCommands,
+} from "./proof/test-suite-runner.js";
 export type { SignerInputs, SignerResult } from "./proof/signer.js";
 export { resolveSigner } from "./proof/signer.js";
 export { resolveSignerFromEnv } from "./proof/signer-env.js";

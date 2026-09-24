@@ -4,7 +4,7 @@
 // own tests — so those tests stay GREEN while it enforces NOTHING. Kept deliberately (ADR-0311
 // D5), not forgotten; re-wiring needs fresh production-catch evidence AND an ADR, never just the
 // wiring.
-// Tombstone: `RETIRED_CHECKS` in `gate-order.ts`, pinned by `gate-order.test.ts`.
+// Tombstone: the retired check's own `retired:` declaration (ADR-0606 D6), held by `gate-order.test.ts`.
 //
 // What follows is retained as written — read it as what this DID, not as current gate policy.
 //

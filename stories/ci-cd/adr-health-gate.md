@@ -71,9 +71,13 @@ read to find the open questions bearing on a story. Nothing on the live `story b
   every contract below. First, `adr-health` **left `pnpm -r test`**: that suite is deliberately
   credential-free (ADR-0302 D3), so a check whose subject is a database could not stay in it, and
   ADR-0307 D4 puts real-corpus assertions on a `check:*` rung that may hold a connection. It is now
-  the declared rung `check:adr-health` ([`gate-order.ts`](../../packages/cli/src/gate-order.ts)),
-  sitting in the gate's block C because its subject is SHARED live state — another session's
-  `adr new` or status flip can red it. CI runs it as its own step. Second, there is **no offline
+  the rung `check:adr-health`, a gate check the gate finds from its own file
+  ([`check-adr-health.ts`](../../packages/cli/src/check-adr-health.ts), whose `/* gate-check`
+  declaration places it — ADR-0606 D1), sitting in the gate's shared-environment block (block C)
+  because its subject is SHARED live state — another session's `adr new` or status flip can red it.
+  CI runs it inside its one `pnpm gate --ci` step, signing in as the presence identity its declaration
+  names (ADR-0606 D3). *(This said the rung was declared in `gate-order.ts` and that "CI runs it as its
+  own step" until 2026-09-24; ADR-0606 moved both.)* Second, there is **no offline
   allocation path left**: the old `max-on-disk + 1` fallback read the deleted directory, and a
   session that cannot reach the store cannot write the decision either, so reserving a number it
   could never use would burn it.

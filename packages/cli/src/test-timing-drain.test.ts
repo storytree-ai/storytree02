@@ -17,7 +17,7 @@ import {
  *
  * `check:test-timing` was retired by ADR-0311 D2 and `test-timing-drain.ts` beside this file carries
  * the UNWIRED banner, so this file LOOKS like a leftover. It is not. Its BASELINE test at the bottom
- * runs inside `pnpm -r test` — GATE_PLAN step 6, which CI runs too — and is the ONLY surviving
+ * runs inside `pnpm -r test` — the gate's test leg, which CI runs too — and is the ONLY surviving
  * enforcement of ADR-0276's no-wall-clock-in-tests rule: it sweeps every gate-tier workspace's test
  * files for `performance.now` / `process.hrtime` behind an anti-vacuity floor and asserts the
  * unsanctioned list is empty. A new timing call anywhere in the repo reds through HERE.

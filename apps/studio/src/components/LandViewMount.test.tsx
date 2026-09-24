@@ -114,6 +114,23 @@ describe('the land layer under the map', () => {
     expect(handed!.registered.target.x).toBeCloseTo((1600 / 2 - CAMERA.tx) / CAMERA.scale, 9);
   });
 
+  it('forwards activity without replacing the app-owned regrow presentation', () => {
+    const cursor = {
+      progress: 0.5,
+      settled: false,
+      absentStoryIds: new Set<string>(),
+      growing: [],
+      hiddenSegmentIds: new Set<string>(),
+      drawingSegments: [],
+    };
+    const { rerender } = mount({ active: false, regrowCursor: cursor });
+    const parked = handed!;
+    rerender(<LandViewMount scene={SCENE} camera={CAMERA} active regrowCursor={cursor} renderCanvas={capture} />);
+    expect(parked.active).toBe(false);
+    expect(handed!.active).toBe(true);
+    expect(handed!.regrow).toBe(parked.regrow);
+  });
+
   it('is INERT — out of the accessibility tree and out of the way of every gesture', () => {
     // ADR-0380 D6 fence 3: the app owns picking, focus, the keyboard camera and the accessible
     // name. A decorative raster that announced itself, or that caught a pointer, would take one of

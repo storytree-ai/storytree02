@@ -51,14 +51,18 @@ test("the match is an EXACT token, so `--only check:help` still runs a gate", ()
 
 test("the help names every flag main() actually branches on — help that omits one is a wrong answer", () => {
   const text = renderGateHelp();
-  for (const flag of ["--scope", "--full", "--fail-fast", "--only", "--rerun-failed", "--ci", "--help"]) {
+  for (const flag of ["--scope", "--list", "--json", "--full", "--fail-fast", "--only", "--rerun-failed", "--ci", "--help"]) {
     assert.ok(text.includes(flag), `help omits ${flag}`);
   }
   // `--ci` is the one flag CI itself passes (ADR-0606 D3), so its line has to say what it changes.
   assert.match(
     text,
-    /--ci\s+run the plan as CI's `verify` job does: the CI placement, the PR merge commit's scope, a skip counts as a failure, one declared credential per step/,
+    /--ci\s+run the plan as CI's `verify` job does: the CI placement, the PR merge commit's scope, a declared skip counts as a failure unless the check accepts it in CI, one declared credential per step/,
   );
+  // `--list` is where a reader finds each check's owner and the retired ones (ADR-0606 D1, D6).
+  assert.match(text, /--list\s+print the plan — every step in run order, where it runs, what it declares, each check's file and owner — and the retired checks; exit/);
+  // …and its JSON form, which is what the ci-cd story's gates read instead of the gate's source text.
+  assert.match(text, /--list --json\s+the same listing as JSON, for a reader that is a program/);
   for (const env of [
     "STORYTREE_GATE_FULL",
     "STORYTREE_GATE_FAIL_FAST",
@@ -88,9 +92,9 @@ test("the help branch is the FIRST thing main() does — before plan validation,
   const helpAt = body.indexOf("gateHelpRequested(argv)");
   assert.ok(helpAt > 0, "main() no longer consults gateHelpRequested — `pnpm gate --help` runs a full gate");
 
-  // Each of these costs real time: reading + validating the plan, spawning git to resolve the
-  // affected scope, and executing the steps. All three must sit BELOW the help check.
-  for (const work of ["rootScriptNames()", "resolveScope(", "await runGate({"]) {
+  // Each of these costs real time: finding and reading every check file for the plan, spawning git
+  // to resolve the affected scope, and executing the steps. All three must sit BELOW the help check.
+  for (const work of ["loadGatePlan(", "resolveScope(", "await runGate({"]) {
     const workAt = body.indexOf(work);
     if (workAt < 0) continue; // renamed; the remaining anchors still bind
     assert.ok(

@@ -1,16 +1,15 @@
-// `pnpm gate` — the runner that walks GATE_PLAN, runs EVERY step, and reports per-step.
+// `pnpm gate` — the runner that walks the gate's plan, runs EVERY step, and reports per-step.
 //
-// This is the thin I/O shell. The plan and its ordering invariant are `gate-order.ts`; the walk, the
-// three statuses and the exit rule are the pure `gate-runner.ts`, which is where the WHY is written
-// down. This file only: resolves the repo root, checks the plan against the real `package.json`,
-// spawns each step, and prints.
+// This is the thin I/O shell. The plan is FOUND — each check declares itself in its own file and
+// `gate-checks.ts` finds, reads and orders them around the fixed legs in `gate-order.ts` (ADR-0606
+// D1/D2); the walk, the statuses and the exit rule are the pure `gate-runner.ts`, which is where the
+// WHY is written down. This file only: resolves the repo root, loads the plan, spawns each step,
+// and prints.
 //
-// FAIL-CLOSED BEFORE IT RUNS ANYTHING. A planned step naming a script the root `package.json` does
-// not declare would otherwise surface as a shell error mid-run; it refuses up front instead, because
-// a plan that has drifted from the scripts it names is not a plan anyone should be reading verdicts
-// from. The converse — a `check:*` script that exists but is NOT in the plan, which would make the
-// gate silently never run it — is fenced by `gate-order.test.ts` in `pnpm -r test` rather than here,
-// so it fails on the branch that adds the check rather than for whoever next runs the gate.
+// FAIL-CLOSED BEFORE IT RUNS ANYTHING. A check-shaped file whose declaration is missing or malformed
+// refuses the WHOLE run, up front, naming the file: a plan quietly missing a check would still print
+// a verdict, and a check the gate could not read is not one it should guess about. There is no
+// second list for the plan to drift from — writing a check's file is what registers it.
 //
 // OUTPUT CONTRACT. Every step's banner and result stream as it happens, so a run that is KILLED
 // still leaves per-step outcomes in the log rather than nothing; the summary table at the end is the
@@ -52,7 +51,7 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { deregisterSpawn, deriveIdentity, registerSpawn } from "@storytree/drive";
+import { deregisterSpawn, deriveIdentity, matchesSubtree, registerSpawn } from "@storytree/drive";
 
 import { discoverWorkspaceProjects, pnpmArgsFor, type AffectedScope } from "./ci-affected.js";
 import { ciMergeScope, githubScopeOutput, githubScopeSummary } from "./ci-affected-merge.js";
@@ -67,19 +66,17 @@ import {
   renderGithubSummary,
 } from "./gate-ci.js";
 import { gateHelpRequested, renderGateHelp } from "./gate-help.js";
+import { listGatePlan, loadGatePlan, renderGatePlanListing } from "./gate-checks.js";
 import {
+  BUILT_IN_LEGS,
   type CiIdentity,
-  GATE_PLAN,
   type GateStep,
-  PRE_EXPENSIVE_CHECKS,
-  SHARED_ENVIRONMENT_CHECKS,
-  SKIP_CAPABLE_CHECKS,
-  ciIdentityFor,
   evaluateGateOrder,
   isExpensiveStep,
   readsLiveStore,
   stepsFor,
 } from "./gate-order.js";
+import { gatherDeclarations } from "./ownership.js";
 import {
   gitLines,
   localAffectedScope,
@@ -119,11 +116,14 @@ const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
 
 const TAG = "[gate]";
 
-/** Every script name the root `package.json` declares. */
-function rootScriptNames(): Set<string> {
-  const raw: unknown = JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8"));
-  const scripts = (raw as { scripts?: Record<string, unknown> }).scripts ?? {};
-  return new Set(Object.keys(scripts));
+/**
+ * Each file's owning story node, read from the ownership map every source file must already be in
+ * (ADR-0317 D2) — so `--list` shows a check with its owner without a second declaration (ADR-0606
+ * D1). The first declaration that matches, as `check:ownership-totality` reads it.
+ */
+function ownerLookup(): (file: string) => string | undefined {
+  const { declarations } = gatherDeclarations(repoRoot);
+  return (file) => declarations.find((declaration) => matchesSubtree(declaration.subtree, file))?.owner;
 }
 
 /** Run one read-only git command in the repo root. */
@@ -363,7 +363,7 @@ function startHeartbeat(rootPid: number, startedAt: number): () => void {
 /**
  * WHICH ENVIRONMENT A STEP GETS. Locally: the session's own, with the test leg made credential-free.
  * In CI (`ci` is set): the job's environment stripped of every credential, with exactly the identity
- * `ciIdentityFor` names put back (`gate-ci.ts`) — or a refusal naming what the workflow did not provide.
+ * identity the step declares put back (`gate-ci.ts`) — or a refusal naming what the workflow did not provide.
  */
 interface StepEnvironmentChoice {
   readonly ci: boolean;
@@ -392,7 +392,8 @@ function executeStep(step: GateStep, choice: StepEnvironmentChoice): Promise<Gat
       return;
     }
 
-    const child = spawn(step.command, {
+    // A found check runs its own file from its own workspace; a fixed leg runs its command.
+    const child = spawn(step.invocation ?? step.command, {
       cwd: repoRoot,
       stdio: "inherit",
       shell: true,
@@ -464,32 +465,43 @@ async function main(): Promise<void> {
     argv.includes("--fail-fast") || (process.env["STORYTREE_GATE_FAIL_FAST"] ?? "") !== "";
   const forceFull = argv.includes("--full") || (process.env["STORYTREE_GATE_FULL"] ?? "") !== "";
   // `--ci` is the CI `verify` job's run (ADR-0606 D3): the CI placement, the PR merge commit's scope,
-  // a skip counts as a failure, each step gets only its declared identity, and GitHub gets log
+  // a declared skip counts as a failure unless the check accepts it in CI, each step gets only its
+  // declared identity, and GitHub gets log
   // sections, error annotations and a summary table. One plan, two ways of walking it.
   const ci = argv.includes("--ci");
 
-  // --- the plan must match the scripts it names ------------------------------------------------
-  const declared = rootScriptNames();
-  const unknown = GATE_PLAN.filter(
-    (s) => s.check !== undefined && !declared.has(s.check),
-  ).map((s) => s.check);
-  if (unknown.length > 0) {
+  // --- the plan: FOUND from each check's own file, ordered by its declaration (ADR-0606 D1/D2) ---
+  // All or nothing: a check-shaped file the gate cannot read refuses the whole run, because a plan
+  // quietly missing a check would still print a verdict — the one outcome worse than no plan.
+  const loaded = loadGatePlan(
+    repoRoot,
+    discoverWorkspaceProjects(repoRoot).map((project) => project.dir),
+    BUILT_IN_LEGS,
+  );
+  if (!loaded.ok) {
+    console.error(`${TAG} REFUSED — the gate could not assemble its plan, so it runs no step:`);
+    for (const reason of loaded.reasons) console.error(`${TAG}   ${reason}`);
     console.error(
-      `${TAG} REFUSED — GATE_PLAN names ${unknown.length} script(s) the root package.json does not ` +
-        `declare: ${unknown.join(", ")}.`,
-    );
-    console.error(
-      `${TAG}   The plan has drifted from the scripts it runs; fix packages/cli/src/gate-order.ts ` +
-        `(or re-add the script) before trusting any verdict from it.`,
+      `${TAG}   Every gate check is a file named check-<name>.ts or <name>-check.ts that opens with a ` +
+        "`/* gate-check` declaration of itself (packages/cli/src/gate-checks.ts).",
     );
     process.exitCode = 1;
+    return;
+  }
+
+  // `--list` answers "what does this gate run, where, and who owns each check?" without running it.
+  // `--list --json` is the same listing for a reader that is a program (the ci-cd story's gates).
+  if (argv.includes("--list")) {
+    const listing = listGatePlan(loaded.plan, loaded.retired, ownerLookup());
+    if (argv.includes("--json")) console.log(JSON.stringify(listing, null, 2));
+    else for (const line of renderGatePlanListing(listing)) console.log(`${TAG} ${line}`);
     return;
   }
 
   // --- affected scope (ADR-0304 D1/D2) ----------------------------------------------------------
   const scope = ci ? resolveCiScope(forceFull) : resolveScope(forceFull);
   const pnpmArgs = pnpmArgsFor(scope);
-  const scopedPlan = scopeGatePlan(GATE_PLAN, pnpmArgs);
+  const scopedPlan = scopeGatePlan(loaded.plan, pnpmArgs);
   // WHERE each step runs (ADR-0606 D3): `both` + `local` here, `both` + `ci` under `--ci`. Narrowed
   // AFTER the scope rewrite and judged BEFORE it (below), so the ordering invariant sees the whole plan.
   const steps = stepsFor(scopedPlan, ci ? "ci" : "local");
@@ -507,28 +519,15 @@ async function main(): Promise<void> {
     return;
   }
 
-  // FAIL-CLOSED ON THE REWRITE ITSELF. `evaluateGateOrder` is the invariant that keeps cheap checks
-  // ahead of the expensive legs and shared-environment checks behind them; it refuses a plan whose
-  // expensive legs it cannot find. Re-running it over the SCOPED plan is what stops a rewrite from
-  // quietly producing a plan nobody is judging any more — the failure mode ADR-0304 names as the
-  // accepted risk of this whole change ("an under-computed graph lets a genuine break through, and
-  // the failure is silent"). A refusal here is a bug in the scoping, so it says so and runs nothing.
-  //
-  // JUDGED OVER THE WHOLE SCOPED PLAN, NOT THE PLACEMENT-FILTERED ONE. Order survives the filter (a
-  // subsequence keeps relative order), but the declared sets name steps from BOTH sides, so judging
-  // the filtered plan would report every step placed on the other side as "missing".
-  const order = evaluateGateOrder({
-    steps: scopedPlan,
-    earlyChecks: PRE_EXPENSIVE_CHECKS,
-    lateChecks: SHARED_ENVIRONMENT_CHECKS,
-  });
+  // FAIL-CLOSED ON THE PLAN IT IS ABOUT TO WALK. The derived order satisfies both ordering axes by
+  // construction; asking `evaluateGateOrder` of the exact scoped plan anyway is what turns a defect
+  // in the derivation or the rewrite into a refusal instead of a quietly misordered run. It judges
+  // the WHOLE plan, before the placement filter: order survives that filter (a subsequence keeps
+  // relative order), so one judgement covers both runs.
+  const order = evaluateGateOrder(scopedPlan);
   if (order.verdict !== "ok") {
-    console.error(`${TAG} REFUSED — the affected-scoped plan no longer satisfies the gate's ordering invariant:`);
+    console.error(`${TAG} REFUSED — the plan no longer satisfies the gate's ordering invariant:`);
     for (const line of order.message.split("\n")) console.error(`${TAG}   ${line}`);
-    console.error(
-      `${TAG}   This is a defect in the scope rewrite (packages/cli/src/gate-scope.ts), not in your ` +
-        `branch. Re-run with \`pnpm gate --full\` to gate meanwhile.`,
-    );
     process.exitCode = 1;
     return;
   }
@@ -593,7 +592,7 @@ async function main(): Promise<void> {
 
   const total = steps.length;
   console.log(
-    `${TAG} running ${total} steps${ci ? " as CI runs them (--ci: a skip counts as a failure)" : ""}` +
+    `${TAG} running ${total} steps${ci ? " as CI runs them (--ci: a declared skip counts as a failure unless the check accepts it in CI)" : ""}` +
       `${failFast ? " (--fail-fast: stops at the first red)" : ""}. ` +
       `Every step runs and is reported PASS / FAIL / SKIP / NOT RUN; the gate is green only if ` +
       `every step passed or declared a skip.`,
@@ -615,16 +614,14 @@ async function main(): Promise<void> {
   const behindNotice = behindMainLines(ci, behindMainCount);
   for (const line of behindNotice) console.log(`${TAG} ${line}`);
 
-  // Each step's CI identity, resolved once against the plan the runner is about to walk.
-  const identities = steps.map((step) => ciIdentityFor(step));
+  // Each step's CI identity is the one it DECLARED; a step that declares none runs with no credential.
+  const identities = steps.map((step) => step.ciIdentity);
 
   const results = await runGate({
     steps,
     execute: (step, index) => executeStep(step, { ci, identity: identities[index] }),
     failFast,
-    skipIsFailure: ci,
-    // Only a DECLARED skip-capable check may opt out; any other exit 3 is a FAIL (ADR-0486/0606).
-    maySkip: (step) => SKIP_CAPABLE_CHECKS.has(step.check ?? ""),
+    ci,
     unselected: selection.unselected,
     shouldStop: () => interrupted,
     onStepStart: (step, index) => {

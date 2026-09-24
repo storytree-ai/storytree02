@@ -26,8 +26,8 @@
 // THE INNER HALF IS NOW CLOSED TOO — ADR-0276 increment 4 is complete. This module's first landing
 // fixed only the OUTER half of the 2026-07-29 evidence: a flake stopped costing the thirteen steps
 // BEHIND `pnpm -r test`, but `pnpm -r` still halted at its first failing package, so a flake in
-// `packages/forest-world` still hid `packages/cli`'s suite INSIDE that single step. `GATE_PLAN` now
-// declares both expensive legs with `--no-bail`, so every workspace runs and every workspace's
+// `packages/forest-world` still hid `packages/cli`'s suite INSIDE that single step. The gate now
+// declares both expensive legs with `--no-bail` (`BUILT_IN_LEGS`), so every workspace runs and every workspace's
 // verdict is reported. That is `pnpm`'s behaviour rather than this module's shape, which is why it
 // was correctly held back from the first landing; it lands here beside `skip` because together they
 // are the increment's last element — "an aggregate scoreboard naming every red AND EVERY SKIP".
@@ -116,13 +116,13 @@ export const GATE_SKIP_EXIT_CODE = 3;
  * all: it detaches the run and returns, so what carries the 4 is the `.exit` file the shell writes.)
  * CI never runs a partial gate, so no CI step can observe it — and since ADR-0606 D3 that is
  * enforced rather than promised: `pnpm gate --ci` REFUSES `--only` / `--rerun-failed`, and a CI run
- * reads a skip (exit 3) as a failure ({@link RunGateInput.skipIsFailure}). Do not re-open it by
+ * reads a declared skip (exit 3) as a failure unless the check accepts it in CI ({@link RunGateInput.ci}). Do not re-open it by
  * teaching the CI mode to run part of the plan.
  */
 export const GATE_PARTIAL_EXIT_CODE = 4;
 
 /**
- * The note a {@link RunGateInput.skipIsFailure} run attaches to a step that declared a skip — so the
+ * The note a {@link RunGateInput.ci} run attaches to a step whose DECLARED skip CI does not accept — so the
  * summary says WHY a step that "only skipped" is red, instead of printing a bare exit 3 as a failure.
  */
 export const REFUSED_SKIP_NOTE =
@@ -130,12 +130,12 @@ export const REFUSED_SKIP_NOTE =
   "skip-capable check needs, so a skip there means an input never arrived";
 
 /**
- * The note on a step that exited {@link GATE_SKIP_EXIT_CODE} WITHOUT being declared skip-capable
- * ({@link RunGateInput.maySkip}; the declaration is `SKIP_CAPABLE_CHECKS` in `gate-order.ts`).
+ * The note a step gets for exiting 3 when its declaration says it never skips (ADR-0606 D1) — so the
+ * summary names the missing declaration rather than printing a bare exit 3 as a failure.
  */
 export const UNDECLARED_SKIP_NOTE =
-  "exit 3 from a step not declared skip-capable (SKIP_CAPABLE_CHECKS, gate-order.ts) — only a " +
-  "declared check may opt out, so an undeclared exit 3 is a failure, not a skip";
+  "exited 3 (the SKIP code) but declares no skip — a skip is an opt-in its own declaration makes, " +
+  "never inferred from an exit code, so this is a failure";
 
 /** What one executed step reported. */
 export interface GateExecution {
@@ -179,24 +179,19 @@ export interface RunGateInput {
    */
   readonly failFast?: boolean;
   /**
-   * A step's {@link GATE_SKIP_EXIT_CODE} counts as a FAILURE, not a skip (default false). Set by
-   * `pnpm gate --ci` (ADR-0606 D3), and it reproduces what CI always did rather than adding a rule:
-   * a plain workflow step read ANY non-zero exit as a failure, and a check whose skip CI accepts
-   * never exits 3 there — it withholds the code and exits 0 (`skipDisposition`, `mutation-diff.ts`).
-   * So the only exit 3 CI can see is a skip CI did NOT sanction: a browser that never installed, a
-   * `web/` clone that never happened — the vacuous-green shape the old workflow comments warned of.
-   */
-  readonly skipIsFailure?: boolean;
-  /**
-   * Whether a step is ALLOWED to declare a skip. A step exiting {@link GATE_SKIP_EXIT_CODE} for which
-   * this answers false is a FAIL carrying {@link UNDECLARED_SKIP_NOTE}, never a SKIP.
+   * This is a CI run (`pnpm gate --ci`, ADR-0606 D3), so a DECLARED skip counts as a FAILURE unless
+   * the step's own declaration accepts that skip in CI (`skip.inCi: accepted`). Default false.
    *
-   * FAIL-CLOSED DEFAULT: absent, NOTHING may skip. The exit code alone used to be enough, so any step
-   * — `check:boundaries`, the typecheck leg — that happened to exit 3 read as a legitimate opt-out and
-   * printed GATE GREEN, NARROWED over a check that never declared it could opt out. The declaration
-   * lives in data (`SKIP_CAPABLE_CHECKS`); `gate-run.ts` passes it in, so this module stays pure.
+   * It reproduces what CI always did rather than adding a rule: a plain workflow step read ANY
+   * non-zero exit as a failure, and a check whose skip CI tolerates never exits 3 there — it
+   * withholds the code and exits 0 (`skipDisposition`, `mutation-diff.ts`). So the exit 3 CI refuses
+   * is a skip CI did NOT sanction: a browser that never installed, a `web/` clone that never
+   * happened — the vacuous-green shape the old workflow comments warned of.
+   *
+   * An UNDECLARED exit 3 is a failure on EITHER side, and that half needs no flag: a skip is an
+   * opt-in its own author wrote in the step's declaration, never inferred from an exit code.
    */
-  readonly maySkip?: (step: GateStep) => boolean;
+  readonly ci?: boolean;
   /** Checked before each step; `true` stops the walk and reports the remainder `not-run`. */
   readonly shouldStop?: () => boolean;
   /**
@@ -266,17 +261,11 @@ export async function runGate(input: RunGateInput): Promise<GateStepResult[]> {
     const started = now();
     const exec = await execute(step, index);
     const durationMs = now() - started;
-    const exitedSkip = exec.exitCode === GATE_SKIP_EXIT_CODE;
-    // Only a step DECLARED skip-capable may skip; the exit code alone is not a declaration.
-    const skipDeclared = exitedSkip && input.maySkip?.(step) === true;
+    const skipCode = exec.exitCode === GATE_SKIP_EXIT_CODE;
+    const skipHonoured =
+      skipCode && step.skip !== undefined && (input.ci !== true || step.skip.inCi === "accepted");
     const status: GateStepStatus =
-      exec.unverified === true
-        ? "not-run"
-        : exec.exitCode === 0
-          ? "pass"
-          : skipDeclared && input.skipIsFailure !== true
-            ? "skip"
-            : "fail";
+      exec.unverified === true ? "not-run" : exec.exitCode === 0 ? "pass" : skipHonoured ? "skip" : "fail";
     const stepResult: Omit<GateStepResult, "note"> = {
       command: step.command,
       status,
@@ -285,11 +274,8 @@ export async function runGate(input: RunGateInput): Promise<GateStepResult[]> {
     };
     const notes = [
       ...(exec.note !== undefined ? [exec.note] : []),
-      // Only a skip this run REFUSED carries a note; an ordinary red never does. An undeclared exit 3
-      // is named as such even under --ci — "never declared" is the truer reason than "CI refuses".
-      ...(status === "fail" && exitedSkip
-        ? [skipDeclared ? REFUSED_SKIP_NOTE : UNDECLARED_SKIP_NOTE]
-        : []),
+      // Only a skip this run REFUSED carries the note; an ordinary red never does.
+      ...(status === "fail" && skipCode ? [step.skip === undefined ? UNDECLARED_SKIP_NOTE : REFUSED_SKIP_NOTE] : []),
     ];
     const result: GateStepResult =
       notes.length > 0 ? { ...stepResult, note: notes.join("; ") } : stepResult;

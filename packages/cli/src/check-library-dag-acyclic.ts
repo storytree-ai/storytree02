@@ -27,7 +27,7 @@ why: >-
  * FAIL-CLOSED ON AN UNREADABLE CORPUS, deliberately, and it does NOT declare a `GATE_SKIP_EXIT_CODE`
  * skip. It takes the `check:guidance` / `check:agents` posture: under ADR-0302 D2 offline is not a
  * supported mode, and an acyclicity claim made against a corpus nobody read is exactly the "believing
- * something is watching when nothing is" failure `RETIRED_CHECKS` was written to prevent. A skip
+ * something is watching when nothing is" failure the retired-check tombstone was written to prevent. A skip
  * would also be locally scoped and misleading — CI runs `check:*` scripts as plain steps where any
  * non-zero exit reds, so the opt-out protocol only exists on a laptop.
  */

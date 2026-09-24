@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { GATE_PLAN, type GateStep } from "./gate-order.js";
+import { BUILT_IN_LEGS, type GateStep } from "./gate-order.js";
 import {
   type BaselinedGate,
   declaredGatesIn,
@@ -108,7 +108,7 @@ const GOLDEN_FAIL = [
   "[check:reliability-gate-parity]     nothing runs the `uat` script of studio: it is not one of the repo-wide legs (test, typecheck) and no gate-plan step names it.",
   "",
   "[check:reliability-gate-parity]   Fix it at whichever end is true. If the command carries a real proof obligation, WIRE",
-  "[check:reliability-gate-parity]   it — a step in `GATE_PLAN` (`packages/cli/src/gate-order.ts`), placed `both` to make",
+  "[check:reliability-gate-parity]   it — a gate check: a `check-<name>.ts` file whose `/* gate-check` declaration places it `both` to make",
   "[check:reliability-gate-parity]   it a merge wall as well as the habit, or `local` to keep it the habit only: CI runs that",
   "[check:reliability-gate-parity]   same plan (ADR-0606). If it does not, stop DECLARING it as one — edit the story's",
   "[check:reliability-gate-parity]   `## Reliability Gates` block, which is `story-author`'s call and not this",
@@ -809,8 +809,8 @@ describe("formatReliabilityGateParity", () => {
     assert.ok(body.includes("stories/s/story.md"));
     assert.ok(body.includes("pnpm --filter studio uat"));
     // Both ends, because which end is wrong is not this rung's call.
-    assert.ok(body.includes("gate-order.ts"));
-    assert.ok(body.includes("GATE_PLAN"));
+    assert.ok(body.includes("check-<name>.ts"));
+    assert.ok(body.includes("/* gate-check"));
     assert.ok(body.includes("story-author"));
   });
 
@@ -1031,7 +1031,9 @@ describe("the remaining strings and branches nothing had read", () => {
     // step. The rung reds on a stale entry, so the deletion was owed in that same landing; this pins
     // that it happened and that the plan really covers the declaration through tier 1.
     assert.deepEqual(UNRUN_GATE_BASELINE, []);
-    assert.ok(targetedInvocations(GATE_PLAN).has(targetKey("studio", "uat")));
+    // A FIXED leg of every plan the gate derives, so the fixed legs alone must cover it.
+    const fixedLegs = [...BUILT_IN_LEGS.lead, ...BUILT_IN_LEGS.wall, ...BUILT_IN_LEGS.trail];
+    assert.ok(targetedInvocations(fixedLegs).has(targetKey("studio", "uat")));
   });
 });
 

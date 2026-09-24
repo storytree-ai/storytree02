@@ -1,16 +1,13 @@
+import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import {
-  GATE_PLAN,
-  type GateStep,
-  LIVE_STORE_READING_CHECKS,
-  STORE_REACH_WITHOUT_READ,
-  readsLiveStore,
-} from "./gate-order.js";
+import { discoverWorkspaceProjects } from "./ci-affected.js";
+import { discoverChecks, loadGatePlan } from "./gate-checks.js";
+import { BUILT_IN_LEGS, type GatePlanStep, type GateStep, readsLiveStore } from "./gate-order.js";
 import type { GateStepResult, GateStepStatus } from "./gate-runner.js";
 import {
   GATE_RUN_RECORD_VERSION,
@@ -37,15 +34,29 @@ const PLAN: GateStep[] = [
   { command: "pnpm -r --no-bail test", check: undefined },
 ];
 
-const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
-const cliSrc = fileURLToPath(new URL(".", import.meta.url));
+/**
+ * The real checkout, asked of git: under `check:mutation-diff` this suite runs from a copy inside the
+ * git-ignored `.stryker-tmp/`, where discovery rooted at the copy would find nothing.
+ */
+function checkoutRoot(): string {
+  const res = spawnSync("git", ["rev-parse", "--show-toplevel"], {
+    cwd: fileURLToPath(new URL(".", import.meta.url)),
+    encoding: "utf8",
+  });
+  assert.equal(res.status, 0, `git rev-parse --show-toplevel: ${res.stderr}`);
+  return res.stdout.trim();
+}
 
-/** The REAL root scripts — the same read `gate-order.test.ts` makes, and fatal when absent. */
-function rootScripts(): Record<string, string> {
-  const raw: unknown = JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8"));
-  const scripts = (raw as { scripts?: Record<string, string> }).scripts;
-  assert.ok(scripts !== undefined, "the root package.json must declare scripts");
-  return scripts;
+let foundPlan: readonly GatePlanStep[] | undefined;
+
+/** The REAL plan, found exactly as `pnpm gate` finds it (ADR-0606 D1) — once. */
+function realPlan(): readonly GatePlanStep[] {
+  if (foundPlan !== undefined) return foundPlan;
+  const root = checkoutRoot();
+  const loaded = loadGatePlan(root, discoverWorkspaceProjects(root).map((p) => p.dir), BUILT_IN_LEGS);
+  assert.ok(loaded.ok, loaded.ok ? "" : loaded.reasons.join("\n"));
+  foundPlan = loaded.plan;
+  return foundPlan;
 }
 
 /** The package specifier that IS the live-store seam: importing it is dialling the store. */
@@ -85,11 +96,11 @@ function importsOf(src: string): ModuleImport[] {
 }
 
 /**
- * Does this `packages/cli/src` entry's transitive LOCAL import closure reach the live-store seam?
+ * Does this entry's transitive LOCAL import closure reach the live-store seam?
  *
  * ⚠ IT READS IMPORT STATEMENTS, NEVER THE FILE'S TEXT, and that is a correction rather than a
  * refinement: a plain substring scan for the seam's NAME matched this very repo's prose — the
- * doc comment on `LIVE_STORE_READING_CHECKS` names `@storytree/library/store` while importing
+ * doc comment on the store-reading map `gate-order.ts` then kept named `@storytree/library/store` while importing
  * nothing — and reported `check:reliability-gate-parity`, a disk-only rung, as a store reader. A
  * fence whose evidence is "the string appears somewhere" is evidence for the wrong thing
  * (`asset:an-observable-is-evidence-only-for-what-it-observes`).
@@ -98,9 +109,9 @@ function importsOf(src: string): ModuleImport[] {
  * stops there and judges the specifier instead. Unresolvable specifiers are skipped rather than
  * guessed, and the vacuity control below is what keeps that from being silent.
  */
-function closureReachesStoreSeam(entryFile: string): boolean {
+function closureReachesStoreSeam(entryPath: string): boolean {
   const seen = new Set<string>();
-  const queue = [path.join(cliSrc, entryFile)];
+  const queue = [entryPath];
   while (queue.length > 0) {
     const file = queue.shift();
     if (file === undefined || seen.has(file) || !existsSync(file)) continue;
@@ -121,19 +132,19 @@ function closureReachesStoreSeam(entryFile: string): boolean {
  * five in {@link PLAN}. The step's `check` is resolved off the real plan when it has one.
  */
 function soloRecord(command: string, status: GateStepStatus): GateRunRecord {
-  const check = GATE_PLAN.find((s) => s.command === command)?.check;
+  const check = realPlan().find((s) => s.command === command)?.check;
   return record({ [command]: status }, [{ command, check }]);
 }
 
 /**
  * The REAL classifier, resolved off the REAL plan — deliberately not a hand-written predicate.
  *
- * A stub would let these tests keep agreeing with themselves after `LIVE_STORE_READING_CHECKS`
+ * A stub would let these tests keep agreeing with themselves after a check's declared identity
  * moved, which is the drift this arc exists to refuse. An unknown command answers TRUE, matching the
  * runner's own fail-closed default.
  */
 function realReadsLiveStore(command: string): boolean {
-  const step = GATE_PLAN.find((s) => s.command === command);
+  const step = realPlan().find((s) => s.command === command);
   return step === undefined || readsLiveStore(step);
 }
 
@@ -466,28 +477,28 @@ test("the SAME evidence splits on what the step reads — the control is a repos
 });
 
 test("every declared store-reading check gets the withheld verdict, not just the one in the example", () => {
-  // Totality over the declared set, so a member added later is covered without a new test — and a
-  // member REMOVED from the set changes this assertion, which is the point.
+  // Totality over the declared set, so a check that starts declaring an identity later is covered
+  // without a new test — and one that STOPS declaring it changes this assertion, which is the point.
   //
   // THE NON-EMPTINESS GUARD IS THE ASSERTION, not decoration: an emptied set makes the loop below
   // iterate nothing and PASS, while every store-reading step silently returns to claiming
   // `flake-signature`. A test that gets greener as its subject disappears is the fault class this
   // whole arc exists to remove, and it would be reported as coverage.
+  const readers = realPlan().filter((step) => step.ciIdentity !== undefined);
   assert.ok(
-    LIVE_STORE_READING_CHECKS.size > 0,
-    "the declared store-reading set is empty, so this test verifies nothing and every store-reading " +
-      "step is back to being acquitted by an unchanged repository",
+    readers.length > 5,
+    "the plan declares almost no store-reading check, so this test verifies nothing and every " +
+      "store-reading step is back to being acquitted by an unchanged repository",
   );
-  for (const check of LIVE_STORE_READING_CHECKS.keys()) {
-    const command = `pnpm ${check}`;
+  for (const step of readers) {
     const [c] = compareRerun({
-      record: soloRecord(command, "fail"),
-      results: [result(command, "pass")],
-      selected: new Set([command]),
+      record: soloRecord(step.command, "fail"),
+      results: [result(step.command, "pass")],
+      selected: new Set([step.command]),
       treeChanged: false,
       readsLiveStore: realReadsLiveStore,
     });
-    assert.equal(c?.verdict, "store-unobserved", `${check} reads the live store and must withhold the flake claim`);
+    assert.equal(c?.verdict, "store-unobserved", `${step.command} reads the live store and must withhold the flake claim`);
   }
 });
 
@@ -505,81 +516,61 @@ test("an UNCLASSIFIABLE command withholds the flake claim rather than asserting 
   assert.equal(c?.verdict, "store-unobserved");
 });
 
-test("readsLiveStore is FALSE for a check-bearing step that is not in the declared set", () => {
-  // Two mutants survived on `readsLiveStore`'s conjunction, and both need a step that HAS a check and
-  // is NOT a member: with `||` (or with the guard forced true) every check-bearing step reads as
-  // store-reading, so `check:boundaries` — disk-only, and one of the cheapest rungs in the gate —
-  // would silently stop being acquittable by an unchanged tree.
-  const disk = GATE_PLAN.find((s) => s.check === "check:boundaries");
-  assert.notEqual(disk, undefined);
-  assert.equal(readsLiveStore(disk!), false);
-
-  // The member control, and the no-check control: the three answers must differ for the right reasons.
-  const member = GATE_PLAN.find((s) => s.check === "check:agents");
-  assert.equal(readsLiveStore(member!), true);
-  const leg = GATE_PLAN.find((s) => s.check === undefined);
-  assert.notEqual(leg, undefined);
-  assert.equal(readsLiveStore(leg!), false, "an expensive `-r` leg names no check and reads no store");
+test("readsLiveStore is FALSE for a check that declares no identity, and for a fixed leg", () => {
+  // The three answers must differ for the right reasons: `check:boundaries` is disk-only and one of
+  // the cheapest rungs in the gate, so it must stay acquittable by an unchanged tree.
+  const plan = realPlan();
+  const disk = plan.find((s) => s.check === "check:boundaries");
+  assert.ok(disk !== undefined);
+  assert.equal(readsLiveStore(disk), false);
+  const member = plan.find((s) => s.check === "check:agents");
+  assert.ok(member !== undefined);
+  assert.equal(readsLiveStore(member), true);
+  const leg = plan.find((s) => s.check === undefined);
+  assert.ok(leg !== undefined);
+  assert.equal(readsLiveStore(leg), false, "a fixed leg names no check and reads no store");
 });
 
-test("every declared store-reading entry says WHAT it reads, and the exemption says why", () => {
-  // The two declared maps' value strings survived as a block — eleven literals no test read. They are
-  // not decoration: each is what a session sees when the rerun report declines to acquit a step, so a
-  // value that can be silently emptied is a diagnostic that can be silently emptied.
-  for (const [check, reads] of LIVE_STORE_READING_CHECKS) {
-    assert.ok(reads.length > 20, `${check} must say what live state its verdict reads`);
-    assert.ok(GATE_PLAN.some((s) => s.check === check), `${check} must be a step in the plan`);
-  }
-  for (const [check, why] of STORE_REACH_WITHOUT_READ) {
-    assert.ok(why.length > 40, `${check}'s exemption must say why the reach is not a read`);
-    assert.equal(LIVE_STORE_READING_CHECKS.has(check), false, `${check} cannot be both declared and exempt`);
-  }
-  // The exemption is a SHORT list by design; a growing one means the closure scan has stopped being
-  // the authority and the declaration has become the whole answer.
-  assert.equal(STORE_REACH_WITHOUT_READ.size, 1);
-});
-
-test("the declared store-reading set matches the REAL import closure of each check's entry module", () => {
-  // The MECHANICAL fence, so the declaration cannot become prose. A step is a member iff its entry
-  // module's transitive local imports reach the store seam. The scan over-approximates in exactly one
-  // known way — one entry file serves two gate steps, only one of which dials the store — and that
-  // instance is declared in STORE_REACH_WITHOUT_READ with its reason rather than tolerated silently.
-  const scripts = rootScripts();
-  for (const step of GATE_PLAN) {
-    if (step.check === undefined) continue;
-    const script = scripts[step.check];
-    assert.equal(typeof script, "string", `${step.check} must be a declared root script`);
-    const entry = /src\/([\w.-]+\.ts)/.exec(script ?? "")?.[1];
-    if (entry === undefined) continue; // not a packages/cli entry (e.g. the forest-world harnesses)
-
-    const reaches = closureReachesStoreSeam(entry);
-    const declared = LIVE_STORE_READING_CHECKS.has(step.check);
-    const exempt = STORE_REACH_WITHOUT_READ.has(step.check);
-
-    if (declared) {
-      assert.ok(reaches, `${step.check} is declared store-reading but its imports never reach the store seam`);
-      assert.ok(!exempt, `${step.check} cannot be both declared store-reading and exempt`);
-    } else if (reaches) {
-      assert.ok(
-        exempt,
-        `${step.check}'s imports reach the store seam but it is neither declared in ` +
-          `LIVE_STORE_READING_CHECKS nor exempted in STORE_REACH_WITHOUT_READ with a reason`,
-      );
-    } else {
-      assert.ok(!exempt, `${step.check} is exempted from a reach it does not have — delete the entry`);
-    }
+test("every check's declared identity matches the REAL import closure of its own file", () => {
+  // THE MECHANICAL FENCE, so a declaration cannot become prose (ADR-0606 D1: "Keep its import-closure
+  // derivation test as the check that a declaration tells the truth about the code"). A check reads the
+  // store iff its file's transitive local imports reach the store seam — and since the mirror harness's
+  // live arm moved into its own file, that is exact, with no exemption to keep.
+  const root = checkoutRoot();
+  const discovery = discoverChecks(root, discoverWorkspaceProjects(root).map((p) => p.dir));
+  assert.ok(discovery.live.length > 20, "the real tree holds the gate's checks");
+  for (const check of discovery.live) {
+    const reaches = closureReachesStoreSeam(path.join(root, check.path));
+    const declared = check.declaration.ciIdentity !== undefined;
+    assert.equal(
+      declared,
+      reaches,
+      reaches
+        ? `${check.name}'s imports reach the store seam, but its declaration names no ciIdentity`
+        : `${check.name} declares ciIdentity ${String(check.declaration.ciIdentity)}, but its imports never reach the store seam`,
+    );
   }
 });
 
 test("the store seam scan is not vacuous — a known reader reaches it and a known non-reader does not", () => {
   // Without this control the fence above passes whenever the scan finds nothing at all, which would
-  // silently permit every declared member to be wrong in the same direction.
-  assert.ok(closureReachesStoreSeam("check-adr-health.ts"), "check-adr-health dials the store directly");
+  // silently permit every declaration to be wrong in the same direction.
+  const src = path.join(checkoutRoot(), "packages/cli/src");
+  assert.ok(closureReachesStoreSeam(path.join(src, "check-adr-health.ts")), "check-adr-health dials the store directly");
   assert.ok(
-    closureReachesStoreSeam("check-library-dag-acyclic.ts"),
+    closureReachesStoreSeam(path.join(src, "check-library-dag-acyclic.ts")),
     "check-library-dag-acyclic reaches it through drive's openCorpusStore, not a direct import",
   );
-  assert.equal(closureReachesStoreSeam("check-boundaries.ts"), false, "check-boundaries is disk-only");
+  assert.ok(
+    closureReachesStoreSeam(path.join(src, "check-mirror-conformance-live.ts")),
+    "the live mirror arm reaches it through a LAZY import",
+  );
+  assert.equal(closureReachesStoreSeam(path.join(src, "check-boundaries.ts")), false, "check-boundaries is disk-only");
+  assert.equal(
+    closureReachesStoreSeam(path.join(src, "check-mirror-conformance.ts")),
+    false,
+    "the fixtures arm no longer carries the live arm's store import",
+  );
 });
 
 test("treeChangedSince answers null whenever either side is missing, never false", () => {
@@ -666,7 +657,7 @@ test("computeTreeDigest: git-visible changes still move the digest", () => {
 
 test("gate-run.ts's treeDigest reads the installed lockfile node_modules/.pnpm/lock.yaml", () => {
   // gate-run.ts is a script (top-level await), so the one filesystem read is asserted on its source.
-  const source = readFileSync(path.join(cliSrc, "gate-run.ts"), "utf8");
+  const source = readFileSync(fileURLToPath(new URL("./gate-run.ts", import.meta.url)), "utf8");
   assert.match(source, /installedLockfile: \(\) => \{[\s\S]*?"node_modules", "\.pnpm", "lock\.yaml"/);
   assert.match(source, /code === "ENOENT" \? undefined : null/, "absent is a state; unreadable is null");
 });

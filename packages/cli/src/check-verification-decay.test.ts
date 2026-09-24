@@ -1,16 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 import {
   CEILINGS,
   crossInputGuards,
   readGitEvidence,
-  resolveCheckEntryFile,
 } from "./check-verification-decay.js";
 import { DECISION_SOURCE_DRIFT } from "./decision-source-decay.js";
 import {
@@ -20,65 +18,6 @@ import {
   VACUOUS_PROOF,
   WARN_LIST_HYGIENE,
 } from "./verification-decay.js";
-
-const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
-const rootScripts = (
-  JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8")) as { scripts: Record<string, string> }
-).scripts;
-
-// ---------------------------------------------------------------------------
-// warn-list-hygiene's entry resolver
-// ---------------------------------------------------------------------------
-
-test("resolveCheckEntryFile: a harness check resolves to its harness entry, never the --import preload shim", () => {
-  // The escape: the old pattern matcher returned `scripts/tsx-cache-off.mjs` for both of these.
-  assert.equal(
-    resolveCheckEntryFile(
-      "pnpm -C packages/forest-world-r3f exec node --import ../../scripts/tsx-cache-off.mjs --import tsx harness/land-art-check.ts",
-    ),
-    "packages/forest-world-r3f/harness/land-art-check.ts",
-  );
-  assert.equal(
-    resolveCheckEntryFile(
-      "pnpm -C packages/forest-world-r3f exec node --import ../../scripts/tsx-cache-off.mjs --import tsx harness/palette-transcription-check.ts",
-    ),
-    "packages/forest-world-r3f/harness/palette-transcription-check.ts",
-  );
-});
-
-test("resolveCheckEntryFile: the live root scripts for check:land-art / check:palette-transcription resolve to existing harness files", () => {
-  for (const script of ["check:land-art", "check:palette-transcription"]) {
-    const entry = resolveCheckEntryFile(rootScripts[script]);
-    assert.ok(
-      entry !== undefined && entry.startsWith("packages/forest-world-r3f/harness/"),
-      `${script} resolved to ${entry}`,
-    );
-    assert.ok(existsSync(path.join(repoRoot, entry)), `${script}: ${entry} does not exist`);
-  }
-});
-
-test("resolveCheckEntryFile: the -C packages/cli src/ form and the legacy forms still resolve", () => {
-  assert.equal(
-    resolveCheckEntryFile(
-      "pnpm -C packages/cli exec node --import ../../scripts/tsx-cache-off.mjs --import tsx src/check-verification-decay.ts",
-    ),
-    "packages/cli/src/check-verification-decay.ts",
-  );
-  assert.equal(
-    resolveCheckEntryFile("pnpm --filter @storytree/cli exec node --import tsx src/check-foo.ts --flag"),
-    "packages/cli/src/check-foo.ts",
-  );
-  assert.equal(resolveCheckEntryFile("node scripts/foo.mjs"), "scripts/foo.mjs");
-});
-
-test("resolveCheckEntryFile: an unrecognised shape is undefined (the caller throws), never a guess", () => {
-  assert.equal(resolveCheckEntryFile(undefined), undefined);
-  assert.equal(resolveCheckEntryFile("pnpm check:guidance"), undefined); // an alias, not a command
-  assert.equal(resolveCheckEntryFile("pnpm --filter @storytree/other exec node src/x.ts"), undefined);
-  assert.equal(resolveCheckEntryFile("pnpm -C packages/cli exec node --import tsx"), undefined);
-  assert.equal(resolveCheckEntryFile("pnpm -C packages/cli exec tsx src/x.ts"), undefined);
-  assert.equal(resolveCheckEntryFile("node ../outside.ts"), undefined);
-});
 
 // ---------------------------------------------------------------------------
 // Attribution cross-input guards

@@ -37,6 +37,8 @@ export interface LandCanvasProps {
   viewport: { width: number; height: number };
   /** The app-owned cursor, adapted here for the canvas without creating another clock. */
   regrow: ForestRegrowPresentation | null;
+  /** Whether the host route is active. This flag does not change the app clock or cursor ownership. */
+  active: boolean;
 }
 
 /** The real canvas, in its own chunk. */
@@ -45,10 +47,10 @@ const ForestWorldCanvas = lazy(async () => {
   return { default: mod.ForestWorldCanvas };
 });
 
-function DefaultLandCanvas({ descriptors, viewport, regrow }: LandCanvasProps) {
+function DefaultLandCanvas({ descriptors, viewport, regrow, active }: LandCanvasProps) {
   return (
     <Suspense fallback={<p className="muted land-view-status">Loading the land…</p>}>
-      <ForestWorldCanvas descriptors={descriptors} viewport={viewport} regrow={regrow} />
+      <ForestWorldCanvas descriptors={descriptors} viewport={viewport} regrow={regrow} active={active} />
     </Suspense>
   );
 }
@@ -60,6 +62,8 @@ export interface LandViewProps {
   scene: SceneG | null;
   /** The app-owned regrow cursor while the world is growing; absent after settlement. */
   regrowCursor?: ForestRegrowCursor | null;
+  /** The route's existing active state, forwarded without changing regrow ownership. */
+  active?: boolean;
   /** The canvas seam (above). Absent ⇒ the real, lazily-loaded one. */
   renderCanvas?: (props: LandCanvasProps) => React.ReactNode;
 }
@@ -102,6 +106,7 @@ function useMeasuredFrame(): [React.RefObject<HTMLDivElement | null>, { width: n
 export function LandView({
   scene,
   regrowCursor = null,
+  active = true,
   renderCanvas = DefaultLandCanvas,
 }: LandViewProps): React.JSX.Element {
   const [ref, frame] = useMeasuredFrame();
@@ -132,7 +137,7 @@ export function LandView({
         {stream !== null && stream.ok && frame === null && (
           <p className="muted land-view-status">Measuring the frame…</p>
         )}
-        {stream !== null && stream.ok && frame !== null && renderCanvas({ descriptors: stream.descriptors, viewport: frame, regrow })}
+        {stream !== null && stream.ok && frame !== null && renderCanvas({ descriptors: stream.descriptors, viewport: frame, regrow, active })}
       </div>
     </aside>
   );

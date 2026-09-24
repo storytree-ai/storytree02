@@ -15,16 +15,40 @@ import { underlayComposition } from './ForestWorldCanvas.js';
 /** The camera a host hands over once it has solved the registration. */
 const REGISTERED = { zoom: 0.6528, target: { x: 120, z: -400 } };
 
+test('fcd-canvas-renders-on-demand-only-while-presentable: standalone and registered canvases paint only while active in a visible document', () => {
+  const presentable = { active: true, documentVisible: true };
+  const parked = { active: false, documentVisible: true };
+  const hidden = { active: true, documentVisible: false };
+
+  for (const registered of [undefined, REGISTERED]) {
+    const visible = underlayComposition(registered, false, presentable);
+    assert.equal(visible.canvasProps.frameloop, 'demand');
+    assert.equal(underlayComposition(registered, false, parked).canvasProps.frameloop, 'never');
+    assert.equal(underlayComposition(registered, false, hidden).canvasProps.frameloop, 'never');
+
+    const control = underlayComposition(registered, false, presentable);
+    assert.deepEqual(
+      { ...underlayComposition(registered, false, parked), canvasProps: undefined },
+      { ...control, canvasProps: undefined },
+    );
+    assert.deepEqual(
+      { ...underlayComposition(registered, false, hidden), canvasProps: undefined },
+      { ...control, canvasProps: undefined },
+    );
+  }
+});
+
+// test-updated (new behaviour): standalone: the canvas keeps everything it draws, and its own camera controls now paints on demand while presentable.
 test('standalone: the canvas keeps everything it draws, and its own camera controls', () => {
-  const c = underlayComposition(undefined, true);
+  const c = underlayComposition(undefined, true, { active: true, documentVisible: true });
   assert.equal(c.backdrop, true);
   assert.equal(c.props, true);
   assert.equal(c.trails, true);
   assert.equal(c.caves, true);
   assert.equal(c.wisps, true);
   assert.equal(c.controls, true);
-  // No extra `<Canvas>` props: R3F's default render loop, and an opaque drawing buffer.
-  assert.equal(c.canvasProps.frameloop, undefined);
+  // A presentable standalone canvas paints only when its content or controls invalidate it.
+  assert.equal(c.canvasProps.frameloop, 'demand');
   assert.equal(c.canvasProps.gl, undefined);
 });
 
