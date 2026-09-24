@@ -5,36 +5,28 @@ story: app-surface
 arc: chapter2-pixellab-organic-growth-arc
 title: "Registered PixelLab organic tracks grow from stable app-owned sockets"
 outcome: "The public app surface composes transparent local PixelLab-authored hero-tree and plant tracks over the retained SVG island by mapping app-owned semantic progress to frames registered at stable root and ground sockets."
-status: proposed
+status: retired
 proof_mode: integration-test
 depends_on: [svg-island-growth-track]
 decisions: [274, 237, 219, 230, 70]
 # PixelLab supplies author-time organic appearance only. The existing app player owns semantics,
 # progress, selection, timing, navigation, reduced motion and the retained scene. Visual quality is
 # deferred to the story's hosted owner-held LOOK leg.
-proof:
-  command:
-    file: pnpm
-    args: ["--filter", "@storytree/app-surface", "test"]
-  scope:
-    testGlobs: ["packages/app-surface/src/organic-pose-to-pose-track.test.ts", "packages/app-surface/src/organic-pose-to-pose-assets.test.ts", "packages/app-surface/src/SemanticGrowthWorldView.test.tsx", "packages/app-surface/src/SceneView.test.tsx"]
-    sourceGlobs: ["packages/app-surface/src/organic-pose-to-pose-track.ts", "packages/app-surface/src/organic-pose-to-pose-assets.ts", "packages/app-surface/src/SemanticGrowthWorldView.tsx", "packages/app-surface/src/SceneView.tsx", "packages/app-surface/src/index.ts", "packages/app-surface/src/assets/chapter2-organic-pose-to-pose/**/*"]
-  real:
-    testFile: "packages/app-surface/src/organic-pose-to-pose-track.test.ts"
-    sourceFile: "packages/app-surface/src/organic-pose-to-pose-track.ts"
-    scope:
-      testGlobs: ["packages/app-surface/src/organic-pose-to-pose-track.test.ts", "packages/app-surface/src/organic-pose-to-pose-assets.test.ts", "packages/app-surface/src/SemanticGrowthWorldView.test.tsx", "packages/app-surface/src/SceneView.test.tsx"]
-      sourceGlobs: ["packages/app-surface/src/organic-pose-to-pose-track.ts", "packages/app-surface/src/organic-pose-to-pose-assets.ts", "packages/app-surface/src/SemanticGrowthWorldView.tsx", "packages/app-surface/src/SceneView.tsx", "packages/app-surface/src/index.ts", "packages/app-surface/src/assets/chapter2-organic-pose-to-pose/**/*"]
-    install: true
-    proofCommand:
-      file: pnpm
-      args: ["--filter", "@storytree/app-surface", "test"]
-    typecheck:
-      file: pnpm
-      args: ["--filter", "@storytree/app-surface", "typecheck"]
+# RETIRED 2026-09-24 under ADR-0608 ("The mounted 3D land becomes the forest, and the flat forest
+# look is retired"). This capability's whole surface was the flat Chapter-2 picture — the painted SVG
+# island, its growth/accretion track, the flat vegetation and PixelLab sprite tracks, and the
+# query-gated `?semanticGrowth=demo` / `?organicGrowth=*` lab routes that staged them. ADR-0608 D2
+# retires that picture and D3 deletes the code that only painted it, with its tests, as engineering
+# follow-through (ADR-0605). The `proof:` binding that stood here named files that no longer exist, so
+# it is REMOVED (the `status: retired` flip alone clears nothing — `check:verification-decay`'s
+# contract-binding-drift instrument filters on the binding, not on status). The node is KEPT as a
+# browsable row with its body as history; the implementation is recoverable from git history.
 ---
 
 # Registered PixelLab organic tracks grow from stable app-owned sockets
+
+> **RETIRED 2026-09-24 under ADR-0608.** The flat forest picture this capability painted is retired;
+> the mounted 3D land is the forest. Its code and tests were deleted, and everything below is history.
 
 **Outcome —** The public app surface composes transparent local PixelLab-authored hero-tree and plant
 tracks over the retained SVG island by mapping app-owned semantic progress to frames registered at

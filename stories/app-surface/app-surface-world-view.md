@@ -10,9 +10,13 @@ proof_mode: integration-test
 depends_on: []
 decisions: [237, 93, 230, 70]
 # NET-NEW missing seam only. AUTHOR_TEST writes WorldSceneView.test.tsx against the missing wrapper;
-# IMPLEMENT authors WorldSceneView.tsx. SceneView, sprite manifest/resolver/sizing/fallback and
-# trail/arrival selectors are ALREADY relocated with 103 green package tests. They remain the
-# package proofCommand's reliability regression evidence, not behaviours this test must recreate.
+# IMPLEMENT authors WorldSceneView.tsx. SceneView and the trail/lane/neighbour/regrow/native-target
+# helpers are ALREADY relocated with their own green package tests. They remain the package
+# proofCommand's reliability regression evidence, not behaviours this test must recreate.
+# ADR-0608 (2026-09-24): the flat forest PICTURE retired — the sprite manifest/resolver/sizing, the
+# painted island and flat vegetation are deleted — and `SceneView` is now the map's SVG INTERACTION
+# layer over the mounted 3D land (nameplates, wisps, hit geometry, lanes, shore rings, native plant
+# targets, caves). This wrapper's seam is unchanged; only what the delegate draws narrowed.
 proof:
   command:
     file: pnpm
@@ -55,32 +59,33 @@ event callbacks to the already-green shared renderer.
 
 The first real-build attempts proved the original authored leaf was too broad: Codex reached a
 genuine `CONFIRM_GREEN` red, while Claude exhausted 16 turns trying to author one oversized test.
-The infrastructure beneath the missing seam is already present and independently green:
-`SceneView`, sprite manifest/resolver/sizing/fallback, and `trailRevealPlan` /
-`arrivalGrowPlan` have **103 passing package tests**.
+The infrastructure beneath the missing seam is already present and independently green: the
+shared `SceneView` interaction layer and its trail/lane/neighbour/regrow helpers carry their own
+package tests. (The sprite manifest/resolver/sizing/fallback that stood here until 2026-09-24 was
+deleted with the flat forest picture, ADR-0608 D2/D3.)
 
 This leaf therefore authors only the missing typed wrapper. The package proof command reruns those
-103 tests as regression evidence after the new pair greens; `WorldSceneView.test.tsx` does not copy
-their fixture matrix or re-prove every sprite, sizing, trail and arrival contract.
+tests as regression evidence after the new pair greens; `WorldSceneView.test.tsx` does not copy
+their fixture matrix or re-prove every lane, trail and arrival contract.
 
 ## Guidance
 
 - Define one plain-data `WorldPresentationModel` containing exactly:
   - the `SceneNode` scene;
-  - selected and emphasized story ids;
+  - the selected story id and the emphasized story ids;
   - hidden statuses;
   - arrival ids;
-  - the existing trail reveal plan;
-  - the resolved sprite sheet; and
-  - art scale.
+  - the neighbour-highlight plan, the lane layout and the lane motion; and
+  - the optional forest-regrow and native-plant-target render layers.
+  (The resolved sprite sheet and art scale it once carried retired with the flat picture, ADR-0608.)
 - Normalize set-like inputs deterministically: stable, duplicate-free ids/statuses and stable
   defaults. Equal plain inputs must yield deeply equal models. Time and randomness are absent.
 - Define `WorldPresentationEvents` separately. Its selection callbacks are optional so the same
   wrapper admits Studio's operable controller and a later Chapter 2 read-only controller without a
   fake mutation.
 - `WorldSceneView` translates that model/events pair into the existing `SceneCtx`, then renders the
-  already-relocated `SceneView`. It does not reproduce `renderNode`, sprite resolution/sizing,
-  trail/arrival selection or any other renderer logic.
+  already-relocated `SceneView`. It does not reproduce `renderNode`, trail/arrival selection or
+  any other renderer logic.
 - The source imports only public browser-safe seams from this package and
   `@storytree/forest-world`. It imports no `apps/studio` module, API/store client, subscription,
   promise, clock, random source or DOM animation authority.
@@ -97,7 +102,7 @@ One compact `WorldSceneView.test.tsx` proves the missing seam:
    scene marker survives delegation, then activate one selectable node and assert the optional
    event callback receives its id.
 3. Inspect/import the wrapper source boundary and assert it has no Studio-private or live-authority
-   import. The package proof command then observes the existing 103 renderer/sprite/sizing/trail
+   import. The package proof command then observes the existing interaction-layer, lane and trail
    tests still green.
 
 ## Contracts (4)
@@ -156,8 +161,8 @@ One compact `WorldSceneView.test.tsx` proves the missing seam:
      `wisp-as-story-claim#uat-7`) can name a contract id instead of a free-form test title. It is
      declared here because this story already treats `app-surface-world-view` as the node standing for
      the relocated shared `SceneView` — the story's own legacy-UAT table routes `SceneView.test.tsx`
-     under this capability — and because no other `app-surface` capability owns the renderer (the three
-     that name `SceneView.test.tsx` in their globs own the organic-growth tracks and the SVG land, not
-     the claim layer). It adds no leaf and moves no write fence: the tests are standing, green, and
+     under this capability — and because no other live `app-surface` capability owns the renderer
+     (the organic-growth and SVG-land capabilities that once named `SceneView.test.tsx` in their
+     globs retired with the flat picture, ADR-0608). It adds no leaf and moves no write fence: the tests are standing, green, and
      older than this declaration. Unlike contracts 1–3 it carries `covers —` / `proven by —` bullets,
      the render-core house shape, because a citation is only resolvable if the binding is written down.

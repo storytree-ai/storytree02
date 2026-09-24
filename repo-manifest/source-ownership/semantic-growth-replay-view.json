@@ -1,8 +1,0 @@
-{
-  "sourceOwnership": {
-    "subtrees": {
-      "packages/app-surface/src/forest-regrow*.ts": "semantic-growth-replay-view",
-      "packages/app-surface/src/shared-growth-tracks.ts": "semantic-growth-replay-view"
-    }
-  }
-}
