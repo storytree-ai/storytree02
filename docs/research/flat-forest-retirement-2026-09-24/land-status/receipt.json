@@ -1,0 +1,209 @@
+{
+  "startedAt": "2026-09-24T09:08:24.894Z",
+  "after": {
+    "origin": "http://localhost:5391",
+    "dir": "/home/mickh/code/Storytree/.claude/worktrees/laneK-native-feedback",
+    "head": "f8dc2352fb21c021591fbd5bb49e0b972f41ff08",
+    "pid": 2562,
+    "health": {
+      "store": "pg",
+      "db": "ok",
+      "schema": {
+        "code": 9,
+        "db": 9
+      },
+      "pid": 2562,
+      "code": {
+        "startedAt": "f8dc2352fb21c021591fbd5bb49e0b972f41ff08",
+        "head": "f8dc2352fb21c021591fbd5bb49e0b972f41ff08",
+        "stale": false,
+        "directory": "/home/mickh/code/Storytree/.claude/worktrees/laneK-native-feedback",
+        "branch": "claude/lane-o-native-targets"
+      }
+    }
+  },
+  "before": {
+    "origin": "http://localhost:5392",
+    "dir": "/home/mickh/code/Storytree/.claude/worktrees/laneK-native-projection",
+    "head": "d4ef3fd6eedc1627d3e98427ca7e9ac08a0abe64",
+    "pid": 2570,
+    "health": {
+      "store": "pg",
+      "db": "ok",
+      "schema": {
+        "code": 9,
+        "db": 9
+      },
+      "pid": 2570,
+      "code": {
+        "startedAt": "d4ef3fd6eedc1627d3e98427ca7e9ac08a0abe64",
+        "head": "d4ef3fd6eedc1627d3e98427ca7e9ac08a0abe64",
+        "stale": false,
+        "directory": "/home/mickh/code/Storytree/.claude/worktrees/laneK-native-projection",
+        "branch": "codex/lane-k-native-projection"
+      }
+    }
+  },
+  "viewport": {
+    "width": 1600,
+    "height": 1000
+  },
+  "scenarios": {
+    "ready": {
+      "server": "http://localhost:5391",
+      "head": "f8dc2352fb21c021591fbd5bb49e0b972f41ff08",
+      "launchArgs": [],
+      "errors": [],
+      "rendererRequests": 1,
+      "timeline": [],
+      "final": {
+        "t": 27154,
+        "notice": null,
+        "mount": {
+          "state": "drawn",
+          "canvas": "ready",
+          "hasCanvas": true
+        },
+        "webgl2Api": true
+      }
+    },
+    "loading": {
+      "server": "http://localhost:5391",
+      "head": "f8dc2352fb21c021591fbd5bb49e0b972f41ff08",
+      "launchArgs": [],
+      "errors": [],
+      "rendererRequests": 1,
+      "timeline": [],
+      "during": {
+        "t": 11904,
+        "notice": {
+          "role": "status",
+          "text": "Loading the 3D forest map…",
+          "insideAriaHidden": false,
+          "visible": true
+        },
+        "mount": {
+          "state": "drawn",
+          "canvas": "loading",
+          "hasCanvas": false
+        },
+        "webgl2Api": true
+      },
+      "final": {
+        "t": 23576,
+        "notice": null,
+        "mount": {
+          "state": "drawn",
+          "canvas": "ready",
+          "hasCanvas": true
+        },
+        "webgl2Api": true
+      }
+    },
+    "unsupported": {
+      "server": "http://localhost:5391",
+      "head": "f8dc2352fb21c021591fbd5bb49e0b972f41ff08",
+      "launchArgs": [
+        "--disable-webgl2"
+      ],
+      "errors": [],
+      "rendererRequests": 0,
+      "timeline": [],
+      "final": {
+        "t": 15400,
+        "notice": {
+          "role": "alert",
+          "text": "This browser can't draw the forest map. It needs a modern browser with WebGL 2 turned on — a current version of Chrome, Edge, Firefox or Safari.",
+          "insideAriaHidden": false,
+          "visible": true
+        },
+        "mount": {
+          "state": "drawn",
+          "canvas": "unsupported",
+          "hasCanvas": false
+        },
+        "webgl2Api": true
+      }
+    },
+    "before-unsupported": {
+      "server": "http://localhost:5392",
+      "head": "d4ef3fd6eedc1627d3e98427ca7e9ac08a0abe64",
+      "launchArgs": [
+        "--disable-webgl2"
+      ],
+      "errors": [
+        "page: THREE.WebGLRenderer: Error creating WebGL context.",
+        "page: THREE.WebGLRenderer: Error creating WebGL context."
+      ],
+      "rendererRequests": 1,
+      "timeline": [],
+      "final": {
+        "t": 25994,
+        "notice": null,
+        "mount": {
+          "state": "drawn",
+          "canvas": null,
+          "hasCanvas": true
+        },
+        "webgl2Api": true
+      }
+    },
+    "chunk-fails": {
+      "server": "http://localhost:5391",
+      "head": "f8dc2352fb21c021591fbd5bb49e0b972f41ff08",
+      "launchArgs": [],
+      "errors": [],
+      "rendererRequests": 1,
+      "timeline": [],
+      "final": {
+        "t": 16377,
+        "notice": {
+          "role": "alert",
+          "text": "The forest map couldn't be drawn: the 3D renderer stopped (Failed to fetch dynamically imported module: http://localhost:5391/@fs/home/mickh/code/Storytree/.claude/worktrees/laneK-native-feedback/packages/forest-world-r3f/src/ForestWorldCanvas.tsx). Reloading the page may help.",
+          "insideAriaHidden": false,
+          "visible": true
+        },
+        "mount": {
+          "state": "drawn",
+          "canvas": "failed",
+          "hasCanvas": false
+        },
+        "webgl2Api": true
+      }
+    },
+    "context-lost": {
+      "server": "http://localhost:5391",
+      "head": "f8dc2352fb21c021591fbd5bb49e0b972f41ff08",
+      "launchArgs": [],
+      "errors": [],
+      "rendererRequests": 1,
+      "timeline": [],
+      "beforeLoss": {
+        "t": 23566,
+        "notice": null,
+        "mount": {
+          "state": "drawn",
+          "canvas": "ready",
+          "hasCanvas": true
+        },
+        "webgl2Api": true
+      },
+      "final": {
+        "t": 25538,
+        "notice": {
+          "role": "alert",
+          "text": "The forest map couldn't be drawn: the browser took the graphics context away. Reloading the page may help.",
+          "insideAriaHidden": false,
+          "visible": true
+        },
+        "mount": {
+          "state": "drawn",
+          "canvas": "failed",
+          "hasCanvas": true
+        },
+        "webgl2Api": true
+      }
+    }
+  },
+  "finishedAt": "2026-09-24T09:10:41.287Z"
+}
