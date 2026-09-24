@@ -1,13 +1,12 @@
 import {
-  CriterionVerdict,
   SIGNING_EVENT_KIND,
   Verdict,
   WORK_EVENT_KIND,
-  WorkEventDoc,
   storyBaselineScope,
   storyBaselineFingerprint,
   type StoryBaselineScope,
 } from "@storytree/proof-protocol";
+import { parseCriterionVerdictDoc, parseVerdictDoc, parseWorkEventDoc } from "./rollup-parse.js";
 
 import type { OwnProofObligation, StoryCapabilityRef } from "./uat-proof.js";
 import { type RollupEvent } from "./rollup.js";
@@ -151,7 +150,7 @@ export function storyBaselineOf(
   let baseline: StoryBaselineScope | null = null;
   for (const event of [...events].sort((a, b) => a.seq - b.seq)) {
     if (event.kind === WORK_EVENT_KIND) {
-      const work = WorkEventDoc.safeParse(event.doc);
+      const work = parseWorkEventDoc(event.doc);
       if (
         work.success &&
         work.data.unitId === storyId &&
@@ -164,7 +163,7 @@ export function storyBaselineOf(
       continue;
     }
     if (event.kind !== SIGNING_EVENT_KIND) continue;
-    const parsed = Verdict.safeParse(event.doc);
+    const parsed = parseVerdictDoc(event.doc);
     if (!parsed.success || parsed.data.unitId !== storyId) continue;
     if (parsed.data.outcome !== "pass") continue;
     const scope = parsed.data.storyBaseline;
@@ -250,7 +249,7 @@ function eventsSinceStoryReset(
   let start = 0;
   ordered.forEach((event, index) => {
     if (event.kind !== WORK_EVENT_KIND) return;
-    const work = WorkEventDoc.safeParse(event.doc);
+    const work = parseWorkEventDoc(event.doc);
     if (work.success && work.data.unitId === storyId && work.data.event === "retired") {
       start = index + 1;
     }
@@ -416,7 +415,7 @@ function latestStoryVerdictSinceReset(
   let latest: { readonly outcome: "pass" | "fail"; readonly seq: number } | null = null;
   for (const event of [...events].sort((a, b) => a.seq - b.seq)) {
     if (event.kind === WORK_EVENT_KIND) {
-      const work = WorkEventDoc.safeParse(event.doc);
+      const work = parseWorkEventDoc(event.doc);
       if (
         work.success &&
         work.data.unitId === storyId &&
@@ -427,7 +426,7 @@ function latestStoryVerdictSinceReset(
       continue;
     }
     if (event.kind !== SIGNING_EVENT_KIND) continue;
-    const verdict = Verdict.safeParse(event.doc);
+    const verdict = parseVerdictDoc(event.doc);
     if (verdict.success && verdict.data.unitId === storyId) {
       latest = { outcome: verdict.data.outcome, seq: event.seq };
     }
@@ -456,13 +455,13 @@ function latestCurrentPassSeq(
   let latest = -1;
   for (const event of events) {
     if (event.kind !== SIGNING_EVENT_KIND) continue;
-    const verdict = Verdict.safeParse(event.doc);
+    const verdict = parseVerdictDoc(event.doc);
     if (!verdict.success || verdict.data.outcome !== "pass") continue;
     if (plainIds.has(verdict.data.unitId)) {
       latest = Math.max(latest, event.seq);
       continue;
     }
-    const criterion = CriterionVerdict.safeParse(event.doc);
+    const criterion = parseCriterionVerdictDoc(event.doc);
     if (
       criterion.success &&
       criterion.data.criterionId !== undefined &&
@@ -507,7 +506,7 @@ function hasLatestCurrentFailure(
 
   for (const event of [...events].sort((a, b) => a.seq - b.seq)) {
     if (event.kind === WORK_EVENT_KIND) {
-      const work = WorkEventDoc.safeParse(event.doc);
+      const work = parseWorkEventDoc(event.doc);
       if (work.success && work.data.event === "retired") {
         latest.delete(`plain:${work.data.unitId}`);
         latest.delete(`criterion:${work.data.unitId}`);
@@ -515,12 +514,12 @@ function hasLatestCurrentFailure(
       continue;
     }
     if (event.kind !== SIGNING_EVENT_KIND) continue;
-    const verdict = Verdict.safeParse(event.doc);
+    const verdict = parseVerdictDoc(event.doc);
     if (!verdict.success) continue;
     if (plainIds.has(verdict.data.unitId)) {
       latest.set(`plain:${verdict.data.unitId}`, verdict.data.outcome);
     }
-    const criterion = CriterionVerdict.safeParse(event.doc);
+    const criterion = parseCriterionVerdictDoc(event.doc);
     if (
       criterion.success &&
       criterion.data.criterionId !== undefined &&
