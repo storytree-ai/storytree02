@@ -141,6 +141,7 @@ test("derived helpers are TOTAL over malformed rows: a missing or non-object doc
   assert.deepEqual([...set], [70]);
   // A card line survives a doc that is not an object, or a title that is not a string.
   assert.equal(decisionCardLineOf("adr-0070", null), "ADR-0070 — adr-0070");
+  assert.equal(decisionCardLineOf("adr-0070", undefined), "ADR-0070 — adr-0070");
   assert.equal(decisionCardLineOf("adr-0070", "a string doc"), "ADR-0070 — adr-0070");
   assert.equal(decisionCardLineOf("adr-0070", { title: 42 }), "ADR-0070 — adr-0070");
 });

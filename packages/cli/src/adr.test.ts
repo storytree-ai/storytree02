@@ -1178,3 +1178,12 @@ test("every `--set` command adr --help prints carries the `edit` verb", async ()
   // And no line teaches the verbless form it would land on.
   assert.doesNotMatch(help, /artifact adr-NNNN --set/);
 });
+
+test("scaffold: a supersedes edge's prose says the targets READ as superseded from it — nothing to flip (ADR-0609 D3)", () => {
+  const edged = scaffold(52, "Replaces two", { supersedes: [7, 9], dependsOn: [] });
+  assert.ok(
+    edged.includes(
+      "**Supersedes** ADR-0007, ADR-0009 — <why>. (They read as superseded from this edge alone, ADR-0609 D3; nothing else to flip.)",
+    ),
+  );
+});

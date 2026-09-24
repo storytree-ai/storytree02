@@ -101,6 +101,8 @@ test("drop-copies bare is a READ: it counts what --pg would change and writes no
 
 test("drop-copies --pg drops every copy, keeps every authored field, and is idempotent", async () => {
   const store = await legacyCorpus();
+  // Another kind's authored `description` is not a decision's copy: the re-read must not count it.
+  await store.upsertDoc({ id: "a-principle", kind: "principle", doc: { kind: "principle", description: "kept" } });
   const before = (await store.readEvents()).length;
   const env = await adrDropCopies({ store, writable: true, actor: "migration-test" });
   assert.deepEqual(env, {
