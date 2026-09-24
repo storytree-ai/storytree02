@@ -78,39 +78,12 @@
 // Pure: every function takes text/data and returns data. The caller supplies the real story files
 // and the real plan; nothing here touches disk.
 
+import { activeReliabilityGates, parseReliabilityGates } from "@storytree/library";
+
 import type { GateStep } from "./gate-order.js";
 
-/** The heading whose section carries a story's declared gates. */
+/** The heading whose section carries a story's declared gates — report prose only; the library parses. */
 const RELIABILITY_GATES_HEADING = "## Reliability Gates";
-
-/**
- * Normalise line endings before ANY offset or split is taken.
- *
- * NOT DEFENSIVE HOUSEKEEPING — a measured defect class on this very arc. Its sibling increment
- * `uat-parser-normalises-line-endings` exists because `packages/library/src/uat-test-criteria.ts`
- * splits on a bare `\n`, so a story file written with CRLF parses to ZERO criteria as a LEGAL answer
- * and every downstream reader reports the empty parse as a legal declaration. A reader of the same
- * files, added on the same arc, that repeated the omission would be this arc's own defect with a
- * fresh date on it: a CRLF story would declare no gates, and a check that judges nothing passes.
- */
-function normalizeEol(text: string): string {
-  return text.replace(/\r\n?/g, "\n");
-}
-
-/**
- * The raw `## Reliability Gates` section of one story file, or `null` when it declares none.
- *
- * Bounded by the next `## ` heading so a story's `## Proof` section — which routinely restates the
- * gate command in prose — cannot be read as a second declaration of it.
- */
-export function reliabilityGatesBlock(storyText: string): string | null {
-  const text = normalizeEol(storyText);
-  const start = text.indexOf(RELIABILITY_GATES_HEADING);
-  if (start === -1) return null;
-  const afterHeading = start + RELIABILITY_GATES_HEADING.length;
-  const nextHeading = text.indexOf("\n## ", afterHeading);
-  return nextHeading === -1 ? text.slice(afterHeading) : text.slice(afterHeading, nextHeading);
-}
 
 /** One `pnpm [--filter <pkg>]+ <script>` command, parsed into the two things that decide coverage. */
 export interface PackageScriptCommand {
@@ -125,72 +98,92 @@ export interface PackageScriptCommand {
  * this module can ask about.
  *
  * `exec` and `dlx` run an arbitrary binary rather than a manifest script — that is kind 2 above, and
- * ~35 declared commands take it. `run` is the explicit form of the same head the bare word already
- * covers, and admitting it here would read `run` itself as the script name.
+ * ~35 declared commands take it. `run` is NOT here: it is the explicit spelling of the bare form, so
+ * the parser steps over it once and reads the script after it (`pnpm --filter studio run uat` runs
+ * exactly what `pnpm --filter studio uat` runs).
  */
-const NON_SCRIPT_HEADS: ReadonlySet<string> = new Set(["exec", "dlx", "run", "install", "add", "why"]);
+const NON_SCRIPT_HEADS: ReadonlySet<string> = new Set(["exec", "dlx", "install", "add", "why"]);
 
-/** A `--filter <pkg>` pair, or the `--filter=<pkg>` spelling. */
-const FILTER_TOKEN = /^--filter(?:=(.+))?$/;
+/** A `--filter <pkg>` / `-F <pkg>` pair, or the `--filter=<pkg>` / `-F=<pkg>` spelling. */
+const FILTER_TOKEN = /^(?:--filter|-F)(?:=(.+))?$/;
+
+/**
+ * pnpm's global options that take a VALUE as the next token. Every other `-` token before the script
+ * is a switch (`--if-present`, `--silent`, `--parallel`, `-r` …) and is stepped over alone; these
+ * consume their value too, or the value would be read as the script name.
+ */
+const VALUE_FLAGS: ReadonlySet<string> = new Set([
+  "-C",
+  "--dir",
+  "--workspace-concurrency",
+  "--reporter",
+  "--test-pattern",
+  "--changed-files-ignore-pattern",
+  "--resume-from",
+]);
 
 /**
  * Parse a declared command into its package-script shape, or `null` when it is not that shape.
  *
- * REQUIRING AT LEAST ONE `--filter` IS THE LOAD-BEARING CONDITION, and it is what excludes the three
+ * REQUIRING AT LEAST ONE FILTER IS THE LOAD-BEARING CONDITION, and it is what excludes the three
  * excluded kinds without naming them. `pnpm storytree adopt <id> --pg` carries no filter, so its head
  * word `storytree` is never mistaken for a per-package proof script — a real hazard, since seven
  * declared commands take that form. `pnpm -r test` carries no filter either, and needs none: it IS
  * one of the repo-wide legs tier 2 derives, not a declaration to judge against them.
  *
- * Everything after a `--` separator is dropped: `pnpm --filter studio test -- server/x.test.ts` runs
- * the `test` script with an argument, and the argument does not change WHICH script runs.
+ * EVERY SPELLING pnpm itself accepts is read, because a spelling this parser refuses is not a
+ * declaration it judged but one it silently skipped — the adversarial pass of 2026-09-24 landed
+ * `pnpm -F X S`, `pnpm --filter X run S` and `pnpm --filter X --if-present S` at exit 0 exactly that
+ * way. So: `--filter` and `-F`, with or without `=`, anywhere before the script; switches stepped
+ * over; one `run` stepped over.
+ *
+ * Nothing after the script is read: `pnpm --filter studio test -- server/x.test.ts` runs the `test`
+ * script with an argument, and the argument does not change WHICH script runs.
  */
 export function parsePackageScriptCommand(command: string): PackageScriptCommand | null {
-  // ONE normalisation, and no `--` split. Three pieces of machinery stood here and the mutation rung
-  // could not kill any of them, because each was made redundant by another:
-  //   · a `.filter((t) => t !== "")` beside the trim — with the filter an empty leading token is
-  //     dropped anyway, and with the trim `\s+` consumes interior runs so none is produced;
-  //   · a `.split(/\s+--\s+/)[0]` to drop post-`--` arguments — unnecessary, because the SCRIPT is
-  //     the first non-`--filter` token and is therefore always found BEFORE any `--`. Even
-  //     `pnpm --filter studio test -- --filter other uat` resolves to `studio`/`test` either way:
-  //     the walk breaks at `test`, so nothing after it is ever read.
-  // Two guards against one condition make each other untestable and read as more careful than either.
   const tokens = command.trim().split(/\s+/);
   if (tokens[0] !== "pnpm") return null;
 
   const packages: string[] = [];
+  let sawRun = false;
   let index = 1;
-  // Stryker disable next-line EqualityOperator,BlockStatement: EQUIVALENT and NON-TERMINATING.
-  // `<=` reads one index past the end, where `tokens[index] ?? ""` yields `""`, `FILTER_TOKEN` does
-  // not match it and the loop breaks on the same iteration — same result, one wasted comparison.
-  // Emptying the BODY removes the only `index` advance, so the mutant is an infinite loop rather
-  // than a behaviour change: it can only ever be reported as a timeout, which the rung's own
-  // vocabulary calls UNPROVEN and refuses to score either way.
+  let head: string | undefined;
   while (index < tokens.length) {
     // Stryker disable next-line StringLiteral: UNREACHABLE — required by `noUncheckedIndexedAccess`,
     // and the loop bound guarantees `index < tokens.length`, so the fallback can never be taken.
     const token = tokens[index] ?? "";
     const filter = FILTER_TOKEN.exec(token);
-    if (filter === null) break;
-    // `undefined` means the `--filter=<pkg>` form was not the one matched, so the target is the NEXT
-    // token. An empty string cannot occur: {@link FILTER_TOKEN}'s group is `(.+)`, so it captures at
-    // least one character or does not participate. An `inline !== ""` guard stood here until the
-    // mutation rung found it unkillable — which is what dead code looks like from the outside.
-    const inline = filter[1];
-    if (inline !== undefined) {
-      packages.push(inline);
+    if (filter !== null) {
+      // `undefined` means the `=` spelling was not the one matched, so the target is the NEXT token.
+      const inline = filter[1];
+      if (inline !== undefined) {
+        packages.push(inline);
+        index += 1;
+        continue;
+      }
+      const target = tokens[index + 1];
+      if (target === undefined || target.startsWith("-")) return null;
+      packages.push(target);
+      index += 2;
+      continue;
+    }
+    if (token.startsWith("-")) {
+      // Stryker disable next-line AssignmentOperator: NON-TERMINATING — `-=` walks the index backwards
+      // over the same flag forever, so the mutant can only ever be reported as a timeout, which the
+      // rung's own vocabulary calls UNPROVEN and refuses to score either way.
+      index += VALUE_FLAGS.has(token) ? 2 : 1;
+      continue;
+    }
+    if (token === "run" && !sawRun) {
+      sawRun = true;
       index += 1;
       continue;
     }
-    const target = tokens[index + 1];
-    if (target === undefined || target.startsWith("-")) return null;
-    packages.push(target);
-    index += 2;
+    head = token;
+    break;
   }
   if (packages.length === 0) return null;
-
-  const head = tokens[index];
-  if (head === undefined || head.startsWith("-")) return null;
+  if (head === undefined) return null;
   if (NON_SCRIPT_HEADS.has(head)) return null;
   return { packages, script: head };
 }
@@ -205,31 +198,123 @@ export interface DeclaredGate {
   readonly parsed: PackageScriptCommand;
 }
 
-/** A backticked span that begins like a command rather than like prose. */
-const COMMAND_SPAN = /`([^`\n]+)`/g;
+/**
+ * Normalise line endings before the library parser sees the text.
+ *
+ * NOT DEFENSIVE HOUSEKEEPING — a measured defect class on this very arc. Its sibling increment
+ * `uat-parser-normalises-line-endings` exists because a story file written with CRLF parsed to ZERO
+ * criteria as a LEGAL answer. `parseReliabilityGates` splits items on a bare `\n` and its item
+ * pattern does not tolerate a trailing CR, so a CRLF story would declare no gates here, and a check
+ * that judges nothing passes.
+ */
+function normalizeEol(text: string): string {
+  return text.replace(/\r\n?/g, "\n");
+}
 
 /**
- * Every kind-1 declared gate in one story file.
+ * Every kind-1 declared gate in one story file, READ BY THE LIBRARY'S OWN PARSER.
  *
- * ANNOTATION-AGNOSTIC ON PURPOSE. Items carry `_(gate: observe)_` (89 of them) or
- * `_(gate: build-tests)_` (9), and this reads BOTH — the obligation is carried by the command, and a
- * check that trusted the annotation would go quiet the moment someone wrote a third kind. Failing
- * WIDE is the same bias `pnpm gate --scope`'s classifier takes.
+ * WHY NOT ITS OWN READER ANY MORE. Until 2026-09-24 this module re-read the markdown itself — a
+ * case-sensitive, position-blind `indexOf` for the heading and a backtick scan that refused a newline
+ * — and the adversarial pass over this arc's instruments landed every one of these at exit 0 while
+ * `parseReliabilityGates` returned the command: a lowercase or TAB-separated heading, the heading
+ * quoted in intro prose before the real one, and a command wrapped across lines. A parity check that
+ * reads the declaration differently from the reader that SIGNS it judges a different corpus. So it
+ * reads what that parser reads — each LIVE gate's `proofCommand` — and nothing else.
+ *
+ * Retired gates are skipped through {@link activeReliabilityGates}, the library's single home of that
+ * filter: a gate retired in place (ADR-0436) is no longer an obligation, so nothing need run it.
+ * ANNOTATION-AGNOSTIC otherwise: `observe` and `build-tests` gates are both judged, because the
+ * obligation is carried by the command.
  */
 export function declaredGatesIn(story: string, storyText: string): DeclaredGate[] {
-  const block = reliabilityGatesBlock(storyText);
-  if (block === null) return [];
   const out: DeclaredGate[] = [];
-  for (const match of block.matchAll(COMMAND_SPAN)) {
-    // Stryker disable next-line StringLiteral: EQUIVALENT — `?? ""` on group 1 of a regex that has
-    // already matched. `COMMAND_SPAN`'s group is not optional, so it always participates and the
-    // fallback is unreachable.
-    const command = (match[1] ?? "").trim();
-    const parsed = parsePackageScriptCommand(command);
+  if (isRetiredNode(storyText)) return out;
+  for (const gate of activeReliabilityGates(parseReliabilityGates(story, normalizeEol(storyText)))) {
+    if (gate.proofCommand === undefined) continue;
+    const parsed = parsePackageScriptCommand(gate.proofCommand);
     if (parsed === null) continue;
-    out.push({ story, command, parsed });
+    out.push({ story, command: gate.proofCommand, parsed });
   }
   return out;
+}
+
+/** Does a LIVE story declare any reliability gate at all, as the library reads it? */
+function declaresGates(story: string, storyText: string): boolean {
+  return !isRetiredNode(storyText) && parseReliabilityGates(story, normalizeEol(storyText)).length > 0;
+}
+
+/** A frontmatter `status: retired` line, inside the leading `---` block. */
+const RETIRED_STATUS = /^status:[^\S\n]*retired[^\S\n]*$/m;
+
+/**
+ * Is this node RETIRED — `status: retired` in its leading frontmatter?
+ *
+ * A retired story owes nothing, so its declared gates are not obligations. This became load-bearing
+ * the day the precondition below arrived: three retired stories (`model-judged-uat`,
+ * `model-uat-pilot`, `model-uat-witness`) still declare `test` gates for packages deleted with them,
+ * and tier 2 had been crediting those to a repo-wide leg that runs nothing — the escape in its
+ * purest form. Read from the frontmatter block only, so prose that QUOTES the line is not a status.
+ */
+export function isRetiredNode(storyText: string): boolean {
+  const text = normalizeEol(storyText);
+  if (!text.startsWith("---\n")) return false;
+  const close = text.indexOf("\n---", 4);
+  if (close === -1) return false;
+  return RETIRED_STATUS.test(text.slice(4, close));
+}
+
+/**
+ * How one workspace answers "do you have package P, and does it declare script S?".
+ *
+ * A PARAMETER, like the baseline, so the rule is testable against a synthetic workspace. The shell
+ * builds it from the real manifests with {@link workspaceScriptResolver}.
+ */
+export type ScriptResolver = (pkg: string, script: string) => "declared" | "no-package" | "no-script";
+
+/**
+ * Build a {@link ScriptResolver} from the workspace's manifests — each package's `name` and the keys
+ * of its `scripts`.
+ */
+export function workspaceScriptResolver(
+  manifests: readonly { readonly name: string; readonly scripts: readonly string[] }[],
+): ScriptResolver {
+  const byName = new Map(manifests.map((m) => [m.name, new Set(m.scripts)] as const));
+  return (pkg, script) => {
+    const scripts = byName.get(pkg);
+    if (scripts === undefined) return "no-package";
+    return scripts.has(script) ? "declared" : "no-script";
+  };
+}
+
+/**
+ * Is the script a declared gate names REAL in every package it filters to?
+ *
+ * WHY THIS IS A PRECONDITION OF BOTH TIERS. `pnpm -r <script>` skips a package that lacks the script
+ * without a word, and so does the narrowed `--if-present` form the gate rewrites a targeted leg into
+ * — so tier 2 used to credit `pnpm --filter @storytree/cli build` (no such script) and a package that
+ * does not exist as "run by the repo-wide leg" while nothing ran either. A gate whose command cannot
+ * run is not run.
+ */
+function unrunnable(gate: DeclaredGate, resolve: ScriptResolver): GateCoverage | undefined {
+  const { packages, script } = gate.parsed;
+  const missingPackage = packages.filter((pkg) => resolve(pkg, script) === "no-package");
+  if (missingPackage.length > 0) {
+    return {
+      covered: false,
+      detail: `no workspace package is named ${missingPackage.join(", ")}, so nothing can run its \`${script}\` script.`,
+    };
+  }
+  const missingScript = packages.filter((pkg) => resolve(pkg, script) === "no-script");
+  if (missingScript.length > 0) {
+    return {
+      covered: false,
+      detail:
+        `${missingScript.join(", ")} declares no \`${script}\` script, so every leg that would run it ` +
+        `skips it silently.`,
+    };
+  }
+  return undefined;
 }
 
 /**
@@ -454,8 +539,10 @@ export function judgeReliabilityGateParity(input: {
    * every synthetic fixture would carry the real baseline's entries as GHOSTS and fail.
    */
   readonly baseline: readonly BaselinedGate[];
+  /** Whether a filtered package exists and declares the script — see {@link workspaceScriptResolver}. */
+  readonly resolveScript: ScriptResolver;
 }): ReliabilityGateParity {
-  const { stories, steps, baseline } = input;
+  const { stories, steps, baseline, resolveScript } = input;
   if (stories.length === 0) {
     throw new VacuousReliabilitySweep(
       "the story walk found no files, so no declaration could be judged — every gate would read as run",
@@ -473,9 +560,9 @@ export function judgeReliabilityGateParity(input: {
   const judged: JudgedGate[] = [];
   let storiesWithBlock = 0;
   for (const story of stories) {
-    if (reliabilityGatesBlock(story.text) !== null) storiesWithBlock += 1;
+    if (declaresGates(story.path, story.text)) storiesWithBlock += 1;
     for (const gate of declaredGatesIn(story.path, story.text)) {
-      const coverage = judgeCoverage(gate, targeted, repoWide);
+      const coverage = unrunnable(gate, resolveScript) ?? judgeCoverage(gate, targeted, repoWide);
       judged.push({
         ...gate,
         coverage,
