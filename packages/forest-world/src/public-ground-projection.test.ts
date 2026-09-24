@@ -99,6 +99,14 @@ test('public-ground-projection-keeps-one-projected-frame-and-ground-basis: frame
   }
 });
 
+test('public-ground-projection-keeps-one-projected-frame-and-ground-basis: a plan without relaxed cells stays without them', () => {
+  const plan = { ...composePublicGroundScene(facts), relaxedCells: null };
+  const projected = projectPublicGroundScene(plan);
+
+  assert.equal(projected.relaxedCells, null, 'the tile fallback is carried, never fabricated into a mesh');
+  assert.equal(projected.cameraElevationDeg, LAND_CAMERA_ELEVATION_DEG);
+});
+
 test('public-ground-projection-reprojects-the-canonical-route-network: paths and cave bearings are projected while route facts survive', () => {
   const plan = composePublicGroundScene(facts);
   const projected = projectPublicGroundScene(plan);
