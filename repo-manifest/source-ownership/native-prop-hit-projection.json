@@ -1,7 +1,8 @@
 {
   "sourceOwnership": {
     "subtrees": {
-      "packages/forest-world-r3f/src/native-prop-hit-projection.ts": "native-prop-hit-projection"
+      "packages/forest-world-r3f/src/native-prop-hit-projection.ts": "native-prop-hit-projection",
+      "packages/forest-world-r3f/src/native-prop-targets.ts": "native-prop-hit-projection"
     }
   }
 }

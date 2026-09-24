@@ -13,6 +13,7 @@ import type { NeighbourHighlightPlan } from './neighbourHighlight.js';
 import type { LaneLayout } from './laneLayout.js';
 import type { SvgIslandAccretionState } from './svg-island-accretion.js';
 import type { VegetationRenderLayer } from './vegetation-render.js';
+import type { NativePropTargetRenderLayer } from './native-prop-targets.js';
 
 export interface WorldPresentationModel {
   readonly scene: SceneNode;
@@ -41,6 +42,7 @@ export interface WorldPresentationModel {
    *  anchors. Absent ⇒ the pre-arc render, unchanged. */
   readonly vegetationLayer?: VegetationRenderLayer | null;
   readonly organicPoseLayers?: readonly OrganicPoseRenderLayer[] | null;
+  readonly nativePropTargetLayer?: NativePropTargetRenderLayer | null;
 }
 
 export interface WorldPresentationModelInput {
@@ -60,6 +62,7 @@ export interface WorldPresentationModelInput {
   readonly forestRegrowLayer?: ForestRegrowRenderLayer | null;
   readonly vegetationLayer?: VegetationRenderLayer | null;
   readonly organicPoseLayers?: readonly OrganicPoseRenderLayer[] | null;
+  readonly nativePropTargetLayer?: NativePropTargetRenderLayer | null;
 }
 
 export interface WorldPresentationEvents {
@@ -80,6 +83,7 @@ interface WorldPresentationLayerDraft {
   forestRegrowLayer?: ForestRegrowRenderLayer | null;
   vegetationLayer?: VegetationRenderLayer | null;
   organicPoseLayers?: readonly OrganicPoseRenderLayer[] | null;
+  nativePropTargetLayer?: NativePropTargetRenderLayer | null;
 }
 
 /** Normalize a plain presentation input without consulting time, stores, or live authority. */
@@ -105,6 +109,9 @@ export function normalizeWorldPresentationModel(
   }
   if (input.organicPoseLayers !== undefined) {
     layers.organicPoseLayers = input.organicPoseLayers;
+  }
+  if (input.nativePropTargetLayer !== undefined) {
+    layers.nativePropTargetLayer = input.nativePropTargetLayer;
   }
   return {
     scene: input.scene,
@@ -172,6 +179,9 @@ export function WorldSceneView({
     }
     if (model.organicPoseLayers !== undefined) {
       next.organicPoseLayers = model.organicPoseLayers;
+    }
+    if (model.nativePropTargetLayer !== undefined) {
+      next.nativePropTargetLayer = model.nativePropTargetLayer;
     }
     return next;
   }, [model, events]);
