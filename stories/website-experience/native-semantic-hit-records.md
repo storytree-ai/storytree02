@@ -68,16 +68,27 @@ semantic input and exports no descriptor-status map or second placement pass.
 1. **`native-semantic-hit-records-carry-attributed-prop-identity-status-and-extent`** — each
    attributable tree, dead tree and coverage-flora placement yields one record with its supplied
    story/capability/status, actual root and relief, and scaled canonical footprint/height.
+   - **asserts —** given supplied canonical placements, island provenance and a placement-keyed
+     semantic-status lookup, `native-prop-hit-records.ts` yields one immutable record for each
+     eligible tree, dead tree and coverage-flora prop, preserving its supplied story, capability,
+     folded status, root and relief while multiplying the frozen role footprint and height by its
+     placement scale.
    - **covers —** `native-prop-hit-records.ts` — test:
      `native-prop-hit-records.test.ts`
 2. **`native-semantic-hit-records-never-invent-decorative-uat-or-missing-semantics`** — decorative
    cover, UAT props and placements missing provenance or supplied semantic status yield no record;
    tint is never a status input.
+   - **asserts —** when `native-prop-hit-records.ts` receives decorative cover, UAT props, or a
+     placement without provenance or supplied semantic status, it returns no record for that
+     placement and never infers its status from tint.
    - **covers —** `native-prop-hit-records.ts` — test:
      `native-prop-hit-records.test.ts`
 3. **`native-semantic-hit-records-preserve-canonical-ground-inputs`** — deriving records does not
    mutate or replace placements, island attribution or caster inputs and creates no second
    placement/caster path.
+   - **asserts —** after `native-prop-hit-records.ts` derives records from supplied canonical
+     ground inputs, the placement list, island-attribution map and caster inputs retain their
+     original identities and values, and no replacement placement or caster collection exists.
    - **covers —** `native-prop-hit-records.ts` — test:
      `native-prop-hit-records.test.ts`
 
