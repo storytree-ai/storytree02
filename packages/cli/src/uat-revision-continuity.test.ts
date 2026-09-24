@@ -677,3 +677,157 @@ describe("the continuity base is the merge base a full clone would find, even on
     });
   });
 });
+
+/**
+ * THE ADVERSARIAL PASS'S SEEDED FAULT (2026-09-24, `instrument-escape-repair-arc`): reword a leg,
+ * re-mint it under a NEW criterion id, and add `_(lineage: replaces <old id>)_`. The wall skipped every
+ * id absent from base as additive expansion and never read lineage, so it landed at exit 0 with no
+ * signed pass for the new text.
+ */
+describe("a DECLARED replacement is charged as a change, whatever id it wears", () => {
+  const CRITERION_C = "uatc_cccccccccccccccccccccccc";
+  const OLD_C = "uatr1:cccccccccccccccc";
+  const CURRENT_D = "uatr1:eeeeeeeeeeeeeeee";
+  const successor = (
+    kind: "replaces" | "split-from" | "merged-from",
+    from: readonly string[],
+    revisionId = CURRENT_B,
+    criterionId = CRITERION_B,
+  ) => ({ ...criterion(criterionId, revisionId), lineage: { kind, criterionIds: [...from] } });
+
+  it("reds a re-minted, reworded criterion that declares `replaces`, naming what it replaces (the seeded fault)", () => {
+    exact(
+      judgeUatRevisionContinuity(
+        inputs({
+          base: revisionSnapshot(OLD),
+          candidate: snapshot([story("agent", [successor("replaces", [CRITERION])])]),
+          events: [signedCriterion(OLD)],
+        }),
+      ),
+      {
+        ok: false,
+        changes: [
+          {
+            storyId: "agent",
+            criterionId: CRITERION_B,
+            oldRevisionId: OLD,
+            newRevisionId: CURRENT_B,
+            replaces: [CRITERION],
+            witnessed: false,
+          },
+        ],
+        lines: [
+          "✗ 1 changed existing UAT criterion revision(s) lack a current signed pass:",
+          "",
+          `  agent › ${CRITERION_B} (replaces ${CRITERION}): ${OLD} → ${CURRENT_B} — UNWITNESSED`,
+          "",
+          "  Drive and sign each candidate revision before landing; an old-revision verdict cannot prove new acceptance text.",
+        ],
+      },
+    );
+  });
+
+  it("greens once the NEW id's revision carries a current signed pass", () => {
+    exact(
+      judgeUatRevisionContinuity(
+        inputs({
+          base: revisionSnapshot(OLD),
+          candidate: snapshot([story("agent", [successor("replaces", [CRITERION])])]),
+          events: [signedCriterion(CURRENT_B, "pass", 2, CRITERION_B)],
+        }),
+      ),
+      {
+        ok: true,
+        changes: [
+          {
+            storyId: "agent",
+            criterionId: CRITERION_B,
+            oldRevisionId: OLD,
+            newRevisionId: CURRENT_B,
+            replaces: [CRITERION],
+            witnessed: true,
+          },
+        ],
+        lines: [
+          "✓ 1 changed existing UAT criterion revision(s) each have a current signed pass.",
+          `  agent › ${CRITERION_B} (replaces ${CRITERION}): ${OLD} → ${CURRENT_B}`,
+        ],
+      },
+    );
+  });
+
+  it("charges split-from and merged-from too, and names every removed source of a merge", () => {
+    const base = snapshot([story("agent", [criterion(CRITERION, OLD), criterion(CRITERION_C, OLD_C)])]);
+    const merged = judgeUatRevisionContinuity(
+      inputs({
+        base,
+        candidate: snapshot([story("agent", [successor("merged-from", [CRITERION, CRITERION_C])])]),
+        events: [],
+      }),
+    );
+    assert.equal(merged.ok, false);
+    assert.deepEqual(merged.changes[0]?.replaces, [CRITERION, CRITERION_C]);
+    assert.equal(merged.changes[0]?.oldRevisionId, `${OLD} + ${OLD_C}`);
+    assert.equal(
+      merged.lines[2],
+      `  agent › ${CRITERION_B} (replaces ${CRITERION}, ${CRITERION_C}): ${OLD} + ${OLD_C} → ${CURRENT_B} — UNWITNESSED`,
+    );
+
+    const split = judgeUatRevisionContinuity(
+      inputs({
+        base: revisionSnapshot(OLD),
+        candidate: snapshot([
+          story("agent", [
+            successor("split-from", [CRITERION]),
+            successor("split-from", [CRITERION], CURRENT_D, CRITERION_C),
+          ]),
+        ]),
+        events: [signedCriterion(CURRENT_B, "pass", 2, CRITERION_B)],
+      }),
+    );
+    assert.equal(split.ok, false, "BOTH halves of a split owe a pass");
+    assert.deepEqual(
+      split.changes.map((c) => [c.criterionId, c.witnessed]),
+      [
+        [CRITERION_B, true],
+        [CRITERION_C, false],
+      ],
+    );
+  });
+
+  it("stays additive when the named source still stands, or never existed in base", () => {
+    // Still standing: the source is not replaced, so the new id is expansion beside it.
+    const beside = judgeUatRevisionContinuity(
+      inputs({
+        base: revisionSnapshot(OLD),
+        candidate: snapshot([story("agent", [criterion(CRITERION, OLD), successor("split-from", [CRITERION])])]),
+        events: [],
+      }),
+    );
+    assert.equal(beside.ok, true);
+    assert.deepEqual(beside.changes, []);
+    // Never in base: nothing was superseded.
+    const phantom = judgeUatRevisionContinuity(
+      inputs({
+        base: revisionSnapshot(OLD),
+        candidate: snapshot([story("agent", [criterion(CRITERION, OLD), successor("replaces", [CRITERION_C])])]),
+        events: [],
+      }),
+    );
+    assert.equal(phantom.ok, true);
+    assert.deepEqual(phantom.changes, []);
+  });
+
+  it("charges only the REMOVED sources of a merge whose other source still stands", () => {
+    const base = snapshot([story("agent", [criterion(CRITERION, OLD), criterion(CRITERION_C, OLD_C)])]);
+    const verdict = judgeUatRevisionContinuity(
+      inputs({
+        base,
+        candidate: snapshot([story("agent", [criterion(CRITERION_C, OLD_C), successor("merged-from", [CRITERION, CRITERION_C])])]),
+        events: [],
+      }),
+    );
+    assert.deepEqual(verdict.changes[0]?.replaces, [CRITERION]);
+    assert.equal(verdict.changes[0]?.oldRevisionId, OLD);
+  });
+});
