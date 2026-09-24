@@ -140,7 +140,9 @@ const INSTRUMENT = () => {
 const payloads = new Map(); let frozen = false;
 const MIME = { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.glb': 'model/gltf-binary', '.webp': 'image/webp', '.jpg': 'image/jpeg', '.ktx2': 'image/ktx2', '.wasm': 'application/wasm', '.bin': 'application/octet-stream' };
 async function open(browser, arm, acquire, video) {
-  const context = await browser.newContext({ viewport, deviceScaleFactor: 1, serviceWorkers: 'block', ...(video ? { recordVideo: { dir: out, size: viewport } } : {}) });
+  const options = { viewport, deviceScaleFactor: 1, serviceWorkers: 'block' };
+  if (video) options.recordVideo = { dir: out, size: viewport };
+  const context = await browser.newContext(options);
   await context.addInitScript(INSTRUMENT);
   await context.route('**/*', async (route) => {
     const req = route.request(); const url = new URL(req.url());

@@ -14,12 +14,13 @@ import { OrthographicCamera, Scene, Vector3 } from 'three';
 
 import { presentRegisteredCamera } from './ForestWorldCanvas.registered-camera.js';
 
-const EYE: readonly [number, number, number] = [0, 766, 643];
+// A non-zero sideways offset, so an eye added on the wrong side of the target is a different picture.
+const EYE: readonly [number, number, number] = [35, 766, 643];
 
 function rig() {
   const camera = new OrthographicCamera(-800, 800, 500, -500, -5000, 5000);
   const scene = new Scene();
-  const drawn: { zoom: number; position: number[]; centre: [number, number] }[] = [];
+  const drawn: { zoom: number; position: number[]; centre: [number, number]; offset: [number, number] }[] = [];
   let invalidations = 0;
   const root = {
     camera,
@@ -29,7 +30,8 @@ function rig() {
         assert.equal(s, scene);
         c.updateMatrixWorld();
         const target = new Vector3(120, 0, -40).project(c);
-        drawn.push({ zoom: c.zoom, position: c.position.toArray(), centre: [target.x, target.y] });
+        const offset = new Vector3(220, 0, -40).project(c);
+        drawn.push({ zoom: c.zoom, position: c.position.toArray(), centre: [target.x, target.y], offset: [offset.x, offset.y] });
       },
     },
     invalidate: () => {
@@ -50,6 +52,17 @@ test('a presentable canvas DRAWS the new pose before the call returns, and defer
   assert.deepEqual(frame?.position, [120 + EYE[0], EYE[1], -40 + EYE[2]]);
   // The host's target lands at the centre of the frame in the drawn picture.
   assert.ok(Math.abs(frame?.centre[0] ?? 1) < 1e-9 && Math.abs(frame?.centre[1] ?? 1) < 1e-9);
+  // …and at the host's SCALE: a point 100 ground units along x lands where an independently posed
+  // camera at zoom 2.5 puts it — a projection left at the old zoom would put it 2.5x nearer centre.
+  const reference = new OrthographicCamera(-800, 800, 500, -500, -5000, 5000);
+  reference.zoom = 2.5;
+  reference.position.set(120 + EYE[0], EYE[1], -40 + EYE[2]);
+  reference.lookAt(120, 0, -40);
+  reference.updateProjectionMatrix();
+  reference.updateMatrixWorld();
+  const expected = new Vector3(220, 0, -40).project(reference);
+  assert.ok(Math.abs(expected.x) > 0.1, 'the offset point is visibly off centre');
+  assert.ok(Math.abs((frame?.offset[0] ?? 0) - expected.x) < 1e-9 && Math.abs((frame?.offset[1] ?? 0) - expected.y) < 1e-9);
 });
 
 test('every camera change is drawn with THAT change, in order — never a stale pose', () => {
