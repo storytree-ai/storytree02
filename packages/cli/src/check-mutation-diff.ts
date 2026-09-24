@@ -41,6 +41,8 @@ import { availableParallelism } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { Instrumenter } from "@stryker-mutator/instrumenter";
+
 import { discoverWorkspaceProjects } from "./ci-affected.js";
 import { GATE_SKIP_EXIT_CODE } from "./gate-runner.js";
 import { MIRRORS } from "./mirror-conformance.js";
@@ -73,6 +75,11 @@ import {
   selectMutationTargets,
   siblingTestFor,
   skipDisposition,
+  explainZeroMutantRun,
+  formatZeroMutantExplanation,
+  type MutantLineSpan,
+  unquoteGitPath,
+  unwitnessedTargets,
 } from "./mutation-diff.js";
 import {
   type BaseRefChoice,
@@ -90,8 +97,13 @@ const VITEST_CONFIG_FILE = "vitest.mutation-diff.config.ts";
 
 const GIT_MAX_BUFFER = 64 * 1024 * 1024;
 
+/**
+ * `core.quotePath=false` on every call: by default git octal-quotes any path holding a non-ASCII
+ * byte, and a quoted path is not a path — such a file used to drop out of the rung with no word
+ * (`unquoteGitPath` is the backstop for the characters git quotes regardless).
+ */
 function git(args: string[]): string {
-  return execFileSync("git", args, { cwd: repoRoot, encoding: "utf8", maxBuffer: GIT_MAX_BUFFER });
+  return execFileSync("git", ["-c", "core.quotePath=false", ...args], { cwd: repoRoot, encoding: "utf8", maxBuffer: GIT_MAX_BUFFER });
 }
 
 /**
@@ -161,7 +173,7 @@ function changedRanges(base: BaseRefChoice): ChangedRanges[] {
 
   const untracked = git(["ls-files", "--others", "--exclude-standard"])
     .split("\n")
-    .map((l) => l.trim())
+    .map((l) => unquoteGitPath(l.trim()))
     .filter((l) => l !== "");
   for (const file of untracked) {
     if (!file.endsWith(".ts") && !file.endsWith(".tsx")) continue;
@@ -172,6 +184,49 @@ function changedRanges(base: BaseRefChoice): ChangedRanges[] {
   }
 
   return ranges;
+}
+
+/** A logger that says nothing — the instrumenter is asked a question here, not run as a tool. */
+const SILENT_LOGGER = {
+  trace: () => undefined,
+  debug: () => undefined,
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+  fatal: () => undefined,
+  isTraceEnabled: () => false,
+  isDebugEnabled: () => false,
+  isInfoEnabled: () => false,
+  isWarnEnabled: () => false,
+  isErrorEnabled: () => false,
+  isFatalEnabled: () => false,
+};
+
+/**
+ * Every mutant Stryker's own instrumenter finds in each selected file, instrumented WHOLE (no span),
+ * as 1-based line extents. The independent second reading {@link explainZeroMutantRun} needs: the
+ * run's report cannot supply it, because it omits a file with no mutant. A file the instrumenter
+ * cannot parse is left out, which that function reads as unexplained, never as empty.
+ */
+async function wholeFileMutants(sources: ReadonlyMap<string, string>): Promise<Map<string, MutantLineSpan[]>> {
+  const out = new Map<string, MutantLineSpan[]>();
+  const instrumenter = new Instrumenter(SILENT_LOGGER);
+  for (const [file, content] of sources) {
+    try {
+      const result = await instrumenter.instrument([{ name: path.join(repoRoot, file), content, mutate: true }], {
+        plugins: null,
+        excludedMutations: [],
+        ignorers: [],
+      });
+      out.set(
+        file,
+        result.mutants.map((m) => ({ startLine: m.location.start.line + 1, endLine: m.location.end.line + 1 })),
+      );
+    } catch {
+      // Unparseable to the instrumenter: absent, which the judge reads as unexplained.
+    }
+  }
+  return out;
 }
 
 /**
@@ -516,7 +571,7 @@ function sourcesFor(targets: readonly { sourceFiles: readonly string[] }[]): Map
   return sources;
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const base = resolveBaseRef();
   console.log(`${TAG} base: ${base.because}`);
 
@@ -711,7 +766,30 @@ function main(): void {
         `suite exists. Nothing could kill these mutants.`,
     );
   }
-  if (witnessless.length > 0) process.exit(1);
+
+  // PER TARGET, NOT ONLY PER GROUP. The bun projects share ONE group, so the check above is satisfied
+  // by ANY package's test — and an untested package that went red alone went green the moment an
+  // unrelated package's change brought a test into the group (ADR-0483's BLIND narrowing then excused
+  // it). `unwitnessedTargets` says why the discriminator is "no own witness AND no test in the run
+  // references the package", which keeps PR #1727's cross-package case on the BLIND path.
+  const unwitnessed = groups
+    .filter((g) => g.testFiles.length > 0 && g.targets.length > 1)
+    .flatMap((g) =>
+      unwitnessedTargets({
+        targets: g.targets,
+        ownWitnesses: (target) => testFilesFor([target], selection.changedTestFiles),
+        groupTestSources: new Map(g.testFiles.map((f) => [f, readFileSync(path.join(repoRoot, f), "utf8")] as const)),
+      }),
+    );
+  for (const target of unwitnessed) {
+    console.error(
+      `${TAG} NO WITNESS: ${target.sourceFiles.join(", ")} changed, but this branch adds or changes ` +
+        `no test under ${target.dir}, no sibling suite exists, and no test this run executes imports ` +
+        `${target.project}. Another package's test in the same run cannot stand in for one — nothing ` +
+        `could kill these mutants.`,
+    );
+  }
+  if (witnessless.length > 0 || unwitnessed.length > 0) process.exit(1);
 
   mkdirSync(path.join(repoRoot, "reports"), { recursive: true });
 
@@ -812,6 +890,25 @@ function main(): void {
         );
         process.exit(disposition.exitCode);
       }
+
+      // REAL CODE, AND STILL NO MUTANT. A one-line edit inside a multi-line expression contains no
+      // whole mutant, so the run honestly counted zero. `explainZeroMutantRun` says why that needs a
+      // second, independent reading before it may skip, and why a disagreement stays red.
+      const selected = ranges.filter((entry) => sources.has(entry.file));
+      const explanation = explainZeroMutantRun(selected, await wholeFileMutants(sources));
+      if (explanation.kind === "explained") {
+        const disposition = skipDisposition({
+          inCi: process.env["CI"] === "true",
+          gateSkipExitCode: GATE_SKIP_EXIT_CODE,
+        });
+        console.log(
+          `${TAG} ${disposition.label} — Stryker found no mutant that fits inside this branch's changed ` +
+            `lines, and its own instrumenter, run over each whole file, agrees. There was nothing here to prove:`,
+        );
+        for (const line of formatZeroMutantExplanation(TAG, explanation)) console.log(line);
+        process.exit(disposition.exitCode);
+      }
+      for (const line of formatZeroMutantExplanation(TAG, explanation)) console.error(line);
     }
 
     // DID THE BRANCH'S OWN SUPPRESSION DIRECTIVES ACTUALLY SUPPRESS ANYTHING?
@@ -845,7 +942,7 @@ function main(): void {
 }
 
 try {
-  main();
+  await main();
 } catch (err) {
   if (err instanceof VacuousOwnershipSweep) {
     // No base revision means the rung cannot tell which lines are this branch's — so it has proved

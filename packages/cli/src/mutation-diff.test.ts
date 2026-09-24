@@ -40,6 +40,11 @@ import {
   selectMutationTargets,
   siblingTestFor,
   skipDisposition,
+  explainZeroMutantRun,
+  formatZeroMutantExplanation,
+  referencesPackage,
+  unquoteGitPath,
+  unwitnessedTargets,
 } from "./mutation-diff.js";
 
 const PROJECTS: ProjectDir[] = [
@@ -3342,4 +3347,239 @@ test("auditSuppressionDirectives accepts a line in ANY of one hunk's ranges", ()
     mutants: [mutantAt({ file: "a.ts", line: 3, mutator: "ConditionalExpression", status: "Survived" })],
   });
   assert.deepEqual([audit.audited, audit.findings.map((f) => f.kind)], [1, ["inert"]]);
+});
+
+// ── instrument-escape-repair-arc: a real-code span no mutant fits inside ──────────────────────────
+
+/**
+ * THE REPRODUCED SHAPE (2026-09-24): `packages/app-surface/src/organic-pose-to-pose-track.ts`, one
+ * value changed on line 96, the `holdMs` row of a frozen policy object. The run counted 0 mutants
+ * and told the author to strengthen their tests. Stryker's instrumenter over the whole file found
+ * 464 mutants, and exactly one touches line 96: the policy's `ObjectLiteral`, lines 93-97.
+ */
+const POLICY_FILE = "packages/app-surface/src/organic-pose-to-pose-track.ts";
+
+test("mutation-diff: a changed line inside a multi-line literal is EXPLAINED, not vacuous (the reproduced fault)", () => {
+  const explanation = explainZeroMutantRun(
+    [{ file: POLICY_FILE, ranges: [{ start: 96, end: 96 }] }],
+    new Map([[POLICY_FILE, [{ startLine: 93, endLine: 97 }, { startLine: 60, endLine: 61 }]]]),
+  );
+  assert.deepEqual(explanation, {
+    kind: "explained",
+    spans: [{ file: POLICY_FILE, start: 96, end: 96, overlapping: 1 }],
+  });
+  assert.deepEqual(formatZeroMutantExplanation("[mutation]", explanation), [
+    `[mutation]   ${POLICY_FILE}:96-96 — 1 mutant(s) span these lines but none fits inside them, because each mutated expression runs past the change`,
+    "[mutation] This is not a test-strength finding: a mutant must fit wholly inside a changed span, and no test can kill a mutant that does not exist.",
+  ]);
+});
+
+test("mutation-diff: a line no mutant touches at all says so", () => {
+  const explanation = explainZeroMutantRun(
+    [{ file: POLICY_FILE, ranges: [{ start: 90, end: 90 }] }],
+    new Map([[POLICY_FILE, [{ startLine: 93, endLine: 97 }, { startLine: 89, endLine: 89 }, { startLine: 91, endLine: 91 }]]]),
+  );
+  assert.deepEqual(explanation, { kind: "explained", spans: [{ file: POLICY_FILE, start: 90, end: 90, overlapping: 0 }] });
+  assert.equal(
+    formatZeroMutantExplanation("[mutation]", explanation)[0],
+    `[mutation]   ${POLICY_FILE}:90-90 — no mutant touches these lines at all`,
+  );
+});
+
+test("mutation-diff: a mutant that FITS inside a changed span makes the zero-mutant run LOST — it stays red", () => {
+  // Fits exactly at both edges, and one fits strictly inside: either alone must convict the run.
+  for (const fitting of [{ startLine: 10, endLine: 12 }, { startLine: 11, endLine: 11 }]) {
+    const explanation = explainZeroMutantRun(
+      [{ file: POLICY_FILE, ranges: [{ start: 10, end: 12 }, { start: 30, end: 30 }] }],
+      new Map([[POLICY_FILE, [fitting, { startLine: 29, endLine: 31 }]]]),
+    );
+    assert.deepEqual(explanation, { kind: "lost", lost: [{ file: POLICY_FILE, start: 10, end: 12, overlapping: 1 }] });
+  }
+  assert.deepEqual(
+    formatZeroMutantExplanation("[mutation]", {
+      kind: "lost",
+      lost: [
+        { file: "a.ts", start: 1, end: 2, overlapping: 1 },
+        { file: "b.ts", start: 3, end: 3, overlapping: 0 },
+      ],
+    }),
+    [
+      "[mutation] UNEXPLAINED — Stryker's own instrumenter, run over each whole file, finds a mutant that fits inside these changed spans, yet the run counted none, so the run lost it: a.ts:1-2, b.ts:3-3",
+    ],
+  );
+});
+
+test("mutation-diff: a mutant one line past either edge does not fit, and one ending before or starting after does not overlap", () => {
+  const explanation = explainZeroMutantRun(
+    [{ file: POLICY_FILE, ranges: [{ start: 10, end: 12 }] }],
+    new Map([
+      [
+        POLICY_FILE,
+        [
+          { startLine: 9, endLine: 12 },
+          { startLine: 10, endLine: 13 },
+          { startLine: 12, endLine: 14 },
+          { startLine: 8, endLine: 10 },
+          { startLine: 5, endLine: 9 },
+          { startLine: 13, endLine: 20 },
+        ],
+      ],
+    ]),
+  );
+  assert.deepEqual(explanation, { kind: "explained", spans: [{ file: POLICY_FILE, start: 10, end: 12, overlapping: 4 }] });
+});
+
+test("mutation-diff: a file the instrumenter could not read is LOST, never an empty explanation", () => {
+  assert.deepEqual(
+    explainZeroMutantRun([{ file: `./${POLICY_FILE}`, ranges: [{ start: 1, end: 1 }] }], new Map()),
+    { kind: "lost", lost: [{ file: POLICY_FILE, start: 1, end: 1, overlapping: 0 }] },
+  );
+  // Read by its normalised name: a `./`-prefixed diff path still finds its reading.
+  assert.equal(
+    explainZeroMutantRun([{ file: `./${POLICY_FILE}`, ranges: [{ start: 1, end: 1 }] }], new Map([[POLICY_FILE, []]])).kind,
+    "explained",
+  );
+});
+
+// ── instrument-escape-repair-arc: the per-project witness (escape 11) and quoted paths (escape 12) ──
+
+/** The adversarial pass's own two targets: an untested package and one that brought a test. */
+const PROBE_UNTESTED: MutationTarget = {
+  project: "@storytree/studio-members",
+  dir: "packages/studio-members",
+  mutateGlobs: ["packages/studio-members/src/zprobe.ts:1-3"],
+  sourceFiles: ["packages/studio-members/src/zprobe.ts"],
+};
+const PROBE_TESTED: MutationTarget = {
+  project: "@storytree/notice-board",
+  dir: "packages/notice-board",
+  mutateGlobs: ["packages/notice-board/src/xprobe.ts:1-3"],
+  sourceFiles: ["packages/notice-board/src/xprobe.ts"],
+};
+const XPROBE_TEST = 'import { xprobe } from "./xprobe.js";';
+
+test("mutation-diff: an untested package is NOT witnessed by another package's test in the same run (the seeded fault)", () => {
+  // Run 2 of the probe: studio-members' new code has no test, notice-board's has one. The group check
+  // passed on notice-board's test and the run printed PASS over seven NoCoverage mutants.
+  const own = new Map<MutationTarget, string[]>([
+    [PROBE_UNTESTED, []],
+    [PROBE_TESTED, ["packages/notice-board/src/xprobe.test.ts"]],
+  ]);
+  const unwitnessed = unwitnessedTargets({
+    targets: [PROBE_UNTESTED, PROBE_TESTED],
+    ownWitnesses: (t) => own.get(t) ?? [],
+    groupTestSources: new Map([["packages/notice-board/src/xprobe.test.ts", XPROBE_TEST]]),
+  });
+  assert.deepEqual(unwitnessed, [PROBE_UNTESTED]);
+});
+
+test("mutation-diff: ONE referencing test in the run is enough — the others need not import the package", () => {
+  assert.deepEqual(
+    unwitnessedTargets({
+      targets: [PROBE_UNTESTED, PROBE_TESTED],
+      ownWitnesses: (t) => (t === PROBE_TESTED ? ["packages/notice-board/src/xprobe.test.ts"] : []),
+      groupTestSources: new Map([
+        ["packages/notice-board/src/xprobe.test.ts", XPROBE_TEST],
+        ["packages/notice-board/src/other.test.ts", 'import { zprobe } from "@storytree/studio-members";'],
+      ]),
+    }),
+    [],
+  );
+});
+
+test("mutation-diff: PR #1727's cross-package case stays on the ADR-0483 BLIND path — a test that IMPORTS the package witnesses it", () => {
+  const library: MutationTarget = {
+    project: "@storytree/library",
+    dir: "packages/library",
+    mutateGlobs: ["packages/library/src/fixture/corpus.ts:166-166"],
+    sourceFiles: ["packages/library/src/fixture/corpus.ts"],
+  };
+  const cli: MutationTarget = { ...PROBE_TESTED, project: "@storytree/cli", dir: "packages/cli" };
+  for (const spelling of [
+    'import { loadFixtureCorpus } from "@storytree/library/fixture";',
+    "import { x } from '@storytree/library';",
+    "const m = await import(`@storytree/library`);",
+  ]) {
+    assert.deepEqual(
+      unwitnessedTargets({
+        targets: [library, cli],
+        ownWitnesses: (t) => (t === cli ? ["packages/cli/src/cli.test.ts"] : []),
+        groupTestSources: new Map([["packages/cli/src/cli.test.ts", spelling]]),
+      }),
+      [],
+      spelling,
+    );
+  }
+});
+
+test("mutation-diff: a target with its OWN witness is never charged, referenced or not", () => {
+  assert.deepEqual(
+    unwitnessedTargets({
+      targets: [PROBE_UNTESTED],
+      ownWitnesses: () => ["packages/studio-members/src/zprobe.test.ts"],
+      groupTestSources: new Map(),
+    }),
+    [],
+  );
+});
+
+test("mutation-diff: referencesPackage matches the package or a subpath, never a longer name or an unquoted mention", () => {
+  assert.equal(referencesPackage('from "@storytree/library"', "@storytree/library"), true);
+  assert.equal(referencesPackage('from "@storytree/library/store"', "@storytree/library"), true);
+  assert.equal(referencesPackage('from "@storytree/library-extra"', "@storytree/library"), false);
+  assert.equal(referencesPackage('from "@storytree/libraryx/store"', "@storytree/library"), false);
+  assert.equal(referencesPackage("// see @storytree/library for the parser", "@storytree/library"), false);
+  // A quoted literal that merely EQUALS the name is not an import — the end-to-end probe of this fix
+  // went green on exactly that, a fixture's `project: "<pkg>"` field.
+  assert.equal(referencesPackage('const t = { project: "@storytree/library" };', "@storytree/library"), false);
+  assert.equal(referencesPackage('import "@storytree/library";', "@storytree/library"), true);
+  assert.equal(referencesPackage('const m = require( "@storytree/library" );', "@storytree/library"), true);
+  assert.equal(referencesPackage('export * from"@storytree/library";', "@storytree/library"), true);
+  assert.equal(referencesPackage('const t = reimport("@storytree/library");', "@storytree/library"), false);
+  assert.equal(referencesPackage(`from "@storytree/library'`, "@storytree/library"), false, "mismatched quotes are not a specifier");
+  assert.equal(referencesPackage('from "x@storytree/library"', "@storytree/library"), false);
+  // Regex metacharacters in a name are literal.
+  assert.equal(referencesPackage('from "a.b"', "a.b"), true);
+  assert.equal(referencesPackage('from "axb"', "a.b"), false);
+});
+
+test("mutation-diff: a narrowed PASS never claims EVERY mutant was killed", () => {
+  const lines = formatMutationVerdict(
+    "[mutation]",
+    { verdict: "pass", counted: 1, mutants: [], reasons: [], narrowings: ["NARROWED (BLIND): packages/x was mutated"] },
+    [TARGET],
+  ).split("\n");
+  assert.deepEqual(lines.slice(1), [
+    "[mutation] NARROWED (BLIND): packages/x was mutated",
+    "[mutation] PASS — every SCORED mutant in this branch's changed lines was killed by this branch's own tests; the NARROWED package(s) above were mutated but NOT scored, so nothing here proves their tests",
+  ]);
+});
+
+test("mutation-diff: a git-QUOTED non-ASCII path is read as its real path, not dropped (the seeded fault)", () => {
+  const diff = [
+    'diff --git "a/packages/cli/src/caf\\303\\251.ts" "b/packages/cli/src/caf\\303\\251.ts"',
+    '--- "a/packages/cli/src/caf\\303\\251.ts"',
+    '+++ "b/packages/cli/src/caf\\303\\251.ts"',
+    "@@ -1,0 +2,3 @@",
+    "+x",
+  ].join("\n");
+  assert.deepEqual(parseUnifiedDiffRanges(diff), [{ file: "packages/cli/src/café.ts", ranges: [{ start: 2, end: 4 }] }]);
+});
+
+test("mutation-diff: unquoteGitPath undoes git's C quoting, and leaves an unquoted path alone", () => {
+  assert.equal(unquoteGitPath("packages/cli/src/a.ts"), "packages/cli/src/a.ts");
+  assert.equal(unquoteGitPath('"b/caf\\303\\251.ts"'), "b/café.ts");
+  assert.equal(unquoteGitPath('"a\\tb\\"c\\\\d\\ne"'), 'a\tb"c\\d\ne');
+  assert.equal(unquoteGitPath('"\\a\\b\\v\\f\\r"'), "\x07\b\v\f\r");
+  // Raw non-ASCII inside quotes (core.quotePath=false quoting a path for another reason) survives.
+  assert.equal(unquoteGitPath('"é\\".ts"'), 'é".ts');
+  // A lone quote is not a quoted path.
+  assert.equal(unquoteGitPath('"'), '"');
+  assert.equal(unquoteGitPath('"abc'), '"abc');
+  assert.equal(unquoteGitPath('abc"'), 'abc"');
+  assert.equal(unquoteGitPath('""'), "");
+  // Whitespace is a character like any other — plain, or after a backslash git never emits but a
+  // reader must not drop.
+  assert.equal(unquoteGitPath('"my \\"odd\\" file.ts"'), 'my "odd" file.ts');
+  assert.equal(unquoteGitPath('"a\\ b"'), "a b");
 });
