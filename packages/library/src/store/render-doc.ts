@@ -288,13 +288,13 @@ export interface RenderDecisionContext {
 }
 
 /**
- * The card line a row renders under. A decision's is COMPUTED from its id and title (ADR-0609 D2) —
- * nothing stores it — and every other kind's is its authored `description`.
+ * The card line a row renders under. A decision's — any row whose id is `adr-NNNN`, the one thing
+ * that makes a row a decision — is COMPUTED from its id and title (ADR-0609 D2), since nothing stores
+ * it; every other row's is its authored `description`.
  */
-function descriptionOf(stored: StoredDoc, doc: unknown): string {
+function descriptionOf(stored: StoredDoc, doc: { description?: unknown }): string {
   const card = decisionCardLineOf(stored.id, doc);
-  if (card !== null && stored.kind === "adr") return card;
-  return asString((doc as { description?: unknown } | null)?.description);
+  return card === null ? asString(doc.description) : card;
 }
 
 export function renderStoredDoc(stored: StoredDoc, context?: RenderDecisionContext): RenderedAsset {
@@ -371,7 +371,7 @@ export function renderStoredDoc(stored: StoredDoc, context?: RenderDecisionConte
     id: knowledge.id ?? stored.id,
     category: stored.kind,
     title: asString(knowledge.title),
-    description: descriptionOf(stored, knowledge),
+    description: descriptionOf(stored, bag),
     body: renderBody(knowledge),
     fields: extractFields(knowledge),
     createdAt: stored.createdAt,
@@ -387,7 +387,7 @@ export function renderStoredDoc(stored: StoredDoc, context?: RenderDecisionConte
   // A decision's status is half stored, half derived (ADR-0609 D3): the row says proposed/accepted
   // (a legacy stored `superseded` reads as `accepted`, what its next write stores), and the context,
   // when given, says whether a decided record has since replaced it.
-  const decisionNumber = stored.kind === "adr" ? adrNumberOfArtifactId(stored.id) : null;
+  const decisionNumber = adrNumberOfArtifactId(stored.id);
   const storedStatus = storedDecisionStatusOf(typedEdges.status);
   if (decisionNumber !== null && storedStatus !== null) {
     asset.status =

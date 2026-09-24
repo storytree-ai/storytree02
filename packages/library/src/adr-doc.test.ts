@@ -396,3 +396,9 @@ test("adr-doc-fields-of-a-row-take-the-number-from-the-id: nothing stores it (AD
   // a pull renders a document the push will accept.
   assert.equal(adrDocumentFieldsOf("adr-0086", { body: "", status: "superseded" }).status, "accepted");
 });
+
+test("adr-doc-fields-of-a-row-with-no-readable-status-degrade-to-proposed: the least-committed value", () => {
+  assert.equal(adrDocumentFieldsOf("adr-0086", { body: "" }).status, "proposed");
+  assert.equal(adrDocumentFieldsOf("adr-0086", { body: "", status: "acepted" }).status, "proposed");
+  assert.equal(adrDocumentFieldsOf("adr-0086", { body: "", status: "proposed" }).status, "proposed");
+});

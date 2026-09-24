@@ -378,6 +378,17 @@ test("owner-grant-carries-settled-authority: increment, deciding ADR, owner prov
   const replacedStore = await seedAuthorityStore(new InMemoryStore());
   await replacedStore.upsertDoc({ id: "adr-0600", kind: "adr", doc: { status: "accepted", supersedes: [577] } });
   await expectRefusal(replacedStore, "deciding ADR has been superseded");
+  // The superseded question needs the whole decision log; a log that cannot be read refuses the
+  // grant with that reason rather than granting on a row that may have been replaced.
+  const logDown = await seedAuthorityStore(new InMemoryStore());
+  const before = (await ownerGrantEvents(logDown)).length;
+  const unreadableLog = await InnerLoopVerbs.recordNodeOwnerGrant(
+    logDown,
+    { getDoc: (id) => logDown.getDoc(id), queryDocs: () => Promise.reject(new Error("log-down")) },
+    validInput(),
+  );
+  assert.deepEqual(unreadableLog, { ok: false, reason: "decision log could not be read: log-down" });
+  assert.equal((await ownerGrantEvents(logDown)).length, before);
   // …and a PROPOSED replacer replaces nothing yet.
   const proposedReplacer = await seedAuthorityStore(new InMemoryStore());
   await proposedReplacer.upsertDoc({ id: "adr-0600", kind: "adr", doc: { status: "proposed", supersedes: [577] } });

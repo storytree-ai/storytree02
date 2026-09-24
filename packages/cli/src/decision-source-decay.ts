@@ -377,9 +377,10 @@ export function projectDecisionFacts(
       typeof doc === "object" && doc !== null
         ? storedDecisionStatusOf((doc as Record<string, unknown>)["status"])
         : null;
-    const number = adrNumberOfArtifactId(row.id);
+    // A row whose id is no decision id is in no supersedes edge, so NaN (a member of no set) reads it
+    // as exactly its stored half.
     const status =
-      stored === null ? "" : number === null ? stored : decisionStatusOf(number, stored, superseded);
+      stored === null ? "" : decisionStatusOf(adrNumberOfArtifactId(row.id) ?? Number.NaN, stored, superseded);
     const locations = new Map<string, SpanLocation>();
     for (const source of sources) {
       const text = readFile(source.file);

@@ -226,7 +226,8 @@ export async function recordNodeOwnerGrant(
   // checks pass — the whole decision log is the price of the one question a single row cannot answer.
   let replaced: boolean;
   try {
-    replaced = d.status === "accepted" && supersededDecisionNumbers(await authorityStore.queryDocs({ kind: "adr" })).has(adrNumberOfArtifactId(decisionId) ?? -1);
+    // Stryker disable next-line ObjectLiteral: EQUIVALENT — the kind filter only trims the read; `supersededDecisionNumbers` ignores every row whose id is not a decision id.
+    replaced = supersededDecisionNumbers(await authorityStore.queryDocs({ kind: "adr" })).has(adrNumberOfArtifactId(decisionId) ?? Number.NaN);
   } catch (error) { return { ok: false, reason: `decision log could not be read: ${errorMessage(error)}` }; }
   if (replaced) return { ok: false, reason: "deciding ADR has been superseded" };
   if (d.status !== "accepted" || !hasQuotedOwnerDirective(DecisionAuthority.safeParse(d.authority).success ? DecisionAuthority.parse(d.authority) : undefined)) return { ok: false, reason: "deciding ADR is not accepted with quoted owner authority" };

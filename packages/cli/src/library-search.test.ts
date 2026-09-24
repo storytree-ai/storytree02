@@ -411,3 +411,11 @@ test("`library related` carries its neighbour ids out, on both the hits and the 
   assert.equal(nothing.ok, true);
   assert.deepEqual(nothing.observedResultIds, []);
 });
+
+test("a decision's searchable card line is COMPUTED from its id and title; a stored copy is ignored (ADR-0609 D2)", () => {
+  const decision = toSearchDoc(row("adr-0609", "adr", { title: "Derive on read", description: "ADR-0609 — a stale copy" }));
+  assert.equal(decision.description, "ADR-0609 — Derive on read");
+  // Every other row keeps its authored line — and so does a row whose id is no decision id.
+  assert.equal(toSearchDoc(row("some-principle", "principle", { title: "P", description: "authored" })).description, "authored");
+  assert.equal(toSearchDoc(row("adr-x", "adr", { title: "X", description: "own line" })).description, "own line");
+});

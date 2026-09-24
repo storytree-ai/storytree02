@@ -532,3 +532,13 @@ test("an unreachable decision log ESCALATES rather than reporting a clean sweep"
     "and raising the ceiling cannot clear it",
   );
 });
+
+test("a decision's judged status is its stored half, derived superseded, or empty when unreadable (ADR-0609)", () => {
+  const statusOf = (rows: DecisionRow[], id: string): string | undefined =>
+    projectDecisionFacts(rows, () => undefined).find((f) => f.id === id)?.status;
+  assert.equal(statusOf([row("adr-0001", ACCEPTED)], "adr-0001"), ACCEPTED);
+  assert.equal(statusOf([row("adr-0001", ACCEPTED, { status: 42 })], "adr-0001"), "", "an unreadable status is never judged");
+  assert.equal(statusOf([row("adr-0001", "superseded")], "adr-0001"), ACCEPTED, "a legacy stored word with no replacer");
+  assert.equal(statusOf([row("adr-0001", ACCEPTED), row("adr-0002", ACCEPTED, { supersedes: [1] })], "adr-0001"), "superseded");
+  assert.equal(statusOf([row("not-a-decision", ACCEPTED)], "not-a-decision"), ACCEPTED);
+});

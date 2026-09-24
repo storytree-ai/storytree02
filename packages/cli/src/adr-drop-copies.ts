@@ -18,9 +18,9 @@ import type { Envelope } from "./envelope.js";
  * `batch-migrate.ts` re-upserts WHOLE documents it read at the start of a long scan, so a concurrent
  * session's edit landing in between is silently reverted (ADR-0352's lost update) — and it only
  * touches rows whose schema version moves, which this change deliberately does not bump. Here every
- * row goes through the store's FIELD-SCOPED write: the three keys are named, merged onto whatever
- * the row holds AT THAT MOMENT under the row lock, and the merged doc is validated through the same
- * `upcastAndValidate` every other writer uses. A sibling's edit to any other field survives.
+ * row goes through the store's FIELD-SCOPED write with no fields at all: whatever the row holds AT
+ * THAT MOMENT, under the row lock, is re-written through the same `upcastAndValidate` every other
+ * writer uses, and that boundary is what strips the copies. A sibling's edit to any field survives.
  *
  * ## IT REFUSES BEFORE IT WRITES ANYTHING IF A STORED `superseded` HAS NO REPLACER
  *
@@ -106,30 +106,21 @@ export async function adrDropCopies(deps: AdrDropCopiesDeps): Promise<Envelope> 
   }
 
   const actor = deps.actor ?? defaultCliActor();
-  let dropped = 0;
-  const vanished: string[] = [];
   for (const row of carrying) {
-    // Named keys, merged under the row lock: `undefined` DELETES a key (mergeFields), and a stored
-    // `superseded` becomes the authored half it always stood on. `upcastAndValidate` then strips the
-    // same three again as the boundary does for every write — belt and braces, one rule.
-    const fields: Record<string, unknown> = { number: undefined, description: undefined };
-    if ((row.doc as Record<string, unknown>)["status"] === "superseded") fields["status"] = "accepted";
-    const written = await deps.store.patchDoc({
-      id: row.id,
-      fields,
-      actor,
-      validate: (merged) => upcastAndValidate(merged),
-    });
-    if (written === null) vanished.push(row.id);
-    else dropped += 1;
+    // An EMPTY field-scoped patch: the row is merged onto itself under the row lock and re-written
+    // through `upcastAndValidate`, whose `stripDerivedDecisionFields` is the one rule that removes the
+    // three copies (and turns a stored `superseded` into `accepted`). Naming the keys here as well
+    // would be a second copy of that rule — the very shape ADR-0609 retires.
+    await deps.store.patchDoc({ id: row.id, fields: {}, actor, validate: (merged) => upcastAndValidate(merged) });
   }
 
+  // The re-read is the verdict, not the loop: a row a concurrent writer on pre-0609 code rewrote
+  // mid-run, or one that vanished, shows up here rather than in a count the loop could only assume.
   const after = (await deps.store.queryDocs({ kind: "adr" })).filter((r) => storedCopiesOf(r.doc).length > 0);
   return {
     ok: after.length === 0,
     body: [
-      `dropped the stored copies from ${String(dropped)} decision row(s) (${summary}).`,
-      ...(vanished.length > 0 ? [`${String(vanished.length)} row(s) disappeared mid-run and were skipped: ${vanished.join(", ")}`] : []),
+      `re-wrote ${String(carrying.length)} decision row(s) through the write boundary (${summary}).`,
       after.length === 0
         ? "Re-read: no decision row stores a copy any more."
         : `Re-read: ${String(after.length)} row(s) STILL store a copy (${after.map((r) => r.id).join(", ")}) — a concurrent writer on old code? Re-run.`,

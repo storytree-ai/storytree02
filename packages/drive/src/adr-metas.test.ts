@@ -270,6 +270,15 @@ test("a legacy stored `superseded` with no replacer reads as accepted — the ed
   assert.equal(adrs[0]?.status, "accepted");
 });
 
+test("a row whose status cannot be read is a PARSE ERROR, not a decision with an invented status", async () => {
+  const store = new InMemoryStore();
+  await seedDecision(store, 400, { status: "acepted" });
+  await seedDecision(store, 401);
+  const { adrs, parseErrors } = await loadTitledAdrMetasFromStore(store);
+  assert.deepEqual(parseErrors, ['adr-0400: unreadable status "acepted"']);
+  assert.deepEqual(adrs.map((a) => a.number), [401]);
+});
+
 test("stored number and description copies get no say: the id and title are the one source", async () => {
   const store = new InMemoryStore();
   await seedDecision(store, 300, { number: 999, description: "ADR-0999 — a stale copy" });

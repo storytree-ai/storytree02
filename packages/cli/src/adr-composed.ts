@@ -72,7 +72,7 @@ interface DecisionRowOptional {
  */
 export function decisionRowsOf(docs: readonly StoredDoc[]): DecisionRow[] {
   const rows: DecisionRow[] = [];
-  const superseded = supersededDecisionNumbers(docs.filter((d) => d.kind === "adr"));
+  const superseded = supersededDecisionNumbers(docs);
   for (const stored of docs) {
     if (stored.kind !== "adr") continue;
     const doc = stored.doc as Record<string, unknown>;
@@ -148,8 +148,9 @@ export function composedReadingsFor(
 ): ComposedStatementReading[] {
   const statements = composedStatementsOf(doc);
   if (statements.length === 0) return [];
-  const id = typeof doc === "object" && doc !== null ? (doc as Record<string, unknown>)["id"] : undefined;
-  const number = typeof id === "string" ? adrNumberOfArtifactId(id) : null;
+  // A doc carrying statements is an object (`composedStatementsOf` returned [] otherwise), and its
+  // number is its id's (ADR-0609 D1). `String` makes an absent id the non-decision it is.
+  const number = adrNumberOfArtifactId(String((doc as Record<string, unknown>)["id"]));
   if (number === null) return [];
   return readComposedStatements(statements, chainFingerprints(number, rows));
 }
@@ -405,6 +406,7 @@ function composeIndex(rows: readonly StoredDoc[], decisions: readonly DecisionRo
   const composed: ComposedIndexRow[] = [];
   for (const stored of rows) {
     const number = adrNumberOfArtifactId(stored.id);
+    // Stryker disable next-line ConditionalExpression,EqualityOperator: EQUIVALENT — a row whose id is not a decision id yields no readings (`composedReadingsFor` returns [] for it), so the loop below pushes nothing either way; this guard exists to narrow `number` for the push.
     if (number === null) continue;
     for (const reading of composedReadingsFor(stored.doc, decisions)) {
       composed.push({

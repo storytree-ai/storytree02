@@ -66,6 +66,12 @@ function stringField(doc: Record<string, unknown>, key: string): string | undefi
   return typeof v === "string" && v !== "" ? v : undefined;
 }
 
+/** A decision's card line is computed from its id and title (ADR-0609 D2); every other row's is authored. */
+function descriptionOf(row: StoredDoc, doc: Record<string, unknown>): string | undefined {
+  const card = decisionCardLineOf(row.id, doc);
+  return card === null ? stringField(doc, "description") : card;
+}
+
 /** Collect every outbound pointer on one stored document, tagged with the field that authored it. */
 function refsOf(doc: Record<string, unknown>): DocRef[] {
   const refs: DocRef[] = [];
@@ -109,7 +115,7 @@ export function toSearchDoc(row: StoredDoc): LibrarySearchDoc {
     title: stringField(doc, "title"),
     // A decision's card line is computed from its id and title (ADR-0609 D2) — nothing stores it,
     // and its `ADR-NNNN` token is what lets a search for the number find the record.
-    description: (row.kind === "adr" ? decisionCardLineOf(row.id, doc) : null) ?? stringField(doc, "description"),
+    description: descriptionOf(row, doc),
     body: prose === "" ? stringField(doc, "body") : prose,
     refs: refsOf(doc),
   };

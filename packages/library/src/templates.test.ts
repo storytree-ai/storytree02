@@ -101,3 +101,10 @@ test("template-adr scaffolds no retired edge — `amends` was removed from the s
     "template-adr still requires the in-place annotation the retired edge used to oblige",
   );
 });
+
+test("template-adr teaches that superseded is DERIVED from the replacer's edge, never written (ADR-0609 D3)", () => {
+  const adr = libraryTemplates().find((t) => t.id === "template-adr");
+  assert.ok(adr !== undefined);
+  assert.match(adr.body, /the target READS as `superseded` from this edge alone — nothing is flipped and no row stores the word \(ADR-0609 D3\)/);
+  assert.match(adr.body, /The field stores only `proposed` \/ `accepted`; `superseded` is derived from the replacing decision's `supersedes` edge \(ADR-0609 D3\)/);
+});

@@ -127,3 +127,53 @@ test("render-computes-a-decisions-card-line-and-status: stored copies are ignore
   assert.equal(renderStoredDoc(stored, { supersededDecisions: new Set([86]) }).status, "superseded");
   assert.equal(renderStoredDoc(stored, { supersededDecisions: new Set() }).status, "accepted");
 });
+
+test("derived helpers are TOTAL over malformed rows: a missing or non-object doc is skipped, never thrown", () => {
+  assert.equal(storedDecisionStatusOf("accepted"), "accepted");
+  // A replacer with no `supersedes` key, and rows whose doc is not an object at all.
+  const set = supersededDecisionNumbers([
+    row(70, { status: "accepted" }),
+    { id: "adr-0071", doc: null },
+    { id: "adr-0072", doc: "accepted" },
+    { id: "adr-0073", doc: undefined },
+    row(74, { status: "accepted", supersedes: [70] }),
+  ]);
+  assert.deepEqual([...set], [70]);
+  // A card line survives a doc that is not an object, or a title that is not a string.
+  assert.equal(decisionCardLineOf("adr-0070", null), "ADR-0070 — adr-0070");
+  assert.equal(decisionCardLineOf("adr-0070", "a string doc"), "ADR-0070 — adr-0070");
+  assert.equal(decisionCardLineOf("adr-0070", { title: 42 }), "ADR-0070 — adr-0070");
+});
+
+test("the write-boundary strip keeps a proposal proposed: only a stored `superseded` is rewritten", () => {
+  assert.equal(stripDerivedDecisionFields({ kind: "adr", status: "proposed", number: 1 })["status"], "proposed");
+  assert.equal(stripDerivedDecisionFields({ kind: "adr", status: "accepted" })["status"], "accepted");
+});
+
+test("render derives by the ID alone, and leaves every non-decision row's own fields standing", () => {
+  const base = { createdAt: "2026-09-24T00:00:00Z", updatedAt: "2026-09-24T00:00:00Z" };
+  const doc = (extra: Record<string, unknown>) => ({ schemaVersion: 9, title: "T", ...base, ...extra });
+  const context = { supersededDecisions: new Set([1, 86]) };
+  // A non-decision keeps its authored card line and its status, context or not — even a status word
+  // a decision could carry.
+  const inc = renderStoredDoc(
+    { id: "inc-1", kind: "increment", doc: doc({ kind: "increment", id: "inc-1", description: "authored", status: "superseded" }), ...base },
+    context,
+  );
+  assert.equal(inc.description, "authored");
+  assert.equal(inc.status, "superseded");
+  // A decision whose stored status is unreadable is passed through as stored, never replaced by a
+  // derived value built on nothing.
+  const bogus = renderStoredDoc(
+    { id: "adr-0086", kind: "adr", doc: doc({ kind: "adr", id: "adr-0086", body: "b", status: "bogus" }), ...base },
+    context,
+  );
+  assert.equal(bogus.status, "bogus");
+  // A row filed as `adr` whose id is no decision id is not a decision: its own description stands.
+  const odd = renderStoredDoc(
+    { id: "adr-x", kind: "adr", doc: doc({ kind: "adr", id: "adr-x", body: "b", description: "own line", status: "accepted" }), ...base },
+    context,
+  );
+  assert.equal(odd.description, "own line");
+  assert.equal(odd.status, "accepted");
+});
