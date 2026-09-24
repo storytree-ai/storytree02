@@ -43,12 +43,12 @@ export async function createCodexReplicaActivityReader(input: {
     return result;
   }
 
-  async function filesIn(replica: string): Promise<ReplicaFiles | undefined> {
+  async function filesIn(replica: string): Promise<ReplicaFiles> {
     const found = new Map<string, Date>();
 
-    async function visit(directory: string, relativeDirectory: string): Promise<boolean> {
+    async function visit(directory: string, relativeDirectory: string): Promise<void> {
       const entries = await absentOnEnoent(() => fs.readdir(directory, { withFileTypes: true }));
-      if (entries === undefined) return false;
+      if (entries === undefined) return;
 
       for (const entry of entries) {
         if (EXCLUDED_PARTS.has(entry.name)) continue;
@@ -56,31 +56,30 @@ export async function createCodexReplicaActivityReader(input: {
         const absolute = path.join(directory, entry.name);
         const stat = await absentOnEnoent(() => fs.lstat(absolute));
         if (stat === undefined) continue;
-        if (stat.isSymbolicLink()) continue;
 
         if (stat.isDirectory()) {
           await visit(absolute, relative);
           continue;
         }
-        if (!stat.isFile() || !SOURCE_ROOTS.has(relative.split("/", 1)[0] ?? "")) continue;
+        if (!stat.isFile() || !SOURCE_ROOTS.has(relative.split("/", 1)[0]!)) continue;
         if (includes(relative)) found.set(relative, stat.mtime);
       }
-      return true;
     }
 
-    return (await visit(replica, "")) ? found : undefined;
+    await visit(replica, "");
+    return found;
   }
 
-  async function discover(): Promise<Map<string, ReplicaFiles | undefined>> {
+  async function discover(): Promise<Map<string, ReplicaFiles>> {
     const entries = await absentOnEnoent(() => fs.readdir(replicaParent, { withFileTypes: true }));
-    const current = new Map<string, ReplicaFiles | undefined>();
+    const current = new Map<string, ReplicaFiles>();
     if (entries === undefined) return current;
 
     for (const entry of entries) {
-      if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
+      if (!entry.isDirectory()) continue;
       const replica = path.join(replicaParent, entry.name);
       const stat = await absentOnEnoent(() => fs.lstat(replica));
-      if (stat === undefined || !stat.isDirectory() || stat.isSymbolicLink()) continue;
+      if (stat === undefined || !stat.isDirectory()) continue;
       current.set(replica, await filesIn(replica));
     }
     return current;
@@ -88,22 +87,18 @@ export async function createCodexReplicaActivityReader(input: {
 
   // Creation is itself an observation boundary, so pre-existing copies are always quiet.
   for (const [replica, files] of await discover()) {
-    if (files !== undefined) replicas.set(replica, files);
+    replicas.set(replica, files);
   }
 
   return async (): Promise<Date | undefined> => {
     const current = await discover();
-    let newest: Date | undefined;
+    let newestMs: number | undefined;
 
     for (const replica of replicas.keys()) {
-      if (!current.has(replica) || current.get(replica) === undefined) replicas.delete(replica);
+      if (!current.has(replica)) replicas.delete(replica);
     }
 
     for (const [replica, files] of current) {
-      if (files === undefined) {
-        replicas.delete(replica);
-        continue;
-      }
       const previous = replicas.get(replica);
       if (previous === undefined) {
         replicas.set(replica, files);
@@ -112,11 +107,14 @@ export async function createCodexReplicaActivityReader(input: {
 
       for (const [relative, mtime] of files) {
         const prior = previous.get(relative);
-        if (prior !== undefined && mtime > prior && (newest === undefined || mtime > newest)) newest = mtime;
+        if (prior === undefined) continue;
+        const observedMs = mtime.getTime();
+        if (observedMs <= prior.getTime()) continue;
+        newestMs = newestMs === undefined ? observedMs : Math.max(newestMs, observedMs);
       }
       replicas.set(replica, files);
     }
 
-    return newest;
+    return newestMs === undefined ? undefined : new Date(newestMs);
   };
 }
