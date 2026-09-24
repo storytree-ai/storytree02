@@ -58,6 +58,18 @@ const REMOVED = `test("add-sums: two and three make five", () => {
   assert.equal(add(2, 3), 5);
 });`;
 
+/** Mutually exclusive declarations still both exist in the static source read, with the same title path. */
+const CONDITIONAL_DUPLICATES = `const usePrimary = true;
+if (usePrimary) {
+  test("conditional duplicate: records the primary branch", () => {
+    assert.equal(add(2, 3), 5);
+  });
+} else {
+  test.skip("conditional duplicate: records the primary branch", () => {
+    assert.equal(add(-1, 1), 0);
+  });
+}`;
+
 const readTests = (source: string): BaselineTest[] => declaredTestsOf(source, FILE);
 
 function review(before: string, after: string): ReturnType<typeof reviewTestChanges> {
@@ -79,6 +91,42 @@ describe("an-existing-test-change-is-recorded-with-its-reason: what the test-wri
     // Adding a NEW test is not a change to an existing one either — that is the per-test review's subject.
     const withNew = review(SOURCE(KEPT), SOURCE(`${KEPT}\n\ntest("add-zero: zero and zero make zero", () => {\n  assert.equal(add(0, 0), 0);\n});`));
     assert.deepEqual(withNew.changes, []);
+  });
+
+  test("duplicate-test-title-change-record-is-occurrence-aware: pairs repeated conditional title paths by source-order occurrence", () => {
+    const before = SOURCE(CONDITIONAL_DUPLICATES);
+
+    const unchanged = review(before, before);
+    assert.deepEqual(unchanged.changes, [], "unchanged duplicate declarations are not updates");
+    assert.deepEqual(unchanged.findings, [], "unchanged duplicate declarations produce no C8 finding");
+
+    const oneOccurrenceChanged = before.replace(
+      "assert.equal(add(-1, 1), 0);",
+      "assert.equal(add(-1, 1), 1);",
+    );
+    const updated = review(before, oneOccurrenceChanged);
+    assert.deepEqual(
+      updated.changes.map((change) => [change.kind, change.test, change.reason]),
+      [["updated", ["conditional duplicate: records the primary branch"], undefined]],
+      "only the changed duplicate occurrence is recorded",
+    );
+    assert.equal(updated.findings.length, 1, "the changed occurrence still needs its own reason");
+    assert.equal(updated.findings[0]?.check, "C8");
+
+    const oneOccurrenceRemoved = SOURCE(`const usePrimary = true;
+if (usePrimary) {
+  test("conditional duplicate: records the primary branch", () => {
+    assert.equal(add(2, 3), 5);
+  });
+}`);
+    const removed = review(before, oneOccurrenceRemoved);
+    assert.deepEqual(
+      removed.changes.map((change) => [change.kind, change.test, change.reason]),
+      [["removed", ["conditional duplicate: records the primary branch"], undefined]],
+      "the surviving duplicate does not hide its removed sibling",
+    );
+    assert.equal(removed.findings.length, 1, "the removed occurrence still needs its own reason");
+    assert.equal(removed.findings[0]?.check, "C8");
   });
 
   test("a rewritten test with no stated reason is recorded AND handed back, naming how to say why", () => {
