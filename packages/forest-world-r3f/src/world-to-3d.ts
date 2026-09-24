@@ -153,6 +153,7 @@ export type InstanceKind =
   | 'trail-ghost-strip'
   | 'cave-arch'
   | 'wisp-sprite'
+  | 'coverage-flora'
   | 'uat-bloom'
   | 'uat-bud'
   | 'uat-wilt';
@@ -294,8 +295,19 @@ export interface SkippedDescriptor {
   sceneKind: string;
 }
 
+/** A core coverage-flora wrapper transported into the 3D descriptor layer. */
+export interface CoverageFloraDescriptor extends Omit<InstanceDescriptor, 'kind' | 'group' | 'material' | 'island'> {
+  kind: 'coverage-flora';
+  group: 'coverage-flora';
+  capability: string;
+  island: string;
+  material: string;
+  theme: string;
+  floraScale: number;
+}
+
 /** The discriminated union returned by `worldTo3D`. Discriminant: `kind`. */
-export type Descriptor3D = InstanceDescriptor | SkippedDescriptor;
+export type Descriptor3D = InstanceDescriptor | CoverageFloraDescriptor | SkippedDescriptor;
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -565,6 +577,34 @@ function walkNode(
       // step with the canvas, which is `comparison-baseline-moves-under-the-page` exactly.
       out.push({ kind: 'skipped', sceneKind: kind });
       break;
+
+    case 'parcel-flora': {
+      // Coverage flora is semantic transport, not SVG recovery: the core carries the capability,
+      // absolute ground anchor, theme, status, and scale on the wrapper itself. A malformed
+      // wrapper is visible to callers as a skip rather than guessed from its drawing transform.
+      if (
+        node.id === undefined ||
+        node.status === undefined ||
+        node.theme === undefined ||
+        node.groundAnchor === undefined ||
+        node.floraScale === undefined ||
+        island === undefined
+      ) {
+        out.push({ kind: 'skipped', sceneKind: kind });
+        break;
+      }
+      out.push({
+        kind: 'coverage-flora',
+        transform: { x: node.groundAnchor.x, y: 0, z: node.groundAnchor.y },
+        group: 'coverage-flora',
+        capability: node.id,
+        island,
+        material: node.status,
+        theme: node.theme,
+        floraScale: node.floraScale,
+      });
+      break;
+    }
 
     case 'tall-flower-proven':
     case 'tall-flower-pending':
