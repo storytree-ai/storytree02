@@ -3362,7 +3362,7 @@ const PROBE_TESTED: MutationTarget = {
   mutateGlobs: ["packages/notice-board/src/xprobe.ts:1-3"],
   sourceFiles: ["packages/notice-board/src/xprobe.ts"],
 };
-const XPROBE_TEST = 'import { xprobe } from "./xprobe.js";\ntest("x", () => xprobe(1));\n';
+const XPROBE_TEST = 'import { xprobe } from "./xprobe.js";';
 
 test("mutation-diff: an untested package is NOT witnessed by another package's test in the same run (the seeded fault)", () => {
   // Run 2 of the probe: studio-members' new code has no test, notice-board's has one. The group check
@@ -3377,6 +3377,20 @@ test("mutation-diff: an untested package is NOT witnessed by another package's t
     groupTestSources: new Map([["packages/notice-board/src/xprobe.test.ts", XPROBE_TEST]]),
   });
   assert.deepEqual(unwitnessed, [PROBE_UNTESTED]);
+});
+
+test("mutation-diff: ONE referencing test in the run is enough — the others need not import the package", () => {
+  assert.deepEqual(
+    unwitnessedTargets({
+      targets: [PROBE_UNTESTED, PROBE_TESTED],
+      ownWitnesses: (t) => (t === PROBE_TESTED ? ["packages/notice-board/src/xprobe.test.ts"] : []),
+      groupTestSources: new Map([
+        ["packages/notice-board/src/xprobe.test.ts", XPROBE_TEST],
+        ["packages/notice-board/src/other.test.ts", 'import { zprobe } from "@storytree/studio-members";'],
+      ]),
+    }),
+    [],
+  );
 });
 
 test("mutation-diff: PR #1727's cross-package case stays on the ADR-0483 BLIND path — a test that IMPORTS the package witnesses it", () => {

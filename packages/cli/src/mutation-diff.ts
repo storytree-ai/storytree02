@@ -500,18 +500,22 @@ export function unwitnessedTargets(input: {
   );
 }
 
-/** git's single-character escapes inside a quoted path. */
-const GIT_ESCAPES: Readonly<Record<string, string>> = {
-  a: "\x07",
-  b: "\b",
-  t: "\t",
-  n: "\n",
-  v: "\v",
-  f: "\f",
-  r: "\r",
-  '"': '"',
-  "\\": "\\",
-};
+/**
+ * git's single-letter escapes inside a quoted path. `\"` and `\\` stand for themselves, so they
+ * need no entry: an escape with no entry here is read as the character it escapes.
+ */
+const GIT_ESCAPES = new Map([
+  ["a", "\x07"],
+  ["b", "\b"],
+  ["t", "\t"],
+  ["n", "\n"],
+  ["v", "\v"],
+  ["f", "\f"],
+  ["r", "\r"],
+]);
+
+/** One token of a quoted path: a three-digit octal byte, a backslash escape, or a plain character. */
+const GIT_QUOTED_TOKEN = /\\([0-7]{3})|\\([\s\S])|[\s\S]/gu;
 
 /**
  * Undo git's C-style path quoting: `"b/caf\303\251.ts"` → `b/café.ts`.
@@ -524,24 +528,15 @@ const GIT_ESCAPES: Readonly<Record<string, string>> = {
  */
 export function unquoteGitPath(raw: string): string {
   if (!(raw.length >= 2 && raw.startsWith('"') && raw.endsWith('"'))) return raw;
-  const chars = Array.from(raw.slice(1, -1));
+  // Octal escapes are BYTES of the path's UTF-8 encoding, so the path is rebuilt as bytes and decoded
+  // once — a multi-byte character arrives as two or three separate escapes.
+  const encoder = new TextEncoder();
   const bytes: number[] = [];
-  let i = 0;
-  while (i < chars.length) {
-    const ch = chars[i] ?? "";
-    const octal = ch === "\\" ? /^[0-7]{3}/.exec(chars.slice(i + 1, i + 4).join("")) : null;
-    if (octal !== null) {
-      bytes.push(Number.parseInt(octal[0], 8));
-      i += 4;
-    } else if (ch === "\\") {
-      bytes.push(...new TextEncoder().encode(GIT_ESCAPES[chars[i + 1] ?? ""] ?? "\\"));
-      i += 2;
-    } else {
-      bytes.push(...new TextEncoder().encode(ch));
-      i += 1;
-    }
+  for (const [token, octal, escaped] of raw.slice(1, -1).matchAll(GIT_QUOTED_TOKEN)) {
+    if (octal !== undefined) bytes.push(Number.parseInt(octal, 8));
+    else bytes.push(...encoder.encode(escaped === undefined ? token : (GIT_ESCAPES.get(escaped) ?? escaped)));
   }
-  return new TextDecoder().decode(new Uint8Array(bytes));
+  return new TextDecoder().decode(Uint8Array.from(bytes));
 }
 
 /**
