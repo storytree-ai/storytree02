@@ -59,8 +59,9 @@ deterministic placement/dedupe and carries no authored-criterion claim.
 
 The valid-input boundary is the existing public layout's: a finite, already-laid-out frame; unique
 published story and capability ids; each island's centre/tree spot/label baseline expressed in that
-same plan ground basis; a non-negative integer ring count and positive finite ground radius; and dependencies limited to the published
-snapshot facts. The composer does not repair an invalid layout or discover missing public facts.
+same plan ground basis; a non-negative integer ring count and positive finite ground radius; and
+dependencies limited to the published snapshot facts. The composer does not repair an invalid layout
+or discover missing public facts.
 
 Its output is one `SceneInput` that preserves that frame and, per supplied island, preserves the
 centre, ground radius, tree spot, label baseline, plate and title. It declares
