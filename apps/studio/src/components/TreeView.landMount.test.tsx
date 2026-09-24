@@ -1,22 +1,19 @@
 // @vitest-environment jsdom
 //
-// TreeView.landMount.test.tsx — `?landMount=1` puts the 3D land UNDER the working map, and the map
-// keeps everything it had.
+// TreeView.landMount.test.tsx — the 3D land sits UNDER the working map, always (ADR-0608 D1: the
+// mounted land IS the forest; the `?landMount` / `?landMountProps` flag retired with the flat look),
+// and the map keeps every interaction it had.
 //
-// ⚠⚠ THIS SUITE IS THE Z-ORDER SETTLEMENT, IN ASSERTIONS. "On the land" was undefined above a
-// canvas, and the answer this increment takes is structural rather than configured: the land layer
-// is the FIRST child of `.world-pan-layer` and the `<svg>` follows it, nothing in that stack sets a
-// `z-index`, so paint order is DOM order and every mark the map draws is above the land
-// unconditionally. That is only true while the ORDERING is true, so the ordering is what is
-// asserted — not a z-index, which would be a second rule able to disagree with the first.
+// ⚠⚠ THIS SUITE IS THE Z-ORDER SETTLEMENT, IN ASSERTIONS. The land layer is the FIRST child of
+// `.world-pan-layer` and the `<svg>` follows it, and the stylesheet states the paint order
+// explicitly (DOM order alone is NOT paint order here — see the z-order case below).
 //
 // ⚠ AND THE SECOND HALF IS THAT THE MAP IS NOT TOUCHED. A mount that quietly cost the map its
 // keyboard camera, its accessible name or its hit targets would satisfy "the land is mounted" and
-// fail the increment. Each is asserted against the SAME assertion in the flag-off arm, so a
-// regression shows up as a difference between the two arms rather than as a number someone has to
-// recognise.
+// fail the map. There is no flag-off arm to compare against any more, so each is asserted directly.
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { useEffect } from 'react';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { act, render, cleanup, fireEvent, within } from '@testing-library/react';
@@ -30,15 +27,14 @@ import {
   markAct2IntroArrived,
   useAct2Intro,
   useStableForestRegrowLayer,
-  useStableVegetationLayer,
   type Act2IntroPlayer,
 } from './act2Intro';
-import type { LandCanvasPhase } from '../lib/landViewStatus';
+import type { LandCanvasPhase, LandMountStatus } from '../lib/landViewStatus';
 
 // Two stories with a declared edge between them — a slightly more honest forest than one story, and
 // more markup for the byte-identity test to compare. ⚠ It does NOT make trails appear in this
-// suite: jsdom lays nothing out, so nothing is routed and `[data-edges]` is 0 in both arms
-// regardless (measured). Edge counts are asserted in the browser capture, not here.
+// suite: jsdom lays nothing out, so nothing is routed and `[data-edges]` is 0 regardless
+// (measured). Edge counts are asserted in the browser capture, not here.
 const TREE_PAYLOAD = {
   stories: [
     {
@@ -149,48 +145,43 @@ function readStudioCss(): string {
   );
 }
 
-/**
- * THE GROUND-SUPPRESSION RULE, matched precisely.
- *
- * ⚠ A LOOSE `\.world-pan-layer\.has-land-mount[^{]*\{` PATTERN IS WRONG AND WAS MEASURED WRONG:
- * three rules now share that prefix (this one, and the two that order the z-stack), so the loose
- * form matched whichever came first in the file and asserted the wrong block's properties. It is
- * anchored on the two ground-layer classes it is ABOUT.
- */
-interface CssRule {
-  /** Everything before the `{` — the selector list. */
-  readonly selector: string;
-  /** Everything between the braces — the declarations. */
-  readonly body: string;
-}
-
-function groundSuppressionRule(css: string): CssRule {
-  const m = /(\.world-pan-layer\.has-land-mount\s+\.hex-coastland[\s\S]*?)\{([^}]*)\}/.exec(css);
-  if (m === null) throw new Error('the ground-suppression rule was not found in the studio stylesheet');
-  return { selector: m[1]!, body: m[2]! };
+/** A stand-in mount that reports one settled status, so a test can hold the land's state fixed. */
+function reportingMount(status: LandMountStatus): Partial<StudioSurfaces> {
+  return {
+    LandViewMount: ({ onStatus }) => {
+      useEffect(() => {
+        onStatus?.(status);
+      }, [onStatus]);
+      return <div data-testid="land-mount" aria-hidden="true" />;
+    },
+  };
 }
 
 describe('the land under the working map', () => {
-  it('is ABSENT by default — the map route is the one that shipped', async () => {
-    const container = await renderTreeAt('');
-    expect(container.querySelector('[data-testid="land-mount"]')).toBeNull();
-    const pan = container.querySelector('.world-pan-layer')!;
-    expect(pan.classList.contains('has-land-mount')).toBe(false);
-    // ⚠ The SVG is still the pan layer's FIRST child when the flag is off — so the closed state is
-    // pinned as hard as the open one, and "the land layer went in" is a visible difference.
-    expect(pan.firstElementChild!.tagName.toLowerCase()).toBe('svg');
-  });
-
-  it('does not open on a near miss, so the renderer chunk is never fetched by accident', async () => {
-    for (const miss of ['?landMount=0', '?landmount=1', '?landMount=', '?landView=1']) {
-      const container = await renderTreeAt(miss);
-      expect(container.querySelector('[data-testid="land-mount"]')).toBeNull();
+  it('is mounted on the clean route, drawing its props — no query opens or closes it', async () => {
+    // ADR-0608 D1: the mounted land is the forest, so it is unconditional. The retired flag's own
+    // values — including the old OFF spelling — neither gate nor configure it any more.
+    for (const search of ['', '?landMount=0', '?landMountProps=0']) {
+      const mountInputs: LandViewMountProps[] = [];
+      const surfaces: Partial<StudioSurfaces> = {
+        LandViewMount: (props) => {
+          mountInputs.push(props);
+          return <LandViewMount {...props} />;
+        },
+      };
+      const container = await renderTreeAt(search, surfaces);
+      expect(container.querySelector('[data-testid="land-mount"]'), `mounted at ${search || '(clean)'}`).toBeTruthy();
+      expect(mountInputs.length).toBeGreaterThan(0);
+      expect(mountInputs.at(-1)!.drawProps, `props drawn at ${search || '(clean)'}`).toBe(true);
+      const pan = container.querySelector('.world-pan-layer')!;
+      // The retired flag's scoping class is gone: the pan layer carries no mode.
+      expect(pan.className).toBe('world-pan-layer');
       cleanup();
     }
   });
 
   it('mounts INSIDE the pan layer and BEFORE the SVG — which is the whole z-order settlement', async () => {
-    const container = await renderTreeAt('?landMount=1');
+    const container = await renderTreeAt('');
     const pan = container.querySelector('.world-pan-layer')!;
     const layer = container.querySelector('[data-testid="land-mount"]')!;
     const svg = container.querySelector('svg.world-scene')!;
@@ -204,29 +195,6 @@ describe('the land under the working map', () => {
     // BEFORE the SVG: the land paints under every mark the map draws.
     expect(pan.firstElementChild).toBe(layer);
     expect(layer.compareDocumentPosition(svg) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-
-    expect(pan.classList.contains('has-land-mount')).toBe(true);
-  });
-
-  it('suppresses the ground LAYERS the stylesheet names, and nothing above them', async () => {
-    // ⚠⚠ THIS TEST EXISTS BECAUSE THE FIRST CUT OF THE RULE MATCHED NOTHING. It named
-    // `.coast-fill-group` / `.relaxed-tile` — real classes, wrong grain (they are the per-island
-    // groups inside these layers). So the tie between the STYLESHEET and the DOM is asserted
-    // directly: every class the suppression rule names must be a class this map actually renders.
-    const container = await renderTreeAt('?landMount=1');
-    const svg = container.querySelector('svg.world-scene')!;
-    const { selector } = groundSuppressionRule(readStudioCss());
-    const named = [...selector.matchAll(/\.has-land-mount\s+\.([a-z-]+)/g)].map((m) => m[1]!);
-    expect(named.length).toBeGreaterThan(0);
-    for (const cls of named) {
-      expect(svg.querySelector(`.${cls}`), `the rule names .${cls}; the map must draw it`).toBeTruthy();
-    }
-    // And it must not reach the flora layer, which carries every mark the legend describes — the
-    // crowns, the flora beds, the nameplates, the signposts and all five wisp families.
-    expect(named).not.toContain('flora-layer');
-    for (const above of ['hex-flora', 'garden-flora', 'story-tree', 'trail-net', 'world-wisp']) {
-      expect(named).not.toContain(above);
-    }
   });
 
   it('holds no map mark itself — it cannot, because it holds no SVG', async () => {
@@ -234,69 +202,53 @@ describe('the land under the working map', () => {
     // vacuously satisfied by any payload that happens not to draw them (this one draws no wisps),
     // which is precisely the green check that verifies nothing. The land layer contains the canvas
     // and nothing else, so no mark the map draws CAN be in it.
-    const container = await renderTreeAt('?landMount=1');
+    const container = await renderTreeAt('');
     const layer = container.querySelector('[data-testid="land-mount"]')!;
     expect(layer.querySelector('svg')).toBeNull();
     expect(layer.querySelector('[data-story-id]')).toBeNull();
     expect(layer.querySelector('[data-cap-id]')).toBeNull();
     // The map's own marks are in the SVG, which follows this layer — so they paint above it.
     const svg = container.querySelector('svg.world-scene')!;
-    expect(svg.querySelector('.trail-net')).toBeTruthy();
+    expect(svg.querySelector('[data-story-id]')).toBeTruthy();
     expect(layer.compareDocumentPosition(svg) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('keeps the map keyboard-drivable and named, identically to the flag-off arm', async () => {
+  it('keeps the map keyboard-drivable and named, with the land mounted', async () => {
     // ADR-0380 D6 fence 1 forbids making accessibility WORSE. The map's affordances all live on
     // `.world-viewport`, which is the land layer's PARENT's parent — so the mount must not move,
     // shadow or re-label any of them.
-    const read = (root: HTMLElement) => {
-      const vp = root.querySelector('.world-viewport')!;
-      return {
-        tabIndex: vp.getAttribute('tabindex'),
-        label: vp.getAttribute('aria-label'),
-        hidden: vp.getAttribute('aria-hidden'),
-      };
-    };
-    const off = read(await renderTreeAt(''));
-    cleanup();
-    const on = read(await renderTreeAt('?landMount=1'));
-    expect(on).toEqual(off);
-    expect(on.tabIndex).toBe('0');
-    expect(on.label).toBeTruthy();
+    const container = await renderTreeAt('');
+    const vp = container.querySelector('.world-viewport')!;
+    expect(vp.getAttribute('tabindex')).toBe('0');
+    expect(vp.getAttribute('aria-label')).toBe('story forest map (pan and zoom)');
+    expect(vp.getAttribute('aria-hidden')).toBeNull();
     // The land layer itself is out of the accessibility tree — a decorative raster must not be
     // announced, and it must not become the map's accessible name by sitting first.
     expect(document.querySelector('[data-testid="land-mount"]')!.getAttribute('aria-hidden')).toBe('true');
   });
 
-  it('hides the SVG ground with `opacity`, which is what keeps the islands CLICKABLE', async () => {
-    // ⚠⚠ THIS READS THE STYLESHEET ON PURPOSE, because the choice it pins is invisible in jsdom and
-    // is exactly the kind a later tidy-up would "simplify". `.relaxed-tile` and `.hex-tile` are
-    // click targets — they carry `cursor: pointer`, and the coordinate fallback walks up from
-    // `document.elementFromPoint`. `display: none` or `visibility: hidden` would take them out of
-    // hit-testing and cost the map its picking, silently and only in a browser. `opacity: 0` leaves
-    // an element fully hit-testable.
-    const { selector, body } = groundSuppressionRule(readStudioCss());
-    expect(body).toMatch(/opacity:\s*0/);
-    expect(body).not.toMatch(/display\s*:/);
-    expect(body).not.toMatch(/visibility\s*:/);
-    // And the selector must not reach the territory group, which CONTAINS the marks above.
-    expect(selector).not.toMatch(/\.hex-flora/);
-  });
-
-  it('leaves the SVG scene graph BYTE-IDENTICAL — the determinism fence', async () => {
-    // ⚠⚠ THE STRONGEST FENCE IN THIS FILE, and the cheapest. ADR-0380 D6 fence 2 puts determinism
-    // on the scene graph rather than on a live raster, so the honest test of "the mount changed
-    // nothing about the map" is that the map's own markup is the SAME STRING with the flag on and
-    // off. It holds only because the mount touches no scene node: the land is a sibling of the
-    // `<svg>`, and the ground is hidden by a class on the pan layer OUTSIDE it. The moment anyone
-    // suppresses the ground by stamping a class on a scene node instead, this fails — which is the
-    // correct outcome, because that is a change to the thing the byte-locks in
-    // `@storytree/forest-world` pin.
-    const off = (await renderTreeAt('')).querySelector('svg.world-scene')!.outerHTML;
-    cleanup();
-    const on = (await renderTreeAt('?landMount=1')).querySelector('svg.world-scene')!.outerHTML;
-    expect(on.length).toBeGreaterThan(1000); // not two empty strings agreeing
-    expect(on).toBe(off);
+  it('leaves the SVG scene graph BYTE-IDENTICAL whatever the land reports — the determinism fence', async () => {
+    // ⚠⚠ ADR-0380 D6 fence 2 puts determinism on the scene graph rather than on a live raster. With
+    // no flag-off arm left, the honest form is that the land's OWN state cannot reach the map's
+    // markup: a land that drew and a land that failed leave the `<svg>` the SAME STRING. It holds
+    // only because the mount touches no scene node — its message lives outside the viewport. (A
+    // settled returning visit, so no regrow is running in either arm.)
+    const previousArrival = window.sessionStorage.getItem(ACT2_INTRO_SESSION_KEY);
+    markAct2IntroArrived(window.sessionStorage);
+    try {
+      const ready = (await renderTreeAt('', reportingMount({ kind: 'ready' }))).querySelector('svg.world-scene')!.outerHTML;
+      cleanup();
+      const failedContainer = await renderTreeAt('', reportingMount({ kind: 'failed', message: 'no land' }));
+      // The failure is really in effect in this arm — it is announced, outside the SVG.
+      expect(within(failedContainer).getByRole('alert').textContent).toBe('no land');
+      const failed = failedContainer.querySelector('svg.world-scene')!.outerHTML;
+      expect(ready.length).toBeGreaterThan(1000); // not two empty strings agreeing
+      expect(failed).toBe(ready);
+    } finally {
+      cleanup();
+      if (previousArrival === null) window.sessionStorage.removeItem(ACT2_INTRO_SESSION_KEY);
+      else window.sessionStorage.setItem(ACT2_INTRO_SESSION_KEY, previousArrival);
+    }
   });
 
   it('keeps the keyboard camera working, with the land mounted', async () => {
@@ -304,7 +256,7 @@ describe('the land under the working map', () => {
     // layer's grandparent — but the land layer is `position: absolute` over the whole frame, so
     // "the handler is still attached" is not the same claim as "the key still moves the camera".
     // This drives the real handler and reads the real camera transform.
-    const container = await renderTreeAt('?landMount=1');
+    const container = await renderTreeAt('');
     const vp = container.querySelector('.world-viewport') as HTMLElement;
     const cameraTransform = () => container.querySelector('g.world-camera')!.getAttribute('transform');
     const before = cameraTransform();
@@ -347,7 +299,7 @@ describe('the land under the working map', () => {
       },
     };
     try {
-      const container = await renderTreeAt('?landMount=1&landMountProps=1', surfaces);
+      const container = await renderTreeAt('', surfaces);
       const viewport = container.querySelector('.world-viewport') as HTMLElement;
       const layer = container.querySelector('[data-testid="land-mount"]')!;
       expect(layer.getAttribute('data-state')).toBe('drawn');
@@ -441,7 +393,7 @@ describe('the land under the working map', () => {
       ),
     };
     try {
-      window.history.replaceState(null, '', '/?landMount=1&landMountProps=1');
+      window.history.replaceState(null, '', '/');
       const tree = (focus: string | null) => (
         <StudioSurfacesContext.Provider value={surfaces}>
           <AppDataContext.Provider value={appData}>
@@ -524,7 +476,7 @@ describe('the land under the working map', () => {
     };
     try {
       // No surface override: the REAL mount and its REAL default canvas, on a runner with no WebGL 2.
-      const container = await renderTreeAt('?landMount=1&landMountProps=1');
+      const container = await renderTreeAt('');
       await act(async () => {});
       const notice = within(container).getByRole('alert');
       expect(notice.textContent).toContain('WebGL 2');
@@ -544,44 +496,25 @@ describe('the land under the working map', () => {
     }
   });
 
-  it('shows no notice without the mount flag', async () => {
-    const container = await renderTreeAt('');
+  it('shows no notice once the land reports it is drawn', async () => {
+    const container = await renderTreeAt('', reportingMount({ kind: 'ready' }));
+    expect(container.querySelector('[data-testid="land-mount"]')).toBeTruthy();
     expect(container.querySelector('[data-testid="land-view-notice"]')).toBeNull();
-  });
-
-  it('suppresses BOTH SVG path passes, and keeps every edge identity in the DOM', () => {
-    // ⚠⚠ THE TWO HALVES OF THE PATHWAY RULE ARE ONE DECISION, and this is the half a stylesheet can
-    // be asked about. The other half is `underlayComposition`'s `trails: true` under a host
-    // (`ForestWorldCanvas.underlay.test.ts`). Landing either alone is a defect: the composition
-    // alone double-draws the network, and this rule alone leaves a map with no pathways at all.
-    const css = readStudioCss();
-    const rule = /\.world-pan-layer\.has-land-mount\s+\.trail-net[\s\S]*?\{([^}]*)\}/.exec(css);
-    expect(rule, 'the path-suppression rule must exist').toBeTruthy();
-    // BOTH passes: the network, and the click-revealed one-hop lit lane. Suppressing only the
-    // network would leave the lit lane floating over the 3D paths on every selection.
-    expect(rule![0]).toMatch(/\.trail-net/);
-    expect(rule![0]).toMatch(/\.trail-edges/);
-    // ⚠ `opacity`, not `display` — these elements carry the edge's identity and its hit surface.
-    expect(rule![1]).toMatch(/opacity:\s*0/);
-    expect(rule![1]).not.toMatch(/display\s*:|visibility\s*:/);
   });
 
   it('keeps edge identity in the SVG layer, never on the canvas', async () => {
     // ⚠ THE COUNT-EQUALITY VERSION OF THIS TEST WAS DELETED AS VACUOUS, and saying why matters more
     // than the assertion that replaced it. jsdom lays nothing out, so `buildWorld` positions no
-    // islands and `buildScene` routes NO trails — `[data-edges]` is 0 in both arms here however
+    // islands and `buildScene` routes NO trails — `[data-edges]` is 0 here however
     // many edges the payload declares (measured: a two-story forest with a real `consumedBy` edge
     // still yields 0). A test comparing 0 to 0 would have read as proof.
     //
-    // WHAT ACTUALLY PROVES IT is the byte-identity test below: if the `<svg>`'s markup is the SAME
-    // STRING with the flag on and off, then every `data-id`, `data-edges`, `data-usage` and
-    // `data-spur` survives the mount by construction — on the REAL markup, whatever it contains.
     // The browser-side count is asserted where the edges are real, in
     // `apps/studio/scripts/capture-land-mount.mjs`.
     //
     // What IS worth asserting here is the placement: identity must live in the layer that paints
     // above the land, never in the decorative one (ADR-0380 D6 fence 1).
-    const container = await renderTreeAt('?landMount=1');
+    const container = await renderTreeAt('');
     const layer = container.querySelector('[data-testid="land-mount"]')!;
     expect(layer.querySelector('[data-edges]')).toBeNull();
     expect(layer.querySelector('[data-id]')).toBeNull();
@@ -599,10 +532,10 @@ describe('the land under the working map', () => {
     // element count identical between the arms. Only the staged picture could catch it, which is
     // why the assertion now pins the EXPLICIT ordering rather than its absence.
     const css = readStudioCss();
-    const land = /\.world-pan-layer\.has-land-mount\s*>\s*\.land-mount\s*\{([^}]*)\}/.exec(css);
-    const svg = /\.world-pan-layer\.has-land-mount\s*>\s*\.world-scene\s*\{([^}]*)\}/.exec(css);
-    expect(land, 'the land layer must carry an explicit z-index under the mount').toBeTruthy();
-    expect(svg, 'the SVG layer must carry an explicit z-index under the mount').toBeTruthy();
+    const land = /\.world-pan-layer\s*>\s*\.land-mount\s*\{([^}]*)\}/.exec(css);
+    const svg = /\.world-pan-layer\s*>\s*\.world-scene\s*\{([^}]*)\}/.exec(css);
+    expect(land, 'the land layer must carry an explicit z-index').toBeTruthy();
+    expect(svg, 'the SVG layer must carry an explicit z-index').toBeTruthy();
     const zOf = (block: string) => Number(/z-index:\s*(-?\d+)/.exec(block)?.[1] ?? NaN);
     const landZ = zOf(land![1]!);
     const svgZ = zOf(svg![1]!);
@@ -618,12 +551,6 @@ describe('the land under the working map', () => {
     // the land would vanish depending on whether a drag was in flight.
     expect(landZ).toBeGreaterThanOrEqual(0);
     expect(svgZ).toBeGreaterThanOrEqual(0);
-  });
-
-  it('leaves the flag-off route with a static SVG and no new stacking context', () => {
-    // The ordering above is scoped to `.has-land-mount` precisely so the ordinary map is untouched.
-    const css = readStudioCss();
-    expect(/\n\.world-scene\s*\{([^}]*)\}/.exec(css)![1]!).not.toMatch(/z-index|position/);
   });
 });
 
@@ -711,7 +638,6 @@ describe('the opening waits for the land it grows on', () => {
         return player;
       },
       useStableForestRegrowLayer,
-      useStableVegetationLayer,
     };
     const surfaces: Partial<StudioSurfaces> = {
       LandViewMount: (props) => (
@@ -740,7 +666,7 @@ describe('the opening waits for the land it grows on', () => {
   it('holds the first growth at NOTHING until the 3D land is ready, then starts it from its first moment', async () => {
     const h = openingHarness();
     try {
-      await renderOpening('?landMount=1&landMountProps=1', h);
+      await renderOpening('', h);
       // The scene exists and the plan is derived — this is exactly the moment the old start fired.
       expect(h.phases.length).toBeGreaterThan(0);
       const waiting = h.players.at(-1)!;
@@ -752,9 +678,12 @@ describe('the opening waits for the land it grows on', () => {
       await act(async () => {});
       expect(h.players.at(-1)!.playing).toBe(false);
       expect(h.players.at(-1)!.progress).toBe(0);
+      // …and the member is TOLD it is loading, in the host's accessible layer (ADR-0608 D5).
+      expect(document.querySelector('[data-testid="land-view-notice"]')?.getAttribute('role')).toBe('status');
 
       act(() => h.phases.at(-1)!({ kind: 'ready' }));
       await act(async () => {});
+      expect(document.querySelector('[data-testid="land-view-notice"]')).toBeNull();
       const started = h.players.at(-1)!;
       expect(started.playing).toBe(true);
       // The START anchor is the ready moment: the 8 s of loading are not in the cursor.
@@ -775,7 +704,7 @@ describe('the opening waits for the land it grows on', () => {
   it('starts anyway when this browser cannot draw the land — a notice, never a forest held at nothing', async () => {
     const h = openingHarness();
     try {
-      await renderOpening('?landMount=1&landMountProps=1', h);
+      await renderOpening('', h);
       expect(h.players.at(-1)!.playing).toBe(false);
       act(() => h.phases.at(-1)!({ kind: 'unsupported' }));
       await act(async () => {});
@@ -788,20 +717,9 @@ describe('the opening waits for the land it grows on', () => {
   it('starts anyway when the land FAILS to load', async () => {
     const h = openingHarness();
     try {
-      await renderOpening('?landMount=1&landMountProps=1', h);
+      await renderOpening('', h);
       act(() => h.phases.at(-1)!({ kind: 'failed', reason: 'the 3D code did not download' }));
       await act(async () => {});
-      expect(h.players.at(-1)!.playing).toBe(true);
-    } finally {
-      h.restore();
-    }
-  });
-
-  it('waits for nothing without the mount flag — the shipped map opens exactly as before', async () => {
-    const h = openingHarness();
-    try {
-      await renderOpening('', h);
-      expect(h.phases).toHaveLength(0);
       expect(h.players.at(-1)!.playing).toBe(true);
     } finally {
       h.restore();

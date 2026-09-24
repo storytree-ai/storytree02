@@ -94,19 +94,6 @@
   --conifer-1: #4d8a59;
   --conifer-2: #2f6b45;
 
-  /* the UAT markers (forest-parcels inc 2; tall flowers, grounded-art inc 7): one soft flat flower per
-     criterion, its verdict read from FORM (a bloomed daisy = proven, a closed bud = pending, a wilted
-     nodding head = failing) and its palette from state. Tuned to the cosy-island concept
-     (docs/research/grounded-art-concept) — soft leaf-greens, warm cream daisy petals, a golden centre;
-     failing desaturates. The standing-stone tokens this replaced were rejected as noisy (#832). */
-  --flower-stem: #6f9257; /* soft leaf-green stalk */
-  --flower-leaf: #7ea363; /* a touch lighter for the leaves */
-  --flower-bud: #7f9d5c; /* sage-green closed bud — calm, unopened (pending) */
-  --flower-petal-proven: #fbf3e0; /* warm cream daisy petal */
-  --flower-center-proven: #eab94e; /* golden daisy centre */
-  --flower-glow-proven: #f4d98a; /* the soft warm halo behind a bloom */
-  --flower-petal-failing: #b9b3a7; /* desaturated, greyed — a wilted head */
-  --flower-center-failing: #8f8672; /* a dull, spent centre */
 
   /* the cosy-island GARDEN's decorative accents (grounded-art inc 11) — warm, low-saturation, matching
      the concept's lavender + sage grass (docs/research/grounded-art-concept/style-bible.md). */
@@ -1553,7 +1540,7 @@ a.stat:hover {
   height: 100%; /* fill the viewport; the camera handles framing/centring */
 }
 
-/* ?landMount=1 (the-land-sits-under-the-working-map, ADR-0530 route C): THE 3D LAND, UNDER THE MAP.
+/* THE 3D LAND, UNDER THE MAP (ADR-0530 route C; the forest itself since ADR-0608 D1).
    A sibling of `.world-scene` inside `.world-pan-layer`, placed BEFORE it — so it inherits the same
    compositor pan transform (ADR-0272 D2: both layers move together, neither re-rasterises) and
    paints UNDERNEATH it.
@@ -1573,8 +1560,6 @@ a.stat:hover {
    negative index that escapes its parent lands behind `.world-frame`'s own gradient, i.e. the land
    silently disappears depending on whether a drag is in flight. Two explicit indices in one parent
    cannot do that.
-   ⚠ AND IT IS SCOPED TO `.has-land-mount`, so the flag-off route keeps a static `<svg>` and no new
-   stacking context — byte-for-byte the map that shipped.
    ⚠ `pointer-events: none` IS A FENCE (ADR-0380 D6 fence 3). The app owns picking, focus and the
    keyboard camera; this layer draws and decides nothing, so it must never intercept a gesture —
    `.world-viewport`'s handlers and the `elementFromPoint` hit-test both have to reach straight
@@ -1605,72 +1590,20 @@ a.stat:hover {
   border-left: 4px solid #b3452f;
   pointer-events: auto;
 }
-.world-pan-layer.has-land-mount > .land-mount {
+.world-pan-layer > .land-mount {
   z-index: 0;
 }
-.world-pan-layer.has-land-mount > .world-scene {
+.world-pan-layer > .world-scene {
   position: relative;
   z-index: 1;
 }
 
-/* ⚠⚠ THE SVG'S OWN GROUND GOES SEE-THROUGH, AND `opacity: 0` IS THE LOAD-BEARING CHOICE — not
-   `display: none` and not `visibility: hidden`. Both of those would remove the element from
-   hit-testing, and `.relaxed-tile` / `.hex-tile` ARE click targets (they carry `cursor: pointer`,
-   and the coordinate fallback walks up from `document.elementFromPoint`). An invisible element still
-   takes a pointer, so picking survives the mount unchanged — which is end-state item 3's first
-   entry.
-   ⚠⚠ IT TARGETS THE TWO LAYER WRAPPERS, AND THOSE TWO ONLY — `coast-layer` (`.hex-coastland`, the
-   sandy shore) and `ground-mesh` (`.relaxed-land`, the status-tinted island land). Both names are
-   `SceneView`'s own class for the scene kind AND the class the legacy inline path writes, so one
-   rule covers both render paths rather than agreeing with one of them today.
-   ⚠ THE PER-ISLAND GROUPS ARE DELIBERATELY NOT LISTED. An earlier cut of this rule named
-   `.coast-fill-group` / `.relaxed-tile` / `.hex-tile`, which are real classes and the WRONG grain:
-   they are the per-island groups INSIDE these layers, so the rule suppressed nothing the layers do
-   not already contain and would have read as working while depending on a second selector staying
-   in step. Hiding the layer is what the scene's own structure offers.
-   ⚠ `.hex-coast` is the empty board between islands. Under the mount it becomes transparent too:
-   the canvas supplies the smooth coast there, while retaining this SVG node preserves the
-   map's DOM and hit-testing behaviour. The mounted legend consequently names the status word on
-   each surviving nameplate; it does not claim that a removed hero-tree silhouette still carries it.
-   Parcel flora, UAT marks and session wisps remain in their own SVG layers. */
-.world-pan-layer.has-land-mount .hex-coastland,
-.world-pan-layer.has-land-mount .relaxed-land,
-.world-pan-layer.has-land-mount .hex-coast {
-  opacity: 0;
-}
-
-/* The mounted surface already has its own trees and relief. Suppress only the SVG central hero tree,
-   leaving every semantic mark (parcel flora, UAT, sessions and the nameplate) and its parent hit
-   region in place. The procedural tree's signpost is a semantic direct child, so this hides its
-   artwork children individually rather than blanking the containing `g`. The remaining selectors
-   cover a static baked `<use>` and the normal vegetation-track sprite path; generic baked art and
-   flora are not hidden. */
-.world-pan-layer.has-land-mount g.story-tree > :not(.story-sign):not(title),
-.world-pan-layer.has-land-mount use[href^='#veg-hero-autumn-tree-'],
-.world-pan-layer.has-land-mount g.baked-art > .pop-motion-inner > image.veg-track-tree {
-  opacity: 0;
-}
-
-/* ⚠⚠ THE HOST'S HALF OF THE PATHWAY RULE — the other half is `underlayComposition`'s `trails: true`
-   under a host, and the two are ONE decision that must land together.
-   `pathways-keep-selection-focus-and-accessible-edge-identity`: under the mount the 3D layer draws
-   the pathways, because it is the layer that can draw a path ON the ground it runs over — routed,
-   docked, following the relief. Leaving these strokes visible as well is the DOUBLE-DRAWING that
-   row exists to remove: two path networks for one dependency graph, one flat and one on the land.
-   ⚠ `opacity: 0` AGAIN, AND FOR THE SAME LOAD-BEARING REASON AS THE GROUND. These elements carry
-   the edge's IDENTITY in the DOM — `data-id`, `data-edges`, `data-usage`, `data-spur`, stamped by
-   `SceneView`'s trail branch — and ADR-0380 D6 fence 1 keeps edge interaction and reachability in
-   the DOM/SVG layer rather than trading it for a prettier picture. An invisible element is still
-   hit-testable and still readable by `document.elementFromPoint` and by any future keyboard or
-   screen-reader affordance; `display: none` would delete all of that to save nothing.
-   ⚠ BOTH PASSES, because both draw a visible stroke: `trails-layer` (`.trail-net`, the network) and
-   `trail-edges` (`.trail-edges`, the click-revealed one-hop lit lane). Suppressing only the first
-   would leave the lit lane floating over the 3D paths on every selection — the bug that reads as
-   "the map drew a road nobody asked for". */
-.world-pan-layer.has-land-mount .trail-net,
-.world-pan-layer.has-land-mount .trail-edges {
-  opacity: 0;
-}
+/* ADR-0608: the flat forest PICTURE is gone from the map, not hidden. `SceneView` no longer draws
+   the empty board, island fills, hero trees, flat plants or road passes, and it draws the island
+   ground only as unpainted hit geometry (`fill="transparent"`, still found by the pointer and by the
+   `elementFromPoint` hit-test). The rules that used to fade those layers to `opacity: 0` under the
+   mount went with them. What the SVG still draws over the land is interaction: nameplates, wisps,
+   the selection lanes and shore rings, and the hit regions. */
 
 /* The generous, invisible per-story hit rect (SceneView hitsLayerToBack): covers a story's crown +
    island + nameplate so node-click stays reliable at the zoomed-out contain fit — the pointer cursor
@@ -1679,12 +1612,6 @@ a.stat:hover {
   cursor: pointer;
 }
 
-/* hex board: the pale coast + extruded land tiles */
-.hex-empty {
-  fill: var(--hex-empty);
-  stroke: var(--hex-empty-line);
-  stroke-width: 1;
-}
 .hex-tile {
   cursor: pointer;
   transition: opacity 0.18s ease;
@@ -1868,28 +1795,7 @@ a.stat:hover {
   stroke-linejoin: round;
   pointer-events: none;
 }
-/* MINIMALIST paint (owner feedback 2026-07-06): the cased ribbon collapses to a single
-   line. The shadow + casing passes are suppressed entirely — only the FILL draws (plus
-   the under-island GHOST when a cave is forced), so a pathway reads as one quiet
-   faded-brown stroke, not a layered striped ribbon. The core still emits every pass and
-   the reveal masks still hook them; hiding them here is a surface styling choice. */
-.trail-shadow,
-.trail-casing {
-  display: none;
-}
-/* ALWAYS drawn now (owner 2026-07-07: "see the pathways without clicking everywhere").
-   A single quiet faded-brown line — no direction tints, no spur dash (both collapsed for
-   minimalism per the owner's earlier steer). Now viable without noise because the moat
-   merges near-parallels and stress spaces the islands. */
-.trail-fill {
-  stroke: var(--trail-line); /* the ONE plain faded-brown pathway line */
-  opacity: 0.62;
-}
-.trail-ghost {
-  stroke: var(--trail-line); /* the OSM tunnel convention: a fine dashed under-island run */
-  stroke-dasharray: 2 6;
-  opacity: 0.45;
-}
+
 /* ADR-0242 — the LIT LANE: when a story is selected, every trail segment on its own one-hop
    edges gets this second, NARROWER stroke painted over the road (SceneView emits one per lit
    segment, after the whole fill pass, at `trailFillWidth(usage) - 1.7`). Narrower is the whole
@@ -1997,48 +1903,6 @@ a.stat:hover {
   .world-scene.lane-motion-draw .coast-fill-group.is-upstream .coast-fill,
   .world-scene.lane-motion-draw .coast-fill-group.is-downstream .coast-fill {
     animation: none;
-  }
-}
-/* a segment DRAWING ON during an island arrival: its per-segment mask owns the growth
-   (below); the base opacity above is simply what it grows into. */
-.trail-fill.is-growing,
-.trail-ghost.is-growing {
-  transition: none;
-}
-/* the per-segment growth mask (rendered in <defs> by TreeView): a solid white stroke
-   over the segment's own path, normalised to pathLength=1 so the dash animation is
-   length-agnostic. `.from-end` starts at -1 so growth runs from the path's geometric
-   END — a chain entry walked against the segment's drawn direction still grows away
-   from the focused island. */
-.trail-reveal-mask {
-  fill: none;
-  stroke: #fff;
-  stroke-linecap: round;
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  animation: trail-reveal-grow 0.35s ease-out both;
-}
-.trail-reveal-mask.from-end {
-  stroke-dashoffset: -1;
-}
-/* ADR-0283 D1 — the Act 2 regrow drives the SAME mask from the app's own cursor instead: it
-   writes `stroke-dashoffset` inline every frame, so the keyframe has to get out of the way (a
-   running animation outranks an inline style on the property it animates). Growth follows the
-   edge there, which means the app has to KNOW when a pathway arrives — a CSS keyframe cannot be
-   sampled, so the timing moved to the plan. Reduced motion never reaches this state: the regrow
-   settles straight onto the grown forest (ADR-0282 D6). */
-.trail-reveal-mask.is-cursor-driven {
-  animation: none;
-}
-@keyframes trail-reveal-grow {
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .trail-reveal-mask {
-    animation: none;
-    stroke-dashoffset: 0;
   }
 }
 
@@ -5885,46 +5749,18 @@ button.legend-tile:hover {
 
 /* ============================================================================
    NEW-ISLAND ARRIVAL — when a re-pulled tree payload holds a story the previous
-   payload didn't (TreeView diffs the id sets), the island ARRIVES instead of
-   popping in, staged like a landmass surfacing: its incident ROADS draw on from
-   the new island (the per-segment masks, driven by arrivalGrowPlan), the sandy
-   coast surfaces, the ground assembles on top of it, and finally the flora +
-   nameplate POP in with a soft overshoot. (The road draw-on is BACK, owner
-   2026-07-07: trails are always drawn now, so a new island's connections have a
-   visible road to draw — the growth animation lives here now, not on click.)
-   Every piece is animation-fill-mode: both, so it holds its hidden from-state
-   through its delay — the board sits quiet for a beat, then the arrival plays.
-   `?arrive=<story-id|auto>` is the demo/QA escape (forces one island to
-   arrive on load, with a ▶ replay button).
+   payload didn't (TreeView diffs the id sets), the island's nameplate group POPS in
+   with a soft overshoot rather than appearing. (The flat coast / ground / road
+   staging that used to precede it retired with the flat forest look, ADR-0608.)
+   `?arrive=<story-id|auto>` is the demo/QA escape (forces one island to arrive on
+   load, with a ▶ replay button).
    ============================================================================ */
-/* the coast surfaces first… */
-.coast-fill-group.arrive-island {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: arrive-ground 0.55s ease-out 1.05s both;
-}
-/* …the ground assembles on it… */
-.relaxed-tile.arrive-island,
-.hex-tile.arrive-island {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: arrive-ground 0.55s ease-out 1.25s both;
-}
-/* …and the flora / tree / nameplate pop last, with a soft overshoot. */
+
+/* the nameplate group pops in with a soft overshoot. */
 .hex-flora.arrive-island {
   transform-box: fill-box;
   transform-origin: center;
   animation: arrive-pop 0.6s cubic-bezier(0.34, 1.45, 0.5, 1) 1.5s both;
-}
-@keyframes arrive-ground {
-  from {
-    opacity: 0;
-    transform: scale(0.78);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
 }
 @keyframes arrive-pop {
   from {
@@ -5936,62 +5772,12 @@ button.legend-tile:hover {
     transform: scale(1);
   }
 }
-/* ADR-0283 D1 — the SAME staging, re-timed for the Act 2 regrow. The delays above open with a
-   ~1.05 s hold because a live arrival draws its roads FIRST and the island surfaces after them.
-   Under edge-driven growth the road has already arrived before the island is scheduled at all, so
-   that hold would leave an island invisible for the whole of its own accretion and then sprout
-   outgoing pathways from ground nobody had seen. Compressed to land inside `islandGrowthMs`
-   (760 ms): coast, then ground, then flora — the same three beats, an order of magnitude tighter.
-   Only the delays and durations change; the keyframes, the reduced-motion kill and the live
-   arrival path are untouched. */
-.world-scene.act2-regrowing .coast-fill-group.arrive-island {
-  animation-duration: 0.34s;
-  animation-delay: 0s;
-}
-.world-scene.act2-regrowing .relaxed-tile.arrive-island,
-.world-scene.act2-regrowing .hex-tile.arrive-island {
-  animation-duration: 0.38s;
-  animation-delay: 0.1s;
-}
-/* ADR-0292 D1 — the flora pop is RETIRED under the regrow, not re-timed.
-   It was one rigid beat for the whole vegetation block, scaled from the group's shared centre, and it
-   was on WALL-CLOCK CSS: 0.42 s that the ADR-0286 speed dial cannot reach, so at the 0.25x default the
-   dial ships at, the vegetation finished at 0.74 s while its island kept accreting for ~3.0 s. Adding a
-   third re-timing here would be synchronising two clocks; instead every object now grows on the app's
-   OWN cursor (`island-vegetation-growth.ts`), which tracks the dial by construction because it is the
-   same number the ground and the roads ride. The live-arrival beat above is untouched — a story
-   appearing in a re-pulled payload has no accretion window to grow inside. */
+
+/* Under the regrow the pop is off: the island itself grows in the 3D layer on the app's own cursor
+   (ADR-0282 / ADR-0608), and a wall-clock CSS beat on top of it would be a second, unsynchronised
+   clock. A live arrival outside the regrow keeps the beat above. */
 .world-scene.act2-regrowing .hex-flora.arrive-island {
   animation: none;
-}
-/* ============================================================================
-   ADR-0292 D3 — the STATUS channel of the one shared tree track.
-   The app varies the single exp-16 track per island by SIZE (capability count, inherited from the
-   body it replaces) and by COLOUR, here. Colour is doing the whole status job: a third channel —
-   status as FORM, by stopping an island's tree at an early frame — was built and measured out,
-   because exp-16's early frames are a SAPLING rather than a withered tree, so it made `unhealthy`
-   read as a seedling (see `island-vegetation-growth.ts`).
-   This is ADR-0226/0227's own pattern: one silhouette, per-status recolour.
-   `healthy` deliberately declares NO filter — it is the common case and the track's own palette, so
-   the majority of trees on the map pay nothing for this channel at all.
-   ============================================================================ */
-.veg-track {
-  /* the tracks are pixel art — never smooth them on the way up to island scale */
-  image-rendering: pixelated;
-}
-/* withered: colour is the ONLY thing distinguishing this island's tree now, so it goes further than
-   a tint — the green is drained out entirely and the whole silhouette darkens toward dead bark. */
-.veg-track-tree.st-unhealthy {
-  filter: grayscale(0.82) sepia(0.55) brightness(0.72) saturate(1.15);
-}
-.veg-track-tree.st-proposed {
-  filter: hue-rotate(-32deg) saturate(1.15) brightness(1.08);
-}
-.veg-track-tree.st-mapped {
-  filter: hue-rotate(-48deg) saturate(0.7) brightness(0.92);
-}
-.veg-track-tree.st-unknown {
-  filter: saturate(0.4) brightness(1.02);
 }
 
 /* the demo's replay control (only rendered when ?arrive= is set) */
@@ -6076,9 +5862,6 @@ button.legend-tile:hover {
   color: var(--accent);
 }
 @media (prefers-reduced-motion: reduce) {
-  .coast-fill-group.arrive-island,
-  .relaxed-tile.arrive-island,
-  .hex-tile.arrive-island,
   .hex-flora.arrive-island {
     animation: none;
   }
@@ -7778,285 +7561,6 @@ button.legend-tile:hover {
   font-size: 10px;
   font-weight: 700;
   pointer-events: none;
-}
-
-/* ============================================================================
-   CAPABILITY-PARCEL FLORA colours (forest-parcels inc 1, ADR-0208) — the designer
-   swarm's meadow / woodland / heath surfaces. The core (@storytree/forest-world
-   scene.ts) emits GEOMETRY only (SceneNode kind + variant + folded status); every
-   palette role is resolved HERE, keyed by .parcel-flora.theme-<t>.st-<status> on the
-   item group × the mark class × .v-<n> (cel faces: v0 light / v1 dark; v2+ within-tier
-   rotation e.g. meadow's petal colours, woodland's sapling canopy, heath's gorse alt
-   lobe + 2-colour bells). Ground is the existing status-tinted .relaxed-cell (zero new
-   ground CSS); ground-contact shadows reuse .flora-shadow. Hex values are the designer
-   palette objects VERBATIM (visually tuned); a single tuned set — the studio map is
-   theme-invariant, matching .flora-shadow / cave practice.
-
-   The SceneView mapper (parallel lane) MUST emit, for each SceneNode:
-     kind 'parcel-flora' → class  parcel-flora theme-<theme> st-<status>
-     kind 'parcel-blade' → class  parcel-blade v-<variant>
-     kind 'parcel-shrub' → class  parcel-shrub v-<variant>
-     kind 'parcel-stem'  → class  parcel-stem  v-<variant>
-     kind 'parcel-flower'→ class  parcel-flower v-<variant>
-     kind 'shadow'       → class  flora-shadow  (existing)
-   ============================================================================ */
-
-/* stroked marks: every parcel-stem, plus HEATH's grass blades (wiry strokes). Filled
-   marks (meadow/woodland blades, all shrubs, all flowers) default to no stroke. */
-.parcel-flora .parcel-stem {
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.parcel-flora.theme-heath .parcel-blade {
-  fill: none;
-  stroke-linecap: round;
-}
-
-/* ---------------------------------- MEADOW ---------------------------------- */
-/* grass blades (filled two-face): v0 light / v1 dark. healthy + building = default. */
-.parcel-flora.theme-meadow .parcel-blade.v-0 { fill: #71a154; }
-.parcel-flora.theme-meadow .parcel-blade.v-1 { fill: #436b32; }
-.parcel-flora.theme-meadow.st-mapped .parcel-blade.v-0,
-.parcel-flora.theme-meadow.st-proposed .parcel-blade.v-0 { fill: #9fa88f; }
-.parcel-flora.theme-meadow.st-mapped .parcel-blade.v-1,
-.parcel-flora.theme-meadow.st-proposed .parcel-blade.v-1 { fill: #7d886c; }
-.parcel-flora.theme-meadow.st-unknown .parcel-blade.v-0 { fill: #b0afa2; }
-.parcel-flora.theme-meadow.st-unknown .parcel-blade.v-1 { fill: #8f8e7c; }
-.parcel-flora.theme-meadow.st-unhealthy .parcel-blade.v-0 { fill: #ab8c54; }
-.parcel-flora.theme-meadow.st-unhealthy .parcel-blade.v-1 { fill: #87693b; }
-/* shrub (filled cel dome): v0 light / v1 dark. */
-.parcel-flora.theme-meadow .parcel-shrub.v-0 { fill: #89b56b; }
-.parcel-flora.theme-meadow .parcel-shrub.v-1 { fill: #4f7a3e; }
-.parcel-flora.theme-meadow.st-building .parcel-shrub.v-0 { fill: #eccb6d; }
-.parcel-flora.theme-meadow.st-building .parcel-shrub.v-1 { fill: #cc9f3c; }
-.parcel-flora.theme-meadow.st-unhealthy .parcel-shrub.v-0 { fill: #a08355; }
-.parcel-flora.theme-meadow.st-unhealthy .parcel-shrub.v-1 { fill: #7a5f3a; }
-/* flowers / buds / berries / flecks (filled discs). Defaults = healthy/mapped values. */
-.parcel-flora.theme-meadow .parcel-flower.v-0 { fill: #faf1da; } /* petal cream */
-.parcel-flora.theme-meadow .parcel-flower.v-1 { fill: #e0973f; } /* flower core */
-.parcel-flora.theme-meadow .parcel-flower.v-2 { fill: #b5762c; } /* core speck */
-.parcel-flora.theme-meadow .parcel-flower.v-3 { fill: #c1543f; } /* berry (healthy) */
-.parcel-flora.theme-meadow .parcel-flower.v-4 { fill: #f7efd9; } /* one-species family (painter emits v0; kept quiet) */
-.parcel-flora.theme-meadow .parcel-flower.v-5 { fill: #f2e6c2; } /* one-species family (painter emits v0; kept quiet) */
-.parcel-flora.theme-meadow .parcel-flower.v-6 { fill: #efe0cd; } /* one-species family (painter emits v0; kept quiet) */
-.parcel-flora.theme-meadow.st-proposed .parcel-flower.v-0 { fill: #cdba79; } /* proposed bud light */
-.parcel-flora.theme-meadow.st-proposed .parcel-flower.v-1 { fill: #a99a5f; } /* proposed bud dark */
-.parcel-flora.theme-meadow.st-building .parcel-flower.v-0 { fill: #f0bd3f; } /* building bud light */
-.parcel-flora.theme-meadow.st-building .parcel-flower.v-1 { fill: #c98f1c; } /* building bud dark */
-.parcel-flora.theme-meadow.st-proposed .parcel-flower.v-2,
-.parcel-flora.theme-meadow.st-building .parcel-flower.v-2 { fill: #fbf2d8; } /* sprout highlight */
-.parcel-flora.theme-meadow.st-unhealthy .parcel-flower.v-0 { fill: #9f2d22; } /* dead fleck */
-.parcel-flora.theme-meadow.st-unhealthy .parcel-flower.v-1 { fill: #7a2018; } /* dead fleck dark */
-.parcel-flora.theme-meadow.st-unhealthy .parcel-flower.v-3 { fill: #9c3d2c; } /* berry dark */
-/* stems (stroked). healthy/mapped = flower stem; proposed/building = sprout; unhealthy = twig/wilt. */
-.parcel-flora.theme-meadow .parcel-stem { stroke: #4f7a3e; }
-.parcel-flora.theme-meadow.st-proposed .parcel-stem,
-.parcel-flora.theme-meadow.st-building .parcel-stem { stroke: #5f7d47; }
-.parcel-flora.theme-meadow.st-proposed .parcel-stem.v-0,
-.parcel-flora.theme-meadow.st-building .parcel-stem.v-0 { stroke: #7c9a5e; } /* sprout seed-leaves */
-.parcel-flora.theme-meadow.st-unhealthy .parcel-stem.v-0 { stroke: #7c5b40; } /* dead twig */
-.parcel-flora.theme-meadow.st-unhealthy .parcel-stem.v-1 { stroke: #6e5535; } /* wilt stem */
-
-/* --------------------------------- WOODLAND --------------------------------- */
-/* fern blades (filled two-face): v0 light / v1 dark. */
-.parcel-flora.theme-woodland .parcel-blade.v-0 { fill: #71a154; } /* quiet palette: unified to the meadow blade pair */
-.parcel-flora.theme-woodland .parcel-blade.v-1 { fill: #436b32; }
-.parcel-flora.theme-woodland.st-building .parcel-blade.v-0 { fill: #e0c15a; }
-.parcel-flora.theme-woodland.st-building .parcel-blade.v-1 { fill: #6b5f1e; }
-.parcel-flora.theme-woodland.st-mapped .parcel-blade.v-0 { fill: #a7b6ab; }
-.parcel-flora.theme-woodland.st-mapped .parcel-blade.v-1 { fill: #5f6f65; }
-.parcel-flora.theme-woodland.st-proposed .parcel-blade.v-0 { fill: #d6c887; }
-.parcel-flora.theme-woodland.st-proposed .parcel-blade.v-1 { fill: #8a7a3e; }
-.parcel-flora.theme-woodland.st-unknown .parcel-blade.v-0 { fill: #c1c0b6; }
-.parcel-flora.theme-woodland.st-unknown .parcel-blade.v-1 { fill: #797870; }
-/* undershrub (v0 light / v1 dark) + sapling crown (v2 light / v3 dark). */
-.parcel-flora.theme-woodland .parcel-shrub.v-0 { fill: #89b56b; } /* quiet palette: shrub greens share one family */
-.parcel-flora.theme-woodland .parcel-shrub.v-1 { fill: #4f7a3e; }
-.parcel-flora.theme-woodland .parcel-shrub.v-2 { fill: #84b167; }
-.parcel-flora.theme-woodland .parcel-shrub.v-3 { fill: #4c773c; }
-.parcel-flora.theme-woodland.st-building .parcel-shrub.v-0 { fill: #c7ac4e; }
-.parcel-flora.theme-woodland.st-building .parcel-shrub.v-1 { fill: #786a20; }
-.parcel-flora.theme-woodland.st-building .parcel-shrub.v-2 { fill: #c9a13f; }
-.parcel-flora.theme-woodland.st-building .parcel-shrub.v-3 { fill: #8a7a2e; }
-.parcel-flora.theme-woodland.st-mapped .parcel-shrub.v-0,
-.parcel-flora.theme-woodland.st-mapped .parcel-shrub.v-2 { fill: #8fa091; }
-.parcel-flora.theme-woodland.st-mapped .parcel-shrub.v-1,
-.parcel-flora.theme-woodland.st-mapped .parcel-shrub.v-3 { fill: #546257; }
-.parcel-flora.theme-woodland.st-proposed .parcel-shrub.v-0,
-.parcel-flora.theme-woodland.st-proposed .parcel-shrub.v-2 { fill: #bfab5c; }
-.parcel-flora.theme-woodland.st-proposed .parcel-shrub.v-1,
-.parcel-flora.theme-woodland.st-proposed .parcel-shrub.v-3 { fill: #7d6c33; }
-.parcel-flora.theme-woodland.st-unknown .parcel-shrub.v-0,
-.parcel-flora.theme-woodland.st-unknown .parcel-shrub.v-2 { fill: #b1b0a7; }
-.parcel-flora.theme-woodland.st-unknown .parcel-shrub.v-1,
-.parcel-flora.theme-woodland.st-unknown .parcel-shrub.v-3 { fill: #7a7972; }
-/* anemone bloom: v0 lit petal / v1 shadow petal / v2 core; v0 also = fleck when unhealthy. */
-.parcel-flora.theme-woodland .parcel-flower.v-0 { fill: #f3ecdf; }
-.parcel-flora.theme-woodland .parcel-flower.v-1 { fill: #e8e1cd; } /* quiet palette: the island agrees on one blossom */
-.parcel-flora.theme-woodland .parcel-flower.v-2 { fill: #e0a640; }
-.parcel-flora.theme-woodland.st-building .parcel-flower.v-0 { fill: #f3e2ab; }
-.parcel-flora.theme-woodland.st-building .parcel-flower.v-1 { fill: #e0cf9e; }
-.parcel-flora.theme-woodland.st-building .parcel-flower.v-2 { fill: #c98a2e; }
-.parcel-flora.theme-woodland.st-mapped .parcel-flower.v-0 { fill: #c2ccc3; }
-.parcel-flora.theme-woodland.st-mapped .parcel-flower.v-1 { fill: #abb7ae; }
-.parcel-flora.theme-woodland.st-mapped .parcel-flower.v-2 { fill: #b7c2ba; }
-.parcel-flora.theme-woodland.st-proposed .parcel-flower.v-0 { fill: #d7cea5; }
-.parcel-flora.theme-woodland.st-proposed .parcel-flower.v-1 { fill: #c3b98d; }
-.parcel-flora.theme-woodland.st-proposed .parcel-flower.v-2 { fill: #cec49a; }
-.parcel-flora.theme-woodland.st-unknown .parcel-flower.v-0 { fill: #d2d0cd; }
-.parcel-flora.theme-woodland.st-unknown .parcel-flower.v-1 { fill: #bcbab7; }
-.parcel-flora.theme-woodland.st-unknown .parcel-flower.v-2 { fill: #c8c6c3; }
-.parcel-flora.theme-woodland.st-unhealthy .parcel-flower.v-0 { fill: #9f2d22; } /* fleck */
-/* stems: v0 twig (unhealthy) / v1 flower-stem (fern-dark) / v2 sapling trunk. */
-.parcel-flora.theme-woodland .parcel-stem.v-1 { stroke: #1f4a29; }
-.parcel-flora.theme-woodland.st-building .parcel-stem.v-1 { stroke: #6b5f1e; }
-.parcel-flora.theme-woodland.st-mapped .parcel-stem.v-1,
-.parcel-flora.theme-woodland.st-proposed .parcel-stem.v-1,
-.parcel-flora.theme-woodland.st-unknown .parcel-stem.v-1 { stroke: #5f6f65; }
-.parcel-flora.theme-woodland .parcel-stem.v-2 { stroke: #5c4530; }
-.parcel-flora.theme-woodland.st-building .parcel-stem.v-2 { stroke: #7c6a4a; }
-.parcel-flora.theme-woodland.st-unhealthy .parcel-stem.v-0 { stroke: #7c5b40; }
-
-/* ----------------------------------- HEATH ---------------------------------- */
-/* wiry moor-grass blades (STROKED): v0 grassB light / v1 grassA dark. */
-.parcel-flora.theme-heath .parcel-blade.v-0 { stroke: #71a154; } /* quiet palette: unified to the meadow blade pair */
-.parcel-flora.theme-heath .parcel-blade.v-1 { stroke: #436b32; }
-.parcel-flora.theme-heath.st-mapped .parcel-blade.v-0 { stroke: #a3a492; }
-.parcel-flora.theme-heath.st-mapped .parcel-blade.v-1 { stroke: #8b8d7a; }
-.parcel-flora.theme-heath.st-proposed .parcel-blade.v-0 { stroke: #c2b678; }
-.parcel-flora.theme-heath.st-proposed .parcel-blade.v-1 { stroke: #a89a58; }
-.parcel-flora.theme-heath.st-building .parcel-blade.v-0 { stroke: #cf9f45; }
-.parcel-flora.theme-heath.st-building .parcel-blade.v-1 { stroke: #a97e2c; }
-.parcel-flora.theme-heath.st-unhealthy .parcel-blade.v-0 { stroke: #96825b; }
-.parcel-flora.theme-heath.st-unhealthy .parcel-blade.v-1 { stroke: #7a6644; }
-.parcel-flora.theme-heath.st-unknown .parcel-blade.v-0 { stroke: #a7a498; }
-.parcel-flora.theme-heath.st-unknown .parcel-blade.v-1 { stroke: #8f8d82; }
-/* scrub mound (filled): body v1 / highlight v0; healthy gorse alt lobe body v3 / hi v2. */
-.parcel-flora.theme-heath .parcel-shrub.v-0 { fill: #89b56b; } /* quiet palette: shrub greens share one family */
-.parcel-flora.theme-heath .parcel-shrub.v-1 { fill: #4f7a3e; }
-.parcel-flora.theme-heath .parcel-shrub.v-2 { fill: #9db86a; }
-.parcel-flora.theme-heath .parcel-shrub.v-3 { fill: #5f7d3f; }
-.parcel-flora.theme-heath.st-mapped .parcel-shrub.v-0 { fill: #b3b7a8; }
-.parcel-flora.theme-heath.st-mapped .parcel-shrub.v-1 { fill: #8d9182; }
-.parcel-flora.theme-heath.st-proposed .parcel-shrub.v-0 { fill: #d5cc9c; }
-.parcel-flora.theme-heath.st-proposed .parcel-shrub.v-1 { fill: #ab9f70; }
-.parcel-flora.theme-heath.st-building .parcel-shrub.v-0 { fill: #f2bb4e; }
-.parcel-flora.theme-heath.st-building .parcel-shrub.v-1 { fill: #bd7f22; }
-.parcel-flora.theme-heath.st-unhealthy .parcel-shrub.v-0 { fill: #a08c62; }
-.parcel-flora.theme-heath.st-unhealthy .parcel-shrub.v-1 { fill: #725f42; }
-.parcel-flora.theme-heath.st-unknown .parcel-shrub.v-0 { fill: #b6b3a6; }
-.parcel-flora.theme-heath.st-unknown .parcel-shrub.v-1 { fill: #8f8d81; }
-/* bells (light v0/v4, dark v1/v5, core v2), building spark v6, unhealthy dead fleck v0. */
-.parcel-flora.theme-heath .parcel-flower.v-0 { fill: #f3ead4; } /* quiet palette: bells join the one island blossom family */
-.parcel-flora.theme-heath .parcel-flower.v-4 { fill: #efe4c9; }
-.parcel-flora.theme-heath .parcel-flower.v-1 { fill: #cfc3a4; }
-.parcel-flora.theme-heath .parcel-flower.v-5 { fill: #c8bb9a; }
-.parcel-flora.theme-heath .parcel-flower.v-2 { fill: #e3cf8e; }
-.parcel-flora.theme-heath.st-mapped .parcel-flower.v-0 { fill: #c6c2b3; }
-.parcel-flora.theme-heath.st-mapped .parcel-flower.v-1 { fill: #a8a394; }
-.parcel-flora.theme-heath.st-mapped .parcel-flower.v-2 { fill: #e2ded0; }
-.parcel-flora.theme-heath.st-proposed .parcel-flower.v-0 { fill: #e0cf8c; }
-.parcel-flora.theme-heath.st-proposed .parcel-flower.v-1 { fill: #c2b06a; }
-.parcel-flora.theme-heath.st-proposed .parcel-flower.v-2 { fill: #f7ecb0; }
-.parcel-flora.theme-heath.st-building .parcel-flower.v-0 { fill: #f7c24a; }
-.parcel-flora.theme-heath.st-building .parcel-flower.v-1 { fill: #dd9f2c; }
-.parcel-flora.theme-heath.st-building .parcel-flower.v-2 { fill: #fff5cf; }
-.parcel-flora.theme-heath.st-building .parcel-flower.v-6 { fill: #ffe38a; } /* build spark */
-.parcel-flora.theme-heath.st-unhealthy .parcel-flower.v-0 { fill: #9f2d22; } /* dead fleck */
-/* stems (raceme = grassA; twig = twigUnhealthy). all v0. */
-.parcel-flora.theme-heath .parcel-stem { stroke: #4d7938; }
-.parcel-flora.theme-heath.st-mapped .parcel-stem { stroke: #8b8d7a; }
-.parcel-flora.theme-heath.st-proposed .parcel-stem { stroke: #a89a58; }
-.parcel-flora.theme-heath.st-building .parcel-stem { stroke: #a97e2c; }
-.parcel-flora.theme-heath.st-unhealthy .parcel-stem { stroke: #5d4c3b; }
-.parcel-flora.theme-heath.st-unknown .parcel-stem { stroke: #8f8d82; }
-
-/* ============================================================================
-   UAT MARKERS (forest-parcels inc 2; tall flowers, grounded-art inc 7) — one soft flat flower per
-   witnessable UAT criterion, SCATTERED deterministically around the island. The owner rejected the
-   standing-stones as "messy and noisy rather than cosy" (#832) and directed a cosy stand-in matching
-   the cosy-island concept (owner call 2026-07-20): a tall flower whose FORM reads the verdict — a
-   bloomed daisy = proven, a closed bud = pending, a wilted nodding head = failing. The core
-   (@storytree/forest-world scene.ts) emits GEOMETRY only (`tallFlowerMarks`); every colour role
-   resolves HERE, keyed by the wrapper's state class composed onto the shared `.tall-flower-marker`
-   base (`.tall-flower-proven` / `-pending` / `-failing`) — the SceneView mapper emits the body-part
-   classes (`.tall-flower-stem/-leaf/-petal/-center/-bud/-glow`) verbatim; `shadow` reuses the existing
-   `.flora-shadow` mapping (no marker-specific shadow rule needed).
-
-   DEVIATION rule carried from the standing-stone round: the glow breathe keyframes animate `transform:
-   scale` (a gentle breath), NEVER `opacity` — the core already resolves each glow layer's own per-node
-   falloff opacity (the layered soft halo), and a CSS opacity animation would flatten it into one pulsing
-   disc. Only the proven bloom's `.tall-flower-glow` breathes. `transform-box: fill-box` +
-   `transform-origin: center` so each glow scales from its own centre.
-   ============================================================================ */
-.tall-flower-marker {
-  pointer-events: none;
-}
-.tall-flower-stem {
-  fill: none;
-  stroke: var(--flower-stem);
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.tall-flower-leaf {
-  fill: var(--flower-leaf);
-}
-.tall-flower-bud {
-  fill: var(--flower-bud);
-}
-.tall-flower-glow {
-  fill: var(--flower-glow-proven);
-}
-/* -- PROVEN: a bloomed daisy — warm cream petals, a golden centre, a soft warm halo -- */
-.tall-flower-proven .tall-flower-petal {
-  fill: var(--flower-petal-proven);
-}
-.tall-flower-proven .tall-flower-center {
-  fill: var(--flower-center-proven);
-}
-/* -- FAILING: a wilted, desaturated head — greyed petals, a dull centre; never proven's bloom -- */
-.tall-flower-failing .tall-flower-petal {
-  fill: var(--flower-petal-failing);
-}
-.tall-flower-failing .tall-flower-center {
-  fill: var(--flower-center-failing);
-}
-/* (PENDING draws only a closed `.tall-flower-bud` — no petals, no centre, no glow: dormant reads as the
-   absence of an open flower.) */
-/* -- the proven glow breathe: transform-only (see the deviation note) -- */
-.tall-flower-proven .tall-flower-glow {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: tall-flower-breathe 4.2s ease-in-out infinite;
-}
-@keyframes tall-flower-breathe {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.05); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .tall-flower-proven .tall-flower-glow {
-    animation: none;
-  }
-}
-/* ============================================================================
-   The cosy-island GARDEN's flat decorative accents (grounded-art inc 11) — a lavender clump and grass
-   tufts in the attested flat tall-flower style. Colour resolves HERE (colour-is-class, ADR-0093 §4); the
-   SceneView mapper emits `.garden-lavender-stem/-head` and `.garden-grass-blade` verbatim. Decorative
-   only — they carry no verdict. Warm, low-saturation to match the concept (docs/research/grounded-art-concept).
-   ============================================================================ */
-.garden-lavender-stem {
-  fill: none;
-  stroke: var(--garden-lavender-stem, #7c8a5b);
-  stroke-linecap: round;
-}
-.garden-lavender-head {
-  fill: var(--garden-lavender-head, #9a8fb0);
-}
-.garden-grass-blade {
-  fill: none;
-  stroke: var(--garden-grass-blade, #8a9663);
-  stroke-linecap: round;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────

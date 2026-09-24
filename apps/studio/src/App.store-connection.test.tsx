@@ -25,9 +25,6 @@ const TREE = '/api/tree';
 const HEALTH = '/api/health';
 const ACTIVITY = '/api/activity';
 const DB_STATUS = '/api/db/status';
-// The map's optional art-style sheet: not an api route and not what this suite is about, but the
-// REAL TreeView asks for it and the double fails closed, so it has to be declared.
-const ART_SHEET = '/art-sheets/storybook/manifest.json';
 
 let http: HttpDouble;
 
@@ -92,7 +89,6 @@ function connectionState(): string | null {
 beforeEach(() => {
   window.localStorage.clear();
   http = installHttpDouble();
-  http.get(ART_SHEET, () => new Response('', { status: 404 }));
 });
 
 afterEach(() => {

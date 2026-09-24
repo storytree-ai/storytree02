@@ -10,14 +10,17 @@
 // (connections are now thin perimeter-docked lines with nothing to tune), so the
 // road-routing dials are GONE. Layout (DAG vs solar) and Ground (tiling) outlived them in the
 // picker, but ADR-0283 D2 and ADR-0233 have since retired those two as well — the surviving groups
-// are Art style + Selection, which is what the group case below pins.
+// are Selection + Forest intro (ADR-0608 retired the Art style group with the sprite art sheets),
+// which is what the group case below pins.
 //
 // ADR-0088 (Shared Islands panel, amends ADR-0076 §2): the building islands moved OFF the
 // map into a permanent left panel, so the `buildingIsland` GEAR TOGGLE lost its meaning (the
 // panel is permanent, not a flag) and was removed from the gear schema. ADR-0283 D2 then retired the
-// Layout picker itself, so the gear carries Art style + Selection and nothing else.
+// Layout picker itself, and ADR-0608 the Art style dials, so the gear carries Selection + Forest
+// intro and nothing else.
 
 import { describe, it, expect } from 'vitest';
+import * as worldSettings from './worldSettings.js';
 import {
   CONTROLS,
   controlByKey,
@@ -26,7 +29,6 @@ import {
   readControlValue,
   resetControls,
   buildShareUrl,
-  readRenderScene,
   type ControlSpec,
   type NumberControl,
 } from './worldSettings.js';
@@ -41,8 +43,8 @@ function ctl(key: string): ControlSpec {
 describe('worldSettings — schema (docked-line roads, ADR-0076)', () => {
   it('exposes exactly the surviving dials, each with a key/label/group/kind/hint', () => {
     const keys = CONTROLS.map((c) => c.key);
-    // The sprite-art-sheets `artStyle` select + its `artScale` size dial (sprites derive their size
-    // from the vector body they replace; the dial multiplies the fit). The `layout` select went with
+    // The sprite-art-sheets `artStyle` select + its `artScale` size dial retired with the flat sprites
+    // they re-skinned (ADR-0608: the mounted 3D land is the forest). The `layout` select went with
     // ADR-0283 D2 (owner-directed 2026-08-02): DAG rows are the ONE arrangement now, not the default
     // among three, so there is nothing to pick. The grounded-art `garden` / `cosy` toggles were retired by
     // ADR-0228, the `veg` vegetation-vocabulary toggle by ADR-0231, and the `substrate` "Ground tiling"
@@ -56,7 +58,7 @@ describe('worldSettings — schema (docked-line roads, ADR-0076)', () => {
     // the first arrival at the map each browser session, and how fast it plays is the one piece of
     // that the URL carries. Its sibling — the "Regrow the forest" replay button — is an ACTION with
     // no URL state, so it is supplied to the panel by TreeView rather than declared here.
-    const expected = ['artStyle', 'artScale', 'selectionMotion', 'regrowSpeed'];
+    const expected = ['selectionMotion', 'regrowSpeed'];
     expect([...keys].sort()).toEqual([...expected].sort());
     // The retired river/pond dials, road-routing dials, the removed building toggles
     // (building-DRAWER, then building-ISLAND), the retired grounded-art `garden` / `cosy` / `veg`
@@ -80,6 +82,8 @@ describe('worldSettings — schema (docked-line roads, ADR-0076)', () => {
       'cosy',
       'veg',
       'substrate',
+      'artStyle',
+      'artScale',
     ]) {
       expect(keys, `retired control still present: ${gone}`).not.toContain(gone);
     }
@@ -93,7 +97,7 @@ describe('worldSettings — schema (docked-line roads, ADR-0076)', () => {
     }
   });
 
-  it('groups controls under Art style + Selection + Forest intro (Layout, Panels, World art, Ground gone)', () => {
+  it('groups controls under Selection + Forest intro (Layout, Panels, World art, Ground, Art style gone)', () => {
     const groups = new Set(CONTROLS.map((c) => c.group));
     // ADR-0283 D2 retired the `layout` select — the only Layout control — so the section goes too.
     expect(groups.has('Layout')).toBe(false);
@@ -105,14 +109,15 @@ describe('worldSettings — schema (docked-line roads, ADR-0076)', () => {
     // The "Ground" section held only the `substrate` tiling select, retired by ADR-0233 (mesh is the one
     // tiling, not a dial), so that section is gone too.
     expect(groups.has('Ground')).toBe(false);
-    // The sprite-art-sheets `artStyle` select + `artScale` dial share the "Art style" section.
-    expect(groups.has('Art style')).toBe(true);
+    // The "Art style" section held only the sprite-sheet `artStyle` select + `artScale` dial, retired
+    // by ADR-0608 with the flat sprites they re-skinned, so that section is gone too.
+    expect(groups.has('Art style')).toBe(false);
     // the two-lane selection highlight's motion dial gets its own section
     expect(groups.has('Selection')).toBe(true);
     // ADR-0286: the Act 2 regrow's own section — the speed dial here, the replay ACTION folded in
     // by TreeView (a button is not URL state, so it is not in this schema).
     expect(groups.has('Forest intro')).toBe(true);
-    expect(groups.size).toBe(3);
+    expect(groups.size).toBe(2);
   });
 
   it('keys are unique', () => {
@@ -142,12 +147,12 @@ describe('worldSettings — the layout picker is RETIRED (ADR-0283 D2)', () => {
 // ADR-0233 retired the `substrate` "Ground tiling" select: mesh is the one and only tiling, no longer a
 // dial. The former "substrate control (select)" suite is gone; the schema test above pins `substrate` as
 // a RETIRED key. Select-control binding (default removes the param, unrelated params preserved) stays
-// covered by the artStyle suite below.
+// covered by the selectionMotion suite below.
 
 describe('worldSettings — buildShareUrl puts params BEFORE the hash', () => {
   it('orders ?…params before the #/tree hash', () => {
-    const url = buildShareUrl('https://x.test/', '?artStyle=daylight', '#/tree');
-    expect(url).toBe('https://x.test/?artStyle=daylight#/tree');
+    const url = buildShareUrl('https://x.test/', '?selectionMotion=march', '#/tree');
+    expect(url).toBe('https://x.test/?selectionMotion=march#/tree');
   });
 
   it('omits the ? when there are no params', () => {
@@ -155,41 +160,35 @@ describe('worldSettings — buildShareUrl puts params BEFORE the hash', () => {
   });
 
   it('keeps a focused deep-link hash intact', () => {
-    const url = buildShareUrl('https://x.test/', '?artStyle=daylight', '#/tree/some-story');
-    expect(url).toBe('https://x.test/?artStyle=daylight#/tree/some-story');
+    const url = buildShareUrl('https://x.test/', '?selectionMotion=march', '#/tree/some-story');
+    expect(url).toBe('https://x.test/?selectionMotion=march#/tree/some-story');
   });
 });
 
 describe('worldSettings — resetControls drops every managed param', () => {
   it('returns empty when only managed params were present', () => {
-    expect(resetControls('?artStyle=storybook&artScale=1.4&selectionMotion=march&regrowSpeed=1.5')).toBe('');
+    expect(resetControls('?selectionMotion=march&regrowSpeed=1.5')).toBe('');
   });
 
   it('preserves unmanaged params', () => {
-    const out = resetControls('?artStyle=storybook&debug=1');
-    expect(out).not.toContain('artStyle');
+    const out = resetControls('?selectionMotion=off&debug=1');
+    expect(out).not.toContain('selectionMotion');
     expect(out).toContain('debug=1');
   });
 });
 
-describe('worldSettings — readRenderScene (scene is now the DEFAULT, ADR-0093 Unit D)', () => {
-  it('defaults to the SCENE render when no ?render param is present', () => {
-    // The flip: absence => scene (the shared scene-graph is the canonical render now).
-    expect(readRenderScene('')).toBe(true);
-    expect(readRenderScene('?artStyle=daylight')).toBe(true);
+describe('worldSettings — the ?render escape hatch is RETIRED (ADR-0608)', () => {
+  // The `?render=legacy` / `?render=inline` hatch fell back to the flat inline forest picture, which
+  // ADR-0608 retired with the flat look: the scene-graph mapper is the map's only interaction layer.
+  it('exports no render-mode reader any more', () => {
+    expect((worldSettings as Record<string, unknown>).readRenderScene).toBeUndefined();
+    expect(MANAGED_KEYS).not.toContain('render');
   });
 
-  it('the ?render=legacy / ?render=inline escape hatch selects the inline render', () => {
-    expect(readRenderScene('?render=legacy')).toBe(false);
-    expect(readRenderScene('?render=inline')).toBe(false);
-  });
-
-  it('?render=scene still explicitly selects the scene render', () => {
-    expect(readRenderScene('?render=scene')).toBe(true);
-  });
-
-  it('an unknown ?render value falls back to the scene default (not the escape hatch)', () => {
-    expect(readRenderScene('?render=wat')).toBe(true);
+  it('leaves every former ?render= value as an ordinary unmanaged param', () => {
+    for (const value of ['legacy', 'inline', 'scene', 'wat']) {
+      expect(resetControls(`?render=${value}`)).toBe(`?render=${value}`);
+    }
   });
 });
 
@@ -198,43 +197,21 @@ describe('worldSettings — readRenderScene (scene is now the DEFAULT, ADR-0093 
 // former "vegetation-vocabulary gear TOGGLE" + "readVegetationVocab" suites are gone. The schema test
 // above pins `veg` as a RETIRED key so a re-introduction is caught red.
 
-describe('worldSettings — artStyle control (sprite-art-sheets arc, Storybook default)', () => {
-  it('defaults to Storybook and writing Storybook REMOVES the param', () => {
-    expect(readControlValue('', ctl('artStyle'))).toBe('storybook');
-    expect(setControlValue('?artStyle=vector', ctl('artStyle'), 'storybook')).toBe('');
-  });
-
-  it('writes Vector as the explicit procedural opt-out', () => {
-    expect(setControlValue('', ctl('artStyle'), 'vector')).toBe('?artStyle=vector');
-    expect(readControlValue('?artStyle=vector', ctl('artStyle'))).toBe('vector');
-  });
-
-  it('writes the two non-default nano-banana sheets when picked, and offers every style in the dropdown', () => {
-    for (const name of ['daylight', 'watercolor']) {
-      expect(setControlValue('', ctl('artStyle'), name)).toBe(`?artStyle=${name}`);
-      expect(readControlValue(`?artStyle=${name}`, ctl('artStyle'))).toBe(name);
-    }
-    const artStyle = ctl('artStyle');
-    if (artStyle.kind !== 'select') throw new Error('artStyle should be a select control');
-    const opts = artStyle.options.map((o) => o.value);
-    expect(opts).toEqual(['storybook', 'daylight', 'watercolor', 'vector']);
-  });
-
-  it('the retired stub / cosy / evening sheets no longer resolve (fall back to vector)', () => {
-    for (const gone of ['stub-a', 'stub-b', 'cosy', 'evening']) {
-      expect(readControlValue(`?artStyle=${gone}`, ctl('artStyle'))).toBe('vector');
+describe('worldSettings — the sprite art-sheet dials are RETIRED (ADR-0608)', () => {
+  // `artStyle` re-skinned the flat forest picture from a sprite sheet and `artScale` sized those
+  // sprites; both went with the flat look they dressed.
+  it('offers no artStyle or artScale control at all', () => {
+    for (const key of ['artStyle', 'artScale']) {
+      expect(controlByKey(key)).toBeUndefined();
+      expect(MANAGED_KEYS).not.toContain(key);
     }
   });
 
-  it('an unknown/typo`d explicit value normalizes to Vector (never a silent broken sheet)', () => {
-    expect(readControlValue('?artStyle=stub-z', ctl('artStyle'))).toBe('vector');
-    expect(readControlValue('?artStyle=', ctl('artStyle'))).toBe('vector');
-  });
-
-  it('preserves UNRELATED params when setting the default', () => {
-    const out = setControlValue('?artStyle=vector&debug=1', ctl('artStyle'), 'storybook');
-    expect(out).toContain('debug=1');
-    expect(out).not.toContain('artStyle');
+  it('leaves every former ?artStyle= / ?artScale= value as an ordinary unmanaged param', () => {
+    for (const value of ['storybook', 'daylight', 'watercolor', 'vector']) {
+      expect(resetControls(`?artStyle=${value}`)).toBe(`?artStyle=${value}`);
+    }
+    expect(resetControls('?artScale=1.5')).toBe('?artScale=1.5');
   });
 });
 
@@ -246,6 +223,12 @@ describe('worldSettings — selectionMotion (the two-lane highlight`s motion)', 
     expect(readControlValue('?selectionMotion=draw', CTL)).toBe('draw');
     // the default option is the param's ABSENCE, so an untouched world's URL stays clean
     expect(setControlValue('?selectionMotion=march', CTL, 'draw')).toBe('');
+  });
+
+  it('preserves UNRELATED params when setting the default', () => {
+    const out = setControlValue('?selectionMotion=march&debug=1', CTL, 'draw');
+    expect(out).toContain('debug=1');
+    expect(out).not.toContain('selectionMotion');
   });
 
   it('reads the looping march and the still state, and round-trips them through the URL', () => {
@@ -263,19 +246,6 @@ describe('worldSettings — selectionMotion (the two-lane highlight`s motion)', 
     for (const junk of ['', 'sparkle', 'DRAW', '1']) {
       expect(readControlValue(`?selectionMotion=${junk}`, CTL)).toBe('draw');
     }
-  });
-});
-
-describe('worldSettings — artScale dial (derived sprite sizing)', () => {
-  it('defaults to 1 (match the vector footprint) and writing 1 REMOVES the param', () => {
-    expect(readControlValue('', ctl('artScale'))).toBe(1);
-    expect(setControlValue('?artScale=1.5', ctl('artScale'), 1)).toBe('');
-  });
-
-  it('reads a set value and clamps garbage to the default / the clamp floor', () => {
-    expect(readControlValue('?artScale=1.5', ctl('artScale'))).toBe(1.5);
-    expect(readControlValue('?artScale=wat', ctl('artScale'))).toBe(1);
-    expect(readControlValue('?artScale=0', ctl('artScale'))).toBe(0.05); // clampMin, never zero-size art
   });
 });
 

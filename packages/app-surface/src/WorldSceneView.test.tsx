@@ -19,7 +19,7 @@ import {
 
 /** This package's own `src/`, derived from THIS FILE — never `process.cwd()`, which under the
  *  mutation rung's Stryker sandbox is the sandbox ROOT and not the project dir (see the same
- *  constant in `SemanticGrowthWorldView.test.tsx` for the measured failure). */
+ *  constant's history in the retired `SemanticGrowthWorldView.test.tsx` for the measured failure). */
 const SRC_DIR = resolve(dirname(fileURLToPath(import.meta.url)));
 
 afterEach(cleanup);
@@ -73,6 +73,8 @@ function representativeInput(): SceneInput {
             title: 'Capability A',
           },
         ],
+        // the shipped map's per-capability ground parcel — the capability's hit geometry (ADR-0608)
+        parcels: [{ capId: 'cap-a', status: 'proposed', testCount: 1, theme: 'meadow', seed: { x: 55, y: 55 } }],
         treeTitle: 'Story A — healthy',
         wisps: [],
         plate: {
@@ -120,13 +122,10 @@ describe('WorldSceneView', () => {
       emphasizedStoryIds: ['story-a', 'story-b'],
       hiddenStatuses: ['proposed', 'unhealthy'],
       arrivalIds: ['story-a', 'story-b'],
-      reveal: null,
       neighbours: null,
       lanes: null,
       // the lanes only carry motion once there is a layout; `draw` is the shipped default
       laneMotion: 'draw',
-      spriteSheet: null,
-      artScale: 1,
     });
   });
 
@@ -175,13 +174,13 @@ describe('WorldSceneView', () => {
       </svg>,
     );
 
-    const tree = container.querySelector('.story-tree.st-healthy');
-    expect(tree).toBeTruthy();
+    // the semantic marker: the island's nameplate, which this interaction layer still draws (ADR-0608)
+    expect(container.querySelector('.hex-flora[data-story-id="story-a"] .world-plate-id')?.textContent).toBe('story-a');
     expect(
       container.querySelector('.hex-flora.is-selected.is-hub.is-emphasized'),
     ).toBeTruthy();
 
-    const capability = container.querySelector('.garden-flora.st-proposed');
+    const capability = container.querySelector('.parcel.st-proposed[data-cap-id="cap-a"]');
     expect(capability).toBeTruthy();
     fireEvent.click(capability!);
     expect(onSelectCapability).toHaveBeenCalledWith('story-a', 'cap-a');

@@ -138,6 +138,11 @@ const BASE = {
   hit: 'world-story-hit',
 } as const satisfies Partial<Record<SceneKind, string>>;
 
+/** True when the interaction layer names a base class for this kind. */
+function hasBaseClass(k: SceneKind): k is keyof typeof BASE {
+  return k in BASE;
+}
+
 const fmt = (n: number): string => n.toFixed(1);
 
 /** ` arrive-island` on an arriving island's nameplate group — the CSS stages its reveal. */
@@ -186,7 +191,7 @@ function composeClass(node: SceneNode, ctx: SceneCtx): string {
     case 'queue-wisp':
       return `world-queue-wisp state-${node.colourState ?? 'supplementing'}`;
     default:
-      return (BASE as Partial<Record<string, string>>)[k] ?? '';
+      return hasBaseClass(k) ? BASE[k] : '';
   }
 }
 

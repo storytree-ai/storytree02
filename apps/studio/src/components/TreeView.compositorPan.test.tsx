@@ -50,10 +50,6 @@ import { HttpDouble, installHttpDouble } from '../test/httpDouble';
 const TREE = '/api/tree';
 const ACTIVITY = '/api/activity';
 const CLAIMS = '/api/claims';
-// The map's optional art-style sheet. Declared because the double fails closed; 404 is the studio's
-// tolerated "keeping the current render" case, and this suite is not about art.
-const ART_SHEET = '/art-sheets/storybook/manifest.json';
-
 let http: HttpDouble;
 
 /** The renderer + overlays this suite stands in for. Everything else stays the real component. */
@@ -199,8 +195,7 @@ function dragPastSlop(viewport: HTMLElement): void {
 }
 
 beforeEach(() => {
-  // Keep the mount offline: vector art has no sprite-sheet manifest fetch in jsdom.
-  window.history.replaceState(null, '', '/?artStyle=vector');
+  window.history.replaceState(null, '', '/');
   // ADR-0286: mark this browser session as having already ARRIVED at the map, so no Act 2 regrow
   // plays. These are PAN tests — they need the settled forest to drag, which is exactly what a
   // returning visitor in the same session gets. Without it every test file is a fresh jsdom and
@@ -211,7 +206,6 @@ beforeEach(() => {
   // The advisory live layers answer store-absent, which is the quiet case these suites want.
   http.get(ACTIVITY, () => ({ builds: null, claims: null }));
   http.get(CLAIMS, () => ({ sessions: null }));
-  http.get(ART_SHEET, () => new Response('', { status: 404 }));
 });
 
 afterEach(() => {
