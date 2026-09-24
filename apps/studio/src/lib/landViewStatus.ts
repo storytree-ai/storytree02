@@ -42,17 +42,11 @@ function failed(reason: string): LandMountStatus {
 
 /** The one status a member is shown for a mount body and its canvas phase. */
 export function landMountStatus(body: LandMountBody, phase: LandCanvasPhase): LandMountStatus {
-  switch (body.state) {
-    case 'no-land':
-    case 'refused':
-      return failed(body.reason ?? 'the land could not be laid out for this map');
-    case 'waiting-for-world':
-    case 'waiting-for-frame':
-    case 'waiting-for-camera':
-      return { kind: 'loading', message: LOADING_MESSAGE };
-    case 'drawn':
-      break;
+  if (body.state === 'no-land' || body.state === 'refused') {
+    return failed(body.reason ?? 'the land could not be laid out for this map');
   }
+  // Still waiting for its world, frame or camera: whatever the canvas says, nothing is drawn yet.
+  if (body.state !== 'drawn') return { kind: 'loading', message: LOADING_MESSAGE };
   switch (phase.kind) {
     case 'ready':
       return { kind: 'ready' };
@@ -65,27 +59,39 @@ export function landMountStatus(body: LandMountBody, phase: LandCanvasPhase): La
   }
 }
 
+/** The part of the browser `detectWebGL2` asks — injectable, so every branch is provable. */
+export interface WebGL2Probe {
+  readonly hasWebGL2Api: boolean;
+  readonly createElement: (tag: 'canvas') => { getContext(kind: 'webgl2'): unknown };
+}
+
+/** The real browser, read when asked (never at import, so a runner without a DOM can import this). */
+export function browserWebGL2Probe(): WebGL2Probe {
+  return {
+    hasWebGL2Api: typeof WebGL2RenderingContext !== 'undefined',
+    createElement: (tag) => document.createElement(tag),
+  };
+}
+
+interface ProbeContext {
+  getExtension?: (name: string) => { loseContext?: () => void } | null;
+}
+
 /**
  * Whether this browser can create a WebGL 2 context — asked ONCE, before any renderer code is
- * fetched, so an old browser never downloads the 3D chunk only to fail in it. A throwing probe is a
- * "no": a browser that cannot answer the question cannot draw the map either.
+ * fetched, so an old browser never downloads the 3D chunk only to fail in it. A probe that throws
+ * while creating the context is a "no": a browser that cannot answer cannot draw the map either.
  */
-export function detectWebGL2(
-  env: { readonly hasWebGL2Api: boolean; readonly createCanvas: () => { getContext(kind: 'webgl2'): unknown } } = {
-    hasWebGL2Api: typeof WebGL2RenderingContext !== 'undefined',
-    createCanvas: () => document.createElement('canvas'),
-  },
-): boolean {
-  if (!env.hasWebGL2Api) return false;
+export function detectWebGL2(probe: WebGL2Probe = browserWebGL2Probe()): boolean {
+  if (!probe.hasWebGL2Api) return false;
+  let context: ProbeContext | null | undefined;
   try {
-    const context = env.createCanvas().getContext('webgl2') as {
-      getExtension?: (name: string) => { loseContext?: () => void } | null;
-    } | null;
-    if (context === null || context === undefined) return false;
-    // Hand the probe's context straight back: browsers cap live contexts, and this one draws nothing.
-    context.getExtension?.('WEBGL_lose_context')?.loseContext?.();
-    return true;
+    context = probe.createElement('canvas').getContext('webgl2') as ProbeContext | null | undefined;
   } catch {
     return false;
   }
+  if (context === null || context === undefined) return false;
+  // Hand the probe's context straight back: browsers cap live contexts, and this one draws nothing.
+  context.getExtension?.('WEBGL_lose_context')?.loseContext?.();
+  return true;
 }

@@ -29,8 +29,10 @@ export function nativePropTargets(
   const statusByPlacement = new Map<KitPlacement, string>();
   for (const placement of ground.placements) {
     const island = ground.islandByPlacement.get(placement);
+    // Stryker disable next-line ConditionalExpression: EQUIVALENT — an island-less placement is dropped again by `deriveNativePropHitRecords`, which refuses any placement with no island; this guard only keeps an `undefined::<cap>` key from ever being looked up.
     if (island === undefined) continue;
     const status = foldedStatusByIslandCapability.get(`${island}::${placement.capId}`);
+    // Stryker disable next-line ConditionalExpression: EQUIVALENT — a status-less placement is dropped again by `deriveNativePropHitRecords`, which refuses an undefined status; this guard keeps the map's value type honest.
     if (status !== undefined) statusByPlacement.set(placement, status);
   }
   const records = deriveNativePropHitRecords(ground, statusByPlacement);

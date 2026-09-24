@@ -105,9 +105,13 @@ const renderDefaultCanvas = (props: LandMountCanvasProps): React.ReactNode => <D
  * cannot be created (R3F throws that into React), must become a message — never an unmounted map
  * route and never a silent blank. The working map above is untouched either way.
  */
-class LandCanvasBoundary extends Component<{ onFailed: (reason: string) => void; children: ReactNode }, { failed: boolean }> {
-  override state = { failed: false };
-  static getDerivedStateFromError(): { failed: boolean } {
+interface LandCanvasBoundaryState {
+  readonly failed: boolean;
+}
+
+class LandCanvasBoundary extends Component<{ onFailed: (reason: string) => void; children: ReactNode }, LandCanvasBoundaryState> {
+  override state: LandCanvasBoundaryState = { failed: false };
+  static getDerivedStateFromError(): LandCanvasBoundaryState {
     return { failed: true };
   }
   override componentDidCatch(error: unknown): void {
@@ -242,21 +246,18 @@ export function LandViewMount({
       target: { x: registration.camera.target.x, z: registration.camera.target.z },
     };
     const withProps: RegisteredUnderlay = drawProps ? { ...registeredProps, props: true } : registeredProps;
+    const canvasProps: LandMountCanvasProps = {
+      descriptors: stream.descriptors,
+      hiddenStatuses,
+      registered: withProps,
+      regrow,
+      active,
+      onPhase: setPhase,
+    };
+    if (onNativePropTargets !== undefined) canvasProps.onNativePropTargets = onNativePropTargets;
     return {
       state: 'drawn' as const,
-      node: (
-        <LandCanvasBoundary onFailed={onFailed}>
-          {renderCanvas({
-            descriptors: stream.descriptors,
-            hiddenStatuses,
-            registered: withProps,
-            regrow,
-            active,
-            onPhase: setPhase,
-            ...(onNativePropTargets === undefined ? {} : { onNativePropTargets }),
-          })}
-        </LandCanvasBoundary>
-      ),
+      node: <LandCanvasBoundary onFailed={onFailed}>{renderCanvas(canvasProps)}</LandCanvasBoundary>,
     };
   })();
   const status = landMountStatus({ state: body.state, reason: 'reason' in body ? body.reason : undefined }, phase);
