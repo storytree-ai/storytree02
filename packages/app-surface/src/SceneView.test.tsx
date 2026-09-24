@@ -268,6 +268,19 @@ function kindsIn(node: SceneNode): Set<string> {
 }
 
 describe('SceneView — the studio scene mapper', () => {
+  it('the SHARED default ctx classes every island by its folded status — the nameplate and ground hooks', () => {
+    // `shippedCtx()` with NO override is what a mapper test gets by default; its island class must
+    // carry the status the scene folded, or the status-keyed nameplate rules read nothing.
+    const input = realisticForestInput(true);
+    const { root } = mountScene(input, shippedCtx());
+    const islands = [...root.querySelectorAll('g.hex-flora[data-story-id]')];
+    expect(islands.length).toBe(input.territories.length);
+    for (const t of input.territories) {
+      const g = root.querySelector(`g.hex-flora[data-story-id="${t.id}"]`);
+      expect(g?.getAttribute('class')).toContain(`hex-territory st-${t.status}`);
+    }
+  });
+
   it('is React.memo-wrapped so a pan (identical scene + ctx) skips the O(nodes) re-walk (ADR-0069)', () => {
     // Pan perf rests on this: a pointermove pans by moving the parent camera <g>, re-rendering
     // TreeView; because TreeView hands stable `scene` + `ctx` identities, memo bails out here and the
