@@ -620,6 +620,37 @@ describe('the land under the working map', () => {
     expect(svgZ).toBeGreaterThanOrEqual(0);
   });
 
+  it('puts the loading notice in the middle of the map, clear of the growth control', () => {
+    // ⚠ The notice used to sit top-centre — the growth control's own slot (`.act2-intro`, drawn
+    // above it) — and the two overlapped into garbled text. While the notice is up the map below
+    // is empty by construction, so the centre is the one place that collides with nothing.
+    const css = readStudioCss();
+    const notice = /\n\.land-view-notice\s*\{([^}]*)\}/.exec(css)![1]!;
+    const control = /\n\.act2-intro\s*\{([^}]*)\}/.exec(css)![1]!;
+    expect(control).toMatch(/top:\s*10px/);
+    expect(notice).toMatch(/top:\s*50%/);
+    expect(notice).toMatch(/left:\s*50%/);
+    expect(notice).toMatch(/transform:\s*translate\(-50%,\s*-50%\)/);
+  });
+
+  it('hit-tests the 3D plants\' click targets without painting them, only on an unparked map', () => {
+    // ⚠⚠ ~2,800 painted-transparent rects made every repaint of the SVG cost ~250 ms of compositor
+    // layerisation — the growth's last fifth played at 3–4 frames a second. Unpainted, they cost
+    // nothing; `pointer-events: all` keeps them hittable. But `all` also ignores visibility and
+    // overrides the parked route's `pointer-events: none`, so the rule MUST NOT reach a parked map:
+    // hidden targets there would catch clicks meant for the page on top.
+    const css = readStudioCss();
+    const rule = /\n([^\n{}]*\.native-prop-targets\s+rect)\s*\{([^}]*)\}/.exec(css);
+    expect(rule, 'the native-target rule must exist').toBeTruthy();
+    const [, selector, body] = rule!;
+    expect(selector).toContain(".tree-route:not([data-parked='true'])");
+    expect(selector).toContain('.has-land-mount');
+    expect(body).toMatch(/visibility:\s*hidden/);
+    expect(body).toMatch(/pointer-events:\s*all/);
+    // And the parked route really is the thing it must stay out of.
+    expect(/\.tree-route\[data-parked='true'\]\s*\{([^}]*)\}/.exec(css)![1]!).toMatch(/pointer-events:\s*none/);
+  });
+
   it('leaves the flag-off route with a static SVG and no new stacking context', () => {
     // The ordering above is scoped to `.has-land-mount` precisely so the ordinary map is untouched.
     const css = readStudioCss();
