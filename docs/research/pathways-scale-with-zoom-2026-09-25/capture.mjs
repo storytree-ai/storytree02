@@ -9,7 +9,7 @@
 //   node capture.mjs --run --heavy-lock-held --out /tmp/<fresh> --arm before=http://127.0.0.1:P,/abs/worktree \
 //     [--snapshot-save /tmp/snap.json | --snapshot-load /tmp/snap.json]
 //
-// Per zoom (rest = the studio's opening view, in = 8 wheel notches in, out = wheeled out to the
+// Per zoom, once with nothing selected and once with one island selected (rest = the studio's opening view, in = 8 wheel notches in, out = wheeled out to the
 // zoom-out floor) it records:
 //   - the SVG camera scale and the 3D camera zoom (CSS px per ground unit — they must agree);
 //   - each 3D road ribbon's declared width and whether it is in WORLD units or SCREEN pixels;
@@ -70,7 +70,9 @@ async function open(arm, acquire) {
     try {
       if (req.method() !== 'GET') throw Error(`refused ${req.method()} ${key}`);
       if (!payloads.has(key)) {
-        if (!acquire) throw Error(`uncaptured API request: ${key}`);
+        // A request the frozen map did not make (the selected story's side panel): fetched ONCE and
+        // kept, and saved with the snapshot, so a later arm replays it too.
+        if (!acquire) (manifest.lateRequests ??= []).push(key);
         const res = await route.fetch({ timeout: 120_000 }); const body = await res.body();
         const headers = res.headers(); for (const h of ['content-length', 'content-encoding', 'transfer-encoding']) delete headers[h];
         payloads.set(key, { status: res.status(), headers, body });
@@ -230,16 +232,21 @@ try {
     storiesWithVerdict: tree.stories.filter((s) => s.verdict).length,
   };
   if (manifest.snapshot.storiesWithVerdict === 0) throw Error('proof-less snapshot — refusing');
+  for (const arm of arms) {
+    // Pass 1, nothing selected: the pictures, and the 3D roads' width with no lane drawn over them.
+    // Pass 2, one island selected (a real nameplate click): the SVG layer's road lanes, measured.
+    for (const selected of [false, true]) {
+      const { context, page } = await open(arm, false);
+      if (selected) manifest.selected = await selectNearest(page);
+      const tag = selected ? 'sel-' : '';
+      await shoot(page, arm, `${tag}rest`);
+      await wheel(page, 8); await shoot(page, arm, `${tag}in`);
+      await wheel(page, -30); await shoot(page, arm, `${tag}out`);
+      await context.close();
+    }
+  }
   const saveTo = value('--snapshot-save', null);
   if (saveTo) writeFileSync(saveTo, JSON.stringify([...payloads].map(([k, p]) => [k, { status: p.status, headers: p.headers, body: p.body.toString('base64') }])));
-  for (const arm of arms) {
-    const { context, page } = await open(arm, false);
-    manifest.selected = await selectNearest(page);
-    await shoot(page, arm, 'rest');
-    await wheel(page, 8); await shoot(page, arm, 'in');
-    await wheel(page, -30); await shoot(page, arm, 'out');
-    await context.close();
-  }
   if (manifest.errors.length) throw Error(manifest.errors.join('\n'));
   manifest.status = 'CAPTURED';
 } catch (e) { manifest.status = 'FAILED'; manifest.failure = e.stack; process.exitCode = 1; console.error(e.stack); }
