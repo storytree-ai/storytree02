@@ -104,6 +104,7 @@ import type { EmitWispArgs, EmitWispDeps, GateEmitWispOpts } from "./wisp-smoke.
 import { staleExistenceClaimRefusal } from "./stale-existence-claim.js";
 import { resolveHoldsDir } from "./build-hold.js";
 import { chooseHoldGraceMs, chooseTimeBudgetMs } from "./time-budget.js";
+import type { BuildGuard, BuildGuardResult } from "./build-guard.js";
 
 /**
  * ADR-0082: the story's OWN UAT crown rolled up from its per-test signed verdicts, as a report line.
@@ -667,6 +668,8 @@ export interface StoryBuildOpts {
    * a watcher WHICH node the run is on rather than only that it has not finished.
    */
   progress?: BuildProgress;
+  /** Paid-entry seam: one lease for the story and all members it drives. */
+  buildGuardFactory?: (input: { runId: string; unitIds: readonly string[] }) => Promise<BuildGuardResult>;
 }
 
 /** `storytree story build <story-id>` — the whole Phase-E walk, returned as one envelope. */
@@ -1086,10 +1089,25 @@ export async function storyBuild(
   // worktree add`, or a `pnpm install` failure it tears down and rethrows), and a throw before this
   // try would leak the Cloud SQL pool for the process lifetime.
   let worktree: BuildWorktree | undefined;
+  let buildGuard: BuildGuard | undefined;
   /** Every claim this chain is holding, each tagged with whether its take CREATED the row or borrowed it. */
   let claimsHeld: HeldClaim[] = [];
   const claimCaller = `story build ${story.id} ${real ? "--real" : live ? "--live" : "--dry-run"}`;
   try {
+    if (real && opts.buildGuardFactory !== undefined) {
+      const acquired = await opts.buildGuardFactory({
+        runId,
+        unitIds: [...new Set([story.id, ...driveOrder.map((node) => node.id)])].sort(),
+      });
+      if (!acquired.ok) {
+        return {
+          ok: false,
+          body: `build lease refused for ${acquired.refusal.unitId}; held by ${acquired.refusal.holderRunId}`,
+          next: [],
+        };
+      }
+      buildGuard = acquired.guard;
+    }
     // Refuse a duplicate concurrent build of any MEMBER before cutting a worktree or spending
     // (ADR-0121) — the ENFORCING twin of presence, now at the grain the duplication actually happens
     // at. A sibling driving disjoint members of the same story is no longer refused (ADR-0270 D1).
@@ -1229,6 +1247,10 @@ export async function storyBuild(
               // phase it stalled in.
               onPhase: (phase) => progress.note(phase),
             };
+            const heldBuildGuard = buildGuard;
+            if (heldBuildGuard !== undefined) {
+              realArgs.beforePhase = () => heldBuildGuard.assertHeld();
+            }
             if (dbProofEnv !== undefined) realArgs.dbProofEnv = dbProofEnv;
             if (override !== undefined) realArgs.authorOverride = override;
             if (liveOverride !== undefined) realArgs.liveAuthorOverride = liveOverride;
@@ -1645,6 +1667,7 @@ export async function storyBuild(
       ],
     };
   } finally {
+    if (buildGuard !== undefined) await buildGuard.release();
     // Put down the member claims (ADR-0121) — but ONLY the rows this chain's own takes created; one
     // the launching session already held was borrowed, not taken, so the chain leaves it (else the
     // session's declaration silently vanishes across its own builds — the ADR-0199 class). Reported

@@ -108,6 +108,7 @@ import {
 } from "./scope-walls.js";
 import type { LiveRunInfo, UsageRunIds } from "./usage.js";
 import { staleExistenceClaimRefusal } from "./stale-existence-claim.js";
+import type { BuildGuard, BuildGuardResult } from "./build-guard.js";
 import { fileHoldChannel, resolveHoldsDir } from "./build-hold.js";
 import { chooseHoldGraceMs, chooseTimeBudgetMs } from "./time-budget.js";
 import {
@@ -1851,6 +1852,12 @@ export interface RealBuildArgs {
    * walk), nothing is recorded at all.
    */
   incrementId?: string | undefined;
+  /** Paid-entry seam: acquire the run lease before the REAL walk starts. */
+  buildGuardFactory?: (input: { runId: string; unitIds: readonly string[] }) => Promise<BuildGuardResult>;
+  /** A held shared guard's checkpoint, run outside advisory phase reporting. */
+  beforePhase?: () => Promise<void>;
+  /** Observes real build activity; its lifecycle is owned by this REAL entry. */
+  buildActivityObserver?: { start(): Promise<void>; stop(): Promise<void> };
 }
 
 /**
@@ -1926,6 +1933,27 @@ export interface RealBuildResult {
  */
 export async function buildNodeReal(args: RealBuildArgs): Promise<RealBuildResult> {
   const { spec, worktree, baseSha, realConfig, store, runId, signer } = args;
+  let acquiredGuard: BuildGuard | undefined;
+  if (args.buildGuardFactory !== undefined) {
+    const acquired = await args.buildGuardFactory({ runId, unitIds: [spec.id] });
+    if (!acquired.ok) {
+      return {
+        result: {
+          ok: false,
+          failedAt: "AUTHOR_TEST",
+          reason: `build lease refused for ${acquired.refusal.unitId}; held by ${acquired.refusal.holderRunId}`,
+          phasesVisited: [],
+        },
+      };
+    }
+    acquiredGuard = acquired.guard;
+  }
+  const checkpoint = args.beforePhase ?? (acquiredGuard === undefined ? undefined : () => acquiredGuard.assertHeld());
+  try {
+    if (args.buildActivityObserver !== undefined) await args.buildActivityObserver.start();
+    // This is deliberately before proveUnit and before its advisory phase reporter: a lost lease
+    // must stop the next controlled operation rather than be swallowed as liveness chatter.
+    if (checkpoint !== undefined) await checkpoint();
   await store.appendEvent(
     workEvent({ unitId: spec.id, event: "building", runId, tier: spec.tier }, signer),
   );
@@ -2163,6 +2191,16 @@ export async function buildNodeReal(args: RealBuildArgs): Promise<RealBuildResul
     commitSha: result.verdict.commitSha,
   });
   return out;
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    return { result: { ok: false, failedAt: "AUTHOR_TEST", reason, phasesVisited: [] } };
+  } finally {
+    try {
+      if (args.buildActivityObserver !== undefined) await args.buildActivityObserver.stop();
+    } finally {
+      if (acquiredGuard !== undefined) await acquiredGuard.release();
+    }
+  }
 }
 
 // ── `storytree node build` ───────────────────────────────────────────────────
