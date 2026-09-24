@@ -1584,6 +1584,27 @@ a.stat:hover {
   inset: 0;
   pointer-events: none;
 }
+.land-view-notice {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  max-width: min(560px, calc(100% - 32px));
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(255, 253, 248, 0.96);
+  box-shadow: 0 2px 10px rgba(40, 32, 20, 0.18);
+  color: #3b3226;
+  font-size: 13px;
+  line-height: 1.4;
+  pointer-events: none;
+}
+.land-view-notice.is-unsupported,
+.land-view-notice.is-failed {
+  border-left: 4px solid #b3452f;
+  pointer-events: auto;
+}
 .world-pan-layer.has-land-mount > .land-mount {
   z-index: 0;
 }

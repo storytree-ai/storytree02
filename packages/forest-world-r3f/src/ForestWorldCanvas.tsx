@@ -1353,6 +1353,13 @@ export interface ForestWorldCanvasProps {
    */
   onNativePropTargets?: (targets: readonly NativePropHitEnvelope[]) => void;
   /**
+   * WHETHER THE RENDERER IS DRAWING, for a host that must never leave a silent blank (ADR-0608 D5):
+   * `ready` once the WebGL context exists and the canvas is created, `lost` if the browser takes
+   * the context away afterwards. A context that cannot be created at all throws into the host's
+   * error boundary instead — R3F's own behaviour, not something this prop reports.
+   */
+  onRendererState?: (state: 'ready' | 'lost') => void;
+  /**
    * REGISTERED-UNDERLAY MODE — present ⇒ this canvas is the LAND BENEATH A HOST'S OWN
    * INTERACTIVE LAYER, and the host owns the camera.
    *
@@ -1636,6 +1643,7 @@ export function ForestWorldCanvas({
   registered,
   regrow,
   onNativePropTargets,
+  onRendererState,
 }: ForestWorldCanvasProps) {
   const [documentVisible, setDocumentVisible] = useState(
     () => typeof document === 'undefined' || document.visibilityState === 'visible',
@@ -1769,6 +1777,14 @@ export function ForestWorldCanvas({
       {...compose.canvasProps}
       data-regrow-active={hasRegrowPresentation ? 'true' : undefined}
       camera={{ position: frame.position, near: frame.near, far: frame.far }}
+      {...(onRendererState === undefined
+        ? {}
+        : {
+            onCreated: ({ gl }: { gl: { domElement: HTMLCanvasElement } }) => {
+              gl.domElement.addEventListener('webglcontextlost', () => onRendererState('lost'), { once: true });
+              onRendererState('ready');
+            },
+          })}
     >
       {/* ⚠ THE BACKDROP IS THE HOST'S IN REGISTERED MODE. Standalone this paints the dark board
           behind the world; under a host the host has already painted its own (the studio's sea

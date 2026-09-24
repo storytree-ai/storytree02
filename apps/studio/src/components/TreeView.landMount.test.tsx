@@ -502,6 +502,45 @@ describe('the land under the working map', () => {
     }
   });
 
+  it('tells the member, in the ACCESSIBLE host layer, when this browser cannot draw the 3D map (ADR-0608 D5)', async () => {
+    const originalRect = Element.prototype.getBoundingClientRect;
+    const originalRO = Object.getOwnPropertyDescriptor(globalThis, 'ResizeObserver');
+    class RO {
+      constructor(private readonly callback: () => void) {}
+      observe() { this.callback(); }
+      disconnect() {}
+    }
+    Object.defineProperty(globalThis, 'ResizeObserver', { configurable: true, writable: true, value: RO });
+    Element.prototype.getBoundingClientRect = function getBoundingClientRect() {
+      return { x: 0, y: 0, left: 0, top: 0, right: 1600, bottom: 900, width: 1600, height: 900, toJSON: () => ({}) } as DOMRect;
+    };
+    try {
+      // No surface override: the REAL mount and its REAL default canvas, on a runner with no WebGL 2.
+      const container = await renderTreeAt('?landMount=1&landMountProps=1');
+      await act(async () => {});
+      const notice = within(container).getByRole('alert');
+      expect(notice.textContent).toContain('WebGL 2');
+      expect(notice.textContent).toContain("This browser can't draw the forest map");
+      // Reachable: not inside the aria-hidden land layer, and not inside the clickable viewport.
+      expect(notice.closest('[aria-hidden="true"]')).toBeNull();
+      expect(notice.closest('.world-viewport')).toBeNull();
+      expect(notice.closest('.world-frame')).not.toBeNull();
+      expect(container.querySelector('[data-testid="land-mount"] canvas')).toBeNull();
+      // No fallback map is invented: the working map is exactly the one that was there.
+      expect(container.querySelector('svg.world-scene')).not.toBeNull();
+    } finally {
+      cleanup();
+      Element.prototype.getBoundingClientRect = originalRect;
+      if (originalRO) Object.defineProperty(globalThis, 'ResizeObserver', originalRO);
+      else Reflect.deleteProperty(globalThis, 'ResizeObserver');
+    }
+  });
+
+  it('shows no notice without the mount flag', async () => {
+    const container = await renderTreeAt('');
+    expect(container.querySelector('[data-testid="land-view-notice"]')).toBeNull();
+  });
+
   it('suppresses BOTH SVG path passes, and keeps every edge identity in the DOM', () => {
     // ⚠⚠ THE TWO HALVES OF THE PATHWAY RULE ARE ONE DECISION, and this is the half a stylesheet can
     // be asked about. The other half is `underlayComposition`'s `trails: true` under a host
