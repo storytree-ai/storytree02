@@ -96,6 +96,11 @@ describe('the map never paints a proof-less tree as current when the live store 
     await expect(tree(b)).rejects.toMatchObject({ status: 503 });
   });
 
+  it('refuses when only the verdict map fails', async () => {
+    const { b } = backend({ verdicts: [null, null], events: [[], []] });
+    await expect(tree(b)).rejects.toMatchObject({ status: 503 });
+  });
+
   it('re-reads once and serves the proof when the second read answers', async () => {
     const { b, calls } = backend({ verdicts: [null, { 'cap-a': PASS }], events: [null, []] });
     const payload = await tree(b);

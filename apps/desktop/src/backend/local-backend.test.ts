@@ -1483,7 +1483,11 @@ test("local-backend: resetHierarchyCache actually clears what the live read cach
       storiesDir: NO_STORIES_DIR,
       docsDir: NO_DOCS_DIR,
       store: "json",
-      backend: live ? { ...stubBackend(), workHierarchy: async () => snapshot } : stubBackend(),
+      // The live arm answers its proof read: a live hierarchy with a FAILED proof read is refused
+      // (503) rather than painted, which is a different test's subject.
+      backend: live
+        ? { ...stubBackend(), workHierarchy: async () => snapshot, latestVerdicts: async () => ({}) }
+        : stubBackend(),
     });
     // REAL node objects with only `end` swapped for a capture — the idiom the mirror probes use
     // (anti-slop-adoption-arc inc-03: no `as unknown as` fake claiming to be something it shares
@@ -1519,4 +1523,87 @@ test("local-backend: resetHierarchyCache actually clears what the live read cach
     [],
     "after the reset the degraded read reaches disk — the cache is genuinely gone",
   );
+});
+
+// The studio's rule, re-composed (apiRouter.ts `buildTreePayload`): when the LIVE store served the
+// hierarchy, a null proof read is a FAILED read, and folding it would paint every island its
+// authored status as if current — the 2026-09-24 all-`proposed` studio map. Re-read once, then refuse
+// with 503. The `tree-live-proof-unread` conformance arm holds the two surfaces to the same answer;
+// these pin the re-read, which that arm (both reads fail twice) cannot distinguish from no re-read.
+test("local-backend: /api/tree refuses a proof-less map when the live store served the hierarchy", async () => {
+  const snapshot = {
+    schemaVersion: 1,
+    commitSha: "sha-live",
+    storiesTreeSha: "tree-live",
+    generatedAt: "2026-09-24T00:00:00.000Z",
+    generator: "test",
+    stories: [
+      {
+        id: "live-story",
+        title: "Live story",
+        outcome: "read from the live projection",
+        status: "proposed" as const,
+        proofMode: "UAT",
+        uatWitness: null,
+        dependsOn: [],
+        consumedBy: [],
+        decisions: [],
+        building: false,
+        capabilities: [],
+        uatTestCriteria: [],
+        reliabilityGates: [],
+      },
+    ],
+    capabilities: [],
+  };
+
+  const treeWith = async (
+    verdicts: (Record<string, never> | null)[],
+    events: (unknown[] | null)[],
+  ): Promise<{ status: number; body: { error?: string; stories?: unknown[] }; calls: number[] }> => {
+    const calls = [0, 0];
+    const handler = createLocalBackend({
+      storiesDir: NO_STORIES_DIR,
+      docsDir: NO_DOCS_DIR,
+      store: "json",
+      backend: {
+        ...stubBackend(),
+        workHierarchy: async () => snapshot,
+        latestVerdicts: async () => verdicts[calls[0]!++] ?? null,
+        verdictEvents: async () => events[calls[1]!++] ?? null,
+      },
+    });
+    const req = new IncomingMessage(new Socket());
+    req.method = "GET";
+    req.url = "/api/tree";
+    let raw = "";
+    const res = new ServerResponse(new IncomingMessage(new Socket()));
+    res.end = ((chunk?: unknown): ServerResponse => {
+      raw = typeof chunk === "string" ? chunk : "";
+      return res;
+    }) as ServerResponse["end"];
+    await handler(req, res);
+    resetHierarchyCache();
+    return { status: res.statusCode, body: JSON.parse(raw) as { error?: string; stories?: unknown[] }, calls };
+  };
+
+  const refused = await treeWith([null, null], [null, null]);
+  assert.equal(refused.status, 503, "both proof reads failing twice is refused, not painted");
+  assert.match(refused.body.error ?? "", /signed verdicts could not be read/);
+  assert.deepEqual(refused.calls, [2, 2], "the proof is re-read exactly once before refusing");
+
+  const halfProven = await treeWith([{}, {}], [null, null]);
+  assert.equal(halfProven.status, 503, "a failed event stream alone is refused too");
+
+  const mapless = await treeWith([null, null], [[], []]);
+  assert.equal(mapless.status, 503, "a failed verdict map alone is refused too");
+
+  const recovered = await treeWith([null, {}], [null, []]);
+  assert.equal(recovered.status, 200, "a re-read that answers serves the map");
+  assert.equal(recovered.body.stories?.length, 1);
+  assert.deepEqual(recovered.calls, [2, 2]);
+
+  const firstTime = await treeWith([{}], [[]]);
+  assert.equal(firstTime.status, 200);
+  assert.deepEqual(firstTime.calls, [1, 1], "a proof that answers first time is read once");
 });
