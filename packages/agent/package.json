@@ -12,7 +12,7 @@
     "test": "bun test --preload ../../scripts/tsx-cache-off.mjs --timeout 300000 src/"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.170",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.281",
     "@anthropic-ai/sdk": "^0.39.0",
     "@openai/codex": "^0.145.0",
     "zod": "^3.24.1"

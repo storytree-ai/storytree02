@@ -136,6 +136,80 @@ test("author => ok on an SDK success result, with cost/turns recorded", async ()
   assert.equal(author.totalCostUsd, 0.0421);
 });
 
+test("author => fail-closed on a `success` no model answered (empty modelUsage, API-error text)", async () => {
+  // The measured silent failure: a bundled Claude Code too old for the requested model.
+  const author = new ClaudeAgentAuthor({
+    cwd: CWD,
+    isWriteAllowed: () => true,
+    queryFn: scripted([
+      {
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        num_turns: 1,
+        total_cost_usd: 0,
+        result: "API Error: 400 Claude Code 2.1.170 does not support this model",
+        modelUsage: {},
+      },
+    ]),
+  });
+
+  const r = await author.author("IMPLEMENT", "implement it");
+  assert.equal(r.ok, false);
+  if (r.ok) return;
+  assert.match(r.error, /no model answered/);
+  assert.match(r.error, /does not support this model/);
+  assert.equal(r.exhausted, undefined, "nothing was authored — this is a genuine failure, not exhaustion");
+  assert.equal(author.runs.length, 1, "the slice is still accounted");
+});
+
+test("author => the empty-modelUsage refusal carries no text suffix when the result has no text", async () => {
+  const author = new ClaudeAgentAuthor({
+    cwd: CWD,
+    isWriteAllowed: () => true,
+    queryFn: scripted([
+      { type: "result", subtype: "success", is_error: false, num_turns: 1, total_cost_usd: 0, modelUsage: {} },
+    ]),
+  });
+
+  assert.deepEqual(await author.author("IMPLEMENT", "implement it"), {
+    ok: false,
+    error: "SDK session reported success but no model answered (empty modelUsage)",
+  });
+});
+
+test("author => a null modelUsage is 'no split reported', not 'no model answered'", async () => {
+  const author = new ClaudeAgentAuthor({
+    cwd: CWD,
+    isWriteAllowed: () => true,
+    queryFn: scripted([
+      { type: "result", subtype: "success", is_error: false, num_turns: 1, total_cost_usd: 0, modelUsage: null },
+    ]),
+  });
+
+  assert.deepEqual(await author.author("IMPLEMENT", "implement it"), { ok: true });
+});
+
+test("author => ok on a `success` whose modelUsage names the model that answered", async () => {
+  const author = new ClaudeAgentAuthor({
+    cwd: CWD,
+    isWriteAllowed: () => true,
+    queryFn: scripted([
+      {
+        type: "result",
+        subtype: "success",
+        is_error: false,
+        num_turns: 1,
+        total_cost_usd: 0.01,
+        result: "ok",
+        modelUsage: { "claude-opus-5-5": { inputTokens: 3, outputTokens: 1, costUSD: 0.01 } },
+      },
+    ]),
+  });
+
+  assert.deepEqual(await author.author("IMPLEMENT", "implement it"), { ok: true });
+});
+
 test("author => EXHAUSTED (not a hard error) on a budget-ceiling result — work may be on disk", async () => {
   const author = new ClaudeAgentAuthor({
     cwd: CWD,
