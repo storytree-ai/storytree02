@@ -2824,11 +2824,13 @@ export function TreeView({
   // page handle from steering the next map.
   useEffect(() => {
     if (!world || typeof window === 'undefined') return;
+    let mounted = true;
     const captureWindow = window as Window & {
       __storytreeForestCaptureCamera?: { capture(target: ForestCaptureTarget): ReturnType<typeof resolveForestCaptureCamera> };
     };
     const bridge = {
       capture: (target: ForestCaptureTarget) => {
+        if (!mounted) throw new Error('forest capture camera is unmounted');
         const frame = { width: frameRef.current?.clientWidth ?? 0, height: frameRef.current?.clientHeight ?? 0 };
         const fit = fitWorld(world.width, world.height, frame.width, frame.height, {
           padding: 16,
@@ -2877,6 +2879,7 @@ export function TreeView({
     };
     captureWindow.__storytreeForestCaptureCamera = bridge;
     return () => {
+      mounted = false;
       if (captureWindow.__storytreeForestCaptureCamera === bridge) delete captureWindow.__storytreeForestCaptureCamera;
     };
   }, [world]);

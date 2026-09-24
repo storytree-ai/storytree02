@@ -167,4 +167,13 @@ describe('fccs-live-seam-returns-the-applied-camera-and-cleans-up: mounted lifec
     view.unmount();
     expect(window.__storytreeForestCaptureCamera).toBeUndefined();
   });
+
+  it('revokes a previously captured command when its map unmounts', async () => {
+    const view = await mountMap();
+    const staleCapture = requireCapture();
+
+    view.unmount();
+
+    expect(() => staleCapture.capture({ kind: 'square', x: 30, y: 30, size: 10 })).toThrow('unmounted');
+  });
 });
