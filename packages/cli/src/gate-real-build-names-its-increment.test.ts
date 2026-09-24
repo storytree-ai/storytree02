@@ -26,7 +26,7 @@ import {
   renderInnerLoopEntryState,
   resolveBuildIncrement,
 } from "@storytree/drive";
-import type { BuildProgress, EnsureDbResult } from "@storytree/drive";
+import type { BuildGuardFactory, BuildProgress, EnsureDbResult } from "@storytree/drive";
 
 // The module under test, reached only through the namespace (ADR-0057 C): `gateRetryCommand` and the
 // increment/innerLoopReads wiring inside `driveBuildTestsGate` do not exist / are ignored at HEAD.
@@ -238,6 +238,37 @@ function spyEnsureDb(): EnsureDbSpy {
   };
 }
 
+/**
+ * An explicit OFFLINE run-lease factory (`gate-build-holds-a-run-lease`) plus what it saw. A drive that
+ * resolves a valid increment acquires its run lease before the policy fold, and production's default
+ * opens the shared claim store — so every drive here that reaches admission injects this guard.
+ */
+interface GuardSpy {
+  events: string[];
+  factory: BuildGuardFactory;
+}
+
+function offlineGuard(): GuardSpy {
+  const events: string[] = [];
+  return {
+    events,
+    factory: async ({ runId }) => {
+      events.push("acquire");
+      return {
+        ok: true,
+        runId,
+        guard: {
+          assertHeld: async () => {},
+          noteActivity: async () => {},
+          release: async () => {
+            events.push("release");
+          },
+        },
+      };
+    },
+  };
+}
+
 const throwingLedger: Pick<Store, "readEvents"> = {
   readEvents: async () => {
     throw new Error("ledger-down-marker");
@@ -333,17 +364,19 @@ test("gate-build-refuses-a-missing-increment-first: a REAL gate drive with no in
 
 // ── gate-build-preflights-the-gate-after-the-sweep ──────────────────────────────────────────────
 
+// test-updated (new behaviour): "gate-build-preflights-the-gate-after-the-sweep: an unknown or closed increment, or a gate the attempt policy stops, is refused after the decision sweep and before the database starts" — gate-build-holds-a-run-lease moves the increment resolution and the attempt-policy fold ahead of the prompt render and the decision sweep, under a held run lease (the shared-store admission order); each refusal is now asserted to precede the prompt render, a policy stop to release its lease once, and a key-fork HALT to come after an admitted lease. Every drive injects the explicit offline buildGuardFactory. The database is still never started.
 test("gate-build-preflights-the-gate-after-the-sweep: an unknown or closed increment, or a gate the attempt policy stops, is refused after the decision sweep and before the database starts", async () => {
   const stories = await fixtureStories();
   try {
     const corpus = await fixtureCorpusWithIncrements();
     const gate = buildTestsGate();
 
-    // Control (already holds before the change): the decision sweep precedes the increment lookup —
-    // an unresolved key fork HALTS before the increment is ever resolved.
+    // An unresolved key fork still HALTS before the database — but now after the lease is admitted
+    // and the policy has passed, and the lease is released once.
     {
       const { progress, stages } = recordingProgress();
       const { ensureDb, calls } = spyEnsureDb();
+      const lease = offlineGuard();
       const env = await GateDriver.driveBuildTestsGate(gate, "builder@example.com", {
         corpusStore: corpus,
         progress,
@@ -352,6 +385,7 @@ test("gate-build-preflights-the-gate-after-the-sweep: an unknown or closed incre
         ensureDb,
         increment: "inc-live",
         innerLoopReads: { corpus, ledger: new InMemoryStore() },
+        buildGuardFactory: lease.factory,
         decisionForks: [
           routineFork({
             id: "runseed-seam",
@@ -362,8 +396,10 @@ test("gate-build-preflights-the-gate-after-the-sweep: an unknown or closed incre
       });
       assert.equal(env.ok, false, env.body);
       assert.match(env.body, /HALTED fix-story#gate-1/);
-      assert.deepEqual(stages, [PROMPTS_STAGE]);
+      assert.equal(stages.at(-1), PROMPTS_STAGE, "the sweep follows the prompt render");
+      assert.equal(stages.includes(DB_STAGE), false);
       assert.equal(calls.count, 0);
+      assert.deepEqual(lease.events, ["acquire", "release"]);
     }
 
     // An unknown / closed increment, and every attempt-policy stop, refuse AFTER the sweep — never
@@ -386,6 +422,7 @@ test("gate-build-preflights-the-gate-after-the-sweep: an unknown or closed incre
     for (const c of cases) {
       const { progress, stages } = recordingProgress();
       const { ensureDb, calls } = spyEnsureDb();
+      const lease = offlineGuard();
       const env = await GateDriver.driveBuildTestsGate(gate, "builder@example.com", {
         corpusStore: corpus,
         progress,
@@ -394,13 +431,16 @@ test("gate-build-preflights-the-gate-after-the-sweep: an unknown or closed incre
         ensureDb,
         increment: c.increment,
         innerLoopReads: { corpus, ledger: c.ledger },
+        buildGuardFactory: lease.factory,
       });
 
       const resolvedIncrement = await resolveBuildIncrement(corpus, c.increment);
       let expectedState;
       if (!resolvedIncrement.ok) {
         expectedState = resolvedIncrement.state;
+        assert.deepEqual(lease.events, [], `increment=${c.increment}: an unresolved increment acquires no lease`);
       } else {
+        assert.deepEqual(lease.events, ["acquire", "release"], `increment=${c.increment}: a policy stop releases its lease once`);
         const preflight = await preflightInnerLoop({
           ledger: c.ledger,
           incrementId: resolvedIncrement.incrementId,
@@ -418,13 +458,15 @@ test("gate-build-preflights-the-gate-after-the-sweep: an unknown or closed incre
 
       assert.deepEqual(env, innerLoopRefusalEnvelope(expectedState), `increment=${c.increment}`);
       assert.equal(calls.count, 0, `increment=${c.increment}: ensureDb must never run`);
-      assert.deepEqual(stages, [PROMPTS_STAGE, PREFLIGHT_STAGE], `increment=${c.increment}`);
+      assert.equal(stages.includes(PROMPTS_STAGE), false, `increment=${c.increment}: refused before the prompt render`);
+      assert.equal(stages.includes(DB_STAGE), false, `increment=${c.increment}`);
     }
 
     // An empty ledger proceeds to the database preflight, which the injected ensureDb refuses.
     {
       const { progress, stages } = recordingProgress();
       const { ensureDb, calls } = spyEnsureDb();
+      const lease = offlineGuard();
       const env = await GateDriver.driveBuildTestsGate(gate, "builder@example.com", {
         corpusStore: corpus,
         progress,
@@ -433,10 +475,13 @@ test("gate-build-preflights-the-gate-after-the-sweep: an unknown or closed incre
         ensureDb,
         increment: "inc-live",
         innerLoopReads: { corpus, ledger: new InMemoryStore() },
+        buildGuardFactory: lease.factory,
       });
       assert.equal(calls.count, 1);
       assert.equal(env.body, DB_MARKER_BODY);
-      assert.deepEqual(stages, [PROMPTS_STAGE, PREFLIGHT_STAGE, DB_STAGE]);
+      assert.ok(stages.includes(PROMPTS_STAGE));
+      assert.equal(stages.at(-1), DB_STAGE);
+      assert.deepEqual(lease.events, ["acquire", "release"], "a database refusal releases the held lease once");
     }
   } finally {
     await rm(stories, { recursive: true, force: true });
@@ -445,6 +490,7 @@ test("gate-build-preflights-the-gate-after-the-sweep: an unknown or closed incre
 
 // ── gate-build-records-under-the-gate-id ────────────────────────────────────────────────────────
 
+// test-updated (refactor): "gate-build-records-under-the-gate-id: the walk records its attempt and any signed pass under the gate id, and the envelopes render the entry state that leaves" — each drive injects the explicit offline buildGuardFactory, so the admitted walks hold a hermetic run lease; same claims.
 test("gate-build-records-under-the-gate-id: the walk records its attempt and any signed pass under the gate id, and the envelopes render the entry state that leaves", async () => {
   const stories1 = await fixtureStories();
   const repo1 = await fixtureRepo();
@@ -462,6 +508,7 @@ test("gate-build-records-under-the-gate-id: the walk records its attempt and any
       authorOverride: scriptedR2Author,
       increment: "inc-live",
       innerLoopReads: { corpus: corpus1, ledger: store1 },
+      buildGuardFactory: offlineGuard().factory,
     });
     assert.equal(env.ok, true, env.body);
 
@@ -498,6 +545,7 @@ test("gate-build-records-under-the-gate-id: the walk records its attempt and any
       authorOverride: scriptedR2Author,
       increment: "inc-live",
       innerLoopReads: { corpus: corpus1, ledger: store1 },
+      buildGuardFactory: offlineGuard().factory,
     });
     const resolvedSecond = await preflightInnerLoop({
       ledger: store1,
@@ -545,6 +593,7 @@ test("gate-build-records-under-the-gate-id: the walk records its attempt and any
       authorOverride: regressingAuthor,
       increment: "inc-live",
       innerLoopReads: { corpus: corpus2, ledger: store2 },
+      buildGuardFactory: offlineGuard().factory,
     });
     assert.equal(env.ok, false, env.body);
 
@@ -706,6 +755,7 @@ test("gate-build-prints-the-increment: a drive with no resolvable signer retries
   }
 });
 
+// test-updated (refactor): "gate-build-preflights-the-gate-after-the-sweep: a gate under a live grant of another kind proceeds, because a gate drive is never a revision run" — injects the explicit offline buildGuardFactory, and asserts the legs it reached (the preflight and the prompt render, ending at the database) without pinning their relative order, which the held-lease admission changes; same claims.
 test("gate-build-preflights-the-gate-after-the-sweep: a gate under a live grant of another kind proceeds, because a gate drive is never a revision run", async () => {
   const stories = await fixtureStories();
   try {
@@ -731,10 +781,13 @@ test("gate-build-preflights-the-gate-after-the-sweep: a gate under a live grant 
       ensureDb,
       increment: "inc-live",
       innerLoopReads: { corpus, ledger },
+      buildGuardFactory: offlineGuard().factory,
     });
     assert.equal(env.body, DB_MARKER_BODY);
     assert.equal(calls.count, 1);
-    assert.deepEqual(stages, [PROMPTS_STAGE, PREFLIGHT_STAGE, DB_STAGE]);
+    assert.ok(stages.includes(PROMPTS_STAGE), stages.join(" | "));
+    assert.ok(stages.includes(PREFLIGHT_STAGE), stages.join(" | "));
+    assert.equal(stages.at(-1), DB_STAGE);
   } finally {
     await rm(stories, { recursive: true, force: true });
   }

@@ -19,6 +19,7 @@ import { InMemoryStore } from "@storytree/storage-protocol";
 import type { Store } from "@storytree/storage-protocol";
 import { loadFixtureCorpus } from "@storytree/library/fixture";
 import { HOLD_GRACE_REAL_ONLY_REFUSAL, holdGraceRefusal, silentBuildProgress } from "@storytree/drive";
+import type { BuildGuardFactory } from "@storytree/drive";
 import type { ReliabilityGate } from "@storytree/library";
 
 import { driveBuildTestsGate, gateRetryCommand } from "./gate-build-driver.js";
@@ -99,6 +100,19 @@ function refusingBuilder(): GateBuildDriverDeps["realNodeBuilder"] {
   });
 }
 
+/**
+ * An explicit OFFLINE run-lease factory (`gate-build-holds-a-run-lease`): a drive that resolves a
+ * valid increment acquires its run lease before the policy fold, and production's default opens the
+ * shared claim store — so the drives below that reach admission inject this no-op guard.
+ */
+function offlineGuardFactory(): BuildGuardFactory {
+  return async ({ runId }) => ({
+    ok: true,
+    runId,
+    guard: { assertHeld: async () => {}, noteActivity: async () => {}, release: async () => {} },
+  });
+}
+
 async function fixtureCorpusWithIncrements(): Promise<InMemoryStore> {
   const corpus = new InMemoryStore();
   await loadFixtureCorpus(corpus);
@@ -135,6 +149,7 @@ test("a gate drive reads --hold-grace and refuses a figure that cannot bound a h
   }
 });
 
+// test-updated (refactor): "a gate drive with a VALID --hold-grace is not refused by the hold check" — its valid increment reaches lease admission, so it injects the explicit offline buildGuardFactory; same claims.
 test("a gate drive with a VALID --hold-grace is not refused by the hold check", async () => {
   // The other side of the first test: without this, a check that refused every value would satisfy
   // it. It also proves the route object passed to `chooseHoldGraceMs` genuinely carries `real: true`
@@ -154,6 +169,7 @@ test("a gate drive with a VALID --hold-grace is not refused by the hold check", 
       increment: "inc-live",
       innerLoopReads: { corpus, ledger: store },
       realNodeBuilder: refusingBuilder(),
+      buildGuardFactory: offlineGuardFactory(),
       holdGrace: "20",
     });
     assert.notEqual(env.body, HOLD_GRACE_REAL_ONLY_REFUSAL);
@@ -163,6 +179,7 @@ test("a gate drive with a VALID --hold-grace is not refused by the hold check", 
   }
 });
 
+// test-updated (refactor): "--hold-grace 0 is HONOURED on a gate drive, unlike --time-budget 0 which is refused" — its valid increment reaches lease admission, so it injects the explicit offline buildGuardFactory; same claims.
 test("--hold-grace 0 is HONOURED on a gate drive, unlike --time-budget 0 which is refused", async () => {
   const stories = await fixtureStories();
   const store: Store = new InMemoryStore();
@@ -177,6 +194,7 @@ test("--hold-grace 0 is HONOURED on a gate drive, unlike --time-budget 0 which i
       increment: "inc-live",
       innerLoopReads: { corpus, ledger: store },
       realNodeBuilder: refusingBuilder(),
+      buildGuardFactory: offlineGuardFactory(),
       holdGrace: "0",
     });
     assert.doesNotMatch(env.body, /--hold-grace/);
