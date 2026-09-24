@@ -1,0 +1,1396 @@
+{
+  "startedAt": "2026-09-24T08:45:46.185Z",
+  "server": {
+    "origin": "http://localhost:5391",
+    "dir": "/home/mickh/code/Storytree/.claude/worktrees/laneK-native-feedback",
+    "head": "a46d0ddb2ad43f8a7435b987d7dc7056685e5c41",
+    "pid": 4168490,
+    "health": {
+      "store": "pg",
+      "db": "ok",
+      "schema": {
+        "code": 9,
+        "db": 9
+      },
+      "pid": 4168490,
+      "code": {
+        "startedAt": "a46d0ddb2ad43f8a7435b987d7dc7056685e5c41",
+        "head": "a46d0ddb2ad43f8a7435b987d7dc7056685e5c41",
+        "stale": false,
+        "directory": "/home/mickh/code/Storytree/.claude/worktrees/laneK-native-feedback",
+        "branch": "claude/lane-o-native-targets"
+      }
+    }
+  },
+  "viewport": {
+    "width": 1800,
+    "height": 1100
+  },
+  "errors": [],
+  "baseline": {
+    "label": "baseline-flat-picture-present",
+    "origin": {
+      "x": 609,
+      "y": 1418.7
+    },
+    "targetCount": 2751,
+    "inViewCount": 303,
+    "camera": {
+      "type": "OrthographicCamera",
+      "zoom": 4.651007811170733,
+      "position": [
+        501.2771633916556,
+        2522.349450015313,
+        3686.2524422618853
+      ]
+    },
+    "hostCTM": [
+      4.651007652282715,
+      0,
+      0,
+      4.651007652282715,
+      -1431.4439697265625,
+      -5042.82861328125
+    ],
+    "registration": {
+      "samples": 100,
+      "maxAbsErrorPx": 0.00017938137000328425
+    },
+    "samples": [
+      {
+        "cap": "library-schema-and-write-validation",
+        "story": "library",
+        "pixel": {
+          "x": 1033,
+          "y": 247
+        },
+        "rectScreenHeight": 80,
+        "standing": 15.05359014926671,
+        "hostHit": {
+          "tag": "image",
+          "cls": "veg-track veg-track-tree st-healthy",
+          "cap": null,
+          "story": null
+        }
+      },
+      {
+        "cap": "work-hierarchy-store-projection",
+        "story": "library",
+        "pixel": {
+          "x": 812,
+          "y": 312
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.56715824336743,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-proposed",
+          "cap": "work-hierarchy-store-projection",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "library-health-gate",
+        "story": "library",
+        "pixel": {
+          "x": 848,
+          "y": 475
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.810274149269844,
+        "hostHit": {
+          "tag": "path",
+          "cls": "parcel-blade v-1",
+          "cap": null,
+          "story": null
+        }
+      },
+      {
+        "cap": "web-experience-sync",
+        "story": "website-experience",
+        "pixel": {
+          "x": 1695,
+          "y": 477
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.141584852422056,
+        "hostHit": {
+          "tag": "path",
+          "cls": "parcel-blade v-0",
+          "cap": null,
+          "story": null
+        }
+      },
+      {
+        "cap": "uat-detail-kind",
+        "story": "uat-criterion-detail",
+        "pixel": {
+          "x": 1481,
+          "y": 854
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.975311238390532,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "uat-detail-kind",
+          "story": "uat-criterion-detail"
+        }
+      },
+      {
+        "cap": "criterion-detail-hash-anchor",
+        "story": "uat-criterion-detail",
+        "pixel": {
+          "x": 1315,
+          "y": 973
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.215495545391605,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "criterion-detail-hash-anchor",
+          "story": "uat-criterion-detail"
+        }
+      },
+      {
+        "cap": "migrate-on-write-upcaster",
+        "story": "library",
+        "pixel": {
+          "x": 954,
+          "y": 298
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.580477831066673,
+        "hostHit": {
+          "tag": "image",
+          "cls": "veg-track veg-track-tree st-healthy",
+          "cap": null,
+          "story": null
+        }
+      },
+      {
+        "cap": "act2-guided-forest",
+        "story": "website-experience",
+        "pixel": {
+          "x": 1738,
+          "y": 312
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.612951334073387,
+        "hostHit": {
+          "tag": "image",
+          "cls": "veg-track veg-track-tree st-healthy",
+          "cap": null,
+          "story": null
+        }
+      },
+      {
+        "cap": "uat-machine-proof-binding",
+        "story": "library",
+        "pixel": {
+          "x": 1034,
+          "y": 354
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.384757675160927,
+        "hostHit": {
+          "tag": "image",
+          "cls": "veg-track veg-track-tree st-healthy",
+          "cap": null,
+          "story": null
+        }
+      },
+      {
+        "cap": "storm-to-forest-inflection",
+        "story": "website-experience",
+        "pixel": {
+          "x": 1667,
+          "y": 359
+        },
+        "rectScreenHeight": 80,
+        "standing": 13.828373721246408,
+        "hostHit": {
+          "tag": "image",
+          "cls": "veg-track veg-track-tree st-healthy",
+          "cap": null,
+          "story": null
+        }
+      },
+      {
+        "cap": "graduation-park-lease",
+        "story": "library",
+        "pixel": {
+          "x": 870,
+          "y": 362
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.646956779983157,
+        "hostHit": {
+          "tag": "image",
+          "cls": "veg-track veg-track-tree st-healthy",
+          "cap": null,
+          "story": null
+        }
+      },
+      {
+        "cap": "seed-corpus-scripts",
+        "story": "library",
+        "pixel": {
+          "x": 940,
+          "y": 380
+        },
+        "rectScreenHeight": 80,
+        "standing": 13.673014150194376,
+        "hostHit": {
+          "tag": "image",
+          "cls": "veg-track veg-track-tree st-healthy",
+          "cap": null,
+          "story": null
+        }
+      },
+      {
+        "cap": "act2-beat-director",
+        "story": "website-experience",
+        "pixel": {
+          "x": 1687,
+          "y": 416
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.154630019896103,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "act2-beat-director",
+          "story": "website-experience"
+        }
+      },
+      {
+        "cap": "hydrated-store-dialing-root",
+        "story": "library",
+        "pixel": {
+          "x": 1010,
+          "y": 427
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.78147030235914,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "hydrated-store-dialing-root",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "eager-batch-migrate",
+        "story": "library",
+        "pixel": {
+          "x": 958,
+          "y": 484
+        },
+        "rectScreenHeight": 80,
+        "standing": 13.366508034442631,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "eager-batch-migrate",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "event-sourced-store-seam",
+        "story": "library",
+        "pixel": {
+          "x": 1051,
+          "y": 485
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.722241714795473,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "event-sourced-store-seam",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "info-pages-triage",
+        "story": "website-experience",
+        "pixel": {
+          "x": 1658,
+          "y": 190
+        },
+        "rectScreenHeight": 80,
+        "standing": 12.9515373753311,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-proposed",
+          "cap": "info-pages-triage",
+          "story": "website-experience"
+        }
+      },
+      {
+        "cap": "work-hierarchy-drift-gate",
+        "story": "library",
+        "pixel": {
+          "x": 831,
+          "y": 247
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.622051370687586,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-proposed",
+          "cap": "work-hierarchy-drift-gate",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "uat-machine-gate-resolution",
+        "story": "library",
+        "pixel": {
+          "x": 1173,
+          "y": 323
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.239382933882098,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "uat-machine-gate-resolution",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "act2-guided-walkthrough",
+        "story": "website-experience",
+        "pixel": {
+          "x": 1631,
+          "y": 337
+        },
+        "rectScreenHeight": 80,
+        "standing": 13.491962986094677,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-proposed",
+          "cap": "act2-guided-walkthrough",
+          "story": "website-experience"
+        }
+      },
+      {
+        "cap": "library-dag-acyclic-core",
+        "story": "library",
+        "pixel": {
+          "x": 735,
+          "y": 341
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.092866025693638,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "library-dag-acyclic-core",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "experience-rollout-guardrails",
+        "story": "website-experience",
+        "pixel": {
+          "x": 1744,
+          "y": 368
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.238600244781537,
+        "hostHit": {
+          "tag": "image",
+          "cls": "veg-track veg-track-tree st-healthy",
+          "cap": null,
+          "story": null
+        }
+      },
+      {
+        "cap": "library-cli",
+        "story": "library",
+        "pixel": {
+          "x": 872,
+          "y": 405
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.21735868030737,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "library-cli",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "native-host-status-presentation",
+        "story": "website-experience",
+        "pixel": {
+          "x": 1766,
+          "y": 409
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.245509973320168,
+        "hostHit": {
+          "tag": "path",
+          "cls": "parcel-blade v-0",
+          "cap": null,
+          "story": null
+        }
+      },
+      {
+        "cap": "act1-terminal-storm",
+        "story": "website-experience",
+        "pixel": {
+          "x": 1626,
+          "y": 463
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.922705804038287,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-proposed",
+          "cap": "act1-terminal-storm",
+          "story": "website-experience"
+        }
+      },
+      {
+        "cap": "pixellab-organic-growth-tracks",
+        "story": "app-surface",
+        "pixel": {
+          "x": 1764,
+          "y": 865
+        },
+        "rectScreenHeight": 80,
+        "standing": 15.069503377606907,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "pixellab-organic-growth-tracks",
+          "story": "app-surface"
+        }
+      },
+      {
+        "cap": "story-author-detail-authority",
+        "story": "uat-criterion-detail",
+        "pixel": {
+          "x": 1384,
+          "y": 907
+        },
+        "rectScreenHeight": 80,
+        "standing": 13.645905665791815,
+        "hostHit": {
+          "tag": "image",
+          "cls": "veg-track veg-track-tree st-healthy",
+          "cap": null,
+          "story": null
+        }
+      },
+      {
+        "cap": "criterion-detail-pointer",
+        "story": "uat-criterion-detail",
+        "pixel": {
+          "x": 1448,
+          "y": 1018
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.847915137266227,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "criterion-detail-pointer",
+          "story": "uat-criterion-detail"
+        }
+      },
+      {
+        "cap": "criterion-detail-hash-anchor",
+        "story": "uat-criterion-detail",
+        "pixel": {
+          "x": 1391,
+          "y": 1008
+        },
+        "rectScreenHeight": 40,
+        "standing": 2.6383110108686196,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "criterion-detail-hash-anchor",
+          "story": "uat-criterion-detail"
+        }
+      },
+      {
+        "cap": "criterion-detail-pointer",
+        "story": "uat-criterion-detail",
+        "pixel": {
+          "x": 1475,
+          "y": 1018
+        },
+        "rectScreenHeight": 40,
+        "standing": 2.5147555995513358,
+        "hostHit": {
+          "tag": "path",
+          "cls": "parcel-blade v-1",
+          "cap": null,
+          "story": null
+        }
+      },
+      {
+        "cap": "library-schema-and-write-validation",
+        "story": "library",
+        "pixel": {
+          "x": 1088,
+          "y": 237
+        },
+        "rectScreenHeight": 40,
+        "standing": 2.2910968671426417,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "library-schema-and-write-validation",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "library-schema-and-write-validation",
+        "story": "library",
+        "pixel": {
+          "x": 1062,
+          "y": 237
+        },
+        "rectScreenHeight": 40,
+        "standing": 3.5974462232520636,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "library-schema-and-write-validation",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "library-schema-and-write-validation",
+        "story": "library",
+        "pixel": {
+          "x": 1069,
+          "y": 237
+        },
+        "rectScreenHeight": 40,
+        "standing": 3.775723038576416,
+        "hostHit": {
+          "tag": "path",
+          "cls": "parcel-blade v-0",
+          "cap": null,
+          "story": null
+        }
+      },
+      {
+        "cap": "library-schema-and-write-validation",
+        "story": "library",
+        "pixel": {
+          "x": 1060,
+          "y": 234
+        },
+        "rectScreenHeight": 40,
+        "standing": 3.4329738221704247,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "library-schema-and-write-validation",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "library-schema-and-write-validation",
+        "story": "library",
+        "pixel": {
+          "x": 1063,
+          "y": 236
+        },
+        "rectScreenHeight": 40,
+        "standing": 3.5135037839313554,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "library-schema-and-write-validation",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "library-schema-and-write-validation",
+        "story": "library",
+        "pixel": {
+          "x": 1064,
+          "y": 236
+        },
+        "rectScreenHeight": 40,
+        "standing": 3.5515998907962967,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "library-schema-and-write-validation",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "info-pages-triage",
+        "story": "website-experience",
+        "pixel": {
+          "x": 1711,
+          "y": 236
+        },
+        "rectScreenHeight": 40,
+        "standing": 4.3049163545942974,
+        "hostHit": {
+          "tag": "image",
+          "cls": "veg-track veg-track-tree st-healthy",
+          "cap": null,
+          "story": null
+        }
+      },
+      {
+        "cap": "library-schema-and-write-validation",
+        "story": "library",
+        "pixel": {
+          "x": 1064,
+          "y": 239
+        },
+        "rectScreenHeight": 40,
+        "standing": 3.6438996623919593,
+        "hostHit": {
+          "tag": "path",
+          "cls": "parcel-blade v-1",
+          "cap": null,
+          "story": null
+        }
+      },
+      {
+        "cap": "work-hierarchy-drift-gate",
+        "story": "library",
+        "pixel": {
+          "x": 783,
+          "y": 327
+        },
+        "rectScreenHeight": 40,
+        "standing": 4.190925394879287,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-proposed",
+          "cap": "work-hierarchy-store-projection",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "work-hierarchy-drift-gate",
+        "story": "library",
+        "pixel": {
+          "x": 799,
+          "y": 332
+        },
+        "rectScreenHeight": 40,
+        "standing": 6.622344587292446,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-proposed",
+          "cap": "work-hierarchy-store-projection",
+          "story": "library"
+        }
+      }
+    ]
+  },
+  "diagnostic": {
+    "label": "diagnostic-flat-picture-pointer-inert",
+    "origin": {
+      "x": 609,
+      "y": 1418.7
+    },
+    "targetCount": 2751,
+    "inViewCount": 303,
+    "camera": {
+      "type": "OrthographicCamera",
+      "zoom": 4.651007811170733,
+      "position": [
+        501.2771633916556,
+        2522.349450015313,
+        3686.2524422618853
+      ]
+    },
+    "hostCTM": [
+      4.651007652282715,
+      0,
+      0,
+      4.651007652282715,
+      -1431.4439697265625,
+      -5042.82861328125
+    ],
+    "registration": {
+      "samples": 100,
+      "maxAbsErrorPx": 0.00017938137000328425
+    },
+    "samples": [
+      {
+        "cap": "library-schema-and-write-validation",
+        "story": "library",
+        "pixel": {
+          "x": 1033,
+          "y": 247
+        },
+        "rectScreenHeight": 80,
+        "standing": 15.05359014926671,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "library-schema-and-write-validation",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "work-hierarchy-store-projection",
+        "story": "library",
+        "pixel": {
+          "x": 812,
+          "y": 312
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.56715824336743,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-proposed",
+          "cap": "work-hierarchy-store-projection",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "library-health-gate",
+        "story": "library",
+        "pixel": {
+          "x": 848,
+          "y": 475
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.810274149269844,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "library-health-gate",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "web-experience-sync",
+        "story": "website-experience",
+        "pixel": {
+          "x": 1695,
+          "y": 477
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.141584852422056,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "web-experience-sync",
+          "story": "website-experience"
+        }
+      },
+      {
+        "cap": "uat-detail-kind",
+        "story": "uat-criterion-detail",
+        "pixel": {
+          "x": 1481,
+          "y": 854
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.975311238390532,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "uat-detail-kind",
+          "story": "uat-criterion-detail"
+        }
+      },
+      {
+        "cap": "criterion-detail-hash-anchor",
+        "story": "uat-criterion-detail",
+        "pixel": {
+          "x": 1315,
+          "y": 973
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.215495545391605,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "criterion-detail-hash-anchor",
+          "story": "uat-criterion-detail"
+        }
+      },
+      {
+        "cap": "migrate-on-write-upcaster",
+        "story": "library",
+        "pixel": {
+          "x": 954,
+          "y": 298
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.580477831066673,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "migrate-on-write-upcaster",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "act2-guided-forest",
+        "story": "website-experience",
+        "pixel": {
+          "x": 1738,
+          "y": 312
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.612951334073387,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-proposed",
+          "cap": "act2-guided-forest",
+          "story": "website-experience"
+        }
+      },
+      {
+        "cap": "uat-machine-proof-binding",
+        "story": "library",
+        "pixel": {
+          "x": 1034,
+          "y": 354
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.384757675160927,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "uat-machine-proof-binding",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "storm-to-forest-inflection",
+        "story": "website-experience",
+        "pixel": {
+          "x": 1667,
+          "y": 359
+        },
+        "rectScreenHeight": 80,
+        "standing": 13.828373721246408,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-proposed",
+          "cap": "storm-to-forest-inflection",
+          "story": "website-experience"
+        }
+      },
+      {
+        "cap": "graduation-park-lease",
+        "story": "library",
+        "pixel": {
+          "x": 870,
+          "y": 362
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.646956779983157,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "graduation-park-lease",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "seed-corpus-scripts",
+        "story": "library",
+        "pixel": {
+          "x": 940,
+          "y": 380
+        },
+        "rectScreenHeight": 80,
+        "standing": 13.673014150194376,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "seed-corpus-scripts",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "act2-beat-director",
+        "story": "website-experience",
+        "pixel": {
+          "x": 1687,
+          "y": 416
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.154630019896103,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "act2-beat-director",
+          "story": "website-experience"
+        }
+      },
+      {
+        "cap": "hydrated-store-dialing-root",
+        "story": "library",
+        "pixel": {
+          "x": 1010,
+          "y": 427
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.78147030235914,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "hydrated-store-dialing-root",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "eager-batch-migrate",
+        "story": "library",
+        "pixel": {
+          "x": 958,
+          "y": 484
+        },
+        "rectScreenHeight": 80,
+        "standing": 13.366508034442631,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "eager-batch-migrate",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "event-sourced-store-seam",
+        "story": "library",
+        "pixel": {
+          "x": 1051,
+          "y": 485
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.722241714795473,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "event-sourced-store-seam",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "info-pages-triage",
+        "story": "website-experience",
+        "pixel": {
+          "x": 1658,
+          "y": 190
+        },
+        "rectScreenHeight": 80,
+        "standing": 12.9515373753311,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-proposed",
+          "cap": "info-pages-triage",
+          "story": "website-experience"
+        }
+      },
+      {
+        "cap": "work-hierarchy-drift-gate",
+        "story": "library",
+        "pixel": {
+          "x": 831,
+          "y": 247
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.622051370687586,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-proposed",
+          "cap": "work-hierarchy-drift-gate",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "uat-machine-gate-resolution",
+        "story": "library",
+        "pixel": {
+          "x": 1173,
+          "y": 323
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.239382933882098,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "uat-machine-gate-resolution",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "act2-guided-walkthrough",
+        "story": "website-experience",
+        "pixel": {
+          "x": 1631,
+          "y": 337
+        },
+        "rectScreenHeight": 80,
+        "standing": 13.491962986094677,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-proposed",
+          "cap": "act2-guided-walkthrough",
+          "story": "website-experience"
+        }
+      },
+      {
+        "cap": "library-dag-acyclic-core",
+        "story": "library",
+        "pixel": {
+          "x": 735,
+          "y": 341
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.092866025693638,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "library-dag-acyclic-core",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "experience-rollout-guardrails",
+        "story": "website-experience",
+        "pixel": {
+          "x": 1744,
+          "y": 368
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.238600244781537,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "experience-rollout-guardrails",
+          "story": "website-experience"
+        }
+      },
+      {
+        "cap": "library-cli",
+        "story": "library",
+        "pixel": {
+          "x": 872,
+          "y": 405
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.21735868030737,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "library-cli",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "native-host-status-presentation",
+        "story": "website-experience",
+        "pixel": {
+          "x": 1766,
+          "y": 409
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.245509973320168,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "native-host-status-presentation",
+          "story": "website-experience"
+        }
+      },
+      {
+        "cap": "act1-terminal-storm",
+        "story": "website-experience",
+        "pixel": {
+          "x": 1626,
+          "y": 463
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.922705804038287,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-proposed",
+          "cap": "act1-terminal-storm",
+          "story": "website-experience"
+        }
+      },
+      {
+        "cap": "pixellab-organic-growth-tracks",
+        "story": "app-surface",
+        "pixel": {
+          "x": 1764,
+          "y": 865
+        },
+        "rectScreenHeight": 80,
+        "standing": 15.069503377606907,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "pixellab-organic-growth-tracks",
+          "story": "app-surface"
+        }
+      },
+      {
+        "cap": "story-author-detail-authority",
+        "story": "uat-criterion-detail",
+        "pixel": {
+          "x": 1384,
+          "y": 907
+        },
+        "rectScreenHeight": 80,
+        "standing": 13.645905665791815,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "story-author-detail-authority",
+          "story": "uat-criterion-detail"
+        }
+      },
+      {
+        "cap": "criterion-detail-pointer",
+        "story": "uat-criterion-detail",
+        "pixel": {
+          "x": 1448,
+          "y": 1018
+        },
+        "rectScreenHeight": 80,
+        "standing": 14.847915137266227,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "criterion-detail-pointer",
+          "story": "uat-criterion-detail"
+        }
+      },
+      {
+        "cap": "criterion-detail-hash-anchor",
+        "story": "uat-criterion-detail",
+        "pixel": {
+          "x": 1391,
+          "y": 1008
+        },
+        "rectScreenHeight": 40,
+        "standing": 2.6383110108686196,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "criterion-detail-hash-anchor",
+          "story": "uat-criterion-detail"
+        }
+      },
+      {
+        "cap": "criterion-detail-pointer",
+        "story": "uat-criterion-detail",
+        "pixel": {
+          "x": 1475,
+          "y": 1018
+        },
+        "rectScreenHeight": 40,
+        "standing": 2.5147555995513358,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "criterion-detail-pointer",
+          "story": "uat-criterion-detail"
+        }
+      },
+      {
+        "cap": "library-schema-and-write-validation",
+        "story": "library",
+        "pixel": {
+          "x": 1088,
+          "y": 237
+        },
+        "rectScreenHeight": 40,
+        "standing": 2.2910968671426417,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "library-schema-and-write-validation",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "library-schema-and-write-validation",
+        "story": "library",
+        "pixel": {
+          "x": 1062,
+          "y": 237
+        },
+        "rectScreenHeight": 40,
+        "standing": 3.5974462232520636,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "library-schema-and-write-validation",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "library-schema-and-write-validation",
+        "story": "library",
+        "pixel": {
+          "x": 1069,
+          "y": 237
+        },
+        "rectScreenHeight": 40,
+        "standing": 3.775723038576416,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "library-schema-and-write-validation",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "library-schema-and-write-validation",
+        "story": "library",
+        "pixel": {
+          "x": 1060,
+          "y": 234
+        },
+        "rectScreenHeight": 40,
+        "standing": 3.4329738221704247,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "library-schema-and-write-validation",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "library-schema-and-write-validation",
+        "story": "library",
+        "pixel": {
+          "x": 1063,
+          "y": 236
+        },
+        "rectScreenHeight": 40,
+        "standing": 3.5135037839313554,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "library-schema-and-write-validation",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "library-schema-and-write-validation",
+        "story": "library",
+        "pixel": {
+          "x": 1064,
+          "y": 236
+        },
+        "rectScreenHeight": 40,
+        "standing": 3.5515998907962967,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "library-schema-and-write-validation",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "info-pages-triage",
+        "story": "website-experience",
+        "pixel": {
+          "x": 1711,
+          "y": 236
+        },
+        "rectScreenHeight": 40,
+        "standing": 4.3049163545942974,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-proposed",
+          "cap": "info-pages-triage",
+          "story": "website-experience"
+        }
+      },
+      {
+        "cap": "library-schema-and-write-validation",
+        "story": "library",
+        "pixel": {
+          "x": 1064,
+          "y": 239
+        },
+        "rectScreenHeight": 40,
+        "standing": 3.6438996623919593,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-healthy",
+          "cap": "library-schema-and-write-validation",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "work-hierarchy-drift-gate",
+        "story": "library",
+        "pixel": {
+          "x": 783,
+          "y": 327
+        },
+        "rectScreenHeight": 40,
+        "standing": 4.190925394879287,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-proposed",
+          "cap": "work-hierarchy-store-projection",
+          "story": "library"
+        }
+      },
+      {
+        "cap": "work-hierarchy-drift-gate",
+        "story": "library",
+        "pixel": {
+          "x": 799,
+          "y": 332
+        },
+        "rectScreenHeight": 40,
+        "standing": 6.622344587292446,
+        "hostHit": {
+          "tag": "rect",
+          "cls": "native-prop-target st-proposed",
+          "cap": "work-hierarchy-store-projection",
+          "story": "library"
+        }
+      }
+    ]
+  },
+  "click": {
+    "hash": "#/tree/library",
+    "selectedCard": "Schema-defined library docs, validated at the write boundary",
+    "selectedCardId": null,
+    "expected": {
+      "story": "library",
+      "cap": "library-schema-and-write-validation",
+      "pixel": {
+        "x": 1033,
+        "y": 247
+      }
+    }
+  },
+  "summary": {
+    "registrationMaxAbsErrorPx": 0.00017938137000328425,
+    "crownSamples": 40,
+    "crownSamplesStriking3dGeometryAboveGround": 40,
+    "crownSamplesHostHitSameCapability": 38,
+    "bothAgree": 38,
+    "baselineHostHitSameCapability": 22
+  },
+  "finishedAt": "2026-09-24T08:46:50.019Z"
+}
