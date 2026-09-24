@@ -4,6 +4,7 @@ import {
   LAND_MAP_REQUIREMENT,
   LOADING_MESSAGE,
   UNSUPPORTED_MESSAGE,
+  afterFirstDrawnFrame,
   browserWebGL2Probe,
   detectWebGL2,
   landMountStatus,
@@ -105,5 +106,63 @@ describe('detectWebGL2', () => {
       else delete g.WebGL2RenderingContext;
       g.document = savedDoc;
     }
+  });
+});
+
+describe('afterFirstDrawnFrame — ready means the land has DRAWN, not merely been made', () => {
+  function fakeFrames() {
+    let queue: (() => void)[] = [];
+    let next = 1;
+    const ids = new Map<number, () => void>();
+    return {
+      frames: {
+        request: (callback: () => void) => {
+          const id = next++;
+          ids.set(id, callback);
+          queue.push(() => { if (ids.delete(id)) callback(); });
+          return id;
+        },
+        cancel: (id: number) => { ids.delete(id); },
+      },
+      /** Deliver one browser frame: every callback queued BEFORE it began. */
+      frame: () => {
+        const due = queue;
+        queue = [];
+        for (const run of due) run();
+      },
+    };
+  }
+
+  it('reports only after a whole frame has passed, never at the making', () => {
+    const f = fakeFrames();
+    const seen: string[] = [];
+    afterFirstDrawnFrame(f.frames, () => seen.push('ready'));
+    expect(seen).toEqual([]);
+    f.frame();
+    expect(seen).toEqual([]);
+    f.frame();
+    expect(seen).toEqual(['ready']);
+    f.frame();
+    expect(seen).toEqual(['ready']);
+  });
+
+  it('never reports once cancelled — an unmount or a lost context mid-wait says nothing', () => {
+    for (const framesBeforeCancel of [0, 1]) {
+      const f = fakeFrames();
+      const seen: string[] = [];
+      const cancel = afterFirstDrawnFrame(f.frames, () => seen.push('ready'));
+      for (let i = 0; i < framesBeforeCancel; i += 1) f.frame();
+      cancel();
+      f.frame();
+      f.frame();
+      expect(seen).toEqual([]);
+    }
+  });
+
+  it('delivers nothing while no frames are delivered — a hidden page waits to be seen', () => {
+    const f = fakeFrames();
+    const seen: string[] = [];
+    afterFirstDrawnFrame(f.frames, () => seen.push('ready'));
+    expect(seen).toEqual([]);
   });
 });

@@ -99,3 +99,42 @@ export function detectWebGL2(probe: WebGL2Probe = browserWebGL2Probe()): boolean
   context.getExtension?.('WEBGL_lose_context')?.loseContext?.();
   return true;
 }
+
+/** The browser's frame clock, injectable so the deferral below is provable without a renderer. */
+export interface LandFrameScheduler {
+  readonly request: (callback: () => void) => number;
+  readonly cancel: (requestId: number) => void;
+}
+
+export const BROWSER_LAND_FRAMES: LandFrameScheduler = {
+  request: (callback) => window.requestAnimationFrame(() => callback()),
+  cancel: (requestId) => window.cancelAnimationFrame(requestId),
+};
+
+/**
+ * Call `report` once the renderer's FIRST FRAME has been drawn — two frames after the context was
+ * made, never on the making itself.
+ *
+ * ⚠ WHY NOT AT `onCreated`: R3F announces the renderer BEFORE its first frame, and that first frame
+ * is the expensive one (shader compiles; measured on a production build 2026-09-24 as ~1 s of
+ * blocked frames straight after it). `ready` is what the member's first growth is anchored to
+ * (the-3d-map-opens-on-its-first-growth), so announcing it early spends the start of the growth on
+ * a frozen screen. Two frame callbacks bracket one whole frame whichever order the renderer's own
+ * loop registered in, so the second runs after the renderer has drawn at least once.
+ *
+ * A hidden page delivers no frames, so a land made while hidden reports ready when it is first SEEN
+ * — which is when it can first draw. Returns a cancel for unmount / context loss.
+ */
+export function afterFirstDrawnFrame(frames: LandFrameScheduler, report: () => void): () => void {
+  let cancelled = false;
+  let requestId = frames.request(() => {
+    if (cancelled) return;
+    requestId = frames.request(() => {
+      if (!cancelled) report();
+    });
+  });
+  return () => {
+    cancelled = true;
+    frames.cancel(requestId);
+  };
+}

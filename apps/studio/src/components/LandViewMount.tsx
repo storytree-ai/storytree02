@@ -44,7 +44,14 @@ import type { RegisteredUnderlay } from '@storytree/forest-world-r3f/canvas';
 
 import { landViewStream } from '../lib/landView.js';
 import { mountedLandCamera } from '../lib/landViewMount.js';
-import { detectWebGL2, landMountStatus, type LandCanvasPhase, type LandMountStatus } from '../lib/landViewStatus.js';
+import {
+  BROWSER_LAND_FRAMES,
+  afterFirstDrawnFrame,
+  detectWebGL2,
+  landMountStatus,
+  type LandCanvasPhase,
+  type LandMountStatus,
+} from '../lib/landViewStatus.js';
 import type { Camera } from '../lib/worldCamera.js';
 
 /** What the canvas slot is handed in registered mode: the stream, and the host's own camera. */
@@ -76,9 +83,17 @@ function DefaultMountCanvas({ descriptors, hiddenStatuses, registered, regrow, a
   useEffect(() => {
     if (!supported) onPhase({ kind: 'unsupported' });
   }, [supported, onPhase]);
+  // `ready` is reported once the land has DRAWN a frame, not when its context was made — the first
+  // growth is anchored to it (see `afterFirstDrawnFrame`).
+  const cancelReady = useRef<(() => void) | null>(null);
+  useEffect(() => () => cancelReady.current?.(), []);
   const onRendererState = useCallback(
-    (state: 'ready' | 'lost') =>
-      onPhase(state === 'ready' ? { kind: 'ready' } : { kind: 'failed', reason: 'the browser took the graphics context away' }),
+    (state: 'ready' | 'lost') => {
+      cancelReady.current?.();
+      cancelReady.current = null;
+      if (state === 'ready') cancelReady.current = afterFirstDrawnFrame(BROWSER_LAND_FRAMES, () => onPhase({ kind: 'ready' }));
+      else onPhase({ kind: 'failed', reason: 'the browser took the graphics context away' });
+    },
     [onPhase],
   );
   if (!supported) return null;
