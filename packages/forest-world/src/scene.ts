@@ -492,7 +492,7 @@ export interface ScenePlantInput {
 export interface SceneParcelInput {
   capId: string;
   status: SceneStatus;
-  /** The capability's published test-criteria count — the flora density knob (0 ⇒ bare ground).
+  /** The capability's published test-criteria count — the flora density knob (0 retains baseline flora).
    *  Absent means coverage is unreported: retain the parcel ground but emit no flora. */
   testCount?: number;
   theme: SurfaceTheme;
@@ -2682,7 +2682,7 @@ function buildTerritorySurface(
     );
     // Stamp each flora item with its capId (the SurfaceFn is capId-agnostic, so attribution — the
     // hover-flora → capability hook — is added here, where the parcel identity is known).
-    for (const fm of (parcel.testCount ?? 0) > 0 ? out.flora : []) {
+    for (const fm of parcel.testCount !== undefined ? out.flora : []) {
       fm.node.id = parcel.capId;
       flora.push(fm);
     }

@@ -1108,7 +1108,7 @@ test('rc-flora-density-is-test-count: flora density IS the test count — a high
   assert.ok(b > a, `the 12-test parcel grows strictly more marks than the 1-test one: ${a} < ${b}`);
 });
 
-test('rc-unreported-parcel-coverage-emits-no-flora: an omitted count keeps status ground while zero remains a numeric bare-ground density', () => {
+test('rc-unreported-parcel-coverage-emits-no-flora: an omitted count keeps status ground while zero retains its baseline flora', () => {
   // This is deliberately a naturally typed client fixture, not a cast: callers may report a
   // capability before its coverage count is published.
   const unreported: SceneParcelInput = {
@@ -1147,7 +1147,7 @@ test('rc-unreported-parcel-coverage-emits-no-flora: an omitted count keeps statu
 
   const flora = allByKind(mustByKind(scene, 'flora-layer'), 'parcel-flora');
   assert.equal(flora.filter((node) => node.id === unreported.capId).length, 0, 'unreported coverage invents no flora');
-  assert.equal(flora.filter((node) => node.id === reportedZero.capId).length, 0, 'zero remains a numeric bare-ground density');
+  assert.equal(flora.filter((node) => node.id === reportedZero.capId).length, 2, 'reported zero retains the existing meadow two-tuft baseline');
 });
 
 test('rc-coverage-flora-carries-semantic-ground-anchor-and-scale: every coverage item carries its own transform pivot and tile-art scale without changing the drawable', () => {
