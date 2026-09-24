@@ -131,6 +131,31 @@ describe('the land layer under the map', () => {
     expect(handed!.regrow).toBe(parked.regrow);
   });
 
+  it('forwards the exact legend set without changing descriptors, camera, activity or regrow', () => {
+    const cursor = {
+      progress: 0.5,
+      settled: false,
+      absentStoryIds: new Set<string>(),
+      growing: [],
+      hiddenSegmentIds: new Set<string>(),
+      drawingSegments: [],
+    };
+    const hidden = new Set(['healthy']);
+    const { rerender } = mount({ hiddenStatuses: hidden, drawProps: true, active: false, regrowCursor: cursor });
+    const dimmed = handed!;
+    expect(dimmed.hiddenStatuses).toBe(hidden);
+    expect(dimmed.descriptors.some((descriptor) => descriptor.kind === 'cell-ground')).toBe(true);
+
+    const shown = new Set<string>();
+    rerender(<LandViewMount scene={SCENE} camera={CAMERA} hiddenStatuses={shown} drawProps active={false} regrowCursor={cursor} renderCanvas={capture} />);
+    expect(handed!.hiddenStatuses).toBe(shown);
+    expect(handed!.descriptors).toBe(dimmed.descriptors);
+    expect(handed!.registered).toEqual(dimmed.registered);
+    expect(handed!.registered.props).toBe(true);
+    expect(handed!.regrow).toBe(dimmed.regrow);
+    expect(handed!.active).toBe(false);
+  });
+
   it('is INERT — out of the accessibility tree and out of the way of every gesture', () => {
     // ADR-0380 D6 fence 3: the app owns picking, focus, the keyboard camera and the accessible
     // name. A decorative raster that announced itself, or that caught a pointer, would take one of
@@ -148,6 +173,7 @@ describe('the land layer under the map', () => {
     // ADR-0530 D3's per-prop status question is still open — so the props arm must be asked for.
     mount();
     expect(handed!.registered.props).toBeUndefined();
+    expect(handed!.hiddenStatuses.size).toBe(0);
     cleanup();
     handed = null;
     mount({ drawProps: true });

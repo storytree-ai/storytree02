@@ -48,6 +48,8 @@ import type { Camera } from '../lib/worldCamera.js';
 /** What the canvas slot is handed in registered mode: the stream, and the host's own camera. */
 export interface LandMountCanvasProps {
   descriptors: readonly Descriptor3D[];
+  /** The host legend's presentation state; never a filter on the scene or its placements. */
+  hiddenStatuses: ReadonlySet<string>;
   registered: RegisteredUnderlay;
   /** The app-owned cursor, adapted here for the canvas without creating another clock. */
   regrow: ForestRegrowPresentation | null;
@@ -61,10 +63,10 @@ const ForestWorldCanvas = lazy(async () => {
   return { default: mod.ForestWorldCanvas };
 });
 
-function DefaultMountCanvas({ descriptors, registered, regrow, active }: LandMountCanvasProps) {
+function DefaultMountCanvas({ descriptors, hiddenStatuses, registered, regrow, active }: LandMountCanvasProps) {
   return (
     <Suspense fallback={null}>
-      <ForestWorldCanvas descriptors={descriptors} registered={registered} regrow={regrow} active={active} />
+      <ForestWorldCanvas descriptors={descriptors} hiddenStatuses={hiddenStatuses} registered={registered} regrow={regrow} active={active} />
     </Suspense>
   );
 }
@@ -72,6 +74,8 @@ function DefaultMountCanvas({ descriptors, registered, regrow, active }: LandMou
 export interface LandViewMountProps {
   /** The scene graph the SVG map was built from — the SAME object, never a second layout. */
   scene: SceneG | null;
+  /** The exact hidden-status set owned by the host legend. */
+  hiddenStatuses?: ReadonlySet<string>;
   /**
    * The camera the SVG layer is CURRENTLY PRESENTING — `presentedCam`, the one written to
    * `<g class="world-camera">`.
@@ -129,6 +133,8 @@ function useMeasuredFrame(): [
   return [ref, frame];
 }
 
+const NO_HIDDEN_STATUSES: ReadonlySet<string> = new Set();
+
 /**
  * The land layer. Draws the ground when it can be registered, and NOTHING otherwise — never a
  * best-effort approximation, and never anything that could catch a pointer or a screen reader.
@@ -138,6 +144,7 @@ function useMeasuredFrame(): [
  */
 export function LandViewMount({
   scene,
+  hiddenStatuses = NO_HIDDEN_STATUSES,
   camera,
   regrowCursor = null,
   active = true,
@@ -172,7 +179,7 @@ export function LandViewMount({
     const withProps: RegisteredUnderlay = drawProps ? { ...registeredProps, props: true } : registeredProps;
     return {
       state: 'drawn' as const,
-      node: renderCanvas({ descriptors: stream.descriptors, registered: withProps, regrow, active }),
+      node: renderCanvas({ descriptors: stream.descriptors, hiddenStatuses, registered: withProps, regrow, active }),
     };
   })();
 

@@ -1,0 +1,4118 @@
+{
+  "status": "CAPTURED",
+  "startedAt": "2026-09-24T07:00:19.358Z",
+  "finishedAt": "2026-09-24T07:01:57.309Z",
+  "inputs": {
+    "sides": [
+      {
+        "name": "before",
+        "dir": "/home/mickh/code/Storytree/.claude/worktrees/laneK-status-before",
+        "head": "f7f896ebdf22b4a6cc7c83aade5fcea071a90122",
+        "pid": 3839622,
+        "origin": "http://127.0.0.1:5291"
+      },
+      {
+        "name": "after",
+        "dir": "/home/mickh/code/Storytree/.claude/worktrees/laneK-native-status",
+        "head": "05bc3402929424a5054ef0b1b72c48288b4f5f9b",
+        "pid": 3839775,
+        "origin": "http://127.0.0.1:5292"
+      }
+    ],
+    "query": "?landMount=1&landMountProps=1&landView=1&act2=intro&sceneExport=1",
+    "viewport": {
+      "width": 1800,
+      "height": 1100
+    },
+    "zoomSteps": 8,
+    "anchor": [
+      0.6,
+      0.45
+    ]
+  },
+  "browser": {
+    "playwright": "1.60.0",
+    "executable": "/home/mickh/.cache/ms-playwright/chromium-1223/chrome-linux64/chrome",
+    "version": "148.0.7778.96"
+  },
+  "cameraComparisonPolicy": {
+    "method": "actual Three Matrix4 projectionMatrix * inverse(matrixWorld), comparing X/Y/W rows",
+    "coefficientTolerance": 1e-10,
+    "matrixLibrary": "/home/mickh/code/Storytree/.claude/worktrees/laneK-native-status/node_modules/.pnpm/three@0.185.1/node_modules/three/build/three.cjs",
+    "mounted": "exact actual camera equality plus XY projection and unchanged canvas/host/data; full depth values retained",
+    "standalone": "exact actual camera equality required; controlled static framing",
+    "priorFailure": "Earlier mapper comparison runs are separate evidence and are not rewritten",
+    "sourceCause": [
+      "Both builds include the repaired coverage mapper. The native status sidecar changes material presentation and registered canvas pointer eligibility; it has no camera or placement authority.",
+      "This comparison requires exact actual camera records for both the mounted and standalone consumers, together with unchanged canvas, host and stable live data.",
+      "Mounted orthographic X/Y/W view-projection coefficients are additionally checked with the renderer package Three Matrix4 implementation at tolerance 1e-10. Complete depth and framing values remain in the receipts."
+    ]
+  },
+  "instrument": {
+    "reducedMotion": "reduce",
+    "deviceScaleFactor": 1,
+    "apiSource": "after host only, then frozen exact-body replay",
+    "cssChanges": [],
+    "clockChanges": [],
+    "cameraChanges": "only real host wheel input",
+    "heavyLock": "caller-declared held"
+  },
+  "limits": [
+    "Ordinary full screenshots preserve the SVG overlay and native coverage flora; double presentation is expected until retirement.",
+    "An AFTER-only real legend toggle follows ordinary captures, fades healthy status and restores it. No CSS diagnosis runs in this status comparison. Target identity and host accessibility remain measured; native screen-space hit envelopes are a separate remaining unit.",
+    "Raw land-mount PNGs compare the actual mounted 3D canvas with exact camera records and equal orthographic XYW view-projection coefficients within the explicit 1e-10 tolerance, plus unchanged canvas, host and stable data.",
+    "Camera depth position, near/far and complete raw matrices remain in the receipts and comparisons. Exact camera equality does not establish clipping sufficiency or pixel identity; those are separate observations.",
+    "Both the LEFT mounted view and RIGHT standalone panel must preserve their actual framing. Status legend toggles are measured on the mounted consumer; the standalone raw canvas must remain unchanged during the toggle.",
+    "Both consumers are enabled together by the stated query; this is not the ordinary single-panel opening composition.",
+    "Static reduced-motion appearance evidence only: no growth, quiet-render, performance or hardware-floor verdict.",
+    "The API snapshot is a frozen set acquired in one warm-up window, not a database transaction snapshot. Browser health bodies also replay after-host bytes; independently fetched health receipts prove each real server identity.",
+    "Live session wisps and other elapsed-time decorations may differ despite identical API bodies; exact scene exports are retained.",
+    "Raw PNG extraction explicitly renders each existing scene with its actual camera once, then reads its canvas. No camera or renderer clock is changed.",
+    "Diagnostic clock checks observe the settled app cursor/readout and regrow state, plus unchanged browser timing-function identities. They do not freeze wall time or expose the app clock internals.",
+    "Diagnostic data equality covers the frozen API inputs and exported world/trails/tile/spacing. Full drawable scene hashes are recorded separately because live elapsed-time decorations can change.",
+    "CAPTURED means instrument checks passed. Appearance remains for the owner to judge."
+  ],
+  "snapshot": {
+    "source": {
+      "name": "after",
+      "dir": "/home/mickh/code/Storytree/.claude/worktrees/laneK-native-status",
+      "head": "05bc3402929424a5054ef0b1b72c48288b4f5f9b",
+      "pid": 3839775,
+      "origin": "http://127.0.0.1:5292"
+    },
+    "file": "api-snapshot.private.json",
+    "frozenAt": "2026-09-24T07:00:50.495Z",
+    "sha256": "69300f56de6d9ef8a922cf78bb12ce68f08f2c899c28e231d3b9b13b1674f34e",
+    "paths": [
+      {
+        "key": "/api/activity",
+        "sha256": "2dc0a2377dd98d10dd44a3803237f86b4a62401d54dfd58f9a765ecb1ca7c765",
+        "acquiredAt": "2026-09-24T07:00:22.164Z"
+      },
+      {
+        "key": "/api/assets",
+        "sha256": "335e5730147af005c3f3332971d5da58a4fe2f7e2c78891eb2a733c634268015",
+        "acquiredAt": "2026-09-24T07:00:30.472Z"
+      },
+      {
+        "key": "/api/docs",
+        "sha256": "0716067226a1b92c6bc521d5c2e6f39e55b4d196a817aa09e34ee2de68ecf77b",
+        "acquiredAt": "2026-09-24T07:00:22.338Z"
+      },
+      {
+        "key": "/api/floor-health",
+        "sha256": "ceca49c5d73e0b5f0c87acffbee498d6337e33be23a1fe92640510e3095a9924",
+        "acquiredAt": "2026-09-24T07:00:36.100Z"
+      },
+      {
+        "key": "/api/health",
+        "sha256": "7bb46415fb0b80f79e5cc5d40820d9bc8cc9ce15c334e43fe42a048f5572766d",
+        "acquiredAt": "2026-09-24T07:00:22.325Z"
+      },
+      {
+        "key": "/api/me",
+        "sha256": "ca4956372cdab235a0eabb3f9fb02c0d4b5dbfb136321a2edbfb252a673715a6",
+        "acquiredAt": "2026-09-24T07:00:21.424Z"
+      },
+      {
+        "key": "/api/tree",
+        "sha256": "b546a80c7e55d438417a889734b5debab8b4900b9b3820c579ef755c8b0803f2",
+        "acquiredAt": "2026-09-24T07:00:29.585Z"
+      }
+    ],
+    "storyCount": 47
+  },
+  "comparisons": {
+    "rest": {
+      "pointerDelivery": {
+        "before": "auto",
+        "after": "none",
+        "scope": "Only the intended registered-canvas pointer eligibility changes; raw computed values remain in receipts. Geometry, paint styles and exact actual cameras remain guarded."
+      },
+      "checks": {
+        "sameStableLiveLayout": true,
+        "sameHostCameraAndComputedComposition": true,
+        "sameCanvasBuffersRectsAndPaintStyles": true,
+        "exactIntendedMountedPointerDelivery": true,
+        "standalonePointerStyleUnchanged": true,
+        "fullAlphaNativePixelsExact": true,
+        "sameMountedOrthographicXYWProjection": true,
+        "exactActualCamerasForStatusOnlyChange": true
+      },
+      "exactAllCameraRecordsEqual": true,
+      "mounted": {
+        "exactCameraEqual": true,
+        "equivalentXYW": true,
+        "coefficientTolerance": 1e-10,
+        "maxAbsCoefficientDelta": 0,
+        "coefficientDeltas": {
+          "x": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "y": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "w": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "positionDelta": [
+          0,
+          0,
+          0
+        ],
+        "before": {
+          "rawCamera": {
+            "type": "OrthographicCamera",
+            "position": [
+              475.1029794281541,
+              2483.121421048536,
+              3636.365922862732
+            ],
+            "quaternion": [
+              -0.42261826174069944,
+              0,
+              0,
+              0.90630778703665
+            ],
+            "zoom": 1.9724813357493298,
+            "near": 1177.9611677831854,
+            "far": 5305.008438884584,
+            "left": -539.703125,
+            "right": 539.703125,
+            "top": 550,
+            "bottom": -550,
+            "projectionMatrix": [
+              0.003654752482208306,
+              0,
+              0,
+              0,
+              0,
+              0.0035863297013624183,
+              0,
+              0,
+              0,
+              0,
+              -0.00048460796996547444,
+              0,
+              0,
+              0,
+              -1.570849370217569,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0.6427876096865393,
+              -0.7660444431189781,
+              0,
+              0,
+              0.7660444431189781,
+              0.6427876096865393,
+              0,
+              475.1029794281541,
+              2483.121421048536,
+              3636.365922862732,
+              1
+            ]
+          },
+          "viewProjectionMatrix": [
+            0.003654752482208306,
+            0,
+            0,
+            0,
+            0,
+            0.002305248296286589,
+            -0.0003712312424832203,
+            0,
+            0,
+            -0.002747287938921225,
+            -0.0003114999986491535,
+            0,
+            -1.736383793369608,
+            4.265932816040062,
+            0.48369086021454777,
+            1
+          ],
+          "rows": {
+            "x": [
+              0.003654752482208306,
+              0,
+              0,
+              -1.736383793369608
+            ],
+            "y": [
+              0,
+              0.002305248296286589,
+              -0.002747287938921225,
+              4.265932816040062
+            ],
+            "w": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        "after": {
+          "rawCamera": {
+            "type": "OrthographicCamera",
+            "position": [
+              475.1029794281541,
+              2483.121421048536,
+              3636.365922862732
+            ],
+            "quaternion": [
+              -0.42261826174069944,
+              0,
+              0,
+              0.90630778703665
+            ],
+            "zoom": 1.9724813357493298,
+            "near": 1177.9611677831854,
+            "far": 5305.008438884584,
+            "left": -539.703125,
+            "right": 539.703125,
+            "top": 550,
+            "bottom": -550,
+            "projectionMatrix": [
+              0.003654752482208306,
+              0,
+              0,
+              0,
+              0,
+              0.0035863297013624183,
+              0,
+              0,
+              0,
+              0,
+              -0.00048460796996547444,
+              0,
+              0,
+              0,
+              -1.570849370217569,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0.6427876096865393,
+              -0.7660444431189781,
+              0,
+              0,
+              0.7660444431189781,
+              0.6427876096865393,
+              0,
+              475.1029794281541,
+              2483.121421048536,
+              3636.365922862732,
+              1
+            ]
+          },
+          "viewProjectionMatrix": [
+            0.003654752482208306,
+            0,
+            0,
+            0,
+            0,
+            0.002305248296286589,
+            -0.0003712312424832203,
+            0,
+            0,
+            -0.002747287938921225,
+            -0.0003114999986491535,
+            0,
+            -1.736383793369608,
+            4.265932816040062,
+            0.48369086021454777,
+            1
+          ],
+          "rows": {
+            "x": [
+              0.003654752482208306,
+              0,
+              0,
+              -1.736383793369608
+            ],
+            "y": [
+              0,
+              0.002305248296286589,
+              -0.002747287938921225,
+              4.265932816040062
+            ],
+            "w": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        "scope": "controlled mounted framing; exact camera records and XYW equivalence required"
+      },
+      "standalone": {
+        "exactCameraEqual": true,
+        "equivalentXYW": true,
+        "coefficientTolerance": 1e-10,
+        "maxAbsCoefficientDelta": 0,
+        "coefficientDeltas": {
+          "x": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "y": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "w": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "positionDelta": [
+          0,
+          0,
+          0
+        ],
+        "before": {
+          "rawCamera": {
+            "type": "OrthographicCamera",
+            "position": [
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217
+            ],
+            "quaternion": [
+              -0.42261826174069933,
+              3.708819303461431e-17,
+              1.7294508439171524e-17,
+              0.90630778703665
+            ],
+            "zoom": 1.6682497445495552,
+            "near": 341.561956187581,
+            "far": 6141.40765048019,
+            "left": -359.796875,
+            "right": 359.796875,
+            "top": 531.1015625,
+            "bottom": -531.1015625,
+            "projectionMatrix": [
+              0.004636643229737766,
+              0,
+              0,
+              0,
+              0,
+              0.003141112477050103,
+              0,
+              0,
+              0,
+              0,
+              -0.000344836760393146,
+              0,
+              0,
+              0,
+              -1.1177831184452711,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              -8.184458649722383e-17,
+              0,
+              -6.269659068556885e-17,
+              0.6427876096865395,
+              -0.7660444431189779,
+              0,
+              5.260868612033374e-17,
+              0.7660444431189779,
+              0.6427876096865395,
+              0,
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217,
+              1
+            ]
+          },
+          "viewProjectionMatrix": [
+            0.004636643229737766,
+            -1.969370432709436e-19,
+            -1.8141408890275752e-20,
+            0,
+            -2.857552012029539e-35,
+            0.002019068180879601,
+            -0.00026416028408231994,
+            0,
+            -3.794841478730399e-19,
+            -0.0024062317582559194,
+            -0.0002216567969451603,
+            0,
+            -2.246234831546325,
+            3.403249375697812,
+            0.31349987516146904,
+            1
+          ],
+          "rows": {
+            "x": [
+              0.004636643229737766,
+              -2.857552012029539e-35,
+              -3.794841478730399e-19,
+              -2.246234831546325
+            ],
+            "y": [
+              -1.969370432709436e-19,
+              0.002019068180879601,
+              -0.0024062317582559194,
+              3.403249375697812
+            ],
+            "w": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        "after": {
+          "rawCamera": {
+            "type": "OrthographicCamera",
+            "position": [
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217
+            ],
+            "quaternion": [
+              -0.42261826174069933,
+              3.708819303461431e-17,
+              1.7294508439171524e-17,
+              0.90630778703665
+            ],
+            "zoom": 1.6682497445495552,
+            "near": 341.561956187581,
+            "far": 6141.40765048019,
+            "left": -359.796875,
+            "right": 359.796875,
+            "top": 531.1015625,
+            "bottom": -531.1015625,
+            "projectionMatrix": [
+              0.004636643229737766,
+              0,
+              0,
+              0,
+              0,
+              0.003141112477050103,
+              0,
+              0,
+              0,
+              0,
+              -0.000344836760393146,
+              0,
+              0,
+              0,
+              -1.1177831184452711,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              -8.184458649722383e-17,
+              0,
+              -6.269659068556885e-17,
+              0.6427876096865395,
+              -0.7660444431189779,
+              0,
+              5.260868612033374e-17,
+              0.7660444431189779,
+              0.6427876096865395,
+              0,
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217,
+              1
+            ]
+          },
+          "viewProjectionMatrix": [
+            0.004636643229737766,
+            -1.969370432709436e-19,
+            -1.8141408890275752e-20,
+            0,
+            -2.857552012029539e-35,
+            0.002019068180879601,
+            -0.00026416028408231994,
+            0,
+            -3.794841478730399e-19,
+            -0.0024062317582559194,
+            -0.0002216567969451603,
+            0,
+            -2.246234831546325,
+            3.403249375697812,
+            0.31349987516146904,
+            1
+          ],
+          "rows": {
+            "x": [
+              0.004636643229737766,
+              -2.857552012029539e-35,
+              -3.794841478730399e-19,
+              -2.246234831546325
+            ],
+            "y": [
+              -1.969370432709436e-19,
+              0.002019068180879601,
+              -0.0024062317582559194,
+              3.403249375697812
+            ],
+            "w": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        "scope": "controlled standalone framing; exact camera records required",
+        "controlledAppearancePair": true
+      },
+      "fullAppScope": "Both panels retain exact actual cameras; the LEFT mounted view receives host legend presentation and the RIGHT standalone is the unchanged control.",
+      "exactSceneExportMatch": false,
+      "elementDeltas": {
+        ".parcel": 0,
+        ".world-cave": 0,
+        ".trail-fill": 0,
+        ".parcel-blade": 0,
+        ".parcel-flora": 0,
+        ".parcel-shrub": 0,
+        ".story-tree": 0,
+        ".world-plate-bg": 0,
+        "[data-edges]": 0
+      }
+    },
+    "zoom": {
+      "pointerDelivery": {
+        "before": "auto",
+        "after": "none",
+        "scope": "Only the intended registered-canvas pointer eligibility changes; raw computed values remain in receipts. Geometry, paint styles and exact actual cameras remain guarded."
+      },
+      "checks": {
+        "sameStableLiveLayout": true,
+        "sameHostCameraAndComputedComposition": true,
+        "sameCanvasBuffersRectsAndPaintStyles": true,
+        "exactIntendedMountedPointerDelivery": true,
+        "standalonePointerStyleUnchanged": true,
+        "fullAlphaNativePixelsExact": true,
+        "sameMountedOrthographicXYWProjection": true,
+        "exactActualCamerasForStatusOnlyChange": true
+      },
+      "exactAllCameraRecordsEqual": true,
+      "mounted": {
+        "exactCameraEqual": true,
+        "equivalentXYW": true,
+        "coefficientTolerance": 1e-10,
+        "maxAbsCoefficientDelta": 0,
+        "coefficientDeltas": {
+          "x": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "y": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "w": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "positionDelta": [
+          0,
+          0,
+          0
+        ],
+        "before": {
+          "rawCamera": {
+            "type": "OrthographicCamera",
+            "position": [
+              504.12332547736673,
+              2483.121421048536,
+              3616.947040253734
+            ],
+            "quaternion": [
+              -0.42261826174069944,
+              0,
+              0,
+              0.90630778703665
+            ],
+            "zoom": 4.228188919246119,
+            "near": 1177.9611677831854,
+            "far": 5305.008438884584,
+            "left": -539.703125,
+            "right": 539.703125,
+            "top": 550,
+            "bottom": -550,
+            "projectionMatrix": [
+              0.007834286524181455,
+              0,
+              0,
+              0,
+              0,
+              0.007687616216811124,
+              0,
+              0,
+              0,
+              0,
+              -0.00048460796996547444,
+              0,
+              0,
+              0,
+              -1.570849370217569,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0.6427876096865393,
+              -0.7660444431189781,
+              0,
+              0,
+              0.7660444431189781,
+              0.6427876096865393,
+              0,
+              504.12332547736673,
+              2483.121421048536,
+              3616.947040253734,
+              1
+            ]
+          },
+          "viewProjectionMatrix": [
+            0.007834286524181455,
+            0,
+            0,
+            0,
+            0,
+            0.004941504452191498,
+            -0.0003712312424832203,
+            0,
+            0,
+            -0.005889055683719503,
+            -0.0003114999986491535,
+            0,
+            -3.9494465753128756,
+            9.030046967675267,
+            0.4776418783080767,
+            1
+          ],
+          "rows": {
+            "x": [
+              0.007834286524181455,
+              0,
+              0,
+              -3.9494465753128756
+            ],
+            "y": [
+              0,
+              0.004941504452191498,
+              -0.005889055683719503,
+              9.030046967675267
+            ],
+            "w": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        "after": {
+          "rawCamera": {
+            "type": "OrthographicCamera",
+            "position": [
+              504.12332547736673,
+              2483.121421048536,
+              3616.947040253734
+            ],
+            "quaternion": [
+              -0.42261826174069944,
+              0,
+              0,
+              0.90630778703665
+            ],
+            "zoom": 4.228188919246119,
+            "near": 1177.9611677831854,
+            "far": 5305.008438884584,
+            "left": -539.703125,
+            "right": 539.703125,
+            "top": 550,
+            "bottom": -550,
+            "projectionMatrix": [
+              0.007834286524181455,
+              0,
+              0,
+              0,
+              0,
+              0.007687616216811124,
+              0,
+              0,
+              0,
+              0,
+              -0.00048460796996547444,
+              0,
+              0,
+              0,
+              -1.570849370217569,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0.6427876096865393,
+              -0.7660444431189781,
+              0,
+              0,
+              0.7660444431189781,
+              0.6427876096865393,
+              0,
+              504.12332547736673,
+              2483.121421048536,
+              3616.947040253734,
+              1
+            ]
+          },
+          "viewProjectionMatrix": [
+            0.007834286524181455,
+            0,
+            0,
+            0,
+            0,
+            0.004941504452191498,
+            -0.0003712312424832203,
+            0,
+            0,
+            -0.005889055683719503,
+            -0.0003114999986491535,
+            0,
+            -3.9494465753128756,
+            9.030046967675267,
+            0.4776418783080767,
+            1
+          ],
+          "rows": {
+            "x": [
+              0.007834286524181455,
+              0,
+              0,
+              -3.9494465753128756
+            ],
+            "y": [
+              0,
+              0.004941504452191498,
+              -0.005889055683719503,
+              9.030046967675267
+            ],
+            "w": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        "scope": "controlled mounted framing; exact camera records and XYW equivalence required"
+      },
+      "standalone": {
+        "exactCameraEqual": true,
+        "equivalentXYW": true,
+        "coefficientTolerance": 1e-10,
+        "maxAbsCoefficientDelta": 0,
+        "coefficientDeltas": {
+          "x": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "y": [
+            0,
+            0,
+            0,
+            0
+          ],
+          "w": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        "positionDelta": [
+          0,
+          0,
+          0
+        ],
+        "before": {
+          "rawCamera": {
+            "type": "OrthographicCamera",
+            "position": [
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217
+            ],
+            "quaternion": [
+              -0.42261826174069933,
+              3.708819303461431e-17,
+              1.7294508439171524e-17,
+              0.90630778703665
+            ],
+            "zoom": 1.6682497445495552,
+            "near": 341.561956187581,
+            "far": 6141.40765048019,
+            "left": -359.796875,
+            "right": 359.796875,
+            "top": 531.1015625,
+            "bottom": -531.1015625,
+            "projectionMatrix": [
+              0.004636643229737766,
+              0,
+              0,
+              0,
+              0,
+              0.003141112477050103,
+              0,
+              0,
+              0,
+              0,
+              -0.000344836760393146,
+              0,
+              0,
+              0,
+              -1.1177831184452711,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              -8.184458649722383e-17,
+              0,
+              -6.269659068556885e-17,
+              0.6427876096865395,
+              -0.7660444431189779,
+              0,
+              5.260868612033374e-17,
+              0.7660444431189779,
+              0.6427876096865395,
+              0,
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217,
+              1
+            ]
+          },
+          "viewProjectionMatrix": [
+            0.004636643229737766,
+            -1.969370432709436e-19,
+            -1.8141408890275752e-20,
+            0,
+            -2.857552012029539e-35,
+            0.002019068180879601,
+            -0.00026416028408231994,
+            0,
+            -3.794841478730399e-19,
+            -0.0024062317582559194,
+            -0.0002216567969451603,
+            0,
+            -2.246234831546325,
+            3.403249375697812,
+            0.31349987516146904,
+            1
+          ],
+          "rows": {
+            "x": [
+              0.004636643229737766,
+              -2.857552012029539e-35,
+              -3.794841478730399e-19,
+              -2.246234831546325
+            ],
+            "y": [
+              -1.969370432709436e-19,
+              0.002019068180879601,
+              -0.0024062317582559194,
+              3.403249375697812
+            ],
+            "w": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        "after": {
+          "rawCamera": {
+            "type": "OrthographicCamera",
+            "position": [
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217
+            ],
+            "quaternion": [
+              -0.42261826174069933,
+              3.708819303461431e-17,
+              1.7294508439171524e-17,
+              0.90630778703665
+            ],
+            "zoom": 1.6682497445495552,
+            "near": 341.561956187581,
+            "far": 6141.40765048019,
+            "left": -359.796875,
+            "right": 359.796875,
+            "top": 531.1015625,
+            "bottom": -531.1015625,
+            "projectionMatrix": [
+              0.004636643229737766,
+              0,
+              0,
+              0,
+              0,
+              0.003141112477050103,
+              0,
+              0,
+              0,
+              0,
+              -0.000344836760393146,
+              0,
+              0,
+              0,
+              -1.1177831184452711,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              -8.184458649722383e-17,
+              0,
+              -6.269659068556885e-17,
+              0.6427876096865395,
+              -0.7660444431189779,
+              0,
+              5.260868612033374e-17,
+              0.7660444431189779,
+              0.6427876096865395,
+              0,
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217,
+              1
+            ]
+          },
+          "viewProjectionMatrix": [
+            0.004636643229737766,
+            -1.969370432709436e-19,
+            -1.8141408890275752e-20,
+            0,
+            -2.857552012029539e-35,
+            0.002019068180879601,
+            -0.00026416028408231994,
+            0,
+            -3.794841478730399e-19,
+            -0.0024062317582559194,
+            -0.0002216567969451603,
+            0,
+            -2.246234831546325,
+            3.403249375697812,
+            0.31349987516146904,
+            1
+          ],
+          "rows": {
+            "x": [
+              0.004636643229737766,
+              -2.857552012029539e-35,
+              -3.794841478730399e-19,
+              -2.246234831546325
+            ],
+            "y": [
+              -1.969370432709436e-19,
+              0.002019068180879601,
+              -0.0024062317582559194,
+              3.403249375697812
+            ],
+            "w": [
+              0,
+              0,
+              0,
+              1
+            ]
+          }
+        },
+        "scope": "controlled standalone framing; exact camera records required",
+        "controlledAppearancePair": true
+      },
+      "fullAppScope": "Both panels retain exact actual cameras; the LEFT mounted view receives host legend presentation and the RIGHT standalone is the unchanged control.",
+      "exactSceneExportMatch": false,
+      "elementDeltas": {
+        ".parcel": 0,
+        ".world-cave": 0,
+        ".trail-fill": 0,
+        ".parcel-blade": 0,
+        ".parcel-flora": 0,
+        ".parcel-shrub": 0,
+        ".story-tree": 0,
+        ".world-plate-bg": 0,
+        "[data-edges]": 0
+      }
+    }
+  },
+  "identities": {
+    "before": {
+      "before": {
+        "head": "f7f896ebdf22b4a6cc7c83aade5fcea071a90122",
+        "status": "",
+        "sourceSha256": "85a314307843f39d52c6c7148bfd28c5b99ed9fa147d62ea94b6d5163470f751"
+      },
+      "finalSource": {
+        "head": "f7f896ebdf22b4a6cc7c83aade5fcea071a90122",
+        "status": "",
+        "sourceSha256": "85a314307843f39d52c6c7148bfd28c5b99ed9fa147d62ea94b6d5163470f751"
+      }
+    },
+    "after": {
+      "before": {
+        "head": "05bc3402929424a5054ef0b1b72c48288b4f5f9b",
+        "status": "",
+        "sourceSha256": "726a0b56df392e4ff7593c693571c347ef8670f2985b720dec882ce4113fcebf"
+      },
+      "finalSource": {
+        "head": "05bc3402929424a5054ef0b1b72c48288b4f5f9b",
+        "status": "",
+        "sourceSha256": "726a0b56df392e4ff7593c693571c347ef8670f2985b720dec882ce4113fcebf"
+      }
+    }
+  },
+  "captures": {
+    "before-rest": {
+      "stableDataSha256": "3dbb76388e5d671ff8c9700bd0718a9b83944c77b8761bf7a411b2a5a28873ff",
+      "sceneSha256": "875045b210746fc022e5608bc2abf000c85913fda981eeb44412bd7c4e738a42",
+      "host": {
+        "svgRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1079.40625,
+          "height": 1100
+        },
+        "frameRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1079.40625,
+          "height": 1100
+        },
+        "cameraAttribute": "translate(-397.4286344809317 -1796.2630488220325) scale(1.9724813357493298)",
+        "cameraCss": {
+          "transform": "matrix(1.97248, 0, 0, 1.97248, -397.429, -1796.26)",
+          "transformOrigin": "0px 0px",
+          "opacity": "1",
+          "display": "inline",
+          "visibility": "visible",
+          "position": "static",
+          "zIndex": "auto",
+          "pointerEvents": "auto"
+        },
+        "cameraCTM": [
+          1.972481369972229,
+          0,
+          0,
+          1.972481369972229,
+          -397.4286193847656,
+          -1796.2630615234375
+        ],
+        "compositor": {
+          "transform": "none",
+          "transformOrigin": "539.703px 550px",
+          "opacity": "1",
+          "display": "block",
+          "visibility": "visible",
+          "position": "absolute",
+          "zIndex": "auto",
+          "pointerEvents": "auto"
+        },
+        "svg": {
+          "transform": "none",
+          "transformOrigin": "539.703px 550px",
+          "opacity": "1",
+          "display": "block",
+          "visibility": "visible",
+          "position": "relative",
+          "zIndex": "1",
+          "pointerEvents": "auto"
+        },
+        "mount": {
+          "transform": "none",
+          "transformOrigin": "539.703px 550px",
+          "opacity": "1",
+          "display": "block",
+          "visibility": "visible",
+          "position": "absolute",
+          "zIndex": "0",
+          "pointerEvents": "none"
+        }
+      },
+      "canvases": {
+        "land-mount": {
+          "frame": 4,
+          "mode": "demand",
+          "requested": 0,
+          "camera": {
+            "type": "OrthographicCamera",
+            "position": [
+              475.1029794281541,
+              2483.121421048536,
+              3636.365922862732
+            ],
+            "quaternion": [
+              -0.42261826174069944,
+              0,
+              0,
+              0.90630778703665
+            ],
+            "zoom": 1.9724813357493298,
+            "near": 1177.9611677831854,
+            "far": 5305.008438884584,
+            "left": -539.703125,
+            "right": 539.703125,
+            "top": 550,
+            "bottom": -550,
+            "projectionMatrix": [
+              0.003654752482208306,
+              0,
+              0,
+              0,
+              0,
+              0.0035863297013624183,
+              0,
+              0,
+              0,
+              0,
+              -0.00048460796996547444,
+              0,
+              0,
+              0,
+              -1.570849370217569,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0.6427876096865393,
+              -0.7660444431189781,
+              0,
+              0,
+              0.7660444431189781,
+              0.6427876096865393,
+              0,
+              475.1029794281541,
+              2483.121421048536,
+              3636.365922862732,
+              1
+            ]
+          },
+          "canvas": {
+            "width": 1079,
+            "height": 1100,
+            "rect": {
+              "x": 0,
+              "y": 0,
+              "width": 1079.40625,
+              "height": 1100
+            },
+            "css": {
+              "transform": "none",
+              "transformOrigin": "539.703px 550px",
+              "opacity": "1",
+              "display": "block",
+              "visibility": "visible",
+              "position": "static",
+              "zIndex": "auto",
+              "pointerEvents": "auto"
+            }
+          },
+          "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+          "renderInfo": {
+            "calls": 47,
+            "triangles": 1995218
+          },
+          "regrow": null
+        },
+        "land-view": {
+          "frame": 5,
+          "mode": "demand",
+          "requested": 0,
+          "camera": {
+            "type": "OrthographicCamera",
+            "position": [
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217
+            ],
+            "quaternion": [
+              -0.42261826174069933,
+              3.708819303461431e-17,
+              1.7294508439171524e-17,
+              0.90630778703665
+            ],
+            "zoom": 1.6682497445495552,
+            "near": 341.561956187581,
+            "far": 6141.40765048019,
+            "left": -359.796875,
+            "right": 359.796875,
+            "top": 531.1015625,
+            "bottom": -531.1015625,
+            "projectionMatrix": [
+              0.004636643229737766,
+              0,
+              0,
+              0,
+              0,
+              0.003141112477050103,
+              0,
+              0,
+              0,
+              0,
+              -0.000344836760393146,
+              0,
+              0,
+              0,
+              -1.1177831184452711,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              -8.184458649722383e-17,
+              0,
+              -6.269659068556885e-17,
+              0.6427876096865395,
+              -0.7660444431189779,
+              0,
+              5.260868612033374e-17,
+              0.7660444431189779,
+              0.6427876096865395,
+              0,
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217,
+              1
+            ]
+          },
+          "canvas": {
+            "width": 719,
+            "height": 1062,
+            "rect": {
+              "x": 1080.40625,
+              "y": 37.796875,
+              "width": 719.59375,
+              "height": 1062.203125
+            },
+            "css": {
+              "transform": "none",
+              "transformOrigin": "359.797px 531.102px",
+              "opacity": "1",
+              "display": "block",
+              "visibility": "visible",
+              "position": "static",
+              "zIndex": "auto",
+              "pointerEvents": "auto"
+            }
+          },
+          "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+          "renderInfo": {
+            "calls": 9,
+            "triangles": 1991834
+          },
+          "regrow": null
+        }
+      },
+      "rawCanvases": {
+        "land-mount": {
+          "file": "before-rest-land-mount-raw.png",
+          "sha256": "18ec1b0f20df98c5ffcc5e1002df990ac800be3f387c8bf4179f913598406405"
+        },
+        "land-view": {
+          "file": "before-rest-land-view-raw.png",
+          "sha256": "e4992f8aba015a3ab698fa836bfdfb65e32314750d6faccdddc4f051d30d4e95"
+        }
+      },
+      "counts": {
+        ".parcel": 213,
+        ".world-cave": 0,
+        ".trail-fill": 109,
+        ".parcel-blade": 11051,
+        ".parcel-flora": 2473,
+        ".parcel-shrub": 2030,
+        ".story-tree": 0,
+        ".world-plate-bg": 36,
+        "[data-edges]": 327
+      }
+    },
+    "after-rest": {
+      "stableDataSha256": "3dbb76388e5d671ff8c9700bd0718a9b83944c77b8761bf7a411b2a5a28873ff",
+      "sceneSha256": "9b7fba1320678dad7f460b85d9879144f02ee2fd2159f8d5716649693f7347ac",
+      "host": {
+        "svgRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1079.40625,
+          "height": 1100
+        },
+        "frameRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1079.40625,
+          "height": 1100
+        },
+        "cameraAttribute": "translate(-397.4286344809317 -1796.2630488220325) scale(1.9724813357493298)",
+        "cameraCss": {
+          "transform": "matrix(1.97248, 0, 0, 1.97248, -397.429, -1796.26)",
+          "transformOrigin": "0px 0px",
+          "opacity": "1",
+          "display": "inline",
+          "visibility": "visible",
+          "position": "static",
+          "zIndex": "auto",
+          "pointerEvents": "auto"
+        },
+        "cameraCTM": [
+          1.972481369972229,
+          0,
+          0,
+          1.972481369972229,
+          -397.4286193847656,
+          -1796.2630615234375
+        ],
+        "compositor": {
+          "transform": "none",
+          "transformOrigin": "539.703px 550px",
+          "opacity": "1",
+          "display": "block",
+          "visibility": "visible",
+          "position": "absolute",
+          "zIndex": "auto",
+          "pointerEvents": "auto"
+        },
+        "svg": {
+          "transform": "none",
+          "transformOrigin": "539.703px 550px",
+          "opacity": "1",
+          "display": "block",
+          "visibility": "visible",
+          "position": "relative",
+          "zIndex": "1",
+          "pointerEvents": "auto"
+        },
+        "mount": {
+          "transform": "none",
+          "transformOrigin": "539.703px 550px",
+          "opacity": "1",
+          "display": "block",
+          "visibility": "visible",
+          "position": "absolute",
+          "zIndex": "0",
+          "pointerEvents": "none"
+        }
+      },
+      "canvases": {
+        "land-mount": {
+          "frame": 4,
+          "mode": "demand",
+          "requested": 0,
+          "camera": {
+            "type": "OrthographicCamera",
+            "position": [
+              475.1029794281541,
+              2483.121421048536,
+              3636.365922862732
+            ],
+            "quaternion": [
+              -0.42261826174069944,
+              0,
+              0,
+              0.90630778703665
+            ],
+            "zoom": 1.9724813357493298,
+            "near": 1177.9611677831854,
+            "far": 5305.008438884584,
+            "left": -539.703125,
+            "right": 539.703125,
+            "top": 550,
+            "bottom": -550,
+            "projectionMatrix": [
+              0.003654752482208306,
+              0,
+              0,
+              0,
+              0,
+              0.0035863297013624183,
+              0,
+              0,
+              0,
+              0,
+              -0.00048460796996547444,
+              0,
+              0,
+              0,
+              -1.570849370217569,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0.6427876096865393,
+              -0.7660444431189781,
+              0,
+              0,
+              0.7660444431189781,
+              0.6427876096865393,
+              0,
+              475.1029794281541,
+              2483.121421048536,
+              3636.365922862732,
+              1
+            ]
+          },
+          "canvas": {
+            "width": 1079,
+            "height": 1100,
+            "rect": {
+              "x": 0,
+              "y": 0,
+              "width": 1079.40625,
+              "height": 1100
+            },
+            "css": {
+              "transform": "none",
+              "transformOrigin": "539.703px 550px",
+              "opacity": "1",
+              "display": "block",
+              "visibility": "visible",
+              "position": "static",
+              "zIndex": "auto",
+              "pointerEvents": "none"
+            }
+          },
+          "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+          "renderInfo": {
+            "calls": 47,
+            "triangles": 1995218
+          },
+          "regrow": null
+        },
+        "land-view": {
+          "frame": 5,
+          "mode": "demand",
+          "requested": 0,
+          "camera": {
+            "type": "OrthographicCamera",
+            "position": [
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217
+            ],
+            "quaternion": [
+              -0.42261826174069933,
+              3.708819303461431e-17,
+              1.7294508439171524e-17,
+              0.90630778703665
+            ],
+            "zoom": 1.6682497445495552,
+            "near": 341.561956187581,
+            "far": 6141.40765048019,
+            "left": -359.796875,
+            "right": 359.796875,
+            "top": 531.1015625,
+            "bottom": -531.1015625,
+            "projectionMatrix": [
+              0.004636643229737766,
+              0,
+              0,
+              0,
+              0,
+              0.003141112477050103,
+              0,
+              0,
+              0,
+              0,
+              -0.000344836760393146,
+              0,
+              0,
+              0,
+              -1.1177831184452711,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              -8.184458649722383e-17,
+              0,
+              -6.269659068556885e-17,
+              0.6427876096865395,
+              -0.7660444431189779,
+              0,
+              5.260868612033374e-17,
+              0.7660444431189779,
+              0.6427876096865395,
+              0,
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217,
+              1
+            ]
+          },
+          "canvas": {
+            "width": 719,
+            "height": 1062,
+            "rect": {
+              "x": 1080.40625,
+              "y": 37.796875,
+              "width": 719.59375,
+              "height": 1062.203125
+            },
+            "css": {
+              "transform": "none",
+              "transformOrigin": "359.797px 531.102px",
+              "opacity": "1",
+              "display": "block",
+              "visibility": "visible",
+              "position": "static",
+              "zIndex": "auto",
+              "pointerEvents": "auto"
+            }
+          },
+          "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+          "renderInfo": {
+            "calls": 9,
+            "triangles": 1991834
+          },
+          "regrow": null
+        }
+      },
+      "rawCanvases": {
+        "land-mount": {
+          "file": "after-rest-land-mount-raw.png",
+          "sha256": "18ec1b0f20df98c5ffcc5e1002df990ac800be3f387c8bf4179f913598406405"
+        },
+        "land-view": {
+          "file": "after-rest-land-view-raw.png",
+          "sha256": "e4992f8aba015a3ab698fa836bfdfb65e32314750d6faccdddc4f051d30d4e95"
+        }
+      },
+      "counts": {
+        ".parcel": 213,
+        ".world-cave": 0,
+        ".trail-fill": 109,
+        ".parcel-blade": 11051,
+        ".parcel-flora": 2473,
+        ".parcel-shrub": 2030,
+        ".story-tree": 0,
+        ".world-plate-bg": 36,
+        "[data-edges]": 327
+      }
+    },
+    "before-zoom": {
+      "stableDataSha256": "3dbb76388e5d671ff8c9700bd0718a9b83944c77b8761bf7a411b2a5a28873ff",
+      "sceneSha256": "875045b210746fc022e5608bc2abf000c85913fda981eeb44412bd7c4e738a42",
+      "host": {
+        "svgRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1079.40625,
+          "height": 1100
+        },
+        "frameRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1079.40625,
+          "height": 1100
+        },
+        "cameraAttribute": "translate(-1591.8255337169066 -4416.525832221394) scale(4.228188919246119)",
+        "cameraCss": {
+          "transform": "matrix(4.22819, 0, 0, 4.22819, -1591.83, -4416.53)",
+          "transformOrigin": "0px 0px",
+          "opacity": "1",
+          "display": "inline",
+          "visibility": "visible",
+          "position": "static",
+          "zIndex": "auto",
+          "pointerEvents": "auto"
+        },
+        "cameraCTM": [
+          4.228188991546631,
+          0,
+          0,
+          4.228188991546631,
+          -1591.8255615234375,
+          -4416.52587890625
+        ],
+        "compositor": {
+          "transform": "none",
+          "transformOrigin": "539.703px 550px",
+          "opacity": "1",
+          "display": "block",
+          "visibility": "visible",
+          "position": "absolute",
+          "zIndex": "auto",
+          "pointerEvents": "auto"
+        },
+        "svg": {
+          "transform": "none",
+          "transformOrigin": "539.703px 550px",
+          "opacity": "1",
+          "display": "block",
+          "visibility": "visible",
+          "position": "relative",
+          "zIndex": "1",
+          "pointerEvents": "auto"
+        },
+        "mount": {
+          "transform": "none",
+          "transformOrigin": "539.703px 550px",
+          "opacity": "1",
+          "display": "block",
+          "visibility": "visible",
+          "position": "absolute",
+          "zIndex": "0",
+          "pointerEvents": "none"
+        }
+      },
+      "canvases": {
+        "land-mount": {
+          "frame": 21,
+          "mode": "demand",
+          "requested": 0,
+          "camera": {
+            "type": "OrthographicCamera",
+            "position": [
+              504.12332547736673,
+              2483.121421048536,
+              3616.947040253734
+            ],
+            "quaternion": [
+              -0.42261826174069944,
+              0,
+              0,
+              0.90630778703665
+            ],
+            "zoom": 4.228188919246119,
+            "near": 1177.9611677831854,
+            "far": 5305.008438884584,
+            "left": -539.703125,
+            "right": 539.703125,
+            "top": 550,
+            "bottom": -550,
+            "projectionMatrix": [
+              0.007834286524181455,
+              0,
+              0,
+              0,
+              0,
+              0.007687616216811124,
+              0,
+              0,
+              0,
+              0,
+              -0.00048460796996547444,
+              0,
+              0,
+              0,
+              -1.570849370217569,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0.6427876096865393,
+              -0.7660444431189781,
+              0,
+              0,
+              0.7660444431189781,
+              0.6427876096865393,
+              0,
+              504.12332547736673,
+              2483.121421048536,
+              3616.947040253734,
+              1
+            ]
+          },
+          "canvas": {
+            "width": 1079,
+            "height": 1100,
+            "rect": {
+              "x": 0,
+              "y": 0,
+              "width": 1079.40625,
+              "height": 1100
+            },
+            "css": {
+              "transform": "none",
+              "transformOrigin": "539.703px 550px",
+              "opacity": "1",
+              "display": "block",
+              "visibility": "visible",
+              "position": "static",
+              "zIndex": "auto",
+              "pointerEvents": "auto"
+            }
+          },
+          "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+          "renderInfo": {
+            "calls": 31,
+            "triangles": 1993706
+          },
+          "regrow": null
+        },
+        "land-view": {
+          "frame": 14,
+          "mode": "demand",
+          "requested": 0,
+          "camera": {
+            "type": "OrthographicCamera",
+            "position": [
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217
+            ],
+            "quaternion": [
+              -0.42261826174069933,
+              3.708819303461431e-17,
+              1.7294508439171524e-17,
+              0.90630778703665
+            ],
+            "zoom": 1.6682497445495552,
+            "near": 341.561956187581,
+            "far": 6141.40765048019,
+            "left": -359.796875,
+            "right": 359.796875,
+            "top": 531.1015625,
+            "bottom": -531.1015625,
+            "projectionMatrix": [
+              0.004636643229737766,
+              0,
+              0,
+              0,
+              0,
+              0.003141112477050103,
+              0,
+              0,
+              0,
+              0,
+              -0.000344836760393146,
+              0,
+              0,
+              0,
+              -1.1177831184452711,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              -8.184458649722383e-17,
+              0,
+              -6.269659068556885e-17,
+              0.6427876096865395,
+              -0.7660444431189779,
+              0,
+              5.260868612033374e-17,
+              0.7660444431189779,
+              0.6427876096865395,
+              0,
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217,
+              1
+            ]
+          },
+          "canvas": {
+            "width": 719,
+            "height": 1062,
+            "rect": {
+              "x": 1080.40625,
+              "y": 37.796875,
+              "width": 719.59375,
+              "height": 1062.203125
+            },
+            "css": {
+              "transform": "none",
+              "transformOrigin": "359.797px 531.102px",
+              "opacity": "1",
+              "display": "block",
+              "visibility": "visible",
+              "position": "static",
+              "zIndex": "auto",
+              "pointerEvents": "auto"
+            }
+          },
+          "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+          "renderInfo": {
+            "calls": 9,
+            "triangles": 1991834
+          },
+          "regrow": null
+        }
+      },
+      "rawCanvases": {
+        "land-mount": {
+          "file": "before-zoom-land-mount-raw.png",
+          "sha256": "52fd326f4f7f06635a0db688d51d09e4787ca4fb2d28ab409fe190c01dba4ef0"
+        },
+        "land-view": {
+          "file": "before-zoom-land-view-raw.png",
+          "sha256": "e4992f8aba015a3ab698fa836bfdfb65e32314750d6faccdddc4f051d30d4e95"
+        }
+      },
+      "counts": {
+        ".parcel": 213,
+        ".world-cave": 0,
+        ".trail-fill": 109,
+        ".parcel-blade": 11051,
+        ".parcel-flora": 2473,
+        ".parcel-shrub": 2030,
+        ".story-tree": 0,
+        ".world-plate-bg": 36,
+        "[data-edges]": 327
+      }
+    },
+    "after-zoom": {
+      "stableDataSha256": "3dbb76388e5d671ff8c9700bd0718a9b83944c77b8761bf7a411b2a5a28873ff",
+      "sceneSha256": "9b7fba1320678dad7f460b85d9879144f02ee2fd2159f8d5716649693f7347ac",
+      "host": {
+        "svgRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1079.40625,
+          "height": 1100
+        },
+        "frameRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1079.40625,
+          "height": 1100
+        },
+        "cameraAttribute": "translate(-1591.8255337169066 -4416.525832221394) scale(4.228188919246119)",
+        "cameraCss": {
+          "transform": "matrix(4.22819, 0, 0, 4.22819, -1591.83, -4416.53)",
+          "transformOrigin": "0px 0px",
+          "opacity": "1",
+          "display": "inline",
+          "visibility": "visible",
+          "position": "static",
+          "zIndex": "auto",
+          "pointerEvents": "auto"
+        },
+        "cameraCTM": [
+          4.228188991546631,
+          0,
+          0,
+          4.228188991546631,
+          -1591.8255615234375,
+          -4416.52587890625
+        ],
+        "compositor": {
+          "transform": "none",
+          "transformOrigin": "539.703px 550px",
+          "opacity": "1",
+          "display": "block",
+          "visibility": "visible",
+          "position": "absolute",
+          "zIndex": "auto",
+          "pointerEvents": "auto"
+        },
+        "svg": {
+          "transform": "none",
+          "transformOrigin": "539.703px 550px",
+          "opacity": "1",
+          "display": "block",
+          "visibility": "visible",
+          "position": "relative",
+          "zIndex": "1",
+          "pointerEvents": "auto"
+        },
+        "mount": {
+          "transform": "none",
+          "transformOrigin": "539.703px 550px",
+          "opacity": "1",
+          "display": "block",
+          "visibility": "visible",
+          "position": "absolute",
+          "zIndex": "0",
+          "pointerEvents": "none"
+        }
+      },
+      "canvases": {
+        "land-mount": {
+          "frame": 21,
+          "mode": "demand",
+          "requested": 0,
+          "camera": {
+            "type": "OrthographicCamera",
+            "position": [
+              504.12332547736673,
+              2483.121421048536,
+              3616.947040253734
+            ],
+            "quaternion": [
+              -0.42261826174069944,
+              0,
+              0,
+              0.90630778703665
+            ],
+            "zoom": 4.228188919246119,
+            "near": 1177.9611677831854,
+            "far": 5305.008438884584,
+            "left": -539.703125,
+            "right": 539.703125,
+            "top": 550,
+            "bottom": -550,
+            "projectionMatrix": [
+              0.007834286524181455,
+              0,
+              0,
+              0,
+              0,
+              0.007687616216811124,
+              0,
+              0,
+              0,
+              0,
+              -0.00048460796996547444,
+              0,
+              0,
+              0,
+              -1.570849370217569,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0.6427876096865393,
+              -0.7660444431189781,
+              0,
+              0,
+              0.7660444431189781,
+              0.6427876096865393,
+              0,
+              504.12332547736673,
+              2483.121421048536,
+              3616.947040253734,
+              1
+            ]
+          },
+          "canvas": {
+            "width": 1079,
+            "height": 1100,
+            "rect": {
+              "x": 0,
+              "y": 0,
+              "width": 1079.40625,
+              "height": 1100
+            },
+            "css": {
+              "transform": "none",
+              "transformOrigin": "539.703px 550px",
+              "opacity": "1",
+              "display": "block",
+              "visibility": "visible",
+              "position": "static",
+              "zIndex": "auto",
+              "pointerEvents": "none"
+            }
+          },
+          "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+          "renderInfo": {
+            "calls": 31,
+            "triangles": 1993706
+          },
+          "regrow": null
+        },
+        "land-view": {
+          "frame": 14,
+          "mode": "demand",
+          "requested": 0,
+          "camera": {
+            "type": "OrthographicCamera",
+            "position": [
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217
+            ],
+            "quaternion": [
+              -0.42261826174069933,
+              3.708819303461431e-17,
+              1.7294508439171524e-17,
+              0.90630778703665
+            ],
+            "zoom": 1.6682497445495552,
+            "near": 341.561956187581,
+            "far": 6141.40765048019,
+            "left": -359.796875,
+            "right": 359.796875,
+            "top": 531.1015625,
+            "bottom": -531.1015625,
+            "projectionMatrix": [
+              0.004636643229737766,
+              0,
+              0,
+              0,
+              0,
+              0.003141112477050103,
+              0,
+              0,
+              0,
+              0,
+              -0.000344836760393146,
+              0,
+              0,
+              0,
+              -1.1177831184452711,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              -8.184458649722383e-17,
+              0,
+              -6.269659068556885e-17,
+              0.6427876096865395,
+              -0.7660444431189779,
+              0,
+              5.260868612033374e-17,
+              0.7660444431189779,
+              0.6427876096865395,
+              0,
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217,
+              1
+            ]
+          },
+          "canvas": {
+            "width": 719,
+            "height": 1062,
+            "rect": {
+              "x": 1080.40625,
+              "y": 37.796875,
+              "width": 719.59375,
+              "height": 1062.203125
+            },
+            "css": {
+              "transform": "none",
+              "transformOrigin": "359.797px 531.102px",
+              "opacity": "1",
+              "display": "block",
+              "visibility": "visible",
+              "position": "static",
+              "zIndex": "auto",
+              "pointerEvents": "auto"
+            }
+          },
+          "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+          "renderInfo": {
+            "calls": 9,
+            "triangles": 1991834
+          },
+          "regrow": null
+        }
+      },
+      "rawCanvases": {
+        "land-mount": {
+          "file": "after-zoom-land-mount-raw.png",
+          "sha256": "52fd326f4f7f06635a0db688d51d09e4787ca4fb2d28ab409fe190c01dba4ef0"
+        },
+        "land-view": {
+          "file": "after-zoom-land-view-raw.png",
+          "sha256": "e4992f8aba015a3ab698fa836bfdfb65e32314750d6faccdddc4f051d30d4e95"
+        }
+      },
+      "counts": {
+        ".parcel": 213,
+        ".world-cave": 0,
+        ".trail-fill": 109,
+        ".parcel-blade": 11051,
+        ".parcel-flora": 2473,
+        ".parcel-shrub": 2030,
+        ".story-tree": 0,
+        ".world-plate-bg": 36,
+        "[data-edges]": 327
+      }
+    },
+    "after-zoom-legend-visible": {
+      "stableDataSha256": "3dbb76388e5d671ff8c9700bd0718a9b83944c77b8761bf7a411b2a5a28873ff",
+      "sceneSha256": "9b7fba1320678dad7f460b85d9879144f02ee2fd2159f8d5716649693f7347ac",
+      "host": {
+        "svgRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1079.40625,
+          "height": 1100
+        },
+        "frameRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1079.40625,
+          "height": 1100
+        },
+        "cameraAttribute": "translate(-1591.8255337169066 -4416.525832221394) scale(4.228188919246119)",
+        "cameraCss": {
+          "transform": "matrix(4.22819, 0, 0, 4.22819, -1591.83, -4416.53)",
+          "transformOrigin": "0px 0px",
+          "opacity": "1",
+          "display": "inline",
+          "visibility": "visible",
+          "position": "static",
+          "zIndex": "auto",
+          "pointerEvents": "auto"
+        },
+        "cameraCTM": [
+          4.228188991546631,
+          0,
+          0,
+          4.228188991546631,
+          -1591.8255615234375,
+          -4416.52587890625
+        ],
+        "compositor": {
+          "transform": "none",
+          "transformOrigin": "539.703px 550px",
+          "opacity": "1",
+          "display": "block",
+          "visibility": "visible",
+          "position": "absolute",
+          "zIndex": "auto",
+          "pointerEvents": "auto"
+        },
+        "svg": {
+          "transform": "none",
+          "transformOrigin": "539.703px 550px",
+          "opacity": "1",
+          "display": "block",
+          "visibility": "visible",
+          "position": "relative",
+          "zIndex": "1",
+          "pointerEvents": "auto"
+        },
+        "mount": {
+          "transform": "none",
+          "transformOrigin": "539.703px 550px",
+          "opacity": "1",
+          "display": "block",
+          "visibility": "visible",
+          "position": "absolute",
+          "zIndex": "0",
+          "pointerEvents": "none"
+        }
+      },
+      "canvases": {
+        "land-mount": {
+          "frame": 22,
+          "mode": "demand",
+          "requested": 0,
+          "camera": {
+            "type": "OrthographicCamera",
+            "position": [
+              504.12332547736673,
+              2483.121421048536,
+              3616.947040253734
+            ],
+            "quaternion": [
+              -0.42261826174069944,
+              0,
+              0,
+              0.90630778703665
+            ],
+            "zoom": 4.228188919246119,
+            "near": 1177.9611677831854,
+            "far": 5305.008438884584,
+            "left": -539.703125,
+            "right": 539.703125,
+            "top": 550,
+            "bottom": -550,
+            "projectionMatrix": [
+              0.007834286524181455,
+              0,
+              0,
+              0,
+              0,
+              0.007687616216811124,
+              0,
+              0,
+              0,
+              0,
+              -0.00048460796996547444,
+              0,
+              0,
+              0,
+              -1.570849370217569,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0.6427876096865393,
+              -0.7660444431189781,
+              0,
+              0,
+              0.7660444431189781,
+              0.6427876096865393,
+              0,
+              504.12332547736673,
+              2483.121421048536,
+              3616.947040253734,
+              1
+            ]
+          },
+          "canvas": {
+            "width": 1079,
+            "height": 1100,
+            "rect": {
+              "x": 0,
+              "y": 0,
+              "width": 1079.40625,
+              "height": 1100
+            },
+            "css": {
+              "transform": "none",
+              "transformOrigin": "539.703px 550px",
+              "opacity": "1",
+              "display": "block",
+              "visibility": "visible",
+              "position": "static",
+              "zIndex": "auto",
+              "pointerEvents": "none"
+            }
+          },
+          "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+          "renderInfo": {
+            "calls": 31,
+            "triangles": 1993706
+          },
+          "regrow": null
+        },
+        "land-view": {
+          "frame": 15,
+          "mode": "demand",
+          "requested": 0,
+          "camera": {
+            "type": "OrthographicCamera",
+            "position": [
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217
+            ],
+            "quaternion": [
+              -0.42261826174069933,
+              3.708819303461431e-17,
+              1.7294508439171524e-17,
+              0.90630778703665
+            ],
+            "zoom": 1.6682497445495552,
+            "near": 341.561956187581,
+            "far": 6141.40765048019,
+            "left": -359.796875,
+            "right": 359.796875,
+            "top": 531.1015625,
+            "bottom": -531.1015625,
+            "projectionMatrix": [
+              0.004636643229737766,
+              0,
+              0,
+              0,
+              0,
+              0.003141112477050103,
+              0,
+              0,
+              0,
+              0,
+              -0.000344836760393146,
+              0,
+              0,
+              0,
+              -1.1177831184452711,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              -8.184458649722383e-17,
+              0,
+              -6.269659068556885e-17,
+              0.6427876096865395,
+              -0.7660444431189779,
+              0,
+              5.260868612033374e-17,
+              0.7660444431189779,
+              0.6427876096865395,
+              0,
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217,
+              1
+            ]
+          },
+          "canvas": {
+            "width": 719,
+            "height": 1062,
+            "rect": {
+              "x": 1080.40625,
+              "y": 37.796875,
+              "width": 719.59375,
+              "height": 1062.203125
+            },
+            "css": {
+              "transform": "none",
+              "transformOrigin": "359.797px 531.102px",
+              "opacity": "1",
+              "display": "block",
+              "visibility": "visible",
+              "position": "static",
+              "zIndex": "auto",
+              "pointerEvents": "auto"
+            }
+          },
+          "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+          "renderInfo": {
+            "calls": 9,
+            "triangles": 1991834
+          },
+          "regrow": null
+        }
+      },
+      "rawCanvases": {
+        "land-mount": {
+          "file": "after-zoom-legend-visible-land-mount-raw.png",
+          "sha256": "52fd326f4f7f06635a0db688d51d09e4787ca4fb2d28ab409fe190c01dba4ef0"
+        },
+        "land-view": {
+          "file": "after-zoom-legend-visible-land-view-raw.png",
+          "sha256": "e4992f8aba015a3ab698fa836bfdfb65e32314750d6faccdddc4f051d30d4e95"
+        }
+      },
+      "counts": {
+        ".parcel": 213,
+        ".world-cave": 0,
+        ".trail-fill": 109,
+        ".parcel-blade": 11051,
+        ".parcel-flora": 2473,
+        ".parcel-shrub": 2030,
+        ".story-tree": 0,
+        ".world-plate-bg": 36,
+        "[data-edges]": 327
+      }
+    },
+    "after-zoom-legend-dimmed": {
+      "stableDataSha256": "3dbb76388e5d671ff8c9700bd0718a9b83944c77b8761bf7a411b2a5a28873ff",
+      "sceneSha256": "9b7fba1320678dad7f460b85d9879144f02ee2fd2159f8d5716649693f7347ac",
+      "host": {
+        "svgRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1079.40625,
+          "height": 1100
+        },
+        "frameRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1079.40625,
+          "height": 1100
+        },
+        "cameraAttribute": "translate(-1591.8255337169066 -4416.525832221394) scale(4.228188919246119)",
+        "cameraCss": {
+          "transform": "matrix(4.22819, 0, 0, 4.22819, -1591.83, -4416.53)",
+          "transformOrigin": "0px 0px",
+          "opacity": "1",
+          "display": "inline",
+          "visibility": "visible",
+          "position": "static",
+          "zIndex": "auto",
+          "pointerEvents": "auto"
+        },
+        "cameraCTM": [
+          4.228188991546631,
+          0,
+          0,
+          4.228188991546631,
+          -1591.8255615234375,
+          -4416.52587890625
+        ],
+        "compositor": {
+          "transform": "none",
+          "transformOrigin": "539.703px 550px",
+          "opacity": "1",
+          "display": "block",
+          "visibility": "visible",
+          "position": "absolute",
+          "zIndex": "auto",
+          "pointerEvents": "auto"
+        },
+        "svg": {
+          "transform": "none",
+          "transformOrigin": "539.703px 550px",
+          "opacity": "1",
+          "display": "block",
+          "visibility": "visible",
+          "position": "relative",
+          "zIndex": "1",
+          "pointerEvents": "auto"
+        },
+        "mount": {
+          "transform": "none",
+          "transformOrigin": "539.703px 550px",
+          "opacity": "1",
+          "display": "block",
+          "visibility": "visible",
+          "position": "absolute",
+          "zIndex": "0",
+          "pointerEvents": "none"
+        }
+      },
+      "canvases": {
+        "land-mount": {
+          "frame": 25,
+          "mode": "demand",
+          "requested": 0,
+          "camera": {
+            "type": "OrthographicCamera",
+            "position": [
+              504.12332547736673,
+              2483.121421048536,
+              3616.947040253734
+            ],
+            "quaternion": [
+              -0.42261826174069944,
+              0,
+              0,
+              0.90630778703665
+            ],
+            "zoom": 4.228188919246119,
+            "near": 1177.9611677831854,
+            "far": 5305.008438884584,
+            "left": -539.703125,
+            "right": 539.703125,
+            "top": 550,
+            "bottom": -550,
+            "projectionMatrix": [
+              0.007834286524181455,
+              0,
+              0,
+              0,
+              0,
+              0.007687616216811124,
+              0,
+              0,
+              0,
+              0,
+              -0.00048460796996547444,
+              0,
+              0,
+              0,
+              -1.570849370217569,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0.6427876096865393,
+              -0.7660444431189781,
+              0,
+              0,
+              0.7660444431189781,
+              0.6427876096865393,
+              0,
+              504.12332547736673,
+              2483.121421048536,
+              3616.947040253734,
+              1
+            ]
+          },
+          "canvas": {
+            "width": 1079,
+            "height": 1100,
+            "rect": {
+              "x": 0,
+              "y": 0,
+              "width": 1079.40625,
+              "height": 1100
+            },
+            "css": {
+              "transform": "none",
+              "transformOrigin": "539.703px 550px",
+              "opacity": "1",
+              "display": "block",
+              "visibility": "visible",
+              "position": "static",
+              "zIndex": "auto",
+              "pointerEvents": "none"
+            }
+          },
+          "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+          "renderInfo": {
+            "calls": 35,
+            "triangles": 3317782
+          },
+          "regrow": null
+        },
+        "land-view": {
+          "frame": 17,
+          "mode": "demand",
+          "requested": 0,
+          "camera": {
+            "type": "OrthographicCamera",
+            "position": [
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217
+            ],
+            "quaternion": [
+              -0.42261826174069933,
+              3.708819303461431e-17,
+              1.7294508439171524e-17,
+              0.90630778703665
+            ],
+            "zoom": 1.6682497445495552,
+            "near": 341.561956187581,
+            "far": 6141.40765048019,
+            "left": -359.796875,
+            "right": 359.796875,
+            "top": 531.1015625,
+            "bottom": -531.1015625,
+            "projectionMatrix": [
+              0.004636643229737766,
+              0,
+              0,
+              0,
+              0,
+              0.003141112477050103,
+              0,
+              0,
+              0,
+              0,
+              -0.000344836760393146,
+              0,
+              0,
+              0,
+              -1.1177831184452711,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              -8.184458649722383e-17,
+              0,
+              -6.269659068556885e-17,
+              0.6427876096865395,
+              -0.7660444431189779,
+              0,
+              5.260868612033374e-17,
+              0.7660444431189779,
+              0.6427876096865395,
+              0,
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217,
+              1
+            ]
+          },
+          "canvas": {
+            "width": 719,
+            "height": 1062,
+            "rect": {
+              "x": 1080.40625,
+              "y": 37.796875,
+              "width": 719.59375,
+              "height": 1062.203125
+            },
+            "css": {
+              "transform": "none",
+              "transformOrigin": "359.797px 531.102px",
+              "opacity": "1",
+              "display": "block",
+              "visibility": "visible",
+              "position": "static",
+              "zIndex": "auto",
+              "pointerEvents": "auto"
+            }
+          },
+          "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+          "renderInfo": {
+            "calls": 9,
+            "triangles": 1991834
+          },
+          "regrow": null
+        }
+      },
+      "rawCanvases": {
+        "land-mount": {
+          "file": "after-zoom-legend-dimmed-land-mount-raw.png",
+          "sha256": "7895cca17b1113eb6c99cf5d94114a9bcba16a875f734c4462fd66f7b2674af8"
+        },
+        "land-view": {
+          "file": "after-zoom-legend-dimmed-land-view-raw.png",
+          "sha256": "e4992f8aba015a3ab698fa836bfdfb65e32314750d6faccdddc4f051d30d4e95"
+        }
+      },
+      "counts": {
+        ".parcel": 213,
+        ".world-cave": 0,
+        ".trail-fill": 109,
+        ".parcel-blade": 11051,
+        ".parcel-flora": 2473,
+        ".parcel-shrub": 2030,
+        ".story-tree": 0,
+        ".world-plate-bg": 36,
+        "[data-edges]": 327
+      }
+    },
+    "after-zoom-legend-restored": {
+      "stableDataSha256": "3dbb76388e5d671ff8c9700bd0718a9b83944c77b8761bf7a411b2a5a28873ff",
+      "sceneSha256": "9b7fba1320678dad7f460b85d9879144f02ee2fd2159f8d5716649693f7347ac",
+      "host": {
+        "svgRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1079.40625,
+          "height": 1100
+        },
+        "frameRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1079.40625,
+          "height": 1100
+        },
+        "cameraAttribute": "translate(-1591.8255337169066 -4416.525832221394) scale(4.228188919246119)",
+        "cameraCss": {
+          "transform": "matrix(4.22819, 0, 0, 4.22819, -1591.83, -4416.53)",
+          "transformOrigin": "0px 0px",
+          "opacity": "1",
+          "display": "inline",
+          "visibility": "visible",
+          "position": "static",
+          "zIndex": "auto",
+          "pointerEvents": "auto"
+        },
+        "cameraCTM": [
+          4.228188991546631,
+          0,
+          0,
+          4.228188991546631,
+          -1591.8255615234375,
+          -4416.52587890625
+        ],
+        "compositor": {
+          "transform": "none",
+          "transformOrigin": "539.703px 550px",
+          "opacity": "1",
+          "display": "block",
+          "visibility": "visible",
+          "position": "absolute",
+          "zIndex": "auto",
+          "pointerEvents": "auto"
+        },
+        "svg": {
+          "transform": "none",
+          "transformOrigin": "539.703px 550px",
+          "opacity": "1",
+          "display": "block",
+          "visibility": "visible",
+          "position": "relative",
+          "zIndex": "1",
+          "pointerEvents": "auto"
+        },
+        "mount": {
+          "transform": "none",
+          "transformOrigin": "539.703px 550px",
+          "opacity": "1",
+          "display": "block",
+          "visibility": "visible",
+          "position": "absolute",
+          "zIndex": "0",
+          "pointerEvents": "none"
+        }
+      },
+      "canvases": {
+        "land-mount": {
+          "frame": 28,
+          "mode": "demand",
+          "requested": 0,
+          "camera": {
+            "type": "OrthographicCamera",
+            "position": [
+              504.12332547736673,
+              2483.121421048536,
+              3616.947040253734
+            ],
+            "quaternion": [
+              -0.42261826174069944,
+              0,
+              0,
+              0.90630778703665
+            ],
+            "zoom": 4.228188919246119,
+            "near": 1177.9611677831854,
+            "far": 5305.008438884584,
+            "left": -539.703125,
+            "right": 539.703125,
+            "top": 550,
+            "bottom": -550,
+            "projectionMatrix": [
+              0.007834286524181455,
+              0,
+              0,
+              0,
+              0,
+              0.007687616216811124,
+              0,
+              0,
+              0,
+              0,
+              -0.00048460796996547444,
+              0,
+              0,
+              0,
+              -1.570849370217569,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0.6427876096865393,
+              -0.7660444431189781,
+              0,
+              0,
+              0.7660444431189781,
+              0.6427876096865393,
+              0,
+              504.12332547736673,
+              2483.121421048536,
+              3616.947040253734,
+              1
+            ]
+          },
+          "canvas": {
+            "width": 1079,
+            "height": 1100,
+            "rect": {
+              "x": 0,
+              "y": 0,
+              "width": 1079.40625,
+              "height": 1100
+            },
+            "css": {
+              "transform": "none",
+              "transformOrigin": "539.703px 550px",
+              "opacity": "1",
+              "display": "block",
+              "visibility": "visible",
+              "position": "static",
+              "zIndex": "auto",
+              "pointerEvents": "none"
+            }
+          },
+          "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+          "renderInfo": {
+            "calls": 31,
+            "triangles": 1993706
+          },
+          "regrow": null
+        },
+        "land-view": {
+          "frame": 19,
+          "mode": "demand",
+          "requested": 0,
+          "camera": {
+            "type": "OrthographicCamera",
+            "position": [
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217
+            ],
+            "quaternion": [
+              -0.42261826174069933,
+              3.708819303461431e-17,
+              1.7294508439171524e-17,
+              0.90630778703665
+            ],
+            "zoom": 1.6682497445495552,
+            "near": 341.561956187581,
+            "far": 6141.40765048019,
+            "left": -359.796875,
+            "right": 359.796875,
+            "top": 531.1015625,
+            "bottom": -531.1015625,
+            "projectionMatrix": [
+              0.004636643229737766,
+              0,
+              0,
+              0,
+              0,
+              0.003141112477050103,
+              0,
+              0,
+              0,
+              0,
+              -0.000344836760393146,
+              0,
+              0,
+              0,
+              -1.1177831184452711,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              -8.184458649722383e-17,
+              0,
+              -6.269659068556885e-17,
+              0.6427876096865395,
+              -0.7660444431189779,
+              0,
+              5.260868612033374e-17,
+              0.7660444431189779,
+              0.6427876096865395,
+              0,
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217,
+              1
+            ]
+          },
+          "canvas": {
+            "width": 719,
+            "height": 1062,
+            "rect": {
+              "x": 1080.40625,
+              "y": 37.796875,
+              "width": 719.59375,
+              "height": 1062.203125
+            },
+            "css": {
+              "transform": "none",
+              "transformOrigin": "359.797px 531.102px",
+              "opacity": "1",
+              "display": "block",
+              "visibility": "visible",
+              "position": "static",
+              "zIndex": "auto",
+              "pointerEvents": "auto"
+            }
+          },
+          "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+          "renderInfo": {
+            "calls": 9,
+            "triangles": 1991834
+          },
+          "regrow": null
+        }
+      },
+      "rawCanvases": {
+        "land-mount": {
+          "file": "after-zoom-legend-restored-land-mount-raw.png",
+          "sha256": "52fd326f4f7f06635a0db688d51d09e4787ca4fb2d28ab409fe190c01dba4ef0"
+        },
+        "land-view": {
+          "file": "after-zoom-legend-restored-land-view-raw.png",
+          "sha256": "e4992f8aba015a3ab698fa836bfdfb65e32314750d6faccdddc4f051d30d4e95"
+        }
+      },
+      "counts": {
+        ".parcel": 213,
+        ".world-cave": 0,
+        ".trail-fill": 109,
+        ".parcel-blade": 11051,
+        ".parcel-flora": 2473,
+        ".parcel-shrub": 2030,
+        ".story-tree": 0,
+        ".world-plate-bg": 36,
+        "[data-edges]": 327
+      }
+    },
+    "after-pointer-before": {
+      "stableDataSha256": "3dbb76388e5d671ff8c9700bd0718a9b83944c77b8761bf7a411b2a5a28873ff",
+      "sceneSha256": "9b7fba1320678dad7f460b85d9879144f02ee2fd2159f8d5716649693f7347ac",
+      "host": {
+        "svgRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1079.40625,
+          "height": 1100
+        },
+        "frameRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1079.40625,
+          "height": 1100
+        },
+        "cameraAttribute": "translate(-1591.8255337169066 -4416.525832221394) scale(4.228188919246119)",
+        "cameraCss": {
+          "transform": "matrix(4.22819, 0, 0, 4.22819, -1591.83, -4416.53)",
+          "transformOrigin": "0px 0px",
+          "opacity": "1",
+          "display": "inline",
+          "visibility": "visible",
+          "position": "static",
+          "zIndex": "auto",
+          "pointerEvents": "auto"
+        },
+        "cameraCTM": [
+          4.228188991546631,
+          0,
+          0,
+          4.228188991546631,
+          -1591.8255615234375,
+          -4416.52587890625
+        ],
+        "compositor": {
+          "transform": "none",
+          "transformOrigin": "539.703px 550px",
+          "opacity": "1",
+          "display": "block",
+          "visibility": "visible",
+          "position": "absolute",
+          "zIndex": "auto",
+          "pointerEvents": "auto"
+        },
+        "svg": {
+          "transform": "none",
+          "transformOrigin": "539.703px 550px",
+          "opacity": "1",
+          "display": "block",
+          "visibility": "visible",
+          "position": "relative",
+          "zIndex": "1",
+          "pointerEvents": "auto"
+        },
+        "mount": {
+          "transform": "none",
+          "transformOrigin": "539.703px 550px",
+          "opacity": "1",
+          "display": "block",
+          "visibility": "visible",
+          "position": "absolute",
+          "zIndex": "0",
+          "pointerEvents": "none"
+        }
+      },
+      "canvases": {
+        "land-mount": {
+          "frame": 29,
+          "mode": "demand",
+          "requested": 0,
+          "camera": {
+            "type": "OrthographicCamera",
+            "position": [
+              504.12332547736673,
+              2483.121421048536,
+              3616.947040253734
+            ],
+            "quaternion": [
+              -0.42261826174069944,
+              0,
+              0,
+              0.90630778703665
+            ],
+            "zoom": 4.228188919246119,
+            "near": 1177.9611677831854,
+            "far": 5305.008438884584,
+            "left": -539.703125,
+            "right": 539.703125,
+            "top": 550,
+            "bottom": -550,
+            "projectionMatrix": [
+              0.007834286524181455,
+              0,
+              0,
+              0,
+              0,
+              0.007687616216811124,
+              0,
+              0,
+              0,
+              0,
+              -0.00048460796996547444,
+              0,
+              0,
+              0,
+              -1.570849370217569,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0.6427876096865393,
+              -0.7660444431189781,
+              0,
+              0,
+              0.7660444431189781,
+              0.6427876096865393,
+              0,
+              504.12332547736673,
+              2483.121421048536,
+              3616.947040253734,
+              1
+            ]
+          },
+          "canvas": {
+            "width": 1079,
+            "height": 1100,
+            "rect": {
+              "x": 0,
+              "y": 0,
+              "width": 1079.40625,
+              "height": 1100
+            },
+            "css": {
+              "transform": "none",
+              "transformOrigin": "539.703px 550px",
+              "opacity": "1",
+              "display": "block",
+              "visibility": "visible",
+              "position": "static",
+              "zIndex": "auto",
+              "pointerEvents": "none"
+            }
+          },
+          "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+          "renderInfo": {
+            "calls": 31,
+            "triangles": 1993706
+          },
+          "regrow": null
+        },
+        "land-view": {
+          "frame": 20,
+          "mode": "demand",
+          "requested": 0,
+          "camera": {
+            "type": "OrthographicCamera",
+            "position": [
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217
+            ],
+            "quaternion": [
+              -0.42261826174069933,
+              3.708819303461431e-17,
+              1.7294508439171524e-17,
+              0.90630778703665
+            ],
+            "zoom": 1.6682497445495552,
+            "near": 341.561956187581,
+            "far": 6141.40765048019,
+            "left": -359.796875,
+            "right": 359.796875,
+            "top": 531.1015625,
+            "bottom": -531.1015625,
+            "projectionMatrix": [
+              0.004636643229737766,
+              0,
+              0,
+              0,
+              0,
+              0.003141112477050103,
+              0,
+              0,
+              0,
+              0,
+              -0.000344836760393146,
+              0,
+              0,
+              0,
+              -1.1177831184452711,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              -8.184458649722383e-17,
+              0,
+              -6.269659068556885e-17,
+              0.6427876096865395,
+              -0.7660444431189779,
+              0,
+              5.260868612033374e-17,
+              0.7660444431189779,
+              0.6427876096865395,
+              0,
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217,
+              1
+            ]
+          },
+          "canvas": {
+            "width": 719,
+            "height": 1062,
+            "rect": {
+              "x": 1080.40625,
+              "y": 37.796875,
+              "width": 719.59375,
+              "height": 1062.203125
+            },
+            "css": {
+              "transform": "none",
+              "transformOrigin": "359.797px 531.102px",
+              "opacity": "1",
+              "display": "block",
+              "visibility": "visible",
+              "position": "static",
+              "zIndex": "auto",
+              "pointerEvents": "auto"
+            }
+          },
+          "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+          "renderInfo": {
+            "calls": 9,
+            "triangles": 1991834
+          },
+          "regrow": null
+        }
+      },
+      "rawCanvases": {
+        "land-mount": {
+          "file": "after-pointer-before-land-mount-raw.png",
+          "sha256": "52fd326f4f7f06635a0db688d51d09e4787ca4fb2d28ab409fe190c01dba4ef0"
+        },
+        "land-view": {
+          "file": "after-pointer-before-land-view-raw.png",
+          "sha256": "e4992f8aba015a3ab698fa836bfdfb65e32314750d6faccdddc4f051d30d4e95"
+        }
+      },
+      "counts": {
+        ".parcel": 213,
+        ".world-cave": 0,
+        ".trail-fill": 109,
+        ".parcel-blade": 11051,
+        ".parcel-flora": 2473,
+        ".parcel-shrub": 2030,
+        ".story-tree": 0,
+        ".world-plate-bg": 36,
+        "[data-edges]": 327
+      }
+    },
+    "after-pointer-after": {
+      "stableDataSha256": "3dbb76388e5d671ff8c9700bd0718a9b83944c77b8761bf7a411b2a5a28873ff",
+      "sceneSha256": "9b7fba1320678dad7f460b85d9879144f02ee2fd2159f8d5716649693f7347ac",
+      "host": {
+        "svgRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1079.40625,
+          "height": 1100
+        },
+        "frameRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1079.40625,
+          "height": 1100
+        },
+        "cameraAttribute": "translate(-1591.8255337169066 -4416.525832221394) scale(4.228188919246119)",
+        "cameraCss": {
+          "transform": "matrix(4.22819, 0, 0, 4.22819, -1591.83, -4416.53)",
+          "transformOrigin": "0px 0px",
+          "opacity": "1",
+          "display": "inline",
+          "visibility": "visible",
+          "position": "static",
+          "zIndex": "auto",
+          "pointerEvents": "auto"
+        },
+        "cameraCTM": [
+          4.228188991546631,
+          0,
+          0,
+          4.228188991546631,
+          -1591.8255615234375,
+          -4416.52587890625
+        ],
+        "compositor": {
+          "transform": "none",
+          "transformOrigin": "539.703px 550px",
+          "opacity": "1",
+          "display": "block",
+          "visibility": "visible",
+          "position": "absolute",
+          "zIndex": "auto",
+          "pointerEvents": "auto"
+        },
+        "svg": {
+          "transform": "none",
+          "transformOrigin": "539.703px 550px",
+          "opacity": "1",
+          "display": "block",
+          "visibility": "visible",
+          "position": "relative",
+          "zIndex": "1",
+          "pointerEvents": "auto"
+        },
+        "mount": {
+          "transform": "none",
+          "transformOrigin": "539.703px 550px",
+          "opacity": "1",
+          "display": "block",
+          "visibility": "visible",
+          "position": "absolute",
+          "zIndex": "0",
+          "pointerEvents": "none"
+        }
+      },
+      "canvases": {
+        "land-mount": {
+          "frame": 30,
+          "mode": "demand",
+          "requested": 0,
+          "camera": {
+            "type": "OrthographicCamera",
+            "position": [
+              504.12332547736673,
+              2483.121421048536,
+              3616.947040253734
+            ],
+            "quaternion": [
+              -0.42261826174069944,
+              0,
+              0,
+              0.90630778703665
+            ],
+            "zoom": 4.228188919246119,
+            "near": 1177.9611677831854,
+            "far": 5305.008438884584,
+            "left": -539.703125,
+            "right": 539.703125,
+            "top": 550,
+            "bottom": -550,
+            "projectionMatrix": [
+              0.007834286524181455,
+              0,
+              0,
+              0,
+              0,
+              0.007687616216811124,
+              0,
+              0,
+              0,
+              0,
+              -0.00048460796996547444,
+              0,
+              0,
+              0,
+              -1.570849370217569,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0.6427876096865393,
+              -0.7660444431189781,
+              0,
+              0,
+              0.7660444431189781,
+              0.6427876096865393,
+              0,
+              504.12332547736673,
+              2483.121421048536,
+              3616.947040253734,
+              1
+            ]
+          },
+          "canvas": {
+            "width": 1079,
+            "height": 1100,
+            "rect": {
+              "x": 0,
+              "y": 0,
+              "width": 1079.40625,
+              "height": 1100
+            },
+            "css": {
+              "transform": "none",
+              "transformOrigin": "539.703px 550px",
+              "opacity": "1",
+              "display": "block",
+              "visibility": "visible",
+              "position": "static",
+              "zIndex": "auto",
+              "pointerEvents": "none"
+            }
+          },
+          "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+          "renderInfo": {
+            "calls": 31,
+            "triangles": 1993706
+          },
+          "regrow": null
+        },
+        "land-view": {
+          "frame": 21,
+          "mode": "demand",
+          "requested": 0,
+          "camera": {
+            "type": "OrthographicCamera",
+            "position": [
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217
+            ],
+            "quaternion": [
+              -0.42261826174069933,
+              3.708819303461431e-17,
+              1.7294508439171524e-17,
+              0.90630778703665
+            ],
+            "zoom": 1.6682497445495552,
+            "near": 341.561956187581,
+            "far": 6141.40765048019,
+            "left": -359.796875,
+            "right": 359.796875,
+            "top": 531.1015625,
+            "bottom": -531.1015625,
+            "projectionMatrix": [
+              0.004636643229737766,
+              0,
+              0,
+              0,
+              0,
+              0.003141112477050103,
+              0,
+              0,
+              0,
+              0,
+              -0.000344836760393146,
+              0,
+              0,
+              0,
+              -1.1177831184452711,
+              1
+            ],
+            "matrixWorld": [
+              1,
+              0,
+              -8.184458649722383e-17,
+              0,
+              -6.269659068556885e-17,
+              0.6427876096865395,
+              -0.7660444431189779,
+              0,
+              5.260868612033374e-17,
+              0.7660444431189779,
+              0.6427876096865395,
+              0,
+              484.4528078286856,
+              2483.121421048536,
+              3497.9343936089217,
+              1
+            ]
+          },
+          "canvas": {
+            "width": 719,
+            "height": 1062,
+            "rect": {
+              "x": 1080.40625,
+              "y": 37.796875,
+              "width": 719.59375,
+              "height": 1062.203125
+            },
+            "css": {
+              "transform": "none",
+              "transformOrigin": "359.797px 531.102px",
+              "opacity": "1",
+              "display": "block",
+              "visibility": "visible",
+              "position": "static",
+              "zIndex": "auto",
+              "pointerEvents": "auto"
+            }
+          },
+          "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+          "renderInfo": {
+            "calls": 9,
+            "triangles": 1991834
+          },
+          "regrow": null
+        }
+      },
+      "rawCanvases": {
+        "land-mount": {
+          "file": "after-pointer-after-land-mount-raw.png",
+          "sha256": "52fd326f4f7f06635a0db688d51d09e4787ca4fb2d28ab409fe190c01dba4ef0"
+        },
+        "land-view": {
+          "file": "after-pointer-after-land-view-raw.png",
+          "sha256": "e4992f8aba015a3ab698fa836bfdfb65e32314750d6faccdddc4f051d30d4e95"
+        }
+      },
+      "counts": {
+        ".parcel": 213,
+        ".world-cave": 0,
+        ".trail-fill": 109,
+        ".parcel-blade": 11051,
+        ".parcel-flora": 2473,
+        ".parcel-shrub": 2030,
+        ".story-tree": 0,
+        ".world-plate-bg": 36,
+        "[data-edges]": 327
+      }
+    }
+  },
+  "statusProbe": {
+    "status": "CAPTURED",
+    "statusName": "healthy",
+    "framing": "zoom",
+    "checks": {
+      "exactActualCameraAndCanvas": true,
+      "sameHostCameraAndComposition": true,
+      "sameStableData": true,
+      "sameRetainedTargetIdentities": true,
+      "sameGroundGeometryObjects": true,
+      "dimmedMaterialDelivered": true,
+      "nativeMountedPixelsChanged": true,
+      "standalonePixelsUnchanged": true,
+      "hostKeepsAccessibleInertComposition": true
+    },
+    "restoration": {
+      "exactCamerasAndCanvas": true,
+      "rawCanvasesExact": true,
+      "sameRetainedTargetIdentities": true,
+      "sameStableData": true
+    },
+    "interaction": {
+      "tabIndex": "0",
+      "label": "story forest map (pan and zoom)",
+      "mountAriaHidden": "true",
+      "mountPointerEvents": "none",
+      "canvasPointerEvents": "none"
+    },
+    "retainedStoryTargetCount": 251,
+    "dimmedMaterialObjects": [
+      {
+        "name": "",
+        "vertices": 61728,
+        "growthAttributes": true,
+        "materials": [
+          {
+            "type": "MeshStandardMaterial",
+            "name": "Pine_Trunks",
+            "opacity": 0.12,
+            "alphaTest": 0,
+            "transparent": true,
+            "depthWrite": true,
+            "cacheKey": "storytree-prop-lighting|storytree-kit-status-alpha-0.12|storytree-regrow-growth-v1"
+          }
+        ]
+      },
+      {
+        "name": "",
+        "vertices": 84627,
+        "growthAttributes": true,
+        "materials": [
+          {
+            "type": "MeshStandardMaterial",
+            "name": "Pine_Branches",
+            "opacity": 0.12,
+            "alphaTest": 0.06,
+            "transparent": true,
+            "depthWrite": true,
+            "cacheKey": "storytree-prop-lighting|storytree-kit-status-alpha-0.12|storytree-regrow-growth-v1"
+          }
+        ]
+      },
+      {
+        "name": "",
+        "vertices": 864971,
+        "growthAttributes": true,
+        "materials": [
+          {
+            "type": "MeshStandardMaterial",
+            "name": "Pine_Forest_Foliage",
+            "opacity": 0.12,
+            "alphaTest": 0.06,
+            "transparent": true,
+            "depthWrite": true,
+            "cacheKey": "storytree-prop-lighting|storytree-kit-status-alpha-0.12|storytree-regrow-growth-v1"
+          }
+        ]
+      }
+    ]
+  },
+  "pointerProbe": {
+    "outcome": {
+      "samples": 81,
+      "canvasEligibleSamples": 0,
+      "nativeTopSamples": 0,
+      "actualViewportClicks": 1,
+      "actualCanvasClicks": 0
+    },
+    "checks": {
+      "noNativeCanvasEligibility": true,
+      "noNativeTopTargets": true,
+      "actualHostClickPreserved": true,
+      "sameActualCameras": true,
+      "sameNativePixels": true,
+      "sameStableData": true,
+      "sameUrl": true
+    },
+    "scope": "Actual hit eligibility and one real bare-background click after status restoration; no CSS, camera or clock interventions. Earlier baseline diagnosis found eligibility beneath SVG without interception.",
+    "interaction": {
+      "tabIndex": "0",
+      "label": "story forest map (pan and zoom)",
+      "mountAriaHidden": "true",
+      "mountPointerEvents": "none",
+      "canvasPointerEvents": "none"
+    },
+    "events": [
+      {
+        "listener": "viewport",
+        "type": "pointerdown",
+        "target": {
+          "tag": "svg",
+          "cls": "world-scene lane-motion-draw",
+          "story": null,
+          "cap": null,
+          "native": false
+        },
+        "path": [
+          {
+            "tag": "svg",
+            "cls": "world-scene lane-motion-draw",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": "world-pan-layer has-land-mount",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": "world-viewport",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": "world-frame",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": "tree-layout has-land-view",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": "tree-wrap",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": "tree-route",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "MAIN",
+            "cls": "content",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": "body body-full",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": "app-stage",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": "app",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": null,
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "BODY",
+            "cls": null,
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "HTML",
+            "cls": null,
+            "story": null,
+            "cap": null,
+            "native": false
+          }
+        ]
+      },
+      {
+        "listener": "viewport",
+        "type": "pointerup",
+        "target": {
+          "tag": "svg",
+          "cls": "world-scene lane-motion-draw",
+          "story": null,
+          "cap": null,
+          "native": false
+        },
+        "path": [
+          {
+            "tag": "svg",
+            "cls": "world-scene lane-motion-draw",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": "world-pan-layer has-land-mount",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": "world-viewport",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": "world-frame",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": "tree-layout has-land-view",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": "tree-wrap",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": "tree-route",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "MAIN",
+            "cls": "content",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": "body body-full",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": "app-stage",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": "app",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": null,
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "BODY",
+            "cls": null,
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "HTML",
+            "cls": null,
+            "story": null,
+            "cap": null,
+            "native": false
+          }
+        ]
+      },
+      {
+        "listener": "viewport",
+        "type": "click",
+        "target": {
+          "tag": "svg",
+          "cls": "world-scene lane-motion-draw",
+          "story": null,
+          "cap": null,
+          "native": false
+        },
+        "path": [
+          {
+            "tag": "svg",
+            "cls": "world-scene lane-motion-draw",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": "world-pan-layer has-land-mount",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": "world-viewport",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": "world-frame",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": "tree-layout has-land-view",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": "tree-wrap",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": "tree-route",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "MAIN",
+            "cls": "content",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": "body body-full",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": "app-stage",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": "app",
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "DIV",
+            "cls": null,
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "BODY",
+            "cls": null,
+            "story": null,
+            "cap": null,
+            "native": false
+          },
+          {
+            "tag": "HTML",
+            "cls": null,
+            "story": null,
+            "cap": null,
+            "native": false
+          }
+        ]
+      }
+    ],
+    "point": {
+      "x": 107.940625,
+      "y": 220,
+      "top": {
+        "tag": "svg",
+        "cls": "world-scene lane-motion-draw",
+        "story": null,
+        "cap": null,
+        "native": false
+      },
+      "stack": [
+        {
+          "tag": "svg",
+          "cls": "world-scene lane-motion-draw",
+          "story": null,
+          "cap": null,
+          "native": false
+        },
+        {
+          "tag": "DIV",
+          "cls": "world-pan-layer has-land-mount",
+          "story": null,
+          "cap": null,
+          "native": false
+        },
+        {
+          "tag": "DIV",
+          "cls": "world-viewport",
+          "story": null,
+          "cap": null,
+          "native": false
+        },
+        {
+          "tag": "DIV",
+          "cls": "world-frame",
+          "story": null,
+          "cap": null,
+          "native": false
+        },
+        {
+          "tag": "DIV",
+          "cls": "tree-layout has-land-view",
+          "story": null,
+          "cap": null,
+          "native": false
+        },
+        {
+          "tag": "DIV",
+          "cls": "tree-wrap",
+          "story": null,
+          "cap": null,
+          "native": false
+        },
+        {
+          "tag": "DIV",
+          "cls": "tree-route",
+          "story": null,
+          "cap": null,
+          "native": false
+        },
+        {
+          "tag": "MAIN",
+          "cls": "content",
+          "story": null,
+          "cap": null,
+          "native": false
+        },
+        {
+          "tag": "DIV",
+          "cls": "body body-full",
+          "story": null,
+          "cap": null,
+          "native": false
+        },
+        {
+          "tag": "DIV",
+          "cls": "app-stage",
+          "story": null,
+          "cap": null,
+          "native": false
+        },
+        {
+          "tag": "DIV",
+          "cls": "app",
+          "story": null,
+          "cap": null,
+          "native": false
+        },
+        {
+          "tag": "DIV",
+          "cls": null,
+          "story": null,
+          "cap": null,
+          "native": false
+        },
+        {
+          "tag": "BODY",
+          "cls": null,
+          "story": null,
+          "cap": null,
+          "native": false
+        },
+        {
+          "tag": "HTML",
+          "cls": null,
+          "story": null,
+          "cap": null,
+          "native": false
+        }
+      ],
+      "canvasEligible": false,
+      "nativeOnTop": false,
+      "bareSvg": true
+    }
+  },
+  "artifactScope": "Selected source identity hashes, raw cameras, host/canvas states and measured results; private API bodies, full live scene exports and complete file inventories remain excluded. Original immutable capture lives in /tmp/laneK-retire-native-status-capture/run-3.",
+  "roadPixelDiagnosis": {
+    "method": "Offline exact RGBA comparison of saved original PNGs, plus full saved Line2 object records. Uniform road RGBA sampled from actual visible road at (790,150); this colour mask does not claim all antialiased edge pixels.",
+    "roadRGBA": [
+      176,
+      164,
+      142,
+      255
+    ],
+    "visibleRoadColourPixels": 13920,
+    "dimmedRoadColourPixels": 13920,
+    "maskSymmetricDifference": 0,
+    "changedAtBaselineRoadColourMask": 0,
+    "lineObjectCountBefore": 109,
+    "lineObjectCountDimmed": 109,
+    "lineObjectRecordsExactlyEqual": false,
+    "sample": {
+      "xy": [
+        790,
+        150
+      ],
+      "visible": [
+        176,
+        164,
+        142,
+        255
+      ],
+      "dimmed": [
+        176,
+        164,
+        142,
+        255
+      ]
+    },
+    "lineRecordDifferenceFields": {
+      "geometryId": 109
+    },
+    "lineObjectDrawingStateEqualExcludingGeometryId": true,
+    "roadRGBWithAllPositiveAlpha": {
+      "visiblePixels": 14886,
+      "dimmedPixels": 14886,
+      "changedRGBAAtMask": 0,
+      "maskSymmetricDifference": 0
+    },
+    "sourceCause": "TrailStrip in ForestWorldCanvas.tsx1258\u20131267 passes fixed #b0a48e and no legend state to Line; trails derive from stable ground at1700\u20131703. The109 geometry UUIDs change because TrailStrip maps a fresh points array and installed Drei Line.js22\u201336 memoizes geometry by that array; all remaining saved road drawing fields are exact."
+  }
+}

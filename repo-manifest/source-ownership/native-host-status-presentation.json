@@ -1,0 +1,7 @@
+{
+  "sourceOwnership": {
+    "subtrees": {
+      "packages/forest-world-r3f/src/kit-status-presentation.ts": "native-host-status-presentation"
+    }
+  }
+}
