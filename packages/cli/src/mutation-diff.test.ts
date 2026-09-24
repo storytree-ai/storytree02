@@ -40,6 +40,9 @@ import {
   selectMutationTargets,
   siblingTestFor,
   skipDisposition,
+  referencesPackage,
+  unquoteGitPath,
+  unwitnessedTargets,
 } from "./mutation-diff.js";
 
 const PROJECTS: ProjectDir[] = [
@@ -3342,4 +3345,129 @@ test("auditSuppressionDirectives accepts a line in ANY of one hunk's ranges", ()
     mutants: [mutantAt({ file: "a.ts", line: 3, mutator: "ConditionalExpression", status: "Survived" })],
   });
   assert.deepEqual([audit.audited, audit.findings.map((f) => f.kind)], [1, ["inert"]]);
+});
+
+// ── instrument-escape-repair-arc: the per-project witness (escape 11) and quoted paths (escape 12) ──
+
+/** The adversarial pass's own two targets: an untested package and one that brought a test. */
+const PROBE_UNTESTED: MutationTarget = {
+  project: "@storytree/studio-members",
+  dir: "packages/studio-members",
+  mutateGlobs: ["packages/studio-members/src/zprobe.ts:1-3"],
+  sourceFiles: ["packages/studio-members/src/zprobe.ts"],
+};
+const PROBE_TESTED: MutationTarget = {
+  project: "@storytree/notice-board",
+  dir: "packages/notice-board",
+  mutateGlobs: ["packages/notice-board/src/xprobe.ts:1-3"],
+  sourceFiles: ["packages/notice-board/src/xprobe.ts"],
+};
+const XPROBE_TEST = 'import { xprobe } from "./xprobe.js";\ntest("x", () => xprobe(1));\n';
+
+test("mutation-diff: an untested package is NOT witnessed by another package's test in the same run (the seeded fault)", () => {
+  // Run 2 of the probe: studio-members' new code has no test, notice-board's has one. The group check
+  // passed on notice-board's test and the run printed PASS over seven NoCoverage mutants.
+  const own = new Map<MutationTarget, string[]>([
+    [PROBE_UNTESTED, []],
+    [PROBE_TESTED, ["packages/notice-board/src/xprobe.test.ts"]],
+  ]);
+  const unwitnessed = unwitnessedTargets({
+    targets: [PROBE_UNTESTED, PROBE_TESTED],
+    ownWitnesses: (t) => own.get(t) ?? [],
+    groupTestSources: new Map([["packages/notice-board/src/xprobe.test.ts", XPROBE_TEST]]),
+  });
+  assert.deepEqual(unwitnessed, [PROBE_UNTESTED]);
+});
+
+test("mutation-diff: PR #1727's cross-package case stays on the ADR-0483 BLIND path — a test that IMPORTS the package witnesses it", () => {
+  const library: MutationTarget = {
+    project: "@storytree/library",
+    dir: "packages/library",
+    mutateGlobs: ["packages/library/src/fixture/corpus.ts:166-166"],
+    sourceFiles: ["packages/library/src/fixture/corpus.ts"],
+  };
+  const cli: MutationTarget = { ...PROBE_TESTED, project: "@storytree/cli", dir: "packages/cli" };
+  for (const spelling of [
+    'import { loadFixtureCorpus } from "@storytree/library/fixture";',
+    "import { x } from '@storytree/library';",
+    "const m = await import(`@storytree/library`);",
+  ]) {
+    assert.deepEqual(
+      unwitnessedTargets({
+        targets: [library, cli],
+        ownWitnesses: (t) => (t === cli ? ["packages/cli/src/cli.test.ts"] : []),
+        groupTestSources: new Map([["packages/cli/src/cli.test.ts", spelling]]),
+      }),
+      [],
+      spelling,
+    );
+  }
+});
+
+test("mutation-diff: a target with its OWN witness is never charged, referenced or not", () => {
+  assert.deepEqual(
+    unwitnessedTargets({
+      targets: [PROBE_UNTESTED],
+      ownWitnesses: () => ["packages/studio-members/src/zprobe.test.ts"],
+      groupTestSources: new Map(),
+    }),
+    [],
+  );
+});
+
+test("mutation-diff: referencesPackage matches the package or a subpath, never a longer name or an unquoted mention", () => {
+  assert.equal(referencesPackage('from "@storytree/library"', "@storytree/library"), true);
+  assert.equal(referencesPackage('from "@storytree/library/store"', "@storytree/library"), true);
+  assert.equal(referencesPackage('from "@storytree/library-extra"', "@storytree/library"), false);
+  assert.equal(referencesPackage('from "@storytree/libraryx/store"', "@storytree/library"), false);
+  assert.equal(referencesPackage("// see @storytree/library for the parser", "@storytree/library"), false);
+  // A quoted literal that merely EQUALS the name is not an import — the end-to-end probe of this fix
+  // went green on exactly that, a fixture's `project: "<pkg>"` field.
+  assert.equal(referencesPackage('const t = { project: "@storytree/library" };', "@storytree/library"), false);
+  assert.equal(referencesPackage('import "@storytree/library";', "@storytree/library"), true);
+  assert.equal(referencesPackage('const m = require( "@storytree/library" );', "@storytree/library"), true);
+  assert.equal(referencesPackage('export * from"@storytree/library";', "@storytree/library"), true);
+  assert.equal(referencesPackage('const t = reimport("@storytree/library");', "@storytree/library"), false);
+  assert.equal(referencesPackage(`from "@storytree/library'`, "@storytree/library"), false, "mismatched quotes are not a specifier");
+  assert.equal(referencesPackage('from "x@storytree/library"', "@storytree/library"), false);
+  // Regex metacharacters in a name are literal.
+  assert.equal(referencesPackage('from "a.b"', "a.b"), true);
+  assert.equal(referencesPackage('from "axb"', "a.b"), false);
+});
+
+test("mutation-diff: a narrowed PASS never claims EVERY mutant was killed", () => {
+  const lines = formatMutationVerdict(
+    "[mutation]",
+    { verdict: "pass", counted: 1, mutants: [], reasons: [], narrowings: ["NARROWED (BLIND): packages/x was mutated"] },
+    [TARGET],
+  ).split("\n");
+  assert.deepEqual(lines.slice(1), [
+    "[mutation] NARROWED (BLIND): packages/x was mutated",
+    "[mutation] PASS — every SCORED mutant in this branch's changed lines was killed by this branch's own tests; the NARROWED package(s) above were mutated but NOT scored, so nothing here proves their tests",
+  ]);
+});
+
+test("mutation-diff: a git-QUOTED non-ASCII path is read as its real path, not dropped (the seeded fault)", () => {
+  const diff = [
+    'diff --git "a/packages/cli/src/caf\\303\\251.ts" "b/packages/cli/src/caf\\303\\251.ts"',
+    '--- "a/packages/cli/src/caf\\303\\251.ts"',
+    '+++ "b/packages/cli/src/caf\\303\\251.ts"',
+    "@@ -1,0 +2,3 @@",
+    "+x",
+  ].join("\n");
+  assert.deepEqual(parseUnifiedDiffRanges(diff), [{ file: "packages/cli/src/café.ts", ranges: [{ start: 2, end: 4 }] }]);
+});
+
+test("mutation-diff: unquoteGitPath undoes git's C quoting, and leaves an unquoted path alone", () => {
+  assert.equal(unquoteGitPath("packages/cli/src/a.ts"), "packages/cli/src/a.ts");
+  assert.equal(unquoteGitPath('"b/caf\\303\\251.ts"'), "b/café.ts");
+  assert.equal(unquoteGitPath('"a\\tb\\"c\\\\d\\ne"'), 'a\tb"c\\d\ne');
+  assert.equal(unquoteGitPath('"\\a\\b\\v\\f\\r"'), "\x07\b\v\f\r");
+  // Raw non-ASCII inside quotes (core.quotePath=false quoting a path for another reason) survives.
+  assert.equal(unquoteGitPath('"é\\".ts"'), 'é".ts');
+  // A lone quote is not a quoted path.
+  assert.equal(unquoteGitPath('"'), '"');
+  assert.equal(unquoteGitPath('"abc'), '"abc');
+  assert.equal(unquoteGitPath('abc"'), 'abc"');
+  assert.equal(unquoteGitPath('""'), "");
 });
