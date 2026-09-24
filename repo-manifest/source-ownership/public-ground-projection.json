@@ -1,0 +1,7 @@
+{
+  "sourceOwnership": {
+    "subtrees": {
+      "packages/forest-world/src/public-ground-projection.ts": "public-ground-projection"
+    }
+  }
+}

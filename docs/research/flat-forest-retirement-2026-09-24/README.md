@@ -42,7 +42,7 @@ The public website's datum is its published snapshot. It deliberately omits sess
 
 ## Delivery and evidence boundaries
 
-First prove the missing coverage producer, then its grounded rendering and host interaction. The website can use its existing `forestSceneInput(snapshot)` seam, but must supply true-ground scene coordinates to `worldTo3D`, not the projected SVG drawing. Any remaining pure units go through the leaf build; visual integration is staged behind an explicit comparison arm. The final switch removes the complete flat picture and its obsolete machinery in one landing, after all prerequisites exist.
+The public consumer uses one plan from `composePublicGroundScene`, projects it with `projectPublicGroundScene` into the declared 50-degree drawing, and calls `buildScene` once. Its retained SVG and the existing `landStreamFromDrawing` native consumer then read that same `SceneG`, as the Studio consumer does. Native sizing remains in that existing reader. The pure projection preserves ground-tagged anchors for one scene normalization, projects cells, routes, offset and the supplied ground frame, and leaves upright label sizes unchanged. Browser framing, registration, host interaction and the public mount remain separate delivery proofs. Any remaining pure units go through the leaf build; visual integration is staged behind an explicit comparison arm. The final switch removes the complete flat picture and its obsolete machinery in one landing, after all prerequisites exist.
 
 Before/after pictures must use one fresh real-corpus snapshot per comparison, the same computed camera/state, and verified served worktree/HEAD. Appearance remains the owner's verdict. No new appearance result is claimed by this source inventory.
 
