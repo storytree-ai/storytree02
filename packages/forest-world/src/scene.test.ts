@@ -6,6 +6,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -30,6 +31,7 @@ import {
   type SceneInput,
   type SceneTerritoryInput,
   type ScenePlantInput,
+  type SceneParcelInput,
   type SceneGardenInput,
   type SceneGardenHero,
   type SceneVegetationInput,
@@ -1104,6 +1106,48 @@ test('rc-flora-density-is-test-count: flora density IS the test count — a high
   const b = flora.filter((n) => n.id === 'capB').length;
   assert.ok(a > 0, 'a 1-test parcel still shows a sprig');
   assert.ok(b > a, `the 12-test parcel grows strictly more marks than the 1-test one: ${a} < ${b}`);
+});
+
+test('rc-unreported-parcel-coverage-emits-no-flora: an omitted count keeps status ground while zero remains a numeric bare-ground density', () => {
+  // This is deliberately a naturally typed client fixture, not a cast: callers may report a
+  // capability before its coverage count is published.
+  const unreported: SceneParcelInput = {
+    capId: 'unreported-cap',
+    status: 'building',
+    theme: 'meadow',
+    seed: SEED_A,
+  };
+  const reportedZero: SceneParcelInput = {
+    capId: 'zero-cap',
+    status: 'healthy',
+    testCount: 0,
+    theme: 'meadow',
+    seed: SEED_B,
+  };
+
+  // Bun strips types, so exercise the package's real strict compiler as part of this regression.
+  const compiler = spawnSync('pnpm', ['typecheck'], {
+    cwd: fileURLToPath(new URL('../', import.meta.url)),
+    encoding: 'utf8',
+  });
+  assert.equal(
+    compiler.status,
+    0,
+    `the package compiler must accept an unreported parcel:\n${compiler.stdout}\n${compiler.stderr}`,
+  );
+
+  const scene = parcelScene([unreported, reportedZero], CELLS_AB);
+  const ground = mustByKind(scene, 'ground-mesh');
+  const unreportedGround = allByKind(ground, 'parcel').find((node) => node.id === unreported.capId);
+  const zeroGround = allByKind(ground, 'parcel').find((node) => node.id === reportedZero.capId);
+  assert.ok(unreportedGround, 'unreported coverage retains its capability parcel ground');
+  assert.equal(unreportedGround.status, 'building', 'the retained ground wears the folded capability status');
+  assert.ok(zeroGround, 'a numeric zero remains a reported parcel');
+  assert.equal(zeroGround.status, 'healthy');
+
+  const flora = allByKind(mustByKind(scene, 'flora-layer'), 'parcel-flora');
+  assert.equal(flora.filter((node) => node.id === unreported.capId).length, 0, 'unreported coverage invents no flora');
+  assert.equal(flora.filter((node) => node.id === reportedZero.capId).length, 0, 'zero remains a numeric bare-ground density');
 });
 
 test('rc-coverage-flora-carries-semantic-ground-anchor-and-scale: every coverage item carries its own transform pivot and tile-art scale without changing the drawable', () => {

@@ -492,8 +492,9 @@ export interface ScenePlantInput {
 export interface SceneParcelInput {
   capId: string;
   status: SceneStatus;
-  /** The capability's test-criteria count — the flora density knob (0 ⇒ bare ground). */
-  testCount: number;
+  /** The capability's published test-criteria count — the flora density knob (0 ⇒ bare ground).
+   *  Absent means coverage is unreported: retain the parcel ground but emit no flora. */
+  testCount?: number;
   theme: SurfaceTheme;
   /** The parcel's Voronoi seed point, in island/map space (the same space `relaxedCells[].poly` is in). */
   seed: Pt;
@@ -2672,13 +2673,16 @@ function buildTerritorySurface(
     const cells = groups[i]!;
     if (!cells.length) return;
     const rand = streamRand(`parcel:${t.id}:${parcel.capId}`);
-    const out = SURFACES[parcel.theme](cells, parcel.status, parcel.testCount, rand, unifiedVeg, art);
+    // An unreported count still owns and tints its ground, but is not coverage data we may render.
+    // Surface painters need a numeric density to construct that ground, so use zero solely for their
+    // ground pass and suppress their flora output below.
+    const out = SURFACES[parcel.theme](cells, parcel.status, parcel.testCount ?? 0, rand, unifiedVeg, art);
     ground.push(
       g(out.ground, { kind: 'parcel', id: parcel.capId, status: parcel.status, title: parcel.capId }),
     );
     // Stamp each flora item with its capId (the SurfaceFn is capId-agnostic, so attribution — the
     // hover-flora → capability hook — is added here, where the parcel identity is known).
-    for (const fm of out.flora) {
+    for (const fm of (parcel.testCount ?? 0) > 0 ? out.flora : []) {
       fm.node.id = parcel.capId;
       flora.push(fm);
     }
