@@ -37,11 +37,12 @@ export const RIBBON_MIN_SCREEN_PX = 1;
 
 /**
  * The ribbon's width on screen in CSS px for a descriptor `width` at a camera `zoom` (CSS px per
- * ground unit). A zoom that is not a positive finite number projects nothing, so the road keeps the
- * floor rather than vanishing or exploding.
+ * ground unit). A zoom or width that is not a finite number projects nothing, so the road keeps the
+ * floor rather than vanishing or exploding; a zero or negative one reaches the floor through the
+ * `max` on its own.
  */
 export function trailRibbonScreenWidth(width: number, zoom: number): number {
-  if (!(zoom > 0) || !Number.isFinite(zoom) || !(width > 0)) return RIBBON_MIN_SCREEN_PX;
+  if (!Number.isFinite(zoom) || !Number.isFinite(width)) return RIBBON_MIN_SCREEN_PX;
   return Math.max(RIBBON_MIN_SCREEN_PX, width * RIBBON_GROUND_SCALE * zoom);
 }
 

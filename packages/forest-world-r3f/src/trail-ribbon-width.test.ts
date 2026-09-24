@@ -65,7 +65,9 @@ test('a road never vanishes: the floor holds, and a zoom that projects nothing k
   for (const z of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
     assert.equal(trailRibbonScreenWidth(3, z), RIBBON_MIN_SCREEN_PX);
   }
-  assert.equal(trailRibbonScreenWidth(0, OPENING), RIBBON_MIN_SCREEN_PX);
+  for (const w of [0, -2, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.equal(trailRibbonScreenWidth(w, OPENING), RIBBON_MIN_SCREEN_PX);
+  }
   // Zoomed right out, the heaviest measured trunk still reads above the floor.
   assert.ok(trailRibbonScreenWidth(12.44, ZOOMED_OUT) > RIBBON_MIN_SCREEN_PX);
 });
@@ -93,10 +95,30 @@ test('the installed hook sets the drawn width from the camera of THAT draw, afte
   assert.equal(zoomedIn, trailRibbonScreenWidth(w, ZOOMED_IN));
   assert.ok(zoomedOut < opening && opening < zoomedIn, `${zoomedOut} < ${opening} < ${zoomedIn}`);
   assert.deepEqual(calls, ['own', 'own', 'own']);
-  // A perspective camera has no zoom in this sense: the width is left as it was.
+  // A perspective camera has no zoom in this sense, nor does an orthographic one reporting none, nor
+  // a draw handed no camera at all: the width is left as it was.
   line.material.linewidth = 7;
   assert.equal(draw({ isPerspectiveCamera: true, zoom: 1 }), 7);
+  assert.equal(draw({ isOrthographicCamera: true }), 7);
+  assert.equal(draw(null), 7);
   undo();
   assert.equal(Object.prototype.hasOwnProperty.call(line, 'onBeforeRender'), false);
   assert.equal(draw(ortho(ZOOMED_OUT)), 7);
+});
+
+test('undo restores a hook the line carried as its OWN property, not the class\'s', () => {
+  const calls: string[] = [];
+  const line = {
+    material: { linewidth: 3 },
+    onBeforeRender(): void {
+      calls.push('instance');
+    },
+  };
+  const original = line.onBeforeRender;
+  const undo = scaleRibbonWithZoom(line, 4);
+  assert.notEqual(line.onBeforeRender, original);
+  undo();
+  assert.equal(line.onBeforeRender, original);
+  (line.onBeforeRender as () => void)();
+  assert.deepEqual(calls, ['instance']);
 });
