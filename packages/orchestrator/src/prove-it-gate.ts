@@ -15,7 +15,7 @@
 
 import { execFile } from "node:child_process";
 
-import type { AuthorResult, AuthoringEscalation, PhaseAuthor } from "@storytree/agent";
+import type { AuthorResult, AuthoringEscalation, AuthoringRepairAdmission, PhaseAuthor } from "@storytree/agent";
 import type { ChangeStore, Store } from "@storytree/storage-protocol";
 import type {
   Anchor,
@@ -47,6 +47,7 @@ import {
   outsideChangedFiles,
   reviewOutsideRed,
 } from "./proof/test-baseline.js";
+import { testChangeKey } from "./proof/test-baseline.js";
 import type { OutsideObservation, TestChange, TestChangeRecord } from "./proof/test-baseline.js";
 
 /**
@@ -390,6 +391,27 @@ interface CheckFailure {
 interface PendingRepair {
   readonly failure: CheckFailure;
   readonly owner: RepairOwner;
+  /** A C8 missing-reason admission consumed by this repair's AUTHOR_TEST slice only. */
+  readonly admission?: AuthoringRepairAdmission;
+}
+
+/**
+ * Admit only the machine-recorded existing-test paths whose own missing reason produced a C8 finding.
+ * The admission is deliberately narrower than the repair itself: it gives the live author no general
+ * repair context and no path supplied by a worker's prose.
+ */
+function c8RepairAdmission(record: TestChangeRecord): AuthoringRepairAdmission | undefined {
+  const c8Tests = new Set(
+    record.findings.flatMap((finding) =>
+      finding.check === "C8" && finding.test !== undefined ? [testChangeKey(finding.test)] : [],
+    ),
+  );
+  const targets = [...new Set(
+    record.changes
+      .filter((change) => change.reason === undefined && c8Tests.has(testChangeKey(change.test)))
+      .map((change) => change.file),
+  )].sort();
+  return targets.length === 0 ? undefined : { kind: "c8-existing-test-reason", targets };
 }
 
 /**
@@ -480,6 +502,7 @@ export async function proveUnit(spec: ProveSpec): Promise<ProveResult> {
     failure: CheckFailure,
     owner: RepairOwner | undefined,
     unowned = "no worker owns this failure",
+    admission?: AuthoringRepairAdmission,
   ): Promise<ProveResult | undefined> => {
     const end = (why?: string): ProveResult =>
       fail(
@@ -502,7 +525,7 @@ export async function proveUnit(spec: ProveSpec): Promise<ProveResult> {
     // `attempt` event before this walk began (ADR-0576 D5), so nothing here can reach the ledger.
     if (decision.extension !== undefined) extensions.push(decision.extension);
     repairs.push({ failedAt: failure.failedAt, check: failure.check, to: edge.next, detail: failure.detail });
-    pending = { failure, owner };
+    pending = admission === undefined ? { failure, owner } : { failure, owner, admission };
     next = edge.next;
     return undefined;
   };
@@ -532,7 +555,7 @@ export async function proveUnit(spec: ProveSpec): Promise<ProveResult> {
           ? spec.prompts.authorTest
           : spec.prompts.authorTest + testRepairSection(repairs.length, causeOf(repairing.failure), implemented);
       const writtenBefore = repairing === undefined ? undefined : await policy?.scopeFingerprint?.();
-      const authored = await spec.author.author("AUTHOR_TEST", brief);
+      const authored = await spec.author.author("AUTHOR_TEST", brief, repairing?.admission);
       // ADR-0569 D1/D4: an escalation can end the walk without a verdict, but it never advances a phase
       // and never gates anything. A phase mismatch is malformed and fails closed with no record at all
       // (D1); a matched escalation still takes exactly ONE spine observation before ending the walk, but
@@ -652,6 +675,8 @@ export async function proveUnit(spec: ProveSpec): Promise<ProveResult> {
             observation: obs.originalProcessResult,
           },
           "test",
+          undefined,
+          c8RepairAdmission(changeRecord),
         );
         if (ended !== undefined) return ended;
         continue;
