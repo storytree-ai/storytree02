@@ -83,22 +83,35 @@ placement collection, renderer clock, renderer camera, native picking path or sh
 1. **`native-status-presentation-dims-only-attributed-capability-props`** — the host hidden set
    produces alpha `0.12` only for matched capability trees and coverage flora; decorative cover,
    UAT criteria and unmatched sources stay full alpha.
+   - **asserts —** given the host hidden-status set and supplied folded island/capability statuses,
+     `deriveKitStatusPresentation` assigns alpha `0.12` only to matched capability tree and
+     coverage-flora placements, while decorative cover, UAT criteria and unmatched sources retain
+     full alpha.
    - **covers —** `kit-status-presentation.ts` — test:
      `kit-status-presentation.test.ts`
 2. **`native-status-presentation-does-not-change-ground-or-casters`** — presentation derives a
    sidecar and leaves canonical placements, their attribution, descriptor stream and caster inputs
    unchanged.
+   - **asserts —** after `deriveKitStatusPresentation` derives its presentation sidecar, the
+     supplied placement list, island attribution, descriptor stream and caster inputs retain their
+     original values and identities.
    - **covers —** `kit-status-presentation.ts` — test:
      `kit-status-presentation.test.ts`
 3. **`native-status-presentation-batches-delivered-materials-by-alpha`** — actual `kitMeshes`
    keeps merged geometry/material buckets for equal material/tint/presentation while separating only
    different presentation alpha, retaining all transformed geometry.
+   - **asserts —** when `kitMeshes` receives equal material/tint/presentation parts, it retains one
+     merged geometry/material bucket, and when presentation alpha differs it separates only that
+     material bucket while retaining every transformed part.
    - **covers —** `kit-mesh.ts`, `kit-status-presentation.ts` — test:
      `kit-status-presentation.test.ts`
 4. **`native-status-presentation-keeps-dimmed-cutouts-and-existing-hooks`** — an actual dimmed
    foliage material remains renderable through its cutout, preserves prop-lighting and regrow shader
    hooks/cache keys/discard, does not mutate the source material, and retains existing replacement
    material/merged-geometry disposal ownership.
+   - **asserts —** when `presentationMaterial` prepares a dimmed foliage clone, it preserves the
+     authored cutout and existing prop-lighting/regrow hooks, leaves the source material unmutated,
+     and retains the existing replacement-material and merged-geometry disposal ownership.
    - **covers —** `kit-mesh.ts`, `ForestWorldCanvas.growth-material.ts` — test:
      `kit-status-presentation.test.ts`
 
