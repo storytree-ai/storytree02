@@ -37,6 +37,15 @@ const records = [
     footprint: 10,
     height: 14,
   }),
+  Object.freeze({
+    storyId: 'story-meadow',
+    capabilityId: 'cap-low-wide-coverage',
+    status: 'healthy',
+    root: Object.freeze({ x: 5, z: 12 }),
+    relief: 2,
+    footprint: 30,
+    height: 1,
+  }),
 ] as const;
 
 test('native-prop-hit-projection-preserves-native-semantic-records-in-drawing-world: tree, dead-tree, and coverage-flora records retain attribution while their roots, crowns, and bounds use the supplied elevation', () => {
