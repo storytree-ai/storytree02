@@ -27,40 +27,9 @@
 // crown-is-never-a-roll-up, offline-under-claims, and
 // build-wisps-are-the-harness (ADR-0048).
 
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { anyInFlight } from '../lib/activity';
-import { resolveSprite, type SpriteDef, type SpriteStyleSheet } from '../lib/sprite-sheet';
 import type { BuildActivity, ClaimActivity, SubagentColourState, TreeStory } from '../types';
-
-// ---------- sprite art sheet (ADR-0230) — the legend IS the world's palette, sprites too ----------
-//
-// When an `artStyle` sprite sheet is active in the world (`artStyle !== 'vector'`), the legend's
-// status/kind icons render the SAME sprite the map draws, instead of the vector CSS shape — so the
-// legend stays "the world's palette" in sprite mode too (the whole point of the legend, ADR-0036 d.6c).
-// The sheet is supplied by context so the pure icon factories (TreeIcon / PlantIcon) can resolve a
-// sprite without every legend caller prop-drilling it; a `null` sheet (the
-// default, vector mode) leaves every icon byte-identical to before. An icon whose `${kind}[:status]`
-// the sheet does NOT cover falls back to its vector shape (resolveSprite → null), exactly as the map does.
-const SpriteSheetContext = createContext<SpriteStyleSheet | null>(null);
-
-/** A legend swatch that draws a resolved sprite instead of a vector shape. The `<svg viewBox="0 0 w h">`
- *  carries the sprite's native aspect, and the legend CSS sizes it by height (`width:auto`), so the
- *  sprite slots into the same 18px chip / 36px tile row as the vector icons it replaces. */
-function SpriteSwatch({ def }: { def: SpriteDef }): React.JSX.Element {
-  return (
-    <svg viewBox={`0 0 ${def.w} ${def.h}`} aria-hidden="true">
-      <image href={def.href} x={0} y={0} width={def.w} height={def.h} preserveAspectRatio="xMidYMid meet" />
-    </svg>
-  );
-}
-
-/** Resolve the active sheet's sprite for a drawable `kind` (+ optional folded `status`); `null` in
- *  vector mode or when the sheet doesn't cover it (the caller then renders its vector shape). */
-function useSprite(kind: string, status?: string): SpriteDef | null {
-  const sheet = useContext(SpriteSheetContext);
-  if (!sheet) return null;
-  return resolveSprite(sheet, kind, status);
-}
 
 // ADR-0212 retired the `building` row: the build wisp is no longer its own drawable, so it is no
 // longer its own legend row — the band it contributes is taught inside `claim`, where the one
@@ -116,78 +85,6 @@ export function legendFacts(stories: TreeStory[]): LegendFacts {
 
 // ---------- mini icons (world css classes — the world's palette, never a copy) ----------
 
-const BARE_BRANCHES = ['M 0 -15 C 2 -20, 1 -22, 2 -25', 'M -3 -15.5 C -8 -19, -7 -20, -4.5 -22'];
-
-function TreeIcon({
-  status,
-  form,
-}: {
-  status: string;
-  form: 'full' | 'withered' | 'young';
-}): React.JSX.Element {
-  // Sprite mode: the sheet re-skins the tree per status (`tree:<status>`, `unhealthy` = the withered
-  // form) exactly as the map does; a miss falls back to the vector growth-ladder shapes below.
-  const sprite = useSprite('tree', status);
-  if (sprite) return <SpriteSwatch def={sprite} />;
-  if (form === 'young') {
-    // The not-yet-full proposed tree: same viewBox as the full form so the
-    // smaller growth stage reads at a glance.
-    return (
-      <svg viewBox="-14 -30 28 34" aria-hidden="true">
-        <g className={`story-tree st-${status}`}>
-          <rect className="story-trunk" x={-1.3} y={-8} width={2.6} height={8} rx={1} />
-          <g className="crown-lo">
-            <circle cx={0} cy={-12.5} r={5.4} />
-            <circle cx={-4.2} cy={-9.6} r={3.4} />
-            <circle cx={4.4} cy={-10} r={3.5} />
-          </g>
-          <g className="crown-hi">
-            <circle cx={-1.4} cy={-14} r={2.8} />
-          </g>
-        </g>
-      </svg>
-    );
-  }
-  if (form === 'withered') {
-    return (
-      <svg viewBox="-14 -32 28 36" aria-hidden="true">
-        <g className="story-tree st-unhealthy">
-          <rect className="story-trunk" x={-1.5} y={-10} width={3} height={10} rx={1} />
-          <g className="story-bare">
-            {BARE_BRANCHES.map((d, i) => (
-              <path key={i} d={d} />
-            ))}
-          </g>
-          <g className="crown-lo">
-            <circle cx={0} cy={-14} r={6.5} />
-            <circle cx={-4.5} cy={-12} r={4} />
-          </g>
-          <g className="crown-hi" opacity={0.7}>
-            <circle cx={-1.5} cy={-16} r={2.8} />
-          </g>
-          <circle className="leaf-litter" cx={-7} cy={-1} r={1.2} />
-          <circle className="leaf-litter" cx={5} cy={-2} r={1.2} />
-        </g>
-      </svg>
-    );
-  }
-  return (
-    <svg viewBox="-14 -30 28 34" aria-hidden="true">
-      <g className={`story-tree st-${status}`}>
-        <rect className="story-trunk" x={-1.5} y={-10} width={3} height={10} rx={1} />
-        <g className="crown-lo">
-          <circle cx={0} cy={-16} r={7.6} />
-          <circle cx={-6} cy={-12} r={4.8} />
-          <circle cx={6.4} cy={-12.5} r={5} />
-        </g>
-        <g className="crown-hi">
-          <circle cx={-2} cy={-18} r={4} />
-        </g>
-      </g>
-    </svg>
-  );
-}
-
 function PlantIcon({
   status,
   dead,
@@ -195,10 +92,6 @@ function PlantIcon({
   status: string;
   dead?: boolean;
 }): React.JSX.Element {
-  // Sprite mode: alive flora → the `flora` sprite; a withered/unhealthy one → `flora:unhealthy` (the
-  // dead form). A miss falls back to the vector flora shapes below.
-  const sprite = useSprite('flora', dead ? 'unhealthy' : status);
-  if (sprite) return <SpriteSwatch def={sprite} />;
   if (dead) {
     return (
       <svg viewBox="-12 -18 24 24" aria-hidden="true">
@@ -362,12 +255,6 @@ function Tile({
   );
 }
 
-/** Growth ladder (ADR-0038): proposed = young, mapped/healthy = full, unhealthy = withered.
- *  A zero-capability story is NOT a distinct stage — it takes its status form like any
- *  other (the sapling state was folded into `young`, owner 2026-06-21). */
-export const treeForm = (st: string): 'full' | 'withered' | 'young' =>
-  st === 'unhealthy' ? 'withered' : st === 'proposed' ? 'young' : 'full';
-
 function countNote(tot: { stories: number; caps: number }): string {
   const parts: string[] = [];
   if (tot.stories > 0) parts.push(`${tot.stories} ${tot.stories === 1 ? 'story' : 'stories'}`);
@@ -422,17 +309,12 @@ function legendModel(
   const building = anyInFlight(builds, now);
   const rows: LegendRow[] = [
     {
+      // ADR-0608: the flat hero tree retired with the flat forest look, so a story's status is
+      // read from the word beneath its nameplate — the row carries no tree picture to point at.
       key: 'tree',
-      label: 'story trees',
+      label: 'story status',
       visible: true,
-      icons: (
-        <>
-          {STATUS_ORDER.filter((st) => totals(st).stories > 0).map((st) => (
-            <TreeIcon key={st} status={st} form={treeForm(st)} />
-          ))}
-          {totals('unknown').stories > 0 && <TreeIcon status="unknown" form="full" />}
-        </>
-      ),
+      icons: <></>,
     },
     {
       key: 'flora',
@@ -466,10 +348,10 @@ function legendModel(
 }
 
 /** A row's human label, for the flyout heading / aria. */
-export function legendRowLabel(key: RowKey, storyStatusFromNameplate = false): string {
+export function legendRowLabel(key: RowKey): string {
   return (
     {
-      tree: storyStatusFromNameplate ? 'story status' : 'story trees',
+      tree: 'story status',
       flora: 'test coverage',
       proof: 'proof',
       claim: 'sessions working',
@@ -488,30 +370,21 @@ export function LegendDrawerBody({
   model,
   hidden,
   onToggleStatus,
-  spriteSheet = null,
-  storyStatusFromNameplate = false,
 }: {
   rowKey: RowKey;
   model: LegendModel;
   hidden: ReadonlySet<string>;
   onToggleStatus: (st: string) => void;
-  /** ADR-0230: the active art sheet (or null in vector mode). Provided to the icon factories so a
-   *  drawer rendered STANDALONE by the panel (outside <WorldLegend>) still sprites its fan tiles. */
-  spriteSheet?: SpriteStyleSheet | null;
-  /** The mounted land removes the SVG hero tree, so story status is read from nameplate text. */
-  storyStatusFromNameplate?: boolean;
 }): React.JSX.Element {
   const { facts, totals, unknownPresent } = model;
   const region = (label: string, body: React.JSX.Element): React.JSX.Element => (
-    <SpriteSheetContext.Provider value={spriteSheet}>
-      <div className="legend-drawer" role="region" aria-label={`legend — ${label}`}>
-        {body}
-      </div>
-    </SpriteSheetContext.Provider>
+    <div className="legend-drawer" role="region" aria-label={`legend — ${label}`}>
+      {body}
+    </div>
   );
   if (rowKey === 'tree') {
     return region(
-      storyStatusFromNameplate ? 'story status' : 'story trees',
+      'story status',
       <>
         <div className="legend-fan">
           {STATUS_ORDER.map((st) => {
@@ -521,7 +394,6 @@ export function LegendDrawerBody({
             return (
               <Tile
                 key={st}
-                icon={storyStatusFromNameplate ? undefined : <TreeIcon status={st} form={treeForm(st)} />}
                 label={st}
                 note={here ? `${countNote(tot)}${off ? ' — hidden' : ''}` : 'not in world yet'}
                 absent={!here}
@@ -538,7 +410,6 @@ export function LegendDrawerBody({
           })}
           {unknownPresent && (
             <Tile
-              icon={storyStatusFromNameplate ? undefined : <TreeIcon status="unknown" form="full" />}
               label="unknown"
               note={`${countNote(totals('unknown'))}${hidden.has('unknown') ? ' — hidden' : ''}`}
               off={hidden.has('unknown')}
@@ -549,24 +420,12 @@ export function LegendDrawerBody({
           )}
         </div>
         <p className="legend-cap">
-          {storyStatusFromNameplate ? <>
-            An island is a <strong>story</strong>. Read its status beneath its name.{' '}
-            <strong>healthy</strong> means signed proof established its baseline.{' '}
-            <strong>proposed</strong> is new work without a proven baseline; <strong>mapped</strong>{' '}
-            is inherited work awaiting or completing adoption; <strong>unhealthy</strong> means proof
-            failed or an authored issue remains. Plants describe individual capabilities. Active work
-            appears as session wisps.
-          </> : <>
-            An island is a <strong>story</strong>; the big tree is the story itself — growth and colour
-            carry the lifecycle. A young amber tree = <strong>proposed</strong> greenfield work that has
-            never established a proven baseline (a defensive authored “healthy” value with no proof
-            also becomes proposed); a full brown tree = <strong>mapped</strong> inherited brownfield
-            provenance, awaiting or completing adoption. A withered tree = <strong>unhealthy</strong>:
-            the story&apos;s proof failed or its authored health issue remains unresolved. Deep green ={' '}
-            <strong>proven</strong>: signed proof established the story&apos;s delivered baseline, which
-            persists when later scope is merely incomplete. Active work shows as session wisps, not a
-            hue. Retired stories leave the forest.
-          </>} Click a tile to fade that status across the forest.
+          An island is a <strong>story</strong>. Read its status beneath its name.{' '}
+          <strong>healthy</strong> means signed proof established its baseline.{' '}
+          <strong>proposed</strong> is new work without a proven baseline; <strong>mapped</strong>{' '}
+          is inherited work awaiting or completing adoption; <strong>unhealthy</strong> means proof
+          failed or an authored issue remains. Plants describe individual capabilities. Active work
+          appears as session wisps. Click a tile to fade that status across the forest.
         </p>
       </>,
     );
@@ -737,8 +596,6 @@ export function WorldLegend({
   onToggle,
   renderDrawer = true,
   barClassName,
-  spriteSheet = null,
-  storyStatusFromNameplate = false,
 }: {
   stories: TreeStory[];
   builds?: BuildActivity[];
@@ -758,12 +615,6 @@ export function WorldLegend({
   renderDrawer?: boolean;
   /** Extra class on the chip bar (e.g. a vertical-wrap variant in the panel). */
   barClassName?: string;
-  /** ADR-0230: the active sprite art sheet (or null in vector mode). When set, the chip-bar +
-   *  inline-drawer icons render the sheet's sprites instead of the vector shapes — the legend stays
-   *  the world's palette in sprite mode. Default null ⇒ every icon is byte-identical vector. */
-  spriteSheet?: SpriteStyleSheet | null;
-  /** Use the nameplate's status word as the mounted-land story-status reading. */
-  storyStatusFromNameplate?: boolean;
 }): React.JSX.Element {
   const controlled = openProp !== undefined && onToggle !== undefined;
   const [openState, setOpenState] = useState<RowKey | null>(null);
@@ -795,43 +646,37 @@ export function WorldLegend({
   const openRow = open ? model.rows.find((r) => r.key === open && r.visible) : undefined;
 
   return (
-    // The whole legend renders under the active sheet, so both the chip-bar icons (built in
-    // `legendModel`) and the inline drawer's fan tiles resolve their sprites from one place.
-    <SpriteSheetContext.Provider value={spriteSheet}>
-      <div className={controlled ? 'world-legend-panel' : 'world-legend-dock'} ref={dockRef}>
-        <div className={`legend-bar${barClassName ? ` ${barClassName}` : ''}`} role="group" aria-label="legend">
-          {model.rows
-            .filter((r) => r.visible)
-            .map((r) => (
-              <button
-                key={r.key}
-                type="button"
-                className={`legend-chip${open === r.key ? ' on' : ''}`}
-                aria-expanded={open === r.key}
-                onClick={() => toggle(r.key)}
-              >
-                {!(r.key === 'tree' && storyStatusFromNameplate) && r.icons}
-                {r.key === 'tree' && storyStatusFromNameplate ? 'story status' : r.label}
-              </button>
-            ))}
-          {hidden.size > 0 && (
-            <button type="button" className="legend-chip legend-reset" onClick={onResetHidden}>
-              show all statuses ({hidden.size} hidden)
+    <div className={controlled ? 'world-legend-panel' : 'world-legend-dock'} ref={dockRef}>
+      <div className={`legend-bar${barClassName ? ` ${barClassName}` : ''}`} role="group" aria-label="legend">
+        {model.rows
+          .filter((r) => r.visible)
+          .map((r) => (
+            <button
+              key={r.key}
+              type="button"
+              className={`legend-chip${open === r.key ? ' on' : ''}`}
+              aria-expanded={open === r.key}
+              onClick={() => toggle(r.key)}
+            >
+              {r.icons}
+              {r.label}
             </button>
-          )}
-        </div>
-
-        {renderDrawer && openRow && (
-          <LegendDrawerBody
-            rowKey={openRow.key}
-            model={model}
-            hidden={hidden}
-            onToggleStatus={onToggleStatus}
-            spriteSheet={spriteSheet}
-            storyStatusFromNameplate={storyStatusFromNameplate}
-          />
+          ))}
+        {hidden.size > 0 && (
+          <button type="button" className="legend-chip legend-reset" onClick={onResetHidden}>
+            show all statuses ({hidden.size} hidden)
+          </button>
         )}
       </div>
-    </SpriteSheetContext.Provider>
+
+      {renderDrawer && openRow && (
+        <LegendDrawerBody
+          rowKey={openRow.key}
+          model={model}
+          hidden={hidden}
+          onToggleStatus={onToggleStatus}
+        />
+      )}
+    </div>
   );
 }

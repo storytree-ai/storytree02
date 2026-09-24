@@ -18,20 +18,11 @@ import {
   forestRegrowAtProgress,
   forestRegrowLayerSignature,
   forestRegrowRenderLayer,
-  forestRegrowTrailPlan,
-  forestRegrowTrailSignature,
-  type ForestRegrowAccretionPlans,
   type ForestRegrowPlan,
   type ForestRegrowRenderLayer,
   type ForestRegrowState,
   type ForestRegrowStory,
   type ForestRegrowTrailEdge,
-  type TrailRevealPlan,
-  vegetationLayerSignature,
-  vegetationProgressByStory,
-  vegetationRenderLayer,
-  type IslandVegetationPlan,
-  type VegetationRenderLayer,
 } from '@storytree/app-surface';
 
 /**
@@ -47,25 +38,6 @@ import {
  */
 export function readAct2Intro(search: string): boolean {
   return new URLSearchParams(search).get('act2') === 'intro';
-}
-
-/**
- * `?veg2=off` — the ONE value that takes the map back to its pre-ADR-0292 render: no shared tree
- * track, no plant track, no per-object sprouting. Absence, an empty value, and any OTHER value
- * (including near-misses like `?veg2=false` or `?veg2=off-x`) leave the growth ON.
- *
- * It is a KILL SWITCH, not a gate. ADR-0292 is a decided ADR whose central choice — exp-16, on every
- * island — the owner made directly in conversation, and the arc's end state describes them watching
- * the regrow on the CLEAN route at the default speed, which a flag would put behind a URL they have
- * to remember. What this buys is the LOOK comparison: the same corpus, the same run, one parameter
- * apart, so the before and after can be held side by side while the appearance is unattested
- * (ADR-0070 stage 2 is the owner's, and nothing in this increment signs it).
- *
- * An EXACT match, never a truthy/loose gate — an over-eager reader here would silently disable the
- * arc for anyone whose URL happened to carry a `veg2` key.
- */
-export function readVegetationGrowthOff(search: string): boolean {
-  return new URLSearchParams(search).get('veg2') === 'off';
 }
 
 /**
@@ -150,78 +122,17 @@ export function useReducedMotion(): boolean {
  */
 export function useStableForestRegrowLayer(
   state: ForestRegrowState | null,
-  plans: ForestRegrowAccretionPlans | null,
   active: boolean,
 ): ForestRegrowRenderLayer | null {
   const held = useRef<{ signature: string; layer: ForestRegrowRenderLayer } | null>(null);
-  if (!active || !state || !plans) {
+  if (!active || !state) {
     held.current = null;
     return null;
   }
   const signature = forestRegrowLayerSignature(state);
   if (held.current?.signature === signature) return held.current.layer;
-  const layer = forestRegrowRenderLayer(state, plans);
+  const layer = forestRegrowRenderLayer(state);
   held.current = { signature, layer };
-  return layer;
-}
-
-/**
- * The same stability hold for the PATHWAY half (ADR-0283 D1): the cursor-driven trail plan that
- * feeds the per-segment reveal masks. Rebuilt only when a front has actually moved, so a frame
- * where nothing is drawing hands back the identical object and the scene's memo bail-out survives.
- *
- * Null when no pathway is mid-draw — which is also the signal that every road on the map is
- * simply painted, with no mask anywhere.
- */
-export function useStableForestRegrowTrails(
-  state: ForestRegrowState | null,
-  usageById: ReadonlyMap<string, number>,
-  active: boolean,
-): TrailRevealPlan | null {
-  const held = useRef<{ signature: string; plan: TrailRevealPlan | null } | null>(null);
-  if (!active || !state) {
-    held.current = null;
-    return null;
-  }
-  const signature = forestRegrowTrailSignature(state);
-  if (held.current?.signature === signature) return held.current.plan;
-  const plan = forestRegrowTrailPlan(state, usageById);
-  held.current = { signature, plan };
-  return plan;
-}
-
-/**
- * The same stability hold for the VEGETATION half (ADR-0292): the per-object growth layer that turns
- * each island's own accretion cursor into a tree frame, a plant frame, a rooted sprout scale and a
- * nameplate offset.
- *
- * Unlike the two holds above this one is NOT gated on a run being in flight, because the settled map
- * needs it too — the tree on a landed island is the shared track's mature frame, not the vector art it
- * replaced. With no regrow (`state === null`) every island sits at 1, the signature is a constant, and
- * the identical layer object is handed back on every frame for the rest of the session. That is what
- * keeps `SceneView`'s memo bail-out intact on a quiet forest, which is the whole of this arc's
- * frame-cost claim: growth rides frames that are already repainting, and a settled map pays nothing.
- */
-export function useStableVegetationLayer(
-  plans: ReadonlyMap<string, IslandVegetationPlan> | null,
-  state: ForestRegrowState | null,
-  storyIds: readonly string[],
-): VegetationRenderLayer | null {
-  const held = useRef<{
-    plans: ReadonlyMap<string, IslandVegetationPlan>;
-    signature: string;
-    layer: VegetationRenderLayer;
-  } | null>(null);
-  if (!plans || plans.size === 0) {
-    held.current = null;
-    return null;
-  }
-  // The plans are keyed by scene-node IDENTITY, so a new scene invalidates the layer even when the
-  // cursor has not moved — comparing the plan map itself is the only honest guard.
-  const signature = vegetationLayerSignature(state);
-  if (held.current?.plans === plans && held.current.signature === signature) return held.current.layer;
-  const layer = vegetationRenderLayer(plans, vegetationProgressByStory(state, storyIds));
-  held.current = { plans, signature, layer };
   return layer;
 }
 

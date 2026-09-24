@@ -80,7 +80,6 @@ import {
   type SpacingTuning,
 } from '@storytree/forest-layout';
 import { readLandView } from '../lib/landView.js';
-import { readLandMount, readLandMountProps } from '../lib/landViewMount.js';
 import { LandView } from './LandView.js';
 import { LandViewMount } from './LandViewMount.js';
 import { LandViewNotice } from './LandViewNotice.js';
@@ -97,14 +96,12 @@ import { flyoutReducer, FLYOUT_CLOSED } from '../lib/panelFlyout.js';
 import {
   controlByKey,
   readControlValue,
-  readRenderScene,
   GROUP_INTRO,
   type ControlSpec,
 } from '../lib/worldSettings.js';
 // ADR-0283 D2: `../lib/stressLayout.js` is no longer imported here — DAG rows are the one map
 // arrangement. The module stays (tested) because `stressSeeds` still serves
 // `overviewConstellation.ts`; its radial sibling `solarLayout.ts` had no caller left and is deleted.
-import { arrivalGrowPlan } from '../lib/trailReveal.js';
 import { fullConnectionSet } from '../lib/connectionSet.js';
 import {
   fitWorld,
@@ -139,10 +136,7 @@ import {
   storyIcon,
   ICON_SHAPES,
 } from '../lib/buildingLayout.js';
-import {
-  loadHeroTreeVariants,
-  type BakedStoneAsset,
-} from '../lib/factoryBuildings.js';
+import type { BakedStoneAsset } from '../lib/factoryBuildings.js';
 import { ConnectionsSection } from './ConnectionsSection.js';
 import { DetailDisclosure } from './DetailDisclosure.js';
 import { BottomDock } from './BottomDock.js';
@@ -191,7 +185,6 @@ import {
   wispBand,
   type SceneInput,
   type SceneGardenInput,
-  type SceneVegHeroTrees,
   type SceneVegetationInput,
   type SceneStatus,
   type ScenePlantInput,
@@ -203,27 +196,20 @@ import {
   neighbourHighlightPlan,
   laneLayout,
   normalizeWorldPresentationModel,
-  deriveForestRegrowAccretionPlans,
-  deriveIslandVegetationPlans,
   WorldSceneView,
   type NativePropTargetRenderLayer,
   type WorldPresentationEvents,
   type WorldPresentationModel,
 } from '@storytree/app-surface';
 import type { NativePropHitEnvelope } from '@storytree/forest-world-r3f';
-import { parseStyleSheet, type SpriteStyleSheet } from '../lib/sprite-sheet.js';
-import { SemanticGrowthDemo } from './SemanticGrowthDemo.js';
 import {
   readAct2Intro,
-  readVegetationGrowthOff,
   act2IntroAlreadyArrived,
   act2IntroStorage,
   markAct2IntroArrived,
   useAct2Intro,
-  useStableForestRegrowTrails,
   useReducedMotion,
   useStableForestRegrowLayer,
-  useStableVegetationLayer,
 } from './act2Intro.js';
 import { Act2IntroControl } from './Act2IntroControl.js';
 import {
@@ -252,8 +238,6 @@ function requireControl(key: string): ControlSpec {
   return c;
 }
 // (the `layout` control retired with ADR-0283 D2 — DAG rows are the one arrangement now)
-const ART_STYLE_CTL = requireControl('artStyle');
-const ART_SCALE_CTL = requireControl('artScale');
 const SELECTION_MOTION_CTL = requireControl('selectionMotion');
 const REGROW_SPEED_CTL = requireControl('regrowSpeed');
 
@@ -1103,49 +1087,6 @@ function readBuildings(search: string = defaultSearch()): boolean {
   return v === 'on' || v === '1' || v === 'true';
 }
 
-/**
- * `?semanticGrowth=demo` — the ONLY value that mounts the query-gated Studio witness stage
- * (semantic-growth-studio-demo, stories/app-surface/semantic-growth-studio-demo.md). Absence, an
- * empty value, or any OTHER value (including a near-miss like `?semanticGrowth=on`) leaves the
- * clean Studio route byte-for-byte unchanged — an EXACT match, never a truthy/loose gate.
- */
-export function readSemanticGrowthDemo(search: string = defaultSearch()): boolean {
-  return new URLSearchParams(search).get('semanticGrowth') === 'demo';
-}
-
-/**
- * The Chapter 2 comparison route is exact and default-off. A different key/value, including the
- * historical rejected island-growth gate, falls through to the ordinary Studio product.
- */
-export function readOrganicPoseToPose(search: string = defaultSearch()): boolean {
-  return (
-    new URLSearchParams(search).get('organicGrowth') ===
-    'organic-pose-to-pose'
-  );
-}
-
-/** Experiment 6: the exact connected native-SVG island accretion witness gate. */
-export function readOrganicIslandAccretion(search: string = defaultSearch()): boolean {
-  return (
-    new URLSearchParams(search).get('organicGrowth') ===
-    'organic-island-accretion'
-  );
-}
-
-/**
- * The Chapter 2 round-3 COMPARISON LAB — `?organicGrowth=r3-lab`, and that exact value only.
- *
- * One fixed composition (the connected SVG accretion island, the ADR-0277-retained plant track and
- * the arrival path-growth beat) with the HERO TREE switchable between the four registered
- * candidates, so the owner gives ONE comparison LOOK verdict instead of opening four hosted tags.
- * Absence, an empty value, a near miss (`r3-lab-x`, `r3`) and every sibling `organicGrowth` value
- * fall through to the ordinary Studio product unchanged — and the lab has NO permanent navigation
- * entry, so the only way in is typing this query.
- */
-export function readChapter2Round3Lab(search: string = defaultSearch()): boolean {
-  return new URLSearchParams(search).get('organicGrowth') === 'r3-lab';
-}
-
 /* ---------- map layout ----------
  * ADR-0283 D2 (owner-directed 2026-08-02): DAG rows are the ONE map layout. The `readLayoutMode`
  * reader, the `LayoutMode` union and the `?layout=` query values are gone — `?layout=stress` /
@@ -1156,23 +1097,6 @@ export function readChapter2Round3Lab(search: string = defaultSearch()): boolean
  * `lib/solarLayout.ts` is DELETED (no caller survived the retirement) and `lib/stressLayout.ts`
  * stays, tested but unreached from the map — `stressSeeds` still serves `overviewConstellation.ts`.
  */
-
-/**
- * Which sprite art STYLE SHEET re-skins the map (sprite-art-sheets arc) — `'storybook'` is the
- * owner-attested default when the parameter is absent; `'vector'` explicitly selects the preserved
- * procedural render; every other recognized value names a sheet folder under
- * `apps/studio/public/art-sheets/<name>/`. Gear-panel managed (worldSettings' `artStyle` control is
- * the single source of truth for the default + the option list), so the panel and this reader never drift.
- */
-export function readArtStyle(search: string = defaultSearch()): string {
-  return readControlValue(search, ART_STYLE_CTL) as string;
-}
-
-/** The sprite size dial (worldSettings' `artScale` number control, default 1 = match the vector
- *  footprint) — multiplies the derived sprite fit; inert while `artStyle` is `vector`. */
-export function readArtScale(search: string = defaultSearch()): number {
-  return readControlValue(search, ART_SCALE_CTL) as number;
-}
 
 /** How fast the Act 2 regrow crosses its plan (worldSettings' `regrowSpeed` number control,
  *  ADR-0286). 1 = the plan's own duration; the 0.25 default — the dial's floor — stretches it to
@@ -1355,7 +1279,7 @@ const PAN_FOLD_THRESHOLD_PX = 4000;
 // heavy overlays that have nothing to do with panning, camera commits or route retention. Doing
 // that used to mean `vi.mock`-ing `@storytree/app-surface` wholesale — which took the module's PURE
 // functions down with it, so `laneLayout`, `neighbourHighlightPlan`,
-// `normalizeWorldPresentationModel` and `deriveIslandVegetationPlans` were replaced by
+// and `normalizeWorldPresentationModel` were replaced by
 // `null`/`{}`/an empty Map and never ran under test at all. Substituting the COMPONENTS alone
 // leaves every one of those computations real.
 //
@@ -1402,14 +1326,12 @@ export interface Act2Choreography {
   useReducedMotion: typeof useReducedMotion;
   useAct2Intro: typeof useAct2Intro;
   useStableForestRegrowLayer: typeof useStableForestRegrowLayer;
-  useStableVegetationLayer: typeof useStableVegetationLayer;
 }
 
 const REAL_ACT2_CHOREOGRAPHY: Act2Choreography = {
   useReducedMotion,
   useAct2Intro,
   useStableForestRegrowLayer,
-  useStableVegetationLayer,
 };
 
 /** `null` means "use the real choreography". */
@@ -2278,36 +2200,11 @@ export function TreeView({
     return byStory;
   }, [claimsMode, rawDepartures, stories, storyIds, capOwner]);
 
-  // ADR-0093 Unit 2b: the shared scene-graph render — the DEFAULT path now (`readRenderScene`
-  // treats anything but an explicit `?render=legacy`/`inline` as scene; the inline render below
-  // is the one-release escape hatch, not the canonical one). The scene is
-  // focus-AGNOSTIC (focus / hover / selection are applied by the mapper per render),
-  // so it only rebuilds on the world / substrate / ticker / build-activity inputs —
-  // never on hover. Hooks live above the early returns (the world may still be null).
-  const renderScene = useMemo(() => readRenderScene(search), [search]);
-  // grounded-art (ADR-0226): the unified vegetation vocabulary — now PERMANENT studio world art
-  // (ADR-0231 retired the `?veg` toggle: always composed, no flag). Every island wears the vocabulary
-  // (grass = tests, small UAT flowers, dead grass = unhealthy, the witness signpost retired) and, via
-  // the tree-spread (decision 1), the per-status `autumn-tree` colourways (ADR-0227) as its central
-  // baked-hero tree. (The default-off `?cosy` / `?garden` / `?factoryart` grounded-art flags were retired
-  // by ADR-0228; the scene's dormant `bakedStone` / `garden` seams stay in forest-world, fed `null` here.)
-  const vegetation = useVegetation();
-  // sprite-art-sheets arc: Storybook is the owner-attested default; `?artStyle=vector` is the explicit
-  // procedural opt-out and fetches nothing. A chosen sheet only affects `sceneCtx` below (NOT
-  // `SceneInput`/`buildScene` — the scene graph itself carries no sprite opinion).
-  const artStyle = useMemo(() => readArtStyle(search), [search]);
-  const spriteSheet = useArtStyleSheet(artStyle);
-  const artScale = useMemo(() => readArtScale(search), [search]);
-  // semantic-growth-studio-demo: the exact `?semanticGrowth=demo` flag (read-only above the
-  // scene/hooks below never depend on it). Checked once all hooks are declared (React ordering),
-  // near the other early returns.
-  const semanticGrowthDemo = useMemo(() => readSemanticGrowthDemo(search), [search]);
-  const organicPoseToPose = useMemo(() => readOrganicPoseToPose(search), [search]);
-  const organicIslandAccretion = useMemo(
-    () => readOrganicIslandAccretion(search),
-    [search],
-  );
-  const chapter2Round3Lab = useMemo(() => readChapter2Round3Lab(search), [search]);
+  // grounded-art (ADR-0226): the unified vegetation vocabulary — PERMANENT studio world art, and
+  // still an input to the scene the 3D land reads (it selects the parcel coverage vocabulary). Its
+  // flat half — the baked hero-tree colourways and the sprite art sheets — retired with the flat
+  // forest look (ADR-0608), so this is the constant presence flag.
+  const vegetation = VEGETATION;
   // ── the Act 2 intro (ADR-0282, ADR-0286): the whole forest regrown from its base nodes ──
   // Unlike the witness stages above this is NOT a variant controller — there is no early return, no
   // separate stage and no synthetic world. It runs on the REAL map with the real corpus: the same
@@ -2350,10 +2247,8 @@ export function TreeView({
   // below rewinds it, and the intro opens with a flash of its own ending. A ref, not state: it is
   // read only where the cursor is seeded, and flipping it must not re-render anything.
   const act2PendingStartRef = useRef(act2StartToken > 0);
-  // The machinery is built only once a regrow has actually been asked for. Deriving the plan is
-  // cheap; the accretion plans below are a scene walk per island, and a session that has already
-  // seen the intro should not pay for one. Once asked for, it STAYS on for the life of the page so
-  // Regrow can replay without rebuilding anything.
+  // The machinery is built only once a regrow has actually been asked for, and once asked for it
+  // STAYS on for the life of the page so Regrow can replay without rebuilding anything.
   const act2Enabled = act2Intro || cameraRasterisationRoute !== null || act2StartToken > 0;
   // The routed geometry the regrow's pathways grow ALONG (ADR-0283 D1): each segment's drawn
   // length in world units, so a long haul takes longer to travel than a short spur instead of
@@ -2491,15 +2386,10 @@ export function TreeView({
   // scene it is handed has to be un-projected first.
   const landView = useMemo(() => readLandView(search), [search]);
 
-  // `?landMount=1` — THE LAND UNDER THE MAP (`the-land-sits-under-the-working-map`), which is the
-  // OTHER half of route C and a different claim from the view above: not a second panel beside the
-  // map but the 3D ground beneath this very surface, registered to it to the pixel. The canvas is
-  // mounted as the first child of `.world-pan-layer` below, BEFORE the `<svg>` — so it inherits the
-  // same compositor pan transform and paints underneath every mark the map draws. Without the flag
-  // the branch is absent and the route is byte-for-byte the one that shipped.
-  // `lib/landViewMount.ts` carries why it is ground-only and what it does not deliver.
-  const landMount = useMemo(() => readLandMount(search), [search]);
-  const landMountProps = useMemo(() => readLandMountProps(search), [search]);
+  // THE LAND UNDER THE MAP (ADR-0608 D1) — the mounted 3D land IS the forest: the canvas is mounted
+  // as the first child of `.world-pan-layer` below, BEFORE the `<svg>`, so it inherits the same
+  // compositor pan transform and paints underneath every mark the interaction layer draws. It is no
+  // longer a flag (`?landMount` / `?landMountProps` retired with the flat forest look).
   // What the mounted 3D map tells a member while it is not simply drawn (ADR-0608 D5). Declared
   // here, ahead of the regrow's start, because the FIRST growth waits on it (below).
   const [landStatus, setLandStatus] = useState<LandMountStatus | null>(null);
@@ -2508,13 +2398,13 @@ export function TreeView({
   // made its context — and a cursor started then is already a third through by the time the land
   // draws: the member saw blank cream, stray flat specks, one orphan name, then land popping in
   // part-grown. So the start waits for the land's first SETTLED status: `ready`, or a terminal
-  // can't-draw (`unsupported` / `failed`), where the member gets the notice and the flat map grows
-  // as it always did rather than being held at nothing forever. Until then the cursor rests at 0 —
+  // can't-draw (`unsupported` / `failed`), where the member gets the notice and the nameplates grow
+  // on rather than being held at nothing forever (there is no flat map to fall back to, ADR-0608 D5). Until then the cursor rests at 0 —
   // nothing half-drawn — and the loading notice is what shows.
   //
   // ⚠ ONLY THE START MOVES. Once running, the cursor is the same wall-clock anchor it always was
   // (ADR-0469): a map navigated away from and back to still shows where the world has got to.
-  const act2LandSettled = !landMount || (landStatus !== null && landStatus.kind !== 'loading');
+  const act2LandSettled = landStatus !== null && landStatus.kind !== 'loading';
 
   // `?sceneExport=1` — the SCENE-EXPORT BRIDGE (ADR-0521's ladder instrument). Behind the flag only,
   // the built scene graph and the layout's own bookkeeping are parked on `window` for a driver to
@@ -2531,98 +2421,15 @@ export function TreeView({
     };
   }, [sceneExport, world, scene, spacingTuning, artRungs]);
 
-  // ADR-0169 §3: trails are hidden by default and GROW on island focus. The plan is the
-  // pure selector (lib/trailReveal): which segments, in what stagger order, from which
-  // end, in which direction tint. Reveal is CLICK/SELECT ONLY — keyed on `selectedStory`,
-  // Trails are ALWAYS drawn now (owner 2026-07-07: "see the pathways without clicking
-  // everywhere"). Reveal-on-click is retired — the noise the click reveal hid is gone
-  // now that the moat merges near-parallels and stress spaces the islands. The growth
-  // animation moves to ARRIVAL (a new island being placed); `growPlan` below drives the
-  // per-segment draw-on masks off `arrivalIds`, not off selection. Clicking an island
-  // still borders it (`.is-selected`, via territoryClassById) — that is the only focus
-  // affordance left. (selectedStory still drives the detail panel + the border.)
-  const trailSegById = useMemo(
-    () => new Map((world?.trails.segments ?? []).map((s) => [s.id, s])),
-    [world],
-  );
-
-  // One connected-accretion plan per island, derived ONCE from the settled scene. This is the
-  // expensive half of the regrow (a scene walk per story), so it is keyed on the scene alone and
-  // never touched by the cursor; the per-frame half below only re-selects cell scales.
-  const act2AccretionPlans = useMemo(
-    () =>
-      act2Enabled && scene && world
-        ? deriveForestRegrowAccretionPlans(
-            scene,
-            new Map(world.territories.map((t) => [t.story.id, t.centroid])),
-          )
-        : null,
-    [act2Enabled, scene, world],
-  );
-  // The per-frame render layer: which islands and roads exist yet, plus the accretion state of
-  // every island still growing. Null unless the regrow is actually mid-flight, so a settled forest
-  // — including the moment the gated route first loads — carries no layer and renders unchanged.
-  // Held STABLE across frames that would paint an identical picture — a forest-map frame's cost is
-  // rasterisation (ADR-0272), so an unchanged layer object is what keeps `SceneView`'s memo bail-out
-  // intact and those frames free.
-  const act2RegrowLayer = act2.useStableForestRegrowLayer(
-    act2Player.state,
-    act2AccretionPlans,
-    act2Player.regrowing,
-  );
-
-  // ── ADR-0292: per-object vegetation growth ──────────────────────────────────────────────────────
-  //
-  // ON by default. The decision is the owner's own (they chose exp-16 in conversation, ADR-0292 D2),
-  // and the arc's end state describes them watching the regrow on the CLEAN route at the default
-  // speed — which a flag would put behind a URL they have to remember. `?veg2=off` is the kill switch
-  // for the LOOK comparison, not a gate on the decision: with it the map renders exactly as it did
-  // before this arc, so the two can be held side by side.
-  //
-  // The APPEARANCE is unattested (ADR-0070 stage 2 is the owner's, and nothing here signs it).
-  const vegetationGrowthOff = useMemo(() => readVegetationGrowthOff(search), [search]);
-  // The expensive half — one walk of each island's flora, seeding every beat — keyed on the SCENE
-  // alone, exactly like the accretion plans above. The cursor never touches it.
-  const vegetationPlans = useMemo(
-    () =>
-      scene && sceneInput && !vegetationGrowthOff
-        ? deriveIslandVegetationPlans(
-            scene,
-            sceneInput.territories.map((t) => ({
-              storyId: t.id,
-              caps: t.caps,
-              // IslandVegetationInput.radius is unread internally (see its own doc comment — deriving
-              // tree size from it was tried and measurably wrong); `screenRadius` just preserves the
-              // pre-split numeric value here (`scene-territory-radius-states-its-space`).
-              radius: t.screenRadius,
-              status: t.status,
-            })),
-            // The active art style, so a growth track inherits the size that is actually on screen.
-            // Load-bearing: the shipped default is the owner-attested Storybook sheet, which draws the
-            // tree at roughly a quarter of its vector body — sizing from the body alone put a tree 4x
-            // too large on every island.
-            { spriteSheet, artScale },
-          )
-        : null,
-    [scene, sceneInput, vegetationGrowthOff, spriteSheet, artScale],
-  );
-  const vegetationStoryIds = useMemo(
-    () => (sceneInput ? sceneInput.territories.map((t) => t.id) : []),
-    [sceneInput],
-  );
-  // The per-frame half. `null` state (no run in flight) holds every island at 1, so the settled map
-  // gets ONE layer object for the whole session and `SceneView`'s memo bail-out survives every pan.
-  const vegetationLayer = act2.useStableVegetationLayer(
-    vegetationPlans,
-    act2Player.regrowing ? act2Player.state : null,
-    vegetationStoryIds,
-  );
+  // The per-frame render layer: which islands and roads exist yet. Null unless the regrow is
+  // actually mid-flight, so a settled forest carries no layer and renders unchanged. Held STABLE
+  // across frames that would paint an identical picture, so `SceneView`'s memo bail-out survives.
+  const act2RegrowLayer = act2.useStableForestRegrowLayer(act2Player.state, act2Player.regrowing);
 
   // ADR-0286: play the pending token, once the map can actually regrow.
   //
-  // WAITING ON `act2AccretionPlans` is the load-bearing part. Starting the cursor before the scene
-  // exists would run the schedule against no accretion plans, so islands would blink in whole
-  // instead of forming — the run would be over before the growth was possible. The token is only
+  // WAITING ON THE SCENE is the load-bearing part. Starting the cursor before the scene exists would
+  // run the schedule against no land, so the run would be over before the growth was possible. The token is only
   // marked played once the run really starts, so an arrival that lands before the tree does still
   // gets its regrow when the tree arrives.
   //
@@ -2681,7 +2488,7 @@ export function TreeView({
       cameraProbeCorpusAccepted &&
       cam !== null &&
       act2Player.plan !== null &&
-      act2AccretionPlans !== null,
+      scene !== null,
     rejectionReason: cameraProbeCorpusAccepted
       ? null
       : `expected-${CAMERA_RASTERISATION_EXPECTED_ISLANDS}-mapped-islands-got-${mappedIslandCount}`,
@@ -2709,8 +2516,10 @@ export function TreeView({
       regrowing: act2Player.regrowing,
     },
     pictureRevision: cameraProbePictureRevisionRef.current,
-    growthNodeCount:
-      svgRef.current?.querySelectorAll('[data-island-accretion-cell]').length ?? 0,
+    // The regrow is PAINTING while any island is mid-growth. This counted the flat accretion's
+    // growing SVG cells until ADR-0608 retired them; the islands now grow in the 3D layer on the
+    // same cursor, so the honest count is the islands the cursor has in flight.
+    growthNodeCount: act2Player.state?.growing.length ?? 0,
     mapNodeCount: cameraRef.current?.querySelectorAll('*').length ?? 0,
     svgTransform: cameraRef.current?.getAttribute('transform') ?? null,
     htmlTransform: panLayerRef.current?.style.transform ?? '',
@@ -2756,11 +2565,11 @@ export function TreeView({
       act2Settle();
       return;
     }
-    if (!act2AccretionPlans || !act2LandSettled) return;
+    if (!scene || !act2LandSettled) return;
     act2PlayedToken.current = act2StartToken;
     act2PendingStartRef.current = false;
     act2Replay();
-  }, [act2StartToken, act2ReducedMotion, act2AccretionPlans, act2LandSettled, act2Replay, act2Settle]);
+  }, [act2StartToken, act2ReducedMotion, scene, act2LandSettled, act2Replay, act2Settle]);
 
   // The gear panel's non-URL button (worldSettings holds the speed dial beside it). Memoised as an
   // array so the panel's own `grouped()` memo is not rebuilt on every render of this component.
@@ -2782,9 +2591,8 @@ export function TreeView({
 
   // ISLAND ARRIVAL: when a re-pulled tree payload contains stories absent from the
   // previous one (a story-author spawn finished → ChatDock's onReloadTree, a UAT
-  // signature re-pull, …), those islands ARRIVE instead of popping in: their roads draw
-  // on end-to-end, then the coast surfaces, the ground assembles, and the flora pops
-  // (SceneView's `arrive-*` classes + the index.css keyframes — the animation fires
+  // signature re-pull, …), those islands' nameplates ARRIVE instead of popping in
+  // (SceneView's `arrive-island` class + the index.css keyframes — the animation fires
   // when the class is first applied, so no remount is needed on a live arrival). The
   // very FIRST payload only seeds the baseline: a full board load is not an arrival.
   const [entering, setEntering] = useState<ReadonlySet<string>>(EMPTY_ID_SET);
@@ -2824,10 +2632,7 @@ export function TreeView({
   }, [arriveParam, world]);
   const arrivalIds = useMemo<ReadonlySet<string> | null>(() => {
     // During an Act 2 regrow the arriving islands ARE the ones the plan is landing right now, so
-    // the staged coast/ground/flora arrival classes are reused verbatim rather than a second
-    // island animation being written. Their DELAYS are re-timed under `.act2-regrowing`
-    // (index.css) to land inside the island's own accretion window: the default staging waits
-    // ~1.05 s for a road to arrive first, which under ADR-0283 has already happened.
+    // the nameplate arrival class is reused verbatim rather than a second reveal being written.
     if (act2RegrowLayer) {
       return act2Player.state && act2Player.state.arrivalStoryIds.length > 0
         ? new Set(act2Player.state.arrivalStoryIds)
@@ -2836,32 +2641,6 @@ export function TreeView({
     if (!demoArrivalId && entering.size === 0) return null;
     return demoArrivalId ? new Set([...entering, demoArrivalId]) : entering;
   }, [act2RegrowLayer, act2Player.state, demoArrivalId, entering]);
-  // Per-segment usage, for the reveal mask's stroke width (the §3 multi-reveal width step-up).
-  const trailSegUsage = useMemo(
-    () => new Map((world?.trails.segments ?? []).map((s) => [s.id, s.usage])),
-    [world],
-  );
-  // ADR-0283 D1 — the regrow's own pathway fronts: which segments are mid-draw and how far the
-  // front has travelled, straight off the app cursor. Held stable across frames where no front
-  // has moved. Null (⇒ fall through to the live-arrival plan below) whenever the regrow is not
-  // drawing a pathway.
-  const act2TrailPlan = useStableForestRegrowTrails(
-    act2Player.state,
-    trailSegUsage,
-    act2Player.regrowing,
-  );
-  // The trail draw-on plan. Two sources, never both: the Act 2 regrow drives it from the CURSOR
-  // (so the schedule knows the instant a pathway arrives — ADR-0283 D1), while a live island
-  // ARRIVAL keeps the CSS beat it has always had (an arriving island's DIRECT incident trails
-  // grow outward from it, existing trails stay statically drawn). Null ⇒ every trail simply
-  // paints, no masks.
-  const growPlan = useMemo(
-    () =>
-      act2Player.regrowing
-        ? act2TrailPlan
-        : arrivalGrowPlan(world?.trails ?? null, arrivalIds),
-    [act2Player.regrowing, act2TrailPlan, world, arrivalIds],
-  );
   // ADR-0242 — the selection highlight the reveal-on-click era never had: ONE hop, both
   // directions. `neighbourHighlightPlan` is pure, so this is just which segments sit on the
   // selected story's own edges (the lit lane) and which islands are its immediate upstream /
@@ -2926,15 +2705,15 @@ export function TreeView({
   }, []);
   // THE NATIVE PLANTS' CLICK TARGETS (ADR-0608). The mounted canvas hands its projected plant
   // envelopes up once the props are drawn; they join the scene walk as this map's OWN hit layer, so
-  // the coordinate hit-test and the per-node click keep one picking authority. Only under the mount,
-  // and only while the canvas actually reports plants.
+  // the coordinate hit-test and the per-node click keep one picking authority — only while the
+  // canvas actually reports plants.
   const [nativePropTargets, setNativePropTargets] = useState<readonly NativePropHitEnvelope[]>(NO_NATIVE_TARGETS);
   const nativePropTargetLayer = useMemo<NativePropTargetRenderLayer | null>(
     () =>
-      landMount && world && nativePropTargets.length > 0
+      world && nativePropTargets.length > 0
         ? { origin: world.offset, targets: nativePropTargets }
         : null,
-    [landMount, world, nativePropTargets],
+    [world, nativePropTargets],
   );
   const worldPresentationModel = useMemo<WorldPresentationModel | null>(
     () =>
@@ -2945,14 +2724,10 @@ export function TreeView({
             emphasizedStoryIds: [...HUB_IDS],
             hiddenStatuses: [...hidden],
             arrivalIds: [...(arrivalIds ?? [])],
-            reveal: growPlan,
             neighbours: neighbourPlan,
             lanes: laneLayoutPlan,
             laneMotion: selectionMotion,
-            spriteSheet,
-            artScale,
             forestRegrowLayer: act2RegrowLayer,
-            vegetationLayer,
             nativePropTargetLayer,
           })
         : null,
@@ -2962,14 +2737,10 @@ export function TreeView({
       selectedStory,
       hidden,
       arrivalIds,
-      growPlan,
       act2RegrowLayer,
-      vegetationLayer,
       neighbourPlan,
       laneLayoutPlan,
       selectionMotion,
-      spriteSheet,
-      artScale,
     ],
   );
   const worldPresentationEvents = useMemo<WorldPresentationEvents>(
@@ -2988,24 +2759,18 @@ export function TreeView({
   //
   // `arrivalIds` is deliberately compared by value. Its Set can be reconstructed from a new semantic
   // player state even when it names the same visible arrivals; treating that allocation as a picture
-  // change would throw away the raw-gap frames the stable regrow/vegetation/trail layers expose.
+  // change would throw away the raw-gap frames the stable regrow layer exposes.
   const arrivalPictureSignature = arrivalIds ? [...arrivalIds].sort().join('\u0000') : '';
   const act2PictureIdentity: readonly unknown[] = [
     scene,
     world,
-    renderScene,
     selectedStory,
     hidden,
     arrivalPictureSignature,
-    growPlan,
-    act2TrailPlan,
     act2RegrowLayer,
-    vegetationLayer,
     neighbourPlan,
     laneLayoutPlan,
     selectionMotion,
-    spriteSheet,
-    artScale,
     arriveRun,
   ];
   // Diagnostic only, and commit-accurate: speculative renders never advance the observed revision.
@@ -3048,27 +2813,6 @@ export function TreeView({
   const act2CompositorPromoted =
     act2CompositorTransform !== undefined && act2CompositorTransform !== 'none';
 
-  // semantic-growth-studio-demo: mounted BEFORE any of the clean-route early returns below, so
-  // the demo never depends on (or waits on) the live tree load — it is a static witness stage,
-  // not a variant of the product controller. Every other value (absent/empty/unknown) falls
-  // through unchanged, byte-for-byte, to the clean Studio path.
-  if (semanticGrowthDemo || organicPoseToPose || organicIslandAccretion || chapter2Round3Lab) {
-    return (
-      <SemanticGrowthDemo
-        spriteSheet={spriteSheet}
-        artScale={artScale}
-        variant={
-          chapter2Round3Lab
-            ? 'r3-lab'
-            : organicIslandAccretion
-              ? 'organic-island-accretion'
-              : organicPoseToPose
-                ? 'organic-pose-to-pose'
-                : 'demo'
-        }
-      />
-    );
-  }
   if (loadError) {
     return (
       <div className="pad">
@@ -3190,8 +2934,6 @@ export function TreeView({
           highlightId={highlightShared}
           substrateMode={substrateMode}
           substrateTuning={substrateTuning}
-          spriteSheet={spriteSheet}
-          storyStatusFromNameplate={landMount}
           onToggleStatus={toggleStatus}
           onResetHidden={() => setHidden(new Set())}
           onSelectIsland={(id) => selectStory(id, null)}
@@ -3199,7 +2941,7 @@ export function TreeView({
         <div className="world-frame">
           {/* The mounted 3D map's message (loading / unsupported / failed), OUTSIDE the aria-hidden
               land layer and outside the clickable viewport — ADR-0608 D5: never a silent blank. */}
-          {landMount && landStatus && <LandViewNotice status={landStatus} />}
+          {landStatus && <LandViewNotice status={landStatus} />}
           <div
             className="world-viewport"
             ref={bindViewport}
@@ -3212,11 +2954,7 @@ export function TreeView({
             onPointerCancel={onPointerCancel}
             onKeyDown={onKeyDown}
             onClick={(e) => {
-              if (!renderScene) {
-                if (e.target === e.currentTarget) clearSelection(); // legacy: per-element selects nodes
-                return;
-              }
-              // scene: the per-node onClick handled a clean click (handledRef); otherwise this click
+              // the per-node onClick handled a clean click (handledRef); otherwise this click
               // didn't reach a node handler (Electron capture-retarget, or a moved click's non-leaf
               // target) — fall back to a coordinate hit-test so the tap still selects.
               if (handledRef.current) {
@@ -3232,7 +2970,7 @@ export function TreeView({
               `<g>` and reset this wrapper in one commit. Ordinary drag folding remains the existing
               useLayoutEffect keyed on `cam`. */}
           <div
-            className={`world-pan-layer${landMount ? ' has-land-mount' : ''}`}
+            className="world-pan-layer"
             ref={panLayerRef}
             style={{
               transform: act2CompositorTransform,
@@ -3240,39 +2978,29 @@ export function TreeView({
               willChange: act2CompositorPromoted ? 'transform' : undefined,
             }}
           >
-          {/* ⚠ FIRST CHILD, BEFORE THE `<svg>` — that ordering IS the z-order settlement. Nothing in
-              this stack sets a `z-index`, so paint order is DOM order and every mark the map draws
-              (nameplates, hit targets, trails, crowns, flora, signposts, all five wisp families,
-              the selection ring) is above the land unconditionally. Inside `.world-pan-layer` so it
-              inherits the drag transform (ADR-0272 D2) and stays registered through a gesture with
-              neither layer re-rasterising. */}
-          {landMount && (
-            <surfaces.LandViewMount
-              scene={scene}
-              hiddenStatuses={hidden}
-              camera={presentedCam}
-              drawProps={landMountProps}
-              regrowCursor={act2Player.regrowing ? act2Player.state : null}
-              active={active}
-              onNativePropTargets={setNativePropTargets}
-              onStatus={setLandStatus}
+          {/* THE FOREST (ADR-0608 D1): the 3D land, FIRST CHILD, BEFORE the `<svg>` — the land paints
+              under the interaction layer (the explicit z-order lives in index.css `.land-mount`), and
+              every mark the map still draws in SVG — nameplates, hit targets, all five wisp families,
+              the selection lanes and rings — sits above it. Inside `.world-pan-layer` so it inherits
+              the drag transform (ADR-0272 D2) and stays registered through a gesture with neither
+              layer re-rasterising. */}
+          <surfaces.LandViewMount
+            scene={scene}
+            hiddenStatuses={hidden}
+            camera={presentedCam}
+            drawProps
+            regrowCursor={act2Player.regrowing ? act2Player.state : null}
+            active={active}
+            onNativePropTargets={setNativePropTargets}
+            onStatus={setLandStatus}
             />
-          )}
           <svg
             ref={svgRef}
             className={`world-scene lane-motion-${selectionMotion}${
-              // ADR-0283 D1: while the regrow is in flight the island arrival staging is re-timed
-              // to land INSIDE the island's own accretion window (index.css). Its default beat
-              // holds the island back ~1.05 s waiting for a road to arrive first — under edge
-              // scheduling the road has already arrived, so that wait would make a settled island
-              // sprout its outgoing pathways before it was visible.
+              // ADR-0283 D1: while the regrow is in flight the nameplate arrival staging is re-timed
+              // (index.css) so a name lands with its island rather than a beat after it.
               act2Player.regrowing ? ' act2-regrowing' : ''
             }`}
-            onClick={(e) => {
-              // scene selection is handled on the viewport (coordinate hit-test); here only the legacy
-              // render clears on a true background click.
-              if (!renderScene && e.target === e.currentTarget) clearSelection();
-            }}
           >
             <defs>
               <marker
@@ -3286,54 +3014,6 @@ export function TreeView({
               >
                 <path d="M 0 1.2 L 8 5 L 0 8.8 z" fill="context-stroke" />
               </marker>
-              {/* ADR-0169 draw-on masks — one per segment currently growing: a solid white
-                  stroke over the segment's own path, pathLength-normalised so a dash offset of
-                  1→0 (or -1→0 for a chain walked against the path's drawn direction) grows it
-                  length-agnostically; the visible stroke is masked by it, so the road draws on.
-                  userSpaceOnUse + oversized bounds keep a thin diagonal's mask region from
-                  clipping the wide stroke. Absent growth ⇒ no masks; every trail just paints.
-
-                  TWO drivers, chosen per segment by whether the plan carries a `drawn` cursor:
-                  a live island ARRIVAL keeps the CSS beat (an inline animation-delay per chain
-                  position plus the 0.35s keyframe), while the Act 2 regrow writes the offset
-                  itself from the app cursor and suppresses the keyframe (`is-cursor-driven`).
-                  ADR-0283 D1 needs the moment a pathway ARRIVES to be a number the schedule
-                  holds, and a CSS keyframe cannot be sampled. */}
-              {renderScene &&
-                growPlan?.segments.map((seg) => {
-                  const s = trailSegById.get(seg.id);
-                  if (!s) return null;
-                  const cursorDriven = seg.drawn !== undefined;
-                  const style: React.CSSProperties = {
-                    strokeWidth: trailFillWidth(seg.revealedUsage) + 8,
-                  };
-                  if (seg.drawn !== undefined) {
-                    const remaining = 1 - Math.max(0, Math.min(1, seg.drawn));
-                    style.strokeDashoffset = seg.fromEnd ? -remaining : remaining;
-                  } else {
-                    style.animationDelay = `${seg.delayMs}ms`;
-                  }
-                  return (
-                    <mask
-                      key={seg.id}
-                      id={`trail-m-${seg.id}`}
-                      maskUnits="userSpaceOnUse"
-                      x={-100000}
-                      y={-100000}
-                      width={200000}
-                      height={200000}
-                    >
-                      <path
-                        d={s.d}
-                        pathLength={1}
-                        className={`trail-reveal-mask${seg.fromEnd ? ' from-end' : ''}${
-                          cursorDriven ? ' is-cursor-driven' : ''
-                        }`}
-                        style={style}
-                      />
-                    </mask>
-                  );
-                })}
             </defs>
 
             {/* Pan/zoom camera (lib/worldCamera): translate+scale the world-unit
@@ -3349,10 +3029,10 @@ export function TreeView({
                 visibility: presentedCam ? undefined : 'hidden',
               }}
             >
-            {renderScene && worldPresentationModel ? (
-              // ADR-0093 Unit D: render FROM the shared scene-graph via the thin React mapper — now
-              // the DEFAULT (the `?render=legacy`/`inline` escape hatch falls to the inline `<g>`
-              // below). The studio-only chrome that is NOT in the shared core — the
+            {worldPresentationModel && (
+              // ADR-0093 Unit D: the interaction layer renders FROM the shared scene-graph via the
+              // thin React mapper (the `?render=legacy` inline escape hatch retired with the flat
+              // forest look, ADR-0608). The studio-only chrome that is NOT in the shared core — the
               // distributed-consumer building stamps and the per-nameplate identity-key glyph — is
               // layered ON TOP as a sibling `<g>` (StudioWorldChrome, ADR-0093 Decision 2). The
               // Shared-Islands panel / session dock / settings gear are React `<div>`s outside this
@@ -3374,69 +3054,6 @@ export function TreeView({
                   buildings={buildings}
                 />
               </>
-            ) : (
-            <g transform={`translate(${world.offset.x} ${world.offset.y})`}>
-              {/* the pale coast. This is the `?render=legacy` escape hatch, not the canonical
-                  render (ADR-0093 Unit D), so it draws the whole moat at once and carries no
-                  ADR-0286 per-island reveal — the Act 2 regrow runs on the scene path. */}
-              <g className="hex-coast">
-                {world.empties.map((h) => {
-                  const c = hexCenter(h);
-                  return <path key={axialKey(h)} className="hex-empty" d={hexPath(c.x, c.y, HEX_R - 0.6)} />;
-                })}
-              </g>
-
-              {/* organic island land: the smoothed coast filled as sand, UNDER the
-                  hex tiles, so each island reads as one solid blob with a beach
-                  rim instead of loose tiles floating in a hexagonal moat. */}
-              <g className="hex-coastland">
-                {world.territories.map((t) => (
-                  <g key={t.story.id} className={`coast-fill-group ${territoryClass(t.story)}`}>
-                    {t.coastGroundLoops.map((loop, i) => (
-                      <path key={`cf${i}`} className="coast-fill" d={coastScreenPath(loop)} />
-                    ))}
-                  </g>
-                ))}
-              </g>
-
-              {/* claimed land, back-to-front so extrusions layer — the shared IslandGround
-                  (the SAME component the Shared Islands panel paints, so map + panel never drift). */}
-              <IslandGround
-                world={world}
-                relaxedCells={relaxedCells}
-                classOf={territoryClass}
-                interactive={{
-                  onSelect: (id) => selectStory(id, null),
-                }}
-              />
-
-              {/* (No edge layer here: the `depends_on` edges are the ADR-0169 trail network, which
-                  only the scene render draws, so this legacy `?render=legacy` escape shows the
-                  world WITHOUT trails.) */}
-
-              {/* trees, contract-density flora, nameplates, wisps — per territory */}
-              {world.territories.map((t) => (
-                <TerritoryFlora
-                  key={t.story.id}
-                  territory={t}
-                  className={territoryClass(t.story)}
-                  hidden={hidden}
-                  // The world orbits the HARNESS now (ADR-0048 §5): in-flight
-                  // builds only. Session presence lives in the dock / panel.
-                  builds={buildsByStory.get(t.story.id) ?? []}
-                  // ADR-0138 §5 / ADR-0200 D7: the story-claim + departure wisps (live by default).
-                  claims={claimsByStory.get(t.story.id) ?? []}
-                  departures={departuresByStory.get(t.story.id) ?? []}
-                  now={now}
-                  onHover={() => {}}
-                  onSelect={(capId) => selectStory(t.story.id, capId)}
-                  // ADR-0102: clicking an island's icon stamp highlights the SPECIFIC shared island
-                  // it names (the carried building's id) in the left panel — so studio's cli-stamp
-                  // highlights cli and its library-stamp highlights library.
-                  onStampClick={(id) => setHighlightShared(id)}
-                />
-              ))}
-            </g>
             )}
             </g>
           </svg>
@@ -3457,7 +3074,7 @@ export function TreeView({
           {act2Intro && <Act2IntroControl player={act2Player} reducedMotion={act2ReducedMotion} />}
           {/* `?arrive=` demo: replay the arrival — remounts the scene subtree so the
               CSS animations run again. Absent flag ⇒ no button (default world untouched). */}
-          {renderScene && demoArrivalId && (
+          {demoArrivalId && (
             <button
               type="button"
               className="arrive-replay"
@@ -3841,70 +3458,13 @@ function IconGlyph({ id, label = true }: { id: string; label?: boolean }): React
  * unified vegetation vocabulary (`?veg`, the promoted default) is unaffected. */
 
 /**
- * The unified vegetation vocabulary (grounded-art, ADR-0226) — now PERMANENT studio world art
- * (ADR-0231 retired the `?veg` toggle: always composed, never a flag). Every island wears the
- * vocabulary; the per-status `autumn-tree` colourways — fetched from the dynamic kit chunk (the
- * tree-spread, decision 1, amends ADR-0221; per-status hue restored by ADR-0227) — are added once they
- * resolve, replacing each island's procedural central tree with a `<use>` of the colourway for that
- * island's status. Returns `{}` (vocabulary on, procedural tree) until the colourways arrive, so the
- * tree swap is a late repaint rather than a hole — never `null`, since the vocabulary is always on.
+ * The unified vegetation vocabulary (grounded-art, ADR-0226) — PERMANENT studio world art, supplied
+ * as the presence flag `{}`. The scene reads its presence to select the parcel coverage vocabulary
+ * the 3D land draws. Its flat half — the per-status baked hero-tree colourways (ADR-0227) and the
+ * sprite art sheets (ADR-0230) — retired with the flat forest look (ADR-0608), since nothing draws a
+ * flat tree any more.
  */
-function useVegetation(): SceneVegetationInput {
-  const [heroTrees, setHeroTrees] = useState<SceneVegHeroTrees | null>(null);
-  useEffect(() => {
-    let live = true;
-    void loadHeroTreeVariants().then(
-      (h) => { if (live) setHeroTrees(h); },
-      (err: unknown) => { console.error('vegetation tree colourways failed to load; keeping the procedural tree', err); },
-    );
-    return () => { live = false; };
-  }, []);
-  return useMemo<SceneVegetationInput>(
-    () => (heroTrees ? { heroTrees } : {}),
-    [heroTrees],
-  );
-}
-
-/**
- * The resolved sprite ART STYLE SHEET for the `artStyle` world setting (sprite-art-sheets arc) —
- * `null` while `artStyle` is the explicit `'vector'` procedural option (no fetch at all) or until a
- * chosen sheet's manifest resolves. The mirror of
- * {@link useBakedStone} / {@link useGardenIsland} for this seam: until it resolves the map keeps its
- * current render (vector, or a previously-loaded sheet), so a style swap is a late repaint rather than
- * a hole in the world.
- *
- * UNLIKE the factory kit / garden heroes / hero-tree colourways (a bundled `kit.json` chunk), a sheet
- * is a studio-served STATIC asset fetched from `/art-sheets/<name>/manifest.json` — the manifest names
- * its own sprite images, so there is nothing to bundle. `parseStyleSheet` (forest-world) validates the
- * fetched JSON and throws on anything malformed; the throw is caught + logged here so a bad manifest
- * degrades to vector, never a crash.
- */
-function useArtStyleSheet(artStyle: string): SpriteStyleSheet | null {
-  const [sheet, setSheet] = useState<SpriteStyleSheet | null>(null);
-  useEffect(() => {
-    if (artStyle === 'vector') {
-      setSheet(null);
-      return;
-    }
-    let live = true;
-    void fetch(`/art-sheets/${artStyle}/manifest.json`)
-      .then((r) => {
-        if (!r.ok) throw new Error(`art-sheet manifest fetch failed: ${r.status}`);
-        return r.json() as Promise<unknown>;
-      })
-      .then((json) => {
-        const parsed = parseStyleSheet(json);
-        if (live) setSheet(parsed);
-      })
-      .catch((err: unknown) => {
-        console.error(`art-style sheet "${artStyle}" failed to load; keeping the current render`, err);
-      });
-    return () => {
-      live = false;
-    };
-  }, [artStyle]);
-  return sheet;
-}
+const VEGETATION: SceneVegetationInput = {};
 
 /**
  * A promoted ICON STAMP (ADR-0102) on a map island: the identity glyph of a BUILDING this island
@@ -4355,8 +3915,6 @@ function SharedIslandsPanel({
   highlightId,
   substrateMode,
   substrateTuning,
-  spriteSheet,
-  storyStatusFromNameplate = false,
   onToggleStatus,
   onResetHidden,
   onSelectIsland,
@@ -4382,12 +3940,6 @@ function SharedIslandsPanel({
   highlightId: string | null;
   substrateMode: SubstrateMode | null;
   substrateTuning: Partial<SubstrateTuning>;
-  /** ADR-0230: the active sprite art sheet (or null in vector mode), threaded to the panel's legend
-   *  (both the chip bar and the right-flyout drawer) so its icons sprite in sync with the map. */
-  spriteSheet: SpriteStyleSheet | null;
-  /** Under `?landMount=1`, the SVG hero tree is suppressed in favour of 3D props; nameplate text
-   *  remains the explicit story-status reading for both legend surfaces. */
-  storyStatusFromNameplate?: boolean;
   onToggleStatus: (st: string) => void;
   onResetHidden: () => void;
   onSelectIsland: (id: string) => void;
@@ -4471,8 +4023,6 @@ function SharedIslandsPanel({
             }
             renderDrawer={false}
             barClassName="legend-bar-panel"
-            spriteSheet={spriteSheet}
-            storyStatusFromNameplate={storyStatusFromNameplate}
           />
         </details>
 
@@ -4530,14 +4080,12 @@ function SharedIslandsPanel({
         <div className="panel-flyout" role="dialog" aria-label="panel detail">
           {legendOpen ? (
             <>
-              <div className="panel-flyout-head">{legendRowLabel(legendOpen, storyStatusFromNameplate)}</div>
+              <div className="panel-flyout-head">{legendRowLabel(legendOpen)}</div>
               <surfaces.LegendDrawerBody
                 rowKey={legendOpen}
                 model={model}
                 hidden={hidden}
                 onToggleStatus={onToggleStatus}
-                spriteSheet={spriteSheet}
-                storyStatusFromNameplate={storyStatusFromNameplate}
               />
             </>
           ) : openIsland ? (
