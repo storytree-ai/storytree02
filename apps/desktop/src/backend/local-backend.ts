@@ -279,6 +279,11 @@ export interface LocalBackendDeps {
 
 // ---------- tree read + verdict overlay (re-composes the studio's GET /api/tree, ADR-0119 overlay) ----------
 
+/** The `/api/tree` refusal — the studio's words exactly (`TREE_PROOF_UNREAD` in apiRouter.ts), held
+ * equal by the `tree-fixtures` conformance arm that exercises a live hierarchy with unreadable proof. */
+const TREE_PROOF_UNREAD =
+  "the live store served the work hierarchy but its signed verdicts could not be read — refusing to paint a map without its proof";
+
 /**
  * Build the verdict-enriched `/api/tree` payload: read the authored tree with FULL capabilities, then
  * fold in the signed-verdict overlay (the studio tree-handler's enrichment, re-composed in
@@ -309,11 +314,25 @@ async function buildTreePayload(deps: LocalBackendDeps): Promise<Record<string, 
   // The asset list used to be a fourth leg, read ONLY to feed the ADR-0107 open-question green-gate
   // its `references`; that gate is retired with the citation tier (ADR-0477 D1), so the read went
   // with it rather than being left fetching a list nothing folds.
-  const [latestVerdicts, verdictEvents, builds] = await Promise.all([
-    deps.backend.latestVerdicts() as Promise<Record<string, DTVerdict> | null>,
-    (deps.backend.verdictEvents?.() ?? Promise.resolve(null)) as Promise<readonly DTVerdictEvent[] | null>,
+  const readProof = () =>
+    Promise.all([
+      deps.backend.latestVerdicts() as Promise<Record<string, DTVerdict> | null>,
+      (deps.backend.verdictEvents?.() ?? Promise.resolve(null)) as Promise<readonly DTVerdictEvent[] | null>,
+    ]);
+  let [[latestVerdicts, verdictEvents], builds] = await Promise.all([
+    readProof(),
     deps.backend.inFlightBuilds(),
   ]);
+  // The studio's rule, re-composed (its `buildTreePayload`): when the LIVE store just served the
+  // hierarchy, a null proof read is a failed read, not an absence, and folding it would paint every
+  // island its authored status as if current. Re-read once, then refuse. A cache/disk origin keeps
+  // the advisory under-claim above.
+  const proofUnread = () =>
+    latestVerdicts === null || (deps.backend.verdictEvents !== undefined && verdictEvents === null);
+  if (selection.origin === "live" && proofUnread()) {
+    [latestVerdicts, verdictEvents] = await readProof();
+    if (proofUnread()) throw new HttpError(503, TREE_PROOF_UNREAD);
+  }
   await foldVerdicts(
     stories,
     uatTestCriteriaByStory,

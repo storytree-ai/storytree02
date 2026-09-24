@@ -80,14 +80,16 @@ why: >-
  *     `{ reading: null }`, and the compiled band renders "no instrument here" and "all clear"
  *     differently on purpose.
  *
- *   `tree-fixtures` — `GET /api/tree`, compared over three synthetic fixture DIRECTORIES, each a
+ *   `tree-fixtures` — `GET /api/tree`, compared over four synthetic fixture DIRECTORIES, each a
  *     `stories/` tree plus the four reads the fold makes (the work-hierarchy seam and the three
- *     advisory proof layers) and the request list. THREE arms because this route's question has two
+ *     advisory proof layers) and the request list. FOUR arms because this route's question has two
  *     sources and each surface re-composes both: `tree-disk` drives the two independent disk walks
  *     (`readTree` against `readTreeWithCaps`), `tree-live` the two independent adapters over the one
  *     shared projection fold (`foldedToTreeWalk` against `toDesktopTree`), and `tree-absent` wires no
  *     projection seam at all with every proof layer silent — the advisory-absence arm, the only one
- *     that catches a mirror emitting `builds: []` where its reference omits the key. This is the
+ *     that catches a mirror emitting `builds: []` where its reference omits the key, and
+ *     `tree-live-proof-unread` answers the projection with every proof layer failed, where both
+ *     must refuse with one 503. This is the
  *     WIDEST pair here: on every other row the substance is shared code and only the envelope is
  *     hand-copied, while here the walks, the adapters and all four enrichment passes exist once per
  *     surface. It found two real, present divergences on its first run (see the `MIRRORS` row).
@@ -960,11 +962,11 @@ function assertCriteriaParse(storyId: string, body: string, expected: number): v
 }
 
 /**
- * The `tree-fixtures` input set: three synthetic fixture DIRECTORIES, each a `stories/` tree plus a
+ * The `tree-fixtures` input set: four synthetic fixture DIRECTORIES, each a `stories/` tree plus a
  * `tree.json` carrying the four reads the `/api/tree` fold makes and the request list both probes
  * replay.
  *
- * WHY THREE ARMS, and why none of them is optional. This route's QUESTION has two sources (ADR-0445
+ * WHY FOUR ARMS, and why none of them is optional. This route's QUESTION has two sources (ADR-0445
  * D1) and each surface re-composes BOTH independently, so one arm would leave half the pair
  * uncompared:
  *   · `tree-disk` — the seam is PRESENT and answers `null` (the projection loader has not run), so
@@ -979,6 +981,10 @@ function assertCriteriaParse(storyId: string, body: string, expected: number): v
  *     the authored hue rather than invent one. It is the arm that catches a mirror emitting
  *     `builds: []` where its reference omits the key, or dropping `uatCriteria` when there is
  *     nothing to say.
+ *   · `tree-live-proof-unread` — the seam answers with a projection but every proof layer is
+ *     `null`: the live store is up and its proof read FAILED. Both surfaces must re-read once and
+ *     then refuse with the same 503, never fold the silence into a map of authored statuses (the
+ *     2026-09-24 all-`proposed` map). The one arm whose agreed answer is a status, not a payload.
  *
  * THE STORIES TREE IS SHAPED BY BRANCH, one story per thing the two walks decide separately:
  *   - `alpha` — the full shape: three capabilities (one whose spec file is MISSING, so both walks
@@ -1412,6 +1418,14 @@ function buildTreeFixtures() {
       arm("live", { source: "live", snapshot }, proven),
       // The advisory-absence arm: no projection seam at all, and every proof layer silent.
       arm("absent", { source: "absent" }, { latestVerdicts: null, verdictEvents: null, builds: null }),
+      // The LIVE store answered the hierarchy and every proof read failed: both surfaces must refuse
+      // (503) rather than fold the silence into a map of authored statuses. That silence is how the
+      // whole studio map read `proposed` on 2026-09-24.
+      arm(
+        "live-proof-unread",
+        { source: "live", snapshot },
+        { latestVerdicts: null, verdictEvents: null, builds: null },
+      ),
     ],
   };
 }
