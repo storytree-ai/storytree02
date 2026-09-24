@@ -87,6 +87,7 @@ export function detectWebGL2(probe: WebGL2Probe = browserWebGL2Probe()): boolean
   let context: ProbeContext | null | undefined;
   try {
     context = probe.createElement('canvas').getContext('webgl2') as ProbeContext | null | undefined;
+    // Stryker disable next-line BlockStatement: EQUIVALENT — an emptied catch leaves `context` undefined, which the guard below turns into the same `false`.
   } catch {
     return false;
   }
