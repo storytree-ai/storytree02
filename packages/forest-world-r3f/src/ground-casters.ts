@@ -98,14 +98,17 @@ const roleSilhouetteTable = {
   bush: DOME_PROFILE(),
   tuft: DOME_PROFILE(),
   flowerPatch: DOME_PROFILE(),
-} as const satisfies Readonly<Record<Exclude<KitRole, 'coverageFlora'>, SilhouetteProfile>>;
+  coverageFlora: DOME_PROFILE(),
+} as const satisfies RoleSilhouettes;
 
 Object.defineProperty(roleSilhouetteTable, 'coverageFlora', {
-  value: DOME_PROFILE(),
+  value: roleSilhouetteTable.coverageFlora,
   enumerable: false,
+  writable: false,
+  configurable: false,
 });
 
-export const ROLE_SILHOUETTE: Readonly<Record<KitRole, SilhouetteProfile>> = roleSilhouetteTable as unknown as Readonly<Record<KitRole, SilhouetteProfile>>;
+export const ROLE_SILHOUETTE = roleSilhouetteTable;
 
 /** The flower's silhouette — the leaf rosette at the foot, a thread of a stem, a small head. The
  *  three criterion roles are one object at three sizes (ADR-0600), so they cast one form. */
@@ -163,10 +166,13 @@ export function roleSilhouettes(treeWidth: number = TREE_SHADOW_WIDTH) {
     ...ROLE_SILHOUETTE,
     tree: narrowedSilhouette(ROLE_SILHOUETTE.tree, treeWidth),
     deadTree: narrowedSilhouette(ROLE_SILHOUETTE.deadTree, treeWidth),
-  } as RoleSilhouettes;
+    coverageFlora: ROLE_SILHOUETTE.coverageFlora,
+  } satisfies RoleSilhouettes;
   Object.defineProperty(silhouettes, 'coverageFlora', {
     value: ROLE_SILHOUETTE.coverageFlora,
     enumerable: false,
+    writable: false,
+    configurable: false,
   });
   return silhouettes;
 }

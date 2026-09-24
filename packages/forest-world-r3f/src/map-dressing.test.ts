@@ -79,6 +79,7 @@ const FOOT = KIT_FOOTPRINTS_2026_08_29;
  * union here. The mapper's coverage wrapper has this complete typed payload. */
 function isCoverageFloraDescriptor(descriptor: Descriptor3D): descriptor is CoverageFloraDescriptor {
   if (descriptor.kind !== 'coverage-flora'
+    || descriptor.group !== 'coverage-flora'
     || !('capability' in descriptor)
     || !('island' in descriptor)
     || !('theme' in descriptor)
@@ -603,7 +604,7 @@ test('cfn-every-coverage-descriptor-becomes-one-grounded-native-placement: the r
   assert.ok(new Set(coverage.map((descriptor) => descriptor.island)).size > 1, 'coverage is genuinely multi-island');
 
   const placements = dress(descriptors).filter(
-    (placement) => placement.role === ('coverageFlora' as unknown as typeof placement.role),
+    (placement) => placement.role === 'coverageFlora',
   );
   assert.equal(placements.length, coverage.length, 'every descriptor becomes exactly one native placement');
   assert.deepEqual(
@@ -656,7 +657,7 @@ test('cfn-coverage-foliage-carries-theme-and-status-without-unbatching: all them
     })),
   );
   const placements = dress(descriptors).filter(
-    (placement) => placement.role === ('coverageFlora' as unknown as typeof placement.role),
+    (placement) => placement.role === 'coverageFlora',
   );
   assert.equal(placements.length, 18, 'all status/theme pairs are native placements');
   assert.deepEqual(placements.map((placement) => placement.tint), Object.values(tokens).flat(), 'every pair uses its emitted foliage token');
@@ -682,7 +683,7 @@ test('cfn-coverage-semantic-changes-rebuild-the-shared-ground-input: every consu
     assert.equal(sameGroundDependencies([base], changedStream), false, `coverage change ${JSON.stringify(change)} invalidates cache equality`);
     assert.notEqual(groundDependencyKey([base]), groundDependencyKey(changedStream), `coverage change ${JSON.stringify(change)} changes the cache key`);
   }
-  const groupChanged = { ...base, group: 'coverage-flora-alt' } as unknown as Descriptor3D;
+  const groupChanged = { ...base, group: 'coverage-flora-alt' } satisfies InstanceDescriptor;
   assert.equal(sameGroundDependencies([base], [groupChanged]), false, 'coverage group invalidates cache equality');
   assert.notEqual(groundDependencyKey([base]), groundDependencyKey([groupChanged]), 'coverage group changes the cache key');
 });
