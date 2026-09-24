@@ -97,6 +97,13 @@ describe('fccs-story-node-and-island-resolve-separately: real layout geometry', 
     expect(resolve({ kind: 'island', id: 'island-cedar' }, {
       world: { territories: [{ storyId: 'story-alpha', islandId: 'island-cedar', x: 40, y: 60, radius: 0 }] } as unknown as ForestCaptureWorld,
     })).toEqual({ ok: false, code: 'invalid-target' });
+
+    const pineDiameter = 70;
+    const pineFit = fitWorld(pineDiameter, pineDiameter, frame.width, frame.height, { fit: 'contain' });
+    expect(resolve({ kind: 'island', id: 'island-pine' })).toMatchObject({
+      ok: true,
+      camera: centerOn(210, 120, frame.width, frame.height, pineFit.scale, limits),
+    });
   });
 });
 
@@ -111,7 +118,8 @@ describe('fccs-named-views-reuse-canonical-camera-policy: resting and fit', () =
 describe('fccs-refusal-preserves-the-current-camera: invalid input', () => {
   it('refuses invalid frames before reading the world and keeps no mutable camera state', () => {
     for (const invalidFrame of [
-      { width: 0, height: 20 }, { width: -1, height: 20 }, { width: Number.NaN, height: 20 }, { width: 20, height: Number.POSITIVE_INFINITY },
+      { width: 0, height: 20 }, { width: -1, height: 20 }, { width: Number.NaN, height: 20 },
+      { width: 20, height: 0 }, { width: 20, height: -1 }, { width: 20, height: Number.POSITIVE_INFINITY },
     ]) {
       expect(resolve({ kind: 'square', x: 0, y: 0, size: 1 }, { frame: invalidFrame, world: null })).toEqual({ ok: false, code: 'invalid-frame' });
     }

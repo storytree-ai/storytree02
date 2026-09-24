@@ -98,7 +98,10 @@ export function resolveForestCaptureCamera(input: ForestCaptureCameraInput): For
 
   if (!Number.isFinite(territory.radius) || territory.radius <= 0) return { ok: false, code: 'invalid-target' };
   const diameter = territory.radius * 2;
-  const subjectFit = fitWorld(diameter, diameter, frame.width, frame.height, { fit: 'contain', align: 'center' });
+  // Only the fitted scale is consumed below; vertical alignment cannot affect that value. Omitting
+  // an alignment option keeps this call honest and avoids an equivalent mutation with no observable
+  // camera consequence.
+  const subjectFit = fitWorld(diameter, diameter, frame.width, frame.height, { fit: 'contain' });
   const camera = centerOn(
     territory.x,
     territory.y,
