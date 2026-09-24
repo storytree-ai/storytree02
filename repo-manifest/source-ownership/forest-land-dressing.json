@@ -8,7 +8,8 @@
       "packages/forest-world-r3f/src/kit-mesh.ts": "forest-land-dressing",
       "packages/forest-world-r3f/src/leaf-tint.ts": "forest-land-dressing",
       "packages/forest-world-r3f/src/map-dressing.ts": "forest-land-dressing",
-      "packages/forest-world-r3f/src/prop-lighting.ts": "forest-land-dressing"
+      "packages/forest-world-r3f/src/prop-lighting.ts": "forest-land-dressing",
+      "packages/forest-world-r3f/src/trail-ribbon-width.ts": "forest-land-dressing"
     }
   }
 }
