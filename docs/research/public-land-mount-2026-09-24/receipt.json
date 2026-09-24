@@ -1,0 +1,95 @@
+{
+  "capturedAt": "2026-09-24T09:23:01.731Z",
+  "viewport": "1600x1000",
+  "sides": {
+    "before": {
+      "dist": "/tmp/laneP-web-before/dist",
+      "hasLand": false,
+      "landBytes": 0,
+      "webgl2": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+      "errors": []
+    },
+    "after": {
+      "dist": "/home/mickh/code/Storytree/.claude/worktrees/laneP-public-mount/web/dist",
+      "hasLand": true,
+      "landBytes": 1864752,
+      "growthFrames": {
+        "frames": 120,
+        "medianMs": 16.699999999999818,
+        "p95Ms": 16.800000000000182,
+        "maxMs": 33.20000000000073
+      },
+      "webgl2": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+      "errors": []
+    }
+  },
+  "shots": [
+    {
+      "side": "before",
+      "surface": "/forest/",
+      "state": "none",
+      "file": "forest-poster-before.png",
+      "sha256": "7ed6708a35eddba003abe2fdb9767ddbabc41192d835cd9a184ddd1bcd4e1907"
+    },
+    {
+      "side": "before",
+      "surface": "/ (settled)",
+      "state": "none",
+      "file": "entry-settled-before.png",
+      "sha256": "fd67d0bf1588d9d015216630c49bfc7e6df9e8d0d2f9f647f8bcef605556754a"
+    },
+    {
+      "side": "before",
+      "surface": "/ (ROAM selection)",
+      "file": "entry-selected-before.png",
+      "sha256": "72c0eb80cfb9743af1a91d27000ccaae4b3fb24ca0d2b93f10e813484f00c0b5",
+      "roam": {
+        "at": {
+          "x": 751.9908447265625,
+          "y": 633.4015808105469,
+          "id": "storage-protocol",
+          "top": "DIV.storm-land-canvas"
+        },
+        "open": false,
+        "selected": 0
+      }
+    },
+    {
+      "side": "after",
+      "surface": "/forest/",
+      "state": "drawn",
+      "file": "forest-poster-after.png",
+      "sha256": "4c1793538fb26c3b99c0b81830192e177e4af82ea0d741a892773a7e5ba2ec42"
+    },
+    {
+      "side": "after",
+      "surface": "/ (growing, ~1 s)",
+      "file": "entry-growing-after.png",
+      "sha256": "5947561389891ce5ba6fae6f5b0e893f211899c379f25218fd0fd9feaff5236a"
+    },
+    {
+      "side": "after",
+      "surface": "/ (settled)",
+      "state": "drawn",
+      "file": "entry-settled-after.png",
+      "sha256": "15b9f70eb3e50e28a96b50f5695c91e2b97da06ac6a4c732f2c6822e476c87c5"
+    },
+    {
+      "side": "after",
+      "surface": "/ (ROAM selection)",
+      "file": "entry-selected-after.png",
+      "sha256": "0923eaa3e3776d82561c30723b6b6ef2b2f5fa50a76e574ec73343868abcb588",
+      "roam": {
+        "at": {
+          "x": 751.9182434082031,
+          "y": 695.733642578125,
+          "id": "storage-protocol",
+          "top": "DIV.storm-land-canvas has-land"
+        },
+        "open": false,
+        "selected": 0
+      }
+    }
+  ],
+  "browser": "148.0.7778.96"
+}
