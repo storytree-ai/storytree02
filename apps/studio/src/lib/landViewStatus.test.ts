@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   LAND_MAP_REQUIREMENT,
   LOADING_MESSAGE,
   UNSUPPORTED_MESSAGE,
+  BROWSER_LAND_FRAMES,
   afterFirstDrawnFrame,
   browserWebGL2Probe,
   detectWebGL2,
@@ -156,6 +157,28 @@ describe('afterFirstDrawnFrame — ready means the land has DRAWN, not merely be
       f.frame();
       f.frame();
       expect(seen).toEqual([]);
+    }
+  });
+
+  it('rides the BROWSER frame clock by default — request and cancel reach requestAnimationFrame', () => {
+    const requested: FrameRequestCallback[] = [];
+    const cancelled: number[] = [];
+    vi.stubGlobal('window', {
+      requestAnimationFrame: (callback: FrameRequestCallback) => requested.push(callback),
+      cancelAnimationFrame: (id: number) => cancelled.push(id),
+    });
+    try {
+      const seen: string[] = [];
+      const cancel = afterFirstDrawnFrame(BROWSER_LAND_FRAMES, () => seen.push('ready'));
+      expect(requested).toHaveLength(1);
+      requested[0]!(16);
+      expect(requested).toHaveLength(2);
+      requested[1]!(32);
+      expect(seen).toEqual(['ready']);
+      cancel();
+      expect(cancelled).toEqual([2]);
+    } finally {
+      vi.unstubAllGlobals();
     }
   });
 

@@ -636,10 +636,16 @@ describe('the land under the working map', () => {
 // the cursor is the same wall-clock anchor it always was (ADR-0469), so an unwatched gap AFTER the
 // start still catches up.
 describe('the opening waits for the land it grows on', () => {
+  /** The injected app clock: the wall time it reports, and the one frame callback it is holding. */
+  interface OpeningClock {
+    now: number;
+    next: ((t: number) => void) | null;
+  }
+
   interface OpeningHarness {
     readonly players: Act2IntroPlayer[];
     readonly phases: ((phase: LandCanvasPhase) => void)[];
-    readonly clock: { now: number; next: ((t: number) => void) | null };
+    readonly clock: OpeningClock;
     readonly frame: (ms: number) => void;
     readonly idle: (ms: number) => void;
     readonly restore: () => void;
@@ -658,7 +664,7 @@ describe('the opening waits for the land it grows on', () => {
     Element.prototype.getBoundingClientRect = function getBoundingClientRect() {
       return { x: 0, y: 0, left: 0, top: 0, right: 1600, bottom: 900, width: 1600, height: 900, toJSON: () => ({}) } as DOMRect;
     };
-    const clock: { now: number; next: ((t: number) => void) | null } = { now: 0, next: null };
+    const clock: OpeningClock = { now: 0, next: null };
     const players: Act2IntroPlayer[] = [];
     const phases: ((phase: LandCanvasPhase) => void)[] = [];
     return {

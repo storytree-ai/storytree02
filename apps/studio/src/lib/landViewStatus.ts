@@ -126,15 +126,9 @@ export const BROWSER_LAND_FRAMES: LandFrameScheduler = {
  * — which is when it can first draw. Returns a cancel for unmount / context loss.
  */
 export function afterFirstDrawnFrame(frames: LandFrameScheduler, report: () => void): () => void {
-  let cancelled = false;
+  // Always the id of the callback still pending, so one cancel stops whichever half is waiting.
   let requestId = frames.request(() => {
-    if (cancelled) return;
-    requestId = frames.request(() => {
-      if (!cancelled) report();
-    });
+    requestId = frames.request(report);
   });
-  return () => {
-    cancelled = true;
-    frames.cancel(requestId);
-  };
+  return () => frames.cancel(requestId);
 }
