@@ -68,3 +68,23 @@ later"*. This is that adjustment.
 - **Opening view**: before and after should be indistinguishable.
 - **Zoomed in**: after, the roads are about twice as wide as before, in proportion to the islands.
   Before, a road was a thin line next to a big island.
+
+## The public website — [`public-sheet.png`](public-sheet.png)
+
+The website runs the same engine (ADR-0593 D6), so it gets the same rule. Its entry forest is the
+one public surface with a zoom, reached through the storm's skip and then its own "skip to the map"
+button (before that, the wheel steps the story text). It cannot zoom in past its opening view, so it
+has two rows, not three: the opening view (plus a native-pixel crop) and zoomed out to its limit.
+Frames: [`public/`](public/). Receipt: [`public/public-receipt.json`](public/public-receipt.json).
+Built from the website at its current pin (`27f931a`), before and after the engine sync, served
+locally. Script: [`capture-public.mjs`](capture-public.mjs).
+
+- **Zoomed out** (0.47 px per ground unit): the same change as in the studio. Thick bands become
+  thin roads in proportion to the islands.
+- **⚠ The opening view DOES change here, unlike in the studio.** The site opens at 1.35 px per
+  ground unit where the studio opens at 1.97. The old ribbon drew the same screen width on both, so
+  the site's roads were proportionally about half as thick again as the studio's. After the change
+  both surfaces draw a road at the same share of an island. The site's roads at its opening view are
+  about a third thinner than before, and still read clearly in the picture. If the owner wants them
+  heavier, the one dial is `RIBBON_GROUND_SCALE` in `trail-ribbon-width.ts`. It would move both
+  surfaces together.

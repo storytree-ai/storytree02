@@ -1,0 +1,100 @@
+{
+  "capturedAt": "2026-09-24T22:13:36.280Z",
+  "viewport": {
+    "width": 1600,
+    "height": 1000
+  },
+  "sides": {
+    "before": {
+      "dist": "/tmp/laneZ-web-before",
+      "landState": "drawn",
+      "errors": []
+    },
+    "after": {
+      "dist": "/tmp/laneZ-web-after",
+      "landState": "drawn",
+      "errors": []
+    }
+  },
+  "shots": [
+    {
+      "side": "before",
+      "label": "rest",
+      "file": "public-before-rest.png",
+      "sha256": "b2ab68025bdfc46172e4e62494e71bfcd0f57884ed533f6579566f058e3e9ddf",
+      "scale": 1.3464205011586825,
+      "viewBox": [
+        21.84,
+        528.35,
+        1188.33,
+        742.71
+      ]
+    },
+    {
+      "side": "before",
+      "label": "map",
+      "file": "public-before-map.png",
+      "sha256": "fdd372babe939a06deccfd988676423c14df108d1db96dde427d580c10f5620d",
+      "scale": 1.3464205011586825,
+      "viewBox": [
+        21.84,
+        528.35,
+        1188.33,
+        742.71
+      ]
+    },
+    {
+      "side": "before",
+      "label": "out",
+      "file": "public-before-out.png",
+      "sha256": "0326eef4ebac33cafe48aacc4bc7beb70d86cc24055a7d383e041d46e41203fd",
+      "scale": 0.47124908850808017,
+      "viewBox": [
+        -1081.61,
+        -483.41,
+        3395.23,
+        2122.02
+      ]
+    },
+    {
+      "side": "after",
+      "label": "rest",
+      "file": "public-after-rest.png",
+      "sha256": "642f043c372dfc9dc8e285d1ebe4b983d16048616fc187a8b091cd1559bfd331",
+      "scale": 1.3464205011586825,
+      "viewBox": [
+        21.84,
+        528.35,
+        1188.33,
+        742.71
+      ]
+    },
+    {
+      "side": "after",
+      "label": "map",
+      "file": "public-after-map.png",
+      "sha256": "743d8d3767c77a361a4b375650e1ff7c65aebb076f551bed8e74cedf4573b991",
+      "scale": 1.3464205011586825,
+      "viewBox": [
+        21.84,
+        528.35,
+        1188.33,
+        742.71
+      ]
+    },
+    {
+      "side": "after",
+      "label": "out",
+      "file": "public-after-out.png",
+      "sha256": "8d9eaa02aaa71d735d754c39d086935336a7b284a4f75b16d6ee5c195088ab9b",
+      "scale": 0.47124908850808017,
+      "viewBox": [
+        -1081.61,
+        -483.41,
+        3395.23,
+        2122.02
+      ]
+    }
+  ],
+  "browser": "148.0.7778.96"
+}
