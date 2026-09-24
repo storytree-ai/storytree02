@@ -402,7 +402,10 @@ export interface TreeDigestReaders {
   readonly installedLockfile: () => string | undefined | null;
 }
 
-/** What an ABSENT installed lockfile contributes to the digest — never equal to any file's hash. */
+/**
+ * What an ABSENT installed lockfile contributes to the digest. A present file contributes
+ * `installed-lockfile:content:` + its content, which can never equal this marker.
+ */
 export const INSTALLED_LOCKFILE_ABSENT = "installed-lockfile:absent";
 
 /**
@@ -430,7 +433,7 @@ export function computeTreeDigest(read: TreeDigestReaders): string | null {
   const installedPart =
     installed === undefined
       ? INSTALLED_LOCKFILE_ABSENT
-      : `installed-lockfile:${createHash("sha256").update(installed).digest("hex")}`;
+      : `installed-lockfile:content:${installed}`;
 
   return createHash("sha256")
     .update(status)

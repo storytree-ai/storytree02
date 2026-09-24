@@ -2262,6 +2262,28 @@ test("mutation-diff: a .test.tsx-only change produces no narrowing and the bare 
   assert.equal(selection.skipReason, SKIP_HEAD);
 });
 
+test("mutation-diff: the unmutated-extension test reads the FINAL extension only — mid-name matches and non-code files do not narrow", () => {
+  const files = [
+    // Not code at all: no narrowing (pins the first guard and its `return false`).
+    "packages/cli/src/notes.md",
+    // `.tsx` mid-name but a different final extension: not a .tsx file (pins the first `$`).
+    "packages/cli/src/view.tsx.snap",
+    // Ends `.tsx`, merely CONTAINS `.d.cts` / `.test.mts` earlier: a production .tsx, so it narrows
+    // (pins the `$` of the declaration and test exclusions).
+    "packages/cli/src/x.d.cts.tsx",
+    "packages/cli/src/y.test.mts.tsx",
+  ];
+  const selection = selectMutationTargets({
+    changed: files.map((file) => ({ file, ranges: [{ start: 1, end: 1 }] })),
+    projects: PROJECTS,
+    existingFiles: existing(...files),
+  });
+  assert.deepEqual(
+    selection.narrowed.map((n) => n.file),
+    ["packages/cli/src/x.d.cts.tsx", "packages/cli/src/y.test.mts.tsx"],
+  );
+});
+
 test("mutation-diff: a .tsx OUTSIDE src/ is not an unmutated-extension narrowing", () => {
   const file = "apps/studio/scripts/tool.tsx";
   const selection = selectMutationTargets({

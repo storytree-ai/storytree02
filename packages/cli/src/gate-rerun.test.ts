@@ -623,6 +623,31 @@ test("computeTreeDigest: an ABSENT installed lockfile is its own state, distinct
   assert.notEqual(absent, empty);
   assert.notEqual(absent, constant, "the absent marker is not hashed as if it were file content");
   assert.equal(absent, computeTreeDigest({ ...gitParts, installedLockfile: () => undefined }), "deterministic");
+  // A file whose content is the word the reader returns for "absent" is still a PRESENT file.
+  assert.notEqual(absent, computeTreeDigest({ ...gitParts, installedLockfile: () => "undefined" }));
+  // The marker's exact text: an empty marker would still differ from every content, so only the
+  // text itself pins it.
+  assert.equal(INSTALLED_LOCKFILE_ABSENT, "installed-lockfile:absent");
+});
+
+test("computeTreeDigest: is a sha256 hex digest, and moving a BOUNDARY between two inputs moves it", () => {
+  const digest = (status: string, diff: string, untracked: string, lock: string | undefined) =>
+    computeTreeDigest({
+      status: () => status,
+      diff: () => diff,
+      untrackedContent: () => untracked,
+      installedLockfile: () => lock,
+    });
+  assert.match(String(digest("s", "d", "u", "l")), /^[0-9a-f]{64}$/);
+  // Each pair concatenates to the same bytes, so only the separator between the two fields tells
+  // them apart — one pair per separator.
+  assert.notEqual(digest("ab", "c", "u", "l"), digest("a", "bc", "u", "l"), "status | diff");
+  assert.notEqual(digest("s", "ab", "c", "l"), digest("s", "a", "bc", "l"), "diff | untracked");
+  assert.notEqual(
+    digest("s", "d", "xinstalled-lockfile:content:", "c"),
+    digest("s", "d", "x", "installed-lockfile:content:c"),
+    "untracked | installed lockfile",
+  );
 });
 
 test("computeTreeDigest: any unreadable input is null (cannot tell), never a digest", () => {

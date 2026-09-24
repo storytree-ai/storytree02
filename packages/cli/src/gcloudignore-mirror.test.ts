@@ -144,6 +144,21 @@ test("⚠⚠ LAST MATCH WINS — a later `!x` undoes `x`, so appended negations 
   );
 });
 
+test("⚠ a CRLF, whitespace-padded .gcloudignore is judged on its trimmed lines — and the negating line number survives", () => {
+  // Written on Windows and hand-indented: every line carries a trailing "\r", some carry spaces.
+  // A judge comparing raw lines would find NOTHING mirrored; one that merged lines would too.
+  const padded = MIRRORED.split("\n")
+    .map((l) => `  ${l}  `)
+    .join("\r\n");
+  assert.deepEqual(judgeGcloudignoreMirror(GITIGNORE, padded).missing, []);
+
+  const negated = judgeGcloudignoreMirror(GITIGNORE, `${padded}\r\n  !.env \r\n`);
+  assert.deepEqual(
+    negated.missing.map((m) => [m.pattern, m.undoneBy?.line, m.undoneBy?.text]),
+    [[".env", 9, "!.env"]],
+  );
+});
+
 test("a negation BEFORE the subject line is overridden by it — order resolves green", () => {
   const before = ["!.env", "!apps/studio/data/users.json", MIRRORED].join("\n");
   assert.deepEqual(judgeGcloudignoreMirror(GITIGNORE, before).missing, []);

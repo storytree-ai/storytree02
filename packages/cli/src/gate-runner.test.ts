@@ -190,6 +190,13 @@ test("an exit 3 from a step NOT declared skip-capable is a FAIL naming why, and 
   assert.equal(boundaries.status, "fail");
   assert.equal(boundaries.exitCode, GATE_SKIP_EXIT_CODE);
   assert.equal(boundaries.note, UNDECLARED_SKIP_NOTE);
+  // The note's TEXT, not just its identity with the constant: it must say where the declaration
+  // lives and why an undeclared exit 3 is a failure.
+  assert.equal(
+    boundaries.note,
+    "exit 3 from a step not declared skip-capable (SKIP_CAPABLE_CHECKS, gate-order.ts) — only a " +
+      "declared check may opt out, so an undeclared exit 3 is a failure, not a skip",
+  );
   assert.equal(gateExitCode(results), 1);
   assert.doesNotMatch(renderGateSummary(results).join("\n"), /GATE GREEN/);
 });

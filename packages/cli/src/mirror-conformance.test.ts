@@ -163,6 +163,25 @@ test("a duplicate key on the REFERENCE side is reported against the reference", 
   );
 });
 
+test("the duplicate-key and length lines name the right SIDE and every key, asserted by exact text", () => {
+  // Two duplicated keys on each side, so the `, ` join is observable, and both sides, so the line
+  // must pick the reference's name for one and the mirror's for the other.
+  const found = compareMirrors(
+    [doc("a"), doc("a"), doc("b"), doc("b")],
+    [doc("a"), doc("a"), doc("b"), doc("b"), doc("b")],
+    SPEC,
+    "fixture",
+  );
+  assert.deepEqual(
+    found.map((d) => formatDivergence(SPEC, d)),
+    [
+      "[fixture] studio carries DUPLICATE entry key(s) a, b",
+      "[fixture] desktop carries DUPLICATE entry key(s) a, b",
+      "[fixture] entry count diverges: studio has 4, desktop has 5",
+    ],
+  );
+});
+
 test("an allowlisted reference-only field is exempted", () => {
   const studio = [doc("a", { hostedOnly: "x" }), doc("b")];
   const desktop = [doc("a"), doc("b")];
