@@ -1,0 +1,193 @@
+{
+  "capturedAt": "2026-09-23T23:31:32.065Z",
+  "head": "05a1f22d99ea1d8de9de18ae2ec42c538c4ab17c",
+  "health": {
+    "store": "pg",
+    "db": "ok",
+    "schema": {
+      "code": 9,
+      "db": 9
+    },
+    "pid": 1561889,
+    "code": {
+      "startedAt": "05a1f22d99ea1d8de9de18ae2ec42c538c4ab17c",
+      "head": "05a1f22d99ea1d8de9de18ae2ec42c538c4ab17c",
+      "stale": false,
+      "directory": "/home/mickh/code/Storytree/.claude/worktrees/laneK-quiet",
+      "branch": "codex/lane-k-3d-regrow-quiet"
+    }
+  },
+  "sourceSha256": "9a88ed806e2f0e77987d14b6264560aebf3b86b0c3bdbaaf38095a5293d1e786",
+  "query": "?landMount=1&landMountProps=1&act2=intro&sceneExport=1",
+  "viewport": {
+    "width": 1800,
+    "height": 1100
+  },
+  "requestedSeconds": 23,
+  "method": "Unmodified native app clock, native Chromium rendering, real mounted studio and ordinary intro camera. One live API snapshot warmed before recording, then frozen. Playwright records the fresh recorded page from creation through close, including any opening load frames.",
+  "limits": [
+    "Recording adds overhead: this is appearance footage, never GPU cost, FPS or load-time evidence.",
+    "The intro camera naturally pulls back with the app cursor; no fit view or manual camera change is used.",
+    "Cursor start means first diagnostic cursor observed in the clip, not the initial blank/loading frame.",
+    "A 23-second excerpt may end before settlement; the JSON records the actual end cursor rather than claiming completion.",
+    "Playwright encodes native browser frames; no frame stepping, synthetic interpolation, time compression or video editing is applied."
+  ],
+  "errors": [],
+  "snapshotSha256": "d35855443af67c8a43313f83f848c93aebaf166ba559c1a491e2fea5b43ab29c",
+  "snapshotPaths": [
+    "/api/activity",
+    "/api/assets",
+    "/api/docs",
+    "/api/floor-health",
+    "/api/health",
+    "/api/me",
+    "/api/tree"
+  ],
+  "firstReady": {
+    "msFromNavigation": 10886,
+    "identity": {
+      "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+      "vendor": "Google Inc. (NVIDIA Corporation)",
+      "software": false
+    },
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ],
+    "progress": 0.3922,
+    "readout": "depth 10 of 13 · 7/36 islands · 1 pathway growing · 39%",
+    "mount": "drawn",
+    "regrow": "true",
+    "camera": {
+      "svg": "translate(-891.1913348248604 -4393.221657867575) scale(3.7709291259470743)",
+      "compositor": "none",
+      "zoom": 3.8610136761824143,
+      "position": [
+        475,
+        2479.145617726454,
+        3795.5322857862457
+      ],
+      "quaternion": [
+        -0.42261826174069933,
+        0,
+        0,
+        0.90630778703665
+      ]
+    },
+    "canvas": {
+      "width": 1800,
+      "height": 1100
+    },
+    "nativeWebGLFrames": 8,
+    "dataSha256": "77905d87519d28633eafeffe0971d69f2e6a9583365e6e2be4b6744ebd6b1fcd",
+    "forest": {
+      "islands": 36,
+      "edges": 95,
+      "segments": 113,
+      "droppedRoutes": 0
+    }
+  },
+  "end": {
+    "msFromNavigation": 23004.899999976158,
+    "identity": {
+      "renderer": "ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 2060/PCIe/SSE2, OpenGL 4.5.0)",
+      "vendor": "Google Inc. (NVIDIA Corporation)",
+      "software": false
+    },
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ],
+    "progress": 0.9795,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 98%",
+    "mount": "drawn",
+    "regrow": "true",
+    "camera": {
+      "svg": "translate(-250.4537693838015 -2445.379458926757) scale(2.4220079355448454)",
+      "compositor": "translate3d(144.476px, 168.876px, 0px) scale(0.839471)",
+      "zoom": 2.4220079355448454,
+      "position": [
+        475,
+        2479.145617726454,
+        3694.6916963947433
+      ],
+      "quaternion": [
+        -0.42261826174069933,
+        0,
+        0,
+        0.90630778703665
+      ]
+    },
+    "canvas": {
+      "width": 1800,
+      "height": 1100
+    },
+    "nativeWebGLFrames": 92,
+    "dataSha256": "77905d87519d28633eafeffe0971d69f2e6a9583365e6e2be4b6744ebd6b1fcd",
+    "forest": {
+      "islands": 36,
+      "edges": 95,
+      "segments": 113,
+      "droppedRoutes": 0
+    }
+  },
+  "cursorStart": {
+    "msFromNavigation": 2649.899999976158,
+    "progress": 0.0006,
+    "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 0%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  "cursorEnd": {
+    "msFromNavigation": 22982.899999976158,
+    "progress": 0.9795,
+    "readout": "depth 13 of 13 · 36/36 islands · 0 pathways growing · 98%",
+    "visibility": "visible",
+    "viewport": [
+      1800,
+      1100
+    ]
+  },
+  "cursorSampleCount": 61,
+  "observedRecordingWallMs": 23066.679340000002,
+  "cursorRewinds": [
+    {
+      "before": {
+        "msFromNavigation": 2649.899999976158,
+        "progress": 0.0006,
+        "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 0%",
+        "visibility": "visible",
+        "viewport": [
+          1800,
+          1100
+        ]
+      },
+      "after": {
+        "msFromNavigation": 2738.099999964237,
+        "progress": 0,
+        "readout": "depth 1 of 13 · 0/36 islands · 0 pathways growing · 0%",
+        "visibility": "visible",
+        "viewport": [
+          1800,
+          1100
+        ]
+      },
+      "beforeMountedReady": true
+    }
+  ],
+  "video": {
+    "file": "mounted-native-intro.webm",
+    "sha256": "34d9db49d5d2e938b978a0469bc5e5fc1a8dc46c7b667784d8670557c27ffd65",
+    "duration": {
+      "seconds": 23.92,
+      "method": "Read WebM container duration with bundled ffmpeg; no editing"
+    }
+  },
+  "sourceSha256After": "9a88ed806e2f0e77987d14b6264560aebf3b86b0c3bdbaaf38095a5293d1e786",
+  "accepted": true
+}

@@ -3211,6 +3211,7 @@ export function TreeView({
               camera={presentedCam}
               drawProps={landMountProps}
               regrowCursor={act2Player.regrowing ? act2Player.state : null}
+              active={active}
             />
           )}
           <svg
@@ -3532,7 +3533,7 @@ export function TreeView({
         {/* THE LAND VIEW — beside the working map, never over it and never instead of it. It is a
             SIBLING of `.world-frame`, so the map above keeps its own frame, its own camera and its
             own hit targets; this panel reads the same `scene` and draws it. */}
-        {landView && <LandView scene={scene} regrowCursor={act2Player.regrowing ? act2Player.state : null} />}
+        {landView && <LandView scene={scene} regrowCursor={act2Player.regrowing ? act2Player.state : null} active={active} />}
 
         {selected && (
           <StoryPanel
