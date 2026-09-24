@@ -125,7 +125,13 @@ export function useStableForestRegrowLayer(
   active: boolean,
 ): ForestRegrowRenderLayer | null {
   const held = useRef<{ signature: string; layer: ForestRegrowRenderLayer } | null>(null);
-  if (!active || !state) {
+  // Two guards, not one `||`: a settled map (no run in flight) and a run with no state yet are
+  // different absences, and each is asserted on its own in `act2Intro.clock.test.tsx`.
+  if (!active) {
+    held.current = null;
+    return null;
+  }
+  if (!state) {
     held.current = null;
     return null;
   }
