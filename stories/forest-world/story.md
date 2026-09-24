@@ -13,13 +13,14 @@ uat_witness: machine
 # The capability FLOOR (ADR-0222 D2, option A — the owner's stated preference, executing the live
 # `forest-world-capability-floor` proposal): `render-core` stands for the geometry KERNEL (mesh /
 # coast / ranking / hex / sizing), deterministic trail router, and framework-agnostic SCENE-GRAPH
-# (`scene.ts`, `buildScene` over its own SceneInput contract). `public-ground-scene-input` earns the
-# one finer leg the floor permits: a new pure adapter layer that composes already-published,
-# already-laid-out public facts into one plan-view SceneInput. The three thin mappers (studio React;
+# (`scene.ts`, `buildScene` over its own SceneInput contract). `public-ground-scene-input` composes
+# already-published, already-laid-out public facts into one plan-view SceneInput, and
+# `public-ground-projection` earns the next separable leg: that immutable plan becomes one coherent
+# 50° SceneInput for the shared SVG and later native consumers. The three thin mappers (studio React;
 # website string-SVG, synced; R3F, packages/forest-world-r3f) still live with their
 # surfaces/packages, proven there — outside this list. The thin-port empty-capabilities exemption
 # (proof-protocol / storage-protocol) is explicitly NOT reopened (ADR-0222 D2).
-capabilities: [render-core, public-ground-scene-input]
+capabilities: [render-core, public-ground-scene-input, public-ground-projection]
 # Foundational root organism (ADR-0093 §1, standing on ADR-0068 / ADR-0075): forest-world owns its OWN
 # minimal input contract (a story is just an id + deps + its capabilities' deps), so it depends on
 # NOTHING — `depends_on: []`, alongside proof-protocol and storage-protocol at the bottom of the order.
