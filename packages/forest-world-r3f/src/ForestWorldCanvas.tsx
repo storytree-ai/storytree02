@@ -28,13 +28,14 @@
 // (under-island) strips are never drawn here — the cave props carry that story.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Canvas, useThree } from '@react-three/fiber';
+import { Canvas, useThree, type RootState } from '@react-three/fiber';
 import { Line, MapControls } from '@react-three/drei';
 import { BufferAttribute, Color, OrthographicCamera, type BufferGeometry, type Mesh, type Texture } from 'three';
 import type { InstanceDescriptor, Descriptor3D } from './world-to-3d.js';
 import type { ForestRegrowPresentation } from './ForestWorldCanvas.regrow.js';
 import { islandGrowthProgress, regrowTrailPoints } from './ForestWorldCanvas.causal.js';
 import { canvasReady } from './ForestWorldCanvas.readiness.js';
+import { presentRegisteredCamera } from './ForestWorldCanvas.registered-camera.js';
 import {
   SHIPPED_ELEVATION_DEG,
   frameWorld,
@@ -1535,46 +1536,6 @@ function FitOrthographicFraming({ halfHeight }: { halfHeight: number }) {
 }
 
 /**
- * APPLY THE HOST'S CAMERA — {@link FitOrthographicFraming}'s opposite number, and the whole of
- * registered-underlay mode's steering.
- *
- * ⚠ IT SETS THE CAMERA AND DERIVES NOTHING. `zoom` and `target` arrive solved from
- * `registrationCamera`; the only thing computed here is the EYE OFFSET, and that is taken from the
- * framing the standalone canvas would have used rather than written down again — so the view
- * DIRECTION (and with it the 50° elevation the registration condition is about) is provably the
- * same one this canvas has always looked from, and the clip range that framing derived still
- * brackets the world. Distance does not affect an orthographic camera's delivered scale, so
- * translating the eye with the target is free.
- *
- * ⚠ `invalidate()` RATHER THAN A RENDER LOOP. Under a host this canvas runs `frameloop="demand"`:
- * nothing on it animates, and a map that spends a GPU frame every 16 ms redrawing an identical
- * still is the shape of the lag that already cost this map a feature (the dependency
- * hover-highlight, removed July 2026). Demand-driven also IS the reduced-motion answer here — a
- * surface that only ever redraws when its camera or its content moved has no motion to reduce.
- */
-function RegisteredCamera({
-  zoom,
-  target,
-  eye,
-}: {
-  zoom: number;
-  target: { readonly x: number; readonly z: number };
-  eye: readonly [number, number, number];
-}) {
-  const camera = useThree((s) => s.camera);
-  const invalidate = useThree((s) => s.invalidate);
-  useLayoutEffect(() => {
-    if (!(camera instanceof OrthographicCamera)) return;
-    camera.zoom = zoom;
-    camera.position.set(target.x + eye[0], eye[1], target.z + eye[2]);
-    camera.lookAt(target.x, 0, target.z);
-    camera.updateProjectionMatrix();
-    invalidate();
-  }, [camera, invalidate, zoom, target.x, target.z, eye]);
-  return null;
-}
-
-/**
  * THE MAP'S TWO LIGHTS, at the strengths a probe of this renderer says they should be.
  *
  * ⚠⚠ THE INTENSITIES ARE READ OFF THE LADDER, and they were `0.7` / `1.1` until 2026-08-30. That
@@ -1773,6 +1734,32 @@ export function ForestWorldCanvas({
   // without a renderer-owned clock or schedule.
   const hasRegrowPresentation = regrow !== null && regrow !== undefined;
   const ready = canvasReady({ created, drawsProps: compose.props, propsSettled });
+  // ⚠⚠ THE HOST'S CAMERA IS APPLIED AND DRAWN HERE, IN THE HOST'S OWN COMMIT — never from a child
+  // of `<Canvas>`. A child's layout effect runs in R3F's separate reconciler on its own schedule and
+  // its `invalidate()` draws on a later frame still, so the studio painted a frame with the SVG on
+  // the new camera and the land on the old one after every drag, wheel notch and arrow key — the
+  // flicker and shake `docs/research/map-pan-steady-2026-09-25/` measured. See
+  // `ForestWorldCanvas.registered-camera.ts`. The eye is the standalone framing's own offset from its
+  // target, so the view direction is unchanged; nothing here re-derives zoom or target.
+  const rootRef = useRef<RootState | null>(null);
+  const registeredZoom = registered?.zoom;
+  const registeredX = registered?.target.x;
+  const registeredZ = registered?.target.z;
+  const eyeX = frame.position[0] - frame.target[0];
+  const eyeY = frame.position[1] - frame.target[1];
+  const eyeZ = frame.position[2] - frame.target[2];
+  const paints = compose.canvasProps.frameloop !== 'never';
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (root === null || registeredZoom === undefined || registeredX === undefined || registeredZ === undefined) return;
+    const camera = root.camera;
+    if (!(camera instanceof OrthographicCamera)) return;
+    presentRegisteredCamera<OrthographicCamera, RootState['scene']>(
+      { camera, scene: root.scene, gl: root.gl, invalidate: () => root.invalidate() },
+      { zoom: registeredZoom, target: { x: registeredX, z: registeredZ }, eye: [eyeX, eyeY, eyeZ] },
+      paints,
+    );
+  }, [created, registeredZoom, registeredX, registeredZ, eyeX, eyeY, eyeZ, paints]);
   const reportedReady = useRef(false);
   useEffect(() => {
     if (!ready || reportedReady.current || onRendererState === undefined) return;
@@ -1799,14 +1786,13 @@ export function ForestWorldCanvas({
       {...compose.canvasProps}
       data-regrow-active={hasRegrowPresentation ? 'true' : undefined}
       camera={{ position: frame.position, near: frame.near, far: frame.far }}
-      {...(onRendererState === undefined
-        ? {}
-        : {
-            onCreated: ({ gl }: { gl: { domElement: HTMLCanvasElement } }) => {
-              gl.domElement.addEventListener('webglcontextlost', () => onRendererState('lost'), { once: true });
-              setCreated(true);
-            },
-          })}
+      onCreated={(state: RootState) => {
+        rootRef.current = state;
+        if (onRendererState !== undefined) {
+          state.gl.domElement.addEventListener('webglcontextlost', () => onRendererState('lost'), { once: true });
+        }
+        setCreated(true);
+      }}
     >
       {/* ⚠ THE BACKDROP IS THE HOST'S IN REGISTERED MODE. Standalone this paints the dark board
           behind the world; under a host the host has already painted its own (the studio's sea
@@ -1845,17 +1831,6 @@ export function ForestWorldCanvas({
         wisps.map((w, i) => (
           <WispSprite key={i} wisp={w} />
         ))}
-      {registered && (
-        <RegisteredCamera
-          zoom={registered.zoom}
-          target={registered.target}
-          eye={[
-            frame.position[0] - frame.target[0],
-            frame.position[1] - frame.target[1],
-            frame.position[2] - frame.target[2],
-          ]}
-        />
-      )}
       {compose.controls && (
         <>
           <FitOrthographicFraming halfHeight={frame.halfHeight} />
