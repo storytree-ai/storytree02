@@ -1,0 +1,7 @@
+{
+  "sourceOwnership": {
+    "subtrees": {
+      "apps/studio/src/lib/forestCaptureCamera.ts": "forest-capture-camera-seam"
+    }
+  }
+}

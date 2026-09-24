@@ -51,7 +51,7 @@ one command path.
 
 **Goal —** A builder can make a repeatable visual-review framing request without mouse navigation.
 
-1. **A semantic capture request has one honest result** _(witness: machine)_
+1. **A semantic capture request has one honest result** _(witness: machine)_ _(criterion-id: uatc_a289667bf18e5f471e57c0fc)_ _(revision-id: uatr1:cf2bdf732dd4aa48)_
    - With a loaded Studio forest and a positive capture frame, request each supported target kind:
      a world square, a story node, an island, `resting`, and `fit`. Observe a receipt containing the
      canonical target and exact applied `{ tx, ty, scale }`; project the reported bounds back through
