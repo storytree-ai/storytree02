@@ -19,7 +19,13 @@ import {
   silentBuildProgress,
   writeRevisionRecord,
 } from "@storytree/drive";
-import type { RealBuildArgs, RealBuildResult, RevisionWrite, StoryRealNodeBuilder } from "@storytree/drive";
+import type {
+  BuildGuardFactory,
+  RealBuildArgs,
+  RealBuildResult,
+  RevisionWrite,
+  StoryRealNodeBuilder,
+} from "@storytree/drive";
 
 import { makeGateDeps } from "./commands.js";
 import type { GateDriverSeams } from "./commands.js";
@@ -147,6 +153,24 @@ const gate: ReliabilityGate = {
   retired: false,
 };
 
+/**
+ * An explicit OFFLINE run-lease factory (`gate-build-holds-a-run-lease`): every drive here names a
+ * valid increment, which now reaches lease admission before the policy fold, and production's default
+ * opens the shared claim store — so each drive injects this no-op guard through {@link gateDeps} or
+ * the composed seams.
+ */
+function offlineGuardFactory(): BuildGuardFactory {
+  return async ({ runId }) => ({
+    ok: true,
+    runId,
+    guard: { assertHeld: async () => {}, noteActivity: async () => {}, release: async () => {} },
+  });
+}
+
+// test-updated (refactor): "a gate revision reaches the drive's build and header, every drive gets the records dir, and a failed drive prints its record with the exact gate re-run" — its drive (via gateDeps) injects the explicit offline buildGuardFactory; same claims.
+// test-updated (refactor): "a gate drive with no revision builds unrevised, still hands the build the records dir, and prints an unwritten record's reason" — its drive (via gateDeps) injects the explicit offline buildGuardFactory; same claims.
+// test-updated (refactor): "a gate revision run pairs with the gate's live grant: refused under a fixed-defect grant, a plain run refused under a revised-test grant, admitted when both agree (ADR-0576 D6)" — its drives (via gateDeps) inject the explicit offline buildGuardFactory; same claims.
+// test-updated (refactor): "a gate revision never aliases the build node: a record written under the build node's id is not found for the gate, before any build" — its drive (via gateDeps) carries the explicit offline buildGuardFactory, never reached before the revision refusal; same claims.
 function gateDeps(extra: {
   reviseTest?: string | undefined;
   ledger?: InMemoryStore;
@@ -163,6 +187,7 @@ function gateDeps(extra: {
     innerLoopReads: { corpus: fx.corpus, ledger: extra.ledger ?? new InMemoryStore() },
     escalationsDir: fx.escalationsDir,
     realNodeBuilder: extra.realNodeBuilder,
+    buildGuardFactory: offlineGuardFactory(),
   };
   deps.reviseTest = extra.reviseTest;
   return deps;
@@ -279,6 +304,7 @@ test("a gate revision reaches the drive's build and header, every drive gets the
   );
 });
 
+// test-updated (refactor): "gate run's dispatch threads --revise-test from argv into the gate drive (makeGateDeps)" — the composed seams carry the explicit offline buildGuardFactory (GateDriverSeams), so the admitted drive never opens the shared claim store; same claims.
 test("gate run's dispatch threads --revise-test from argv into the gate drive (makeGateDeps)", async () => {
   const priorRun = "gate-real-dispatched";
   await writeRevisionRecord(fx.escalationsDir, GATE_ID, priorRun, { ok: false, escalation: ESCALATION });
@@ -296,6 +322,7 @@ test("gate run's dispatch threads --revise-test from argv into the gate drive (m
     promote: false,
     escalationsDir: fx.escalationsDir,
     realNodeBuilder: recordingBuilder(calls, { written: true, path: "/records/gate/gate-real-next.json" }),
+    buildGuardFactory: offlineGuardFactory(),
   };
   const gateDeps = makeGateDeps(
     { store: new InMemoryStore() },

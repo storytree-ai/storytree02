@@ -21,6 +21,7 @@ import {
 import type { DecisionFork, NodeSpec } from "@storytree/orchestrator";
 import type { ReliabilityGate } from "@storytree/library";
 import { silentBuildProgress } from "@storytree/drive";
+import type { BuildGuardFactory } from "@storytree/drive";
 
 import { driveBuildTestsGate, gateRetryCommand } from "./gate-build-driver.js";
 import type { GateBuildDriverDeps } from "./gate-build-driver.js";
@@ -183,7 +184,23 @@ function buildTestsGate(over: Partial<ReliabilityGate> = {}): ReliabilityGate {
   };
 }
 
+/**
+ * An explicit OFFLINE run-lease factory (`gate-build-holds-a-run-lease`). A REAL gate drive that
+ * resolves a valid increment now acquires its shared run lease before the policy fold; production
+ * omits the seam and opens the shared claim store, so every drive here that reaches admission injects
+ * this no-op guard instead — the suite never falls through to a live pool.
+ */
+function offlineGuardFactory(): BuildGuardFactory {
+  return async ({ runId }) => ({
+    ok: true,
+    runId,
+    guard: { assertHeld: async () => {}, noteActivity: async () => {}, release: async () => {} },
+  });
+}
+
 // ── the load-bearing R2 walk ─────────────────────────────────────────────────
+
+// test-updated (refactor): "drives a build-tests gate's R2 red→green and signs a DRIVEN verdict FOR the gate id; the gate greens its covered cap" — injects the explicit offline buildGuardFactory so the admitted drive holds a hermetic run lease; same claims.
 
 test("drives a build-tests gate's R2 red→green and signs a DRIVEN verdict FOR the gate id; the gate greens its covered cap", async () => {
   const stories = await fixtureStories();
@@ -202,6 +219,7 @@ test("drives a build-tests gate's R2 red→green and signs a DRIVEN verdict FOR 
       authorOverride: scriptedR2Author,
       increment: "inc-live",
       innerLoopReads: { corpus, ledger: store },
+      buildGuardFactory: offlineGuardFactory(),
     });
     assert.equal(env.ok, true, env.body);
     assert.match(env.body, /gate run fix-story#gate-1 — BUILD-TESTS \(REAL\)/);
@@ -238,6 +256,7 @@ test("drives a build-tests gate's R2 red→green and signs a DRIVEN verdict FOR 
   }
 });
 
+// test-updated (refactor): "U3 regression wall: an R2 refactor that REGRESSES the sibling test reds the suite → no verdict signed" — injects the explicit offline buildGuardFactory; same claims.
 test("U3 regression wall: an R2 refactor that REGRESSES the sibling test reds the suite → no verdict signed", async () => {
   const stories = await fixtureStories();
   const repo = await fixtureRepo();
@@ -269,6 +288,7 @@ test("U3 regression wall: an R2 refactor that REGRESSES the sibling test reds th
       authorOverride: regressingAuthor,
       increment: "inc-live",
       innerLoopReads: { corpus, ledger: store },
+      buildGuardFactory: offlineGuardFactory(),
     });
     assert.equal(env.ok, false, env.body);
     assert.match(env.body, /failed closed at CONFIRM_GREEN/);
@@ -295,6 +315,7 @@ function routineFork(over: Partial<DecisionFork> = {}): DecisionFork {
   };
 }
 
+// test-updated (refactor): "U4 — an UNRESOLVED key design fork HALTS the drive before any spend (no worktree, no verdict signed)" — a valid increment now reaches lease admission before the sweep, so the drive injects the explicit offline buildGuardFactory; same claims.
 test("U4 — an UNRESOLVED key design fork HALTS the drive before any spend (no worktree, no verdict signed)", async () => {
   const stories = await fixtureStories();
   const store: Store = new InMemoryStore();
@@ -310,6 +331,7 @@ test("U4 — an UNRESOLVED key design fork HALTS the drive before any spend (no 
       store,
       increment: "inc-live",
       innerLoopReads: { corpus, ledger: store },
+      buildGuardFactory: offlineGuardFactory(),
       decisionForks: [
         routineFork({
           id: "runseed-seam",
@@ -329,6 +351,7 @@ test("U4 — an UNRESOLVED key design fork HALTS the drive before any spend (no 
   }
 });
 
+// test-updated (refactor): "U4 — a ROUTINE choice + a RESOLVED key fork sweep CLEAR; the drive proceeds to a signed green" — injects the explicit offline buildGuardFactory; same claims.
 test("U4 — a ROUTINE choice + a RESOLVED key fork sweep CLEAR; the drive proceeds to a signed green", async () => {
   const stories = await fixtureStories();
   const repo = await fixtureRepo();
@@ -345,6 +368,7 @@ test("U4 — a ROUTINE choice + a RESOLVED key fork sweep CLEAR; the drive proce
       authorOverride: scriptedR2Author,
       increment: "inc-live",
       innerLoopReads: { corpus, ledger: store },
+      buildGuardFactory: offlineGuardFactory(),
       decisionForks: [
         routineFork({ id: "helper-name", question: "What to name the extracted helper?" }), // routine — leaf decides
         routineFork({
@@ -452,6 +476,7 @@ test("a gate drive reads --time-budget and refuses a figure that cannot bound a 
   }
 });
 
+// test-updated (refactor): "a gate drive with a VALID --time-budget is not refused by the budget check" — its valid increment reaches lease admission, so it injects the explicit offline buildGuardFactory; same claims.
 test("a gate drive with a VALID --time-budget is not refused by the budget check", async () => {
   // The other side: without this, a check that refused every value would satisfy the test above.
   // This drive goes on to fail for its own unrelated reasons; what matters is that the failure is
@@ -469,6 +494,7 @@ test("a gate drive with a VALID --time-budget is not refused by the budget check
       increment: "inc-live",
       innerLoopReads: { corpus, ledger: store },
       realNodeBuilder: refusingBuilder(),
+      buildGuardFactory: offlineGuardFactory(),
       timeBudget: "45",
       decisionForks: [
         routineFork({

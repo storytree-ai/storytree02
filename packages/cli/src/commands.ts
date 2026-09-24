@@ -3254,6 +3254,7 @@ export type GateDriverSeams = Partial<
     | "promote"
     | "escalationsDir"
     | "realNodeBuilder"
+    | "buildGuardFactory"
   >
 >;
 
