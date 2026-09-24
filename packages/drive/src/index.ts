@@ -42,6 +42,7 @@ export * from "./build-progress.js";
 export * from "./spawn-registry.js";
 export * from "./spawn-stop.js";
 export * from "./node-build.js";
+export type { BuildGuard, BuildGuardResult } from "./build-guard.js";
 // ADR-0378: the stale negative-existence-claim REAL-mode precondition — a declared sourceFile that
 // already exists on disk while the spec's own prose still (anchored) says it does not.
 export * from "./stale-existence-claim.js";

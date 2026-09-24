@@ -1,3 +1,4 @@
+import { offlineBuildGuardFactory } from "./real-chain-fixture.js";
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import * as fsp from "node:fs/promises";
@@ -203,6 +204,7 @@ function realOpts(args: {
     repoRoot: fx.repoRoot,
     storiesDir: fx.storiesDir,
     corpusStore: fx.corpus,
+    buildGuardFactory: offlineBuildGuardFactory,
     innerLoopReads: { corpus: args.corpus ?? fx.corpus, ledger: args.ledger },
     increment: args.increment,
     reviseTest: args.reviseTest,
