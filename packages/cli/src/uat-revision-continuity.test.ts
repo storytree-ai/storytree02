@@ -768,6 +768,10 @@ describe("a DECLARED replacement is charged as a change, whatever id it wears", 
     assert.equal(merged.ok, false);
     assert.deepEqual(merged.changes[0]?.replaces, [CRITERION, CRITERION_C]);
     assert.equal(merged.changes[0]?.oldRevisionId, `${OLD} + ${OLD_C}`);
+    assert.equal(
+      merged.lines[2],
+      `  agent › ${CRITERION_B} (replaces ${CRITERION}, ${CRITERION_C}): ${OLD} + ${OLD_C} → ${CURRENT_B} — UNWITNESSED`,
+    );
 
     const split = judgeUatRevisionContinuity(
       inputs({

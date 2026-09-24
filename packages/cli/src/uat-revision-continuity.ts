@@ -169,8 +169,8 @@ export async function readUatRevisionVerdictEvents(
 interface CriterionOwner {
   readonly storyId: string;
   readonly revisionId: string;
-  /** The base criterion ids this one declares it descends from, when it carries a lineage tag. */
-  readonly lineage: readonly string[];
+  /** The base criterion ids this one declares it descends from — absent without a lineage tag. */
+  readonly lineage: readonly string[] | undefined;
 }
 
 interface IndexedHierarchy {
@@ -253,7 +253,7 @@ function indexStoryCriteria(
     criteria.set(criterion.criterionId, {
       storyId: story.id,
       revisionId: criterion.revisionId,
-      lineage: criterion.lineage?.criterionIds ?? [],
+      lineage: criterion.lineage?.criterionIds,
     });
   }
 }
@@ -274,6 +274,7 @@ function candidateChanges(
     if (before === undefined) {
       // A new id is additive expansion UNLESS it declares it supersedes a base criterion this branch
       // removed — then it is that criterion's replacement, charged from the revision it replaces.
+      if (after.lineage === undefined) continue;
       const replaced = after.lineage.flatMap((id) => {
         const source = base.get(id);
         return source !== undefined && !candidate.has(id) ? [{ id, revisionId: source.revisionId }] : [];
