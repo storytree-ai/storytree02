@@ -58,7 +58,7 @@ import type { GPoint, LayoutCell } from './parcel-cells.js';
  * is now "every entry is a signal OR is declared dressing", which is a check a reader can still
  * fail, where an unclassified role would have quietly widened what a prop is allowed to mean.
  */
-export type KitRole = 'tree' | 'deadTree' | 'bloom' | 'bud' | 'wilt' | 'bush' | 'tuft' | 'flowerPatch';
+export type KitRole = 'tree' | 'deadTree' | 'bloom' | 'bud' | 'wilt' | 'coverageFlora' | 'bush' | 'tuft' | 'flowerPatch';
 
 export const KIT_ROLES: readonly KitRole[] = [
   'tree',
@@ -70,6 +70,9 @@ export const KIT_ROLES: readonly KitRole[] = [
   'tuft',
   'flowerPatch',
 ];
+
+/** Every geometry-bearing role, including the separate core coverage scene class. */
+export const ALL_KIT_ROLES: readonly KitRole[] = [...KIT_ROLES, 'coverageFlora'];
 
 /** What a role IS: a claim about the work, or scenery that asserts nothing. */
 export type KitRoleClass = 'scene' | 'dressing';
@@ -90,6 +93,7 @@ export const KIT_ROLE_CLASS = {
   bloom: 'scene',
   bud: 'scene',
   wilt: 'scene',
+  coverageFlora: 'scene',
   bush: 'dressing',
   tuft: 'dressing',
   flowerPatch: 'dressing',
@@ -100,8 +104,20 @@ export function isDressingRole(role: KitRole): boolean {
   return KIT_ROLE_CLASS[role] === 'dressing';
 }
 
+/** Scene flora supplied by the core's coverage descriptors, rather than by a capability parcel. */
+export function isCoverageRole(role: string): role is KitRole {
+  return role === 'coverageFlora';
+}
+
+/** The two role forms that stand for a capability itself. */
+export function isCapabilityTreeRole(role: string): role is KitRole {
+  return role === 'tree' || role === 'deadTree';
+}
+
 /** The roles that REPORT something, in declaration order. */
-export const SCENE_ROLES: readonly KitRole[] = KIT_ROLES.filter((r) => !isDressingRole(r));
+export const SCENE_ROLES: readonly KitRole[] = KIT_ROLES.filter(
+  (r) => !isDressingRole(r) && !isCoverageRole(r),
+);
 
 /** The roles that assert nothing — the ground cover. */
 export const DRESSING_ROLES: readonly KitRole[] = KIT_ROLES.filter(isDressingRole);
@@ -148,6 +164,7 @@ export const KIT_ROLE_SIGNAL = {
   bloom: 'SCENE — a UAT criterion the owner has signed (ADR-0226 D4, one flower per criterion)',
   bud: 'SCENE — a UAT criterion NOBODY HAS SIGNED YET: the same flower, not yet opened (ADR-0600 D1)',
   wilt: 'SCENE — a UAT criterion witnessed FAILING: the same flower, nodding over (ADR-0600 D2)',
+  coverageFlora: 'SCENE — one native flora mark supplied by the core coverage stream',
   bush: 'DRESSING — undergrowth on a healthy island, asserting nothing (build_land.py:1087, 70 per recipe island)',
   tuft: 'DRESSING — a clump of grass on a healthy island, asserting nothing (build_land.py:1088, 120 per recipe island)',
   flowerPatch:
@@ -274,6 +291,7 @@ export const KIT_ROLE_ASSEMBLIES = {
   // the vocabulary has always refused (see {@link clearanceFactor}'s closing note).
   bud: ['flower'],
   wilt: ['flower'],
+  coverageFlora: ['plant-a', 'plant-b'],
   // ⚠ TWO SHAPES FOR THE BUSH FOR THE REASON THE PINE HAS TWO, and it binds HARDER here: the
   // recipe stands 70 undergrowth per island against 13 stands, so one silhouette repeated is a
   // defect five times over. The tuft has the recipe's own three clumps. The flower has one shape,
@@ -337,6 +355,7 @@ export const KIT_ROLE_SIZE = {
   // one witnessed passing, and shrinking it would say it were. What tells them apart is
   // {@link KIT_ROLE_TILT}.
   wilt: { axis: 'width', units: 4 },
+  coverageFlora: { axis: 'width', units: 8 },
   // ⚠⚠ THE BUSH AND THE TUFT ARE THE RECIPE'S OWN DELIVERED WIDTHS — the ROLE size, which
   // `cover-dressing.ts`'s size rung then multiplies. Each is the WIDEST assembly serving the role,
   // at its native kit width, times the MEAN of the scale `build_land.py` sprinkles it at, so rung 1
@@ -434,6 +453,7 @@ export const KIT_ROLE_TILT = {
   bloom: 0,
   bud: 0,
   wilt: Math.PI / 3,
+  coverageFlora: 0,
   bush: 0,
   tuft: 0,
   flowerPatch: 0,
@@ -518,6 +538,33 @@ export function stateForm(status: string): StateForm | null {
   }
   if (status === 'unhealthy') return { role: 'deadTree', tint: null };
   return null;
+}
+
+const COVERAGE_FOLIAGE = {
+  meadow: {
+    healthy: '#89b56b', mapped: '#9fa88f', proposed: '#9fa88f', building: '#eccb6d', unhealthy: '#a08355', unknown: '#b0afa2',
+  },
+  woodland: {
+    healthy: '#89b56b', mapped: '#8fa091', proposed: '#bfab5c', building: '#c7ac4e', unhealthy: '#7c5b40', unknown: '#b1b0a7',
+  },
+  heath: {
+    healthy: '#89b56b', mapped: '#b3b7a8', proposed: '#d5cc9c', building: '#f2bb4e', unhealthy: '#a08c62', unknown: '#b6b3a6',
+  },
+} as const;
+
+/** Resolve the emitted foliage token; unrecognised core data is refused rather than guessed. */
+export function coverageFoliageTint(theme: string, status: string): string {
+  const byStatus = COVERAGE_FOLIAGE[theme as keyof typeof COVERAGE_FOLIAGE];
+  const tint = byStatus?.[status as keyof typeof byStatus];
+  if (!tint) throw new Error(`kit-vocabulary: coverage flora has no foliage route for ${theme}/${status}`);
+  return tint;
+}
+
+/** The two shipped leafy forms alternate by core theme, with no asset-dependent lookup. */
+export function coverageFloraAssembly(theme: string): KitAssembly {
+  if (theme === 'meadow' || theme === 'heath') return 'plant-a';
+  if (theme === 'woodland') return 'plant-b';
+  throw new Error(`kit-vocabulary: coverage flora has no assembly for theme ${theme}`);
 }
 
 /** Every state the vocabulary draws something for, with the form it draws — the table a report
@@ -727,6 +774,7 @@ export const KIT_FOOTPRINTS_2026_08_29 = {
   // costs is computed in {@link KIT_ROLE_TILT}.
   bud: 2.6,
   wilt: 4,
+  coverageFlora: 8,
   // ⚠ A WIDTH-SIZED ROLE'S FOOTPRINT IS ITS DECLARED WIDTH EXACTLY, by construction — every
   // assembly serving it is scaled TO that width, so the widest is that width. These three restate
   // `KIT_ROLE_SIZE` for the same reason the two pines' heights do, and the test holds them to it.
@@ -770,6 +818,7 @@ export const KIT_HEIGHTS_2026_08_29 = {
   //   wilt  4   x 0.599 / 0.980 = 2.445, the bloom's own — they are the same size upright
   bud: 1.589,
   wilt: 2.445,
+  coverageFlora: 4.535,
   // ⚠ THE THREE GROUND-COVER HEIGHTS FALL OUT OF THEIR PROPORTIONS, exactly as the bloom's does —
   // `declared width x (assembly height / assembly width)`, the TALLEST assembly winning, off the
   // 2026-09-03 re-export's own world bounds:

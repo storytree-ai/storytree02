@@ -20,6 +20,7 @@ import test from 'node:test';
 import { COVER_SIZE_RUNGS } from './cover-dressing.js';
 import { decodeKitAsset } from './kit-asset.js';
 import {
+  ALL_KIT_ROLES,
   FOOTPRINT_TOLERANCE,
   KIT_ASSEMBLIES,
   KIT_FOOTPRINTS_2026_08_29,
@@ -38,6 +39,8 @@ import {
   candidatePoints,
   capabilityFactsFrom,
   clearanceFactor,
+  coverageFloraAssembly,
+  coverageFoliageTint,
   BUD_MAX_SHARE_OF_BLOOM,
   BUD_MIN_MULTIPLE_OF_COVER_FLOWER,
   COVER_SCALE,
@@ -46,6 +49,8 @@ import {
   FLOWER_PATCH_MAX_SHARE_OF_BLOOM,
   KIT_ROLE_TILT,
   SCENE_ROLES,
+  isCapabilityTreeRole,
+  isCoverageRole,
   isCriterionRole,
   clearsObjectFloor,
   isDressingRole,
@@ -1409,4 +1414,59 @@ test('⚠ THE CENSUS TELLS THE THREE CRITERION STATES APART — an island report
   assert.equal(census['bloom'], 1);
   assert.equal(census['bud'], 4);
   assert.equal(census['wilt'], 2);
+});
+
+
+test('coverage is measured with every geometry role but classified separately from both capability forms', () => {
+  assert.deepEqual([...ALL_KIT_ROLES], [
+    'tree', 'deadTree', 'bloom', 'bud', 'wilt', 'bush', 'tuft', 'flowerPatch', 'coverageFlora',
+  ]);
+  assert.deepEqual([...SCENE_ROLES], ['tree', 'deadTree', 'bloom', 'bud', 'wilt']);
+  assert.deepEqual([...DRESSING_ROLES], ['bush', 'tuft', 'flowerPatch']);
+  assert.equal(KIT_ROLE_CLASS.coverageFlora, 'scene');
+  assert.equal(isDressingRole('coverageFlora'), false);
+  assert.deepEqual(ALL_KIT_ROLES.filter(isCapabilityTreeRole), ['tree', 'deadTree']);
+  assert.deepEqual(ALL_KIT_ROLES.filter(isCoverageRole), ['coverageFlora']);
+  for (const role of ['', 'unrecognised-role']) {
+    assert.equal(isCapabilityTreeRole(role), false, role);
+    assert.equal(isCoverageRole(role), false, role);
+  }
+  assert.equal(isCriterionRole('coverageFlora'), false);
+});
+
+test('each coverage theme selects its declared plant and refuses an unknown theme', () => {
+  assert.equal(coverageFloraAssembly('meadow'), 'plant-a');
+  assert.equal(coverageFloraAssembly('heath'), 'plant-a');
+  assert.equal(coverageFloraAssembly('woodland'), 'plant-b');
+  for (const theme of ['', 'bog', 'Meadow']) {
+    assert.throws(() => coverageFloraAssembly(theme), {
+      message: `kit-vocabulary: coverage flora has no assembly for theme ${theme}`,
+    });
+  }
+});
+
+test('unknown and unhealthy coverage keep their theme foliage colours', () => {
+  for (const [theme, unknown, unhealthy] of [
+    ['meadow', '#b0afa2', '#a08355'],
+    ['woodland', '#b1b0a7', '#7c5b40'],
+    ['heath', '#b6b3a6', '#a08c62'],
+  ] as const) {
+    assert.equal(coverageFoliageTint(theme, 'unknown'), unknown);
+    assert.equal(coverageFoliageTint(theme, 'unhealthy'), unhealthy);
+    assert.notEqual(unknown, unhealthy, 'uncertainty must remain distinct from a known failure');
+  }
+});
+
+test('unrecognised coverage themes and statuses report the missing route', () => {
+  for (const [theme, status] of [
+    ['bog', 'healthy'],
+    ['', 'unknown'],
+    ['meadow', 'not-a-status'],
+    ['woodland', ''],
+    ['heath', 'Healthy'],
+  ] as const) {
+    assert.throws(() => coverageFoliageTint(theme, status), {
+      message: `kit-vocabulary: coverage flora has no foliage route for ${theme}/${status}`,
+    });
+  }
 });

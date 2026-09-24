@@ -44,12 +44,29 @@ import {
 import { criteriaByIsland, dressMapFromKit, dressMapWithCover, signedCriteriaByIsland } from './map-dressing.js';
 import * as mapDressing from './map-dressing.js';
 import { KIT_FOOTPRINTS_2026_08_29, isCriterionRole, isDressingRole, type KitPlacement } from './kit-vocabulary.js';
+import * as kitVocabulary from './kit-vocabulary.js';
+import { groundDependencyKey, sameGroundDependencies } from './ground-dependency.js';
 import { LAND_RELIEF_AMPLITUDE } from './land-relief.js';
+import { landHeight } from './land-relief.js';
 import { WEAR_FALLOFF, wearOf } from './land-wear.js';
 import { shoreField } from './shore-fall.js';
 import { wearField } from './trail-wear.js';
 import type { GPoint } from './parcel-cells.js';
-import { worldTo3D, type Descriptor3D, type InstanceDescriptor } from './world-to-3d.js';
+import { worldTo3D, type CoverageFloraDescriptor, type Descriptor3D, type InstanceDescriptor } from './world-to-3d.js';
+
+const isCapabilityTreeRole = (role: string): boolean => {
+  const selector = (kitVocabulary as typeof kitVocabulary & {
+    isCapabilityTreeRole?: (candidate: string) => boolean;
+  }).isCapabilityTreeRole;
+  return selector?.(role) ?? false;
+};
+
+const isCoverageRole = (role: string): boolean => {
+  const selector = (kitVocabulary as typeof kitVocabulary & {
+    isCoverageRole?: (candidate: string) => boolean;
+  }).isCoverageRole;
+  return selector?.(role) ?? false;
+};
 
 /** The fixtures here draw on the TUNED tile (ADR-0528), like the harness island: every number this
  *  file pins was derived on it, and the 3D mapper sizes the islands to the ratio either way. */
@@ -57,6 +74,22 @@ const TUNED_LATTICE = { hexR: PRE_ADR0528_TILE.hexR } as const;
 const TUNED_TILE = { hexR: PRE_ADR0528_TILE.hexR } as const;
 
 const FOOT = KIT_FOOTPRINTS_2026_08_29;
+
+/** `InstanceDescriptor` still admits every `InstanceKind`, so `kind` alone cannot narrow the
+ * union here. The mapper's coverage wrapper has this complete typed payload. */
+function isCoverageFloraDescriptor(descriptor: Descriptor3D): descriptor is CoverageFloraDescriptor {
+  if (descriptor.kind !== 'coverage-flora'
+    || descriptor.group !== 'coverage-flora'
+    || !('capability' in descriptor)
+    || !('island' in descriptor)
+    || !('theme' in descriptor)
+    || !('floraScale' in descriptor)) return false;
+  return typeof descriptor.capability === 'string'
+    && typeof descriptor.island === 'string'
+    && typeof descriptor.material === 'string'
+    && typeof descriptor.theme === 'string'
+    && typeof descriptor.floraScale === 'number';
+}
 
 // ---------------------------------------------------------------------------
 // FAIL FAST BEFORE THE EXPENSIVE CALL (`mutation-rung-scores-a-hang-as-unproven` §3, 2026-09-05).
@@ -454,11 +487,11 @@ test('the map still grows ONE object per capability, on the capability’s own p
   const map = twoStoryMap();
   assertSignatures(map, { [STORY_A]: 4, [STORY_B]: 2 });
   const placements = dress(map);
-  // ⚠ `isCriterionRole`, NOT `role !== 'bloom'`. This line read the latter until 2026-09-23, and it
-  // was correct only while a criterion had ONE form: with buds and wilts on the map the old filter
-  // counts a story's unsigned criteria as capabilities, and the test goes green on a map that
-  // reports the wrong number of capabilities per island.
-  const caps = placements.filter((p) => !isCriterionRole(p.role)).map((p) => p.capId);
+  // test-updated (new behaviour): "the map still grows ONE object per capability, on the capability’s own parcel" excludes coverage flora because it is scene content, not a capability tree.
+  // ⚠ `isCapabilityTreeRole`, NOT `!isCriterionRole`. This census once used the latter after its
+  // criterion-form repair; coverage adds a third scene class, so only the dedicated selector may
+  // count capability trees.
+  const caps = placements.filter((p) => isCapabilityTreeRole(p.role)).map((p) => p.capId);
   assert.deepEqual([...caps].sort(), ['atlas-parse', 'atlas-store', 'beacon-emit']);
 });
 
@@ -562,6 +595,97 @@ test('the dressing is deterministic — the same map dresses identically twice',
   groundSanity();
   assertSignatures(twoStoryMap(), { [STORY_A]: 4, [STORY_B]: 2 });
   assert.deepEqual(dress(twoStoryMap()), dress(twoStoryMap()));
+});
+
+test('cfn-every-coverage-descriptor-becomes-one-grounded-native-placement: the real multi-island descriptor stream keeps each coverage plant attributable and grounded', () => {
+  const descriptors = twoStoryMap();
+  const coverage = descriptors.filter(isCoverageFloraDescriptor);
+  assert.ok(coverage.length > 1, 'the real mapper fixture supplies coverage flora on more than one island');
+  assert.ok(new Set(coverage.map((descriptor) => descriptor.island)).size > 1, 'coverage is genuinely multi-island');
+
+  const placements = dress(descriptors).filter(
+    (placement) => placement.role === 'coverageFlora',
+  );
+  assert.equal(placements.length, coverage.length, 'every descriptor becomes exactly one native placement');
+  assert.deepEqual(
+    placements.map((placement) => ({
+      capId: placement.capId,
+      at: placement.at,
+      y: placement.y,
+      scale: placement.scale,
+    })),
+    coverage.map((descriptor) => ({
+      capId: descriptor.capability,
+      at: { x: descriptor.transform.x, z: descriptor.transform.z },
+      y: landHeight(descriptor.transform.x, descriptor.transform.z, LAND_RELIEF_AMPLITUDE),
+      scale: descriptor.floraScale / 0.4,
+    })),
+    'the one placement keeps its capability, grounded anchor, and serialized-source scale in descriptor order',
+  );
+});
+
+test('cfn-coverage-is-an-explicit-scene-class-not-a-capability-tree-or-cover: coverage has its own scene selector', () => {
+  const vocabulary = kitVocabulary as typeof kitVocabulary & {
+    isCoverageRole?: (role: string) => boolean;
+    isCapabilityTreeRole?: (role: string) => boolean;
+  };
+  assert.equal(typeof vocabulary.isCoverageRole, 'function', 'the vocabulary declares coverage as an explicit scene class');
+  assert.equal(typeof vocabulary.isCapabilityTreeRole, 'function', 'the capability census has a selector distinct from all scene roles');
+  if (typeof vocabulary.isCoverageRole !== 'function' || typeof vocabulary.isCapabilityTreeRole !== 'function') return;
+  assert.equal(vocabulary.isCoverageRole('coverageFlora'), true);
+  assert.equal(vocabulary.isCapabilityTreeRole('coverageFlora'), false, 'coverage is never counted as a capability tree');
+  assert.equal(vocabulary.isDressingRole('coverageFlora' as never), false, 'coverage is scene content, not decorative cover');
+});
+
+test('cfn-coverage-foliage-carries-theme-and-status-without-unbatching: all theme × folded-status routes resolve to their emitted foliage token', () => {
+  const tokens = {
+    meadow: ['#89b56b', '#9fa88f', '#9fa88f', '#eccb6d', '#a08355', '#b0afa2'],
+    woodland: ['#89b56b', '#8fa091', '#bfab5c', '#c7ac4e', '#7c5b40', '#b1b0a7'],
+    heath: ['#89b56b', '#b3b7a8', '#d5cc9c', '#f2bb4e', '#a08c62', '#b6b3a6'],
+  } as const;
+  const statuses = ['healthy', 'mapped', 'proposed', 'building', 'unhealthy', 'unknown'] as const;
+  const descriptors: Descriptor3D[] = Object.entries(tokens).flatMap(([theme], themeIndex) =>
+    statuses.map((material, statusIndex) => ({
+      kind: 'coverage-flora' as const,
+      group: 'coverage-flora' as const,
+      capability: `${theme}-${material}`,
+      island: `island-${theme}`,
+      material,
+      theme,
+      floraScale: 0.4,
+      transform: { x: themeIndex * 100 + statusIndex * 10, y: 0, z: statusIndex * 10 },
+    })),
+  );
+  const placements = dress(descriptors).filter(
+    (placement) => placement.role === 'coverageFlora',
+  );
+  assert.equal(placements.length, 18, 'all status/theme pairs are native placements');
+  assert.deepEqual(placements.map((placement) => placement.tint), Object.values(tokens).flat(), 'every pair uses its emitted foliage token');
+  assert.equal(placements[0]?.tint, placements[6]?.tint, 'healthy themes share the intentional foliage material bucket');
+  assert.notEqual(placements[0]?.tint, placements[1]?.tint, 'a distinct emitted token remains a distinct bucket');
+});
+
+test('cfn-coverage-semantic-changes-rebuild-the-shared-ground-input: every consumed coverage descriptor field invalidates the shared ground cache', () => {
+  const base: CoverageFloraDescriptor = {
+    kind: 'coverage-flora', group: 'coverage-flora', capability: 'cap-a', island: 'island-a', material: 'healthy', theme: 'meadow', floraScale: 0.4,
+    transform: { x: 10, y: 0, z: 20 },
+  };
+  const changes: readonly Partial<Extract<Descriptor3D, { kind: 'coverage-flora' }>>[] = [
+    { transform: { x: 11, y: 0, z: 20 } },
+    { capability: 'cap-b' },
+    { island: 'island-b' },
+    { material: 'unhealthy' },
+    { theme: 'woodland' },
+    { floraScale: 0.8 },
+  ];
+  for (const change of changes) {
+    const changedStream: CoverageFloraDescriptor[] = [{ ...base, ...change }];
+    assert.equal(sameGroundDependencies([base], changedStream), false, `coverage change ${JSON.stringify(change)} invalidates cache equality`);
+    assert.notEqual(groundDependencyKey([base]), groundDependencyKey(changedStream), `coverage change ${JSON.stringify(change)} changes the cache key`);
+  }
+  const groupChanged = { ...base, group: 'coverage-flora-alt' } satisfies InstanceDescriptor;
+  assert.equal(sameGroundDependencies([base], [groupChanged]), false, 'coverage group invalidates cache equality');
+  assert.notEqual(groundDependencyKey([base]), groundDependencyKey([groupChanged]), 'coverage group changes the cache key');
 });
 
 test('fld-every-dressed-placement-keeps-its-island: the companion result preserves each exact placement’s producing island', () => {
@@ -754,9 +878,13 @@ test('⚠⚠ ONE TREE PER CAPABILITY AND NOTHING ELSE TREE-SHAPED (ADR-0518 D1) 
       ['atlas-parse', 'atlas-sign', 'atlas-store', 'beacon-ack', 'beacon-emit'],
     );
     for (const t of trees) assert.equal(t.scale, 1, `a tree at scale ${t.scale} — nothing tree-shaped stands below the role`);
-    // Every other placement is a bloom or a dressing role — there is no third thing.
+    // test-updated (new behaviour): "⚠⚠ ONE TREE PER CAPABILITY AND NOTHING ELSE TREE-SHAPED (ADR-0518 D1) — on the whole map, both layers" admits native coverage flora as a third scene class, not cover.
+    // Every other placement is a criterion, dressing role, or explicit coverage scene role.
     for (const p of placements) {
-      assert.ok(isTree(p) || p.role === 'bloom' || isDressingRole(p.role), `${p.role} is neither signal nor declared dressing`);
+      assert.ok(
+        isTree(p) || isCriterionRole(p.role) || isDressingRole(p.role) || isCoverageRole(p.role),
+        `${p.role} is neither a capability tree, criterion, declared dressing, nor coverage`,
+      );
     }
   }
   // NON-VACUITY: the covered map DID add something, and none of it is a tree.
