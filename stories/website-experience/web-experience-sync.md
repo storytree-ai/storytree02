@@ -3,7 +3,7 @@ id: "web-experience-sync"
 tier: capability
 story: website-experience
 title: "The R3F mapper rides the sync — one artifact mechanism, two parent packages"
-outcome: "The forest-world → website sync + drift-gate mechanism generalises to carry a SECOND parent package: sync:web-engine copies @storytree/forest-world-r3f's browser-safe sources (.tsx included) into web/src/lib/forest-world-r3f/ with @generated banners and with its @storytree/forest-world imports rewritten to the synced sibling core dir, and check:web-engine fails on drift, staleness, or leftovers in EITHER synced dir — so the 3D look flows parent → site exactly like the 2D look, never hand-ported."
+outcome: "The forest-world → website sync + drift-gate mechanism generalises to carry a SECOND parent package: sync:web-engine copies @storytree/forest-world-r3f's browser-safe sources (.tsx included) into web/src/lib/forest-world-r3f/ with @generated banners and with its @storytree/forest-world imports rewritten to the synced sibling core dir, and check:web-engine fails on drift, staleness, or leftovers in EITHER synced dir (refusing before it compares anything when web/ is not checked out at the commit this branch records) — so the 3D look flows parent → site exactly like the 2D look, never hand-ported."
 status: proposed
 proof_mode: integration-test
 depends_on: [forest-scene-model]
@@ -49,7 +49,8 @@ proof:
 `@storytree/forest-world-r3f`'s browser-safe sources (`.tsx` included) into
 `web/src/lib/forest-world-r3f/` with `@generated` banners and with its `@storytree/forest-world`
 imports rewritten to the synced sibling core dir; `check:web-engine` fails on drift, staleness, or
-leftovers in EITHER synced dir.
+leftovers in EITHER synced dir (refusing before it compares anything when `web/` is not checked out
+at the commit this branch records).
 
 **Depends on —** [`forest-scene-model`](forest-scene-model.md) — you cannot sync a package that does
 not exist, and the scene-model lane is the one that brings
@@ -122,7 +123,8 @@ first syncs the artifact site-side (the inflection chain). Neither is the leaf's
 
 **Goal —** Prove the generalised pure core over in-memory fixtures: a two-package sync plan lands
 each file in its own dest dir, `.tsx` is included, the workspace import rewrites to the sibling
-dir, and drift in either dir reds the check.
+dir, and drift in either dir reds the check — and prove over real throwaway git repositories that
+the check only ever compares a `web/` checked out at the commit this branch records.
 
 1. Feed `computeSyncPlan` (parameterised) two fixture packages — a `forest-world`-shaped one
    (unchanged expectations: same dest paths, same banner, same content as today's single-package
@@ -137,12 +139,23 @@ dir, and drift in either dir reds the check.
    path named; a faithful two-dir state stays green.
 4. Assert a fixture source carrying an unresolvable `@storytree/orchestrator` import makes the plan
    FAIL loudly (the no-smuggling wall), not sync verbatim.
+5. Run `checkWebEngine` end to end over a real parent repository whose index records `web` as a
+   gitlink, containing a nested `web/` repository that holds a synced copy → a checkout ON the
+   recorded commit with a faithful copy compares OK; a checkout moved OFF the recorded commit
+   refuses before any file is compared — even when the copy on disk has drifted too — naming both
+   commits and prescribing `git submodule update --init web`, never a sync; a bump STAGED in the
+   index counts as recorded although HEAD still names the old commit; genuine drift ON the recorded
+   commit keeps the source-drift diagnosis and its `pnpm land:web-engine` remedy; and a `web/` with
+   no git of its own is unreadable (the check refuses), never read as the parent's HEAD.
 
-## Contracts (4)
+## Contracts (5)
 
 Each one isolated automated test in `packages/cli/src/web-engine-sync.test.ts` (`node:test`,
-offline, in-memory fixtures — the module's existing discipline). Per ADR-0122 each contract id
-leads a distinctly-named test so `storytree coverage web-experience-sync` reports 4/4.
+offline, in-memory fixtures — the module's existing discipline). Contract 5 has a second half: its
+pure judgement is tested there, and its shell end to end in `packages/cli/src/web-engine.test.ts`,
+still offline but over real throwaway git repositories, because only real git state can show which
+commits the shell reads. Per ADR-0122 each contract id leads a distinctly-named test so
+`storytree coverage web-experience-sync` reports 5/5.
 
 1. **`wes-second-package-plans-beside-the-core`** — the plan is package-parameterised
    - **asserts —** a two-package plan lands r3f files under `src/lib/forest-world-r3f/` with
@@ -165,6 +178,18 @@ leads a distinctly-named test so `storytree coverage web-experience-sync` report
      with the path named; a faithful two-dir state is green.
    - **covers —** `packages/cli/src/web-engine-sync.ts:193` (`detectEngineDrift`, composed
      per-package by the shell: `packages/cli/src/web-engine.ts:92`)
+5. **`wes-off-pin-checkout-refuses-first`** — only the recorded commit's copy is ever compared
+   - **asserts —** when `web/` is checked out at a commit other than the `web` gitlink this branch
+     records, `check:web-engine` refuses (exit 1, locally and in CI) before comparing a single file,
+     naming both commits and prescribing `git submodule update --init web` — never the
+     `sync:web-engine` / `land:web-engine` remedy that is right for genuine source drift; an
+     unreadable pin or checkout commit refuses too; the pin is read from the parent's INDEX, so a
+     bump staged by `land:web-engine` counts as recorded; a `web/` with no `.git` of its own is
+     unreadable, never read as the parent's HEAD; a checkout ON the recorded commit gets the
+     unchanged drift comparison.
+   - **covers —** `packages/cli/src/web-engine-sync.ts` (`checkoutPinSight`, and the `off-pin` /
+     `pin-unreadable` sights in `judgeEngineCheck`) + `packages/cli/src/web-engine.ts`
+     (`readCheckoutPin`, and `checkWebEngine`, which consults it before any package is compared)
 
 ## Guidance — the slice that earns the signed verdict
 

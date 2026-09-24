@@ -3,6 +3,7 @@
 //
 //   pnpm sync:web-engine     copy every synced parent package into web/src/lib/<pkg>/
 //   pnpm check:web-engine    fail (exit 1) if any synced copy drifts from its package — the gate guard
+//                            (and, first, if web/ is not on the commit this branch records for it)
 //
 // Like check-web-grounding, this runs in the PARENT repo (the only side that owns the
 // package sources) against the checked-out `web/` submodule, at submodule-bump granularity.
@@ -24,25 +25,35 @@ import { GATE_SKIP_EXIT_CODE } from "./gate-runner.js";
 import { WEB_MERGE_METHOD, pinAfterMerge, planLanding } from "./web-engine-land.js";
 import {
   ENGINE_PACKAGES,
+  checkoutPinSight,
   computeSyncPlan,
   detectEngineDrift,
   isEngineSource,
   judgeEngineCheck,
 } from "./web-engine-sync.js";
-import type { EngineCheckVerdict, EnginePackage } from "./web-engine-sync.js";
+import type { CheckoutPinReading, EngineCheckVerdict, EnginePackage } from "./web-engine-sync.js";
 
 /** Repo root: packages/cli/src/web-engine.ts → four dirs up (the build-claude-md pattern). */
 const repoRoot = path.resolve(fileURLToPath(import.meta.url), "..", "..", "..", "..");
 const webRoot = path.join(repoRoot, "web");
 
+/** The parent checkout and the `web/` checkout inside it — THIS repository's unless a test hands
+ *  in a fixture pair, which is what lets the check run end to end over real git state. */
+export interface EngineCheckout {
+  readonly repoRoot: string;
+  readonly webRoot: string;
+}
+
+const HERE: EngineCheckout = { repoRoot, webRoot };
+
 /** The package's source dir in the parent repo, OS-native. */
-function srcDirAbs(pkg: EnginePackage): string {
-  return path.join(repoRoot, ...pkg.srcDir.split("/"));
+function srcDirAbs(pkg: EnginePackage, at: EngineCheckout = HERE): string {
+  return path.join(at.repoRoot, ...pkg.srcDir.split("/"));
 }
 
 /** The package's synced dest dir inside the web checkout, OS-native. */
-function destDirAbs(pkg: EnginePackage): string {
-  return path.join(webRoot, ...pkg.destDir.split("/"));
+function destDirAbs(pkg: EnginePackage, at: EngineCheckout = HERE): string {
+  return path.join(at.webRoot, ...pkg.destDir.split("/"));
 }
 
 /** How long `land:web-engine` waits for the website pull request to land, as ticks x seconds. The
@@ -71,8 +82,8 @@ function fail(message: string): never {
 
 /** Read one package's browser-safe sources (file name → content), filtered to engine
  *  sources, holding the package to its fail-loud discovery floor. */
-function readPackageSources(pkg: EnginePackage): Map<string, string> {
-  const dir = srcDirAbs(pkg);
+function readPackageSources(pkg: EnginePackage, at: EngineCheckout = HERE): Map<string, string> {
+  const dir = srcDirAbs(pkg, at);
   if (!existsSync(dir)) {
     fail(`the package source is missing at ${pkg.srcDir} — is the workspace package present?`);
   }
@@ -89,8 +100,8 @@ function readPackageSources(pkg: EnginePackage): Map<string, string> {
 }
 
 /** Files currently in one package's synced dir (to catch stale leftovers). */
-function listSyncedFiles(pkg: EnginePackage): string[] {
-  const dir = destDirAbs(pkg);
+function listSyncedFiles(pkg: EnginePackage, at: EngineCheckout = HERE): string[] {
+  const dir = destDirAbs(pkg, at);
   if (!existsSync(dir)) return [];
   return readdirSync(dir).filter((n) => isEngineSource(n));
 }
@@ -112,19 +123,55 @@ function emit(verdict: EngineCheckVerdict): void {
   if (verdict.status === "skip") process.exit(GATE_SKIP_EXIT_CODE);
 }
 
-function runCheck(): void {
-  const inCi = process.env.CI === "true";
+/**
+ * The two commits {@link checkoutPinSight} compares: the `web` gitlink this branch records, and the
+ * commit `web/` is actually checked out at.
+ *
+ * The pin comes from the INDEX (`git rev-parse :web`), not from HEAD, and the difference matters in
+ * one real state: after `pnpm land:web-engine` the bump is STAGED and not yet committed, so HEAD
+ * still names the old commit while the index — what this branch is about to record, and what
+ * `git submodule update` restores — names the new one. Read from HEAD, the check would refuse that
+ * checkout and prescribe a command that changes nothing.
+ *
+ * `web/` must hold its own `.git` (a directory for a clone, a file for a submodule) before git is
+ * asked about it: without one, `git -C web` walks UP to this repository and answers with its HEAD —
+ * a commit that is never the pin, which would pass for an off-pin checkout.
+ */
+export function readCheckoutPin(at: EngineCheckout): CheckoutPinReading {
+  const webPath = path.relative(at.repoRoot, at.webRoot).split(path.sep).join("/");
+  return {
+    pin: shOk("git", ["rev-parse", `:${webPath}`], at.repoRoot),
+    checkedOut: existsSync(path.join(at.webRoot, ".git")) ? shOk("git", ["rev-parse", "HEAD"], at.webRoot) : null,
+  };
+}
+
+/**
+ * The whole `--check`, over one parent + `web/` checkout pair, returning its verdict rather than
+ * exiting — so it can be run end to end over a fixture repository. {@link runCheck} is this over
+ * THIS repository, plus the exit.
+ *
+ * Order is the point: no checkout → the declared skip/fail; a checkout NOT on the recorded commit →
+ * refuse before any file is read (the comparison would be about the wrong commit); then the per-package
+ * drift comparison. `packages` exists for the fixture; production always carries every one.
+ */
+export function checkWebEngine(
+  at: EngineCheckout,
+  opts: { readonly inCi: boolean; readonly packages?: readonly EnginePackage[] },
+): EngineCheckVerdict {
+  const { inCi } = opts;
 
   // Key on web/src, not web/: an uninitialized submodule leaves an EMPTY web/ stub dir.
-  if (!existsSync(path.join(webRoot, "src"))) {
-    emit(judgeEngineCheck({ kind: "no-web-checkout" }, { inCi }));
-    return;
+  if (!existsSync(path.join(at.webRoot, "src"))) {
+    return judgeEngineCheck({ kind: "no-web-checkout" }, { inCi });
   }
+
+  const offPin = checkoutPinSight(readCheckoutPin(at));
+  if (offPin !== null) return judgeEngineCheck(offPin, { inCi });
 
   let checkedFiles = 0;
   const checkedDirs: string[] = [];
-  for (const pkg of ENGINE_PACKAGES) {
-    const destDir = destDirAbs(pkg);
+  for (const pkg of opts.packages ?? ENGINE_PACKAGES) {
+    const destDir = destDirAbs(pkg, at);
     if (!existsSync(destDir)) {
       // Bootstrap, per package: the website has not yet adopted THIS package. Not a
       // failure — the parent-side machinery lands first; the site opts in (and this
@@ -136,39 +183,41 @@ function runCheck(): void {
       continue;
     }
 
-    const plan = computeSyncPlan(readPackageSources(pkg), pkg);
+    const plan = computeSyncPlan(readPackageSources(pkg, at), pkg);
     const readSynced = (file: string): string | null => {
       const p = path.join(destDir, file);
       return existsSync(p) ? readFileSync(p, "utf8") : null;
     };
-    const problems = detectEngineDrift(plan, readSynced, listSyncedFiles(pkg));
+    const problems = detectEngineDrift(plan, readSynced, listSyncedFiles(pkg, at));
 
     if (problems.length > 0) {
-      console.error(
-        `check:web-engine — BLOCKED: the website's synced copy of ${pkg.srcDir} has drifted ` +
-          `(${problems.length} file(s)):\n`,
-      );
-      for (const p of problems) console.error(`  ✗ ${pkg.destDir}/${p.file}: ${p.reason}`);
-      console.error(
-        "\nThe parent package changed but the public copy wasn't re-synced.\n" +
-          "  RUN:  pnpm land:web-engine     — it does the whole ceremony: branch the website from the\n" +
-          "                                    PIN, sync, commit, push, open the pull request, wait for\n" +
-          "                                    it to merge, and bump the submodule here.\n" +
-          "  Or by hand: `pnpm sync:web-engine`, commit the web submodule, and bump it here — but the\n" +
-          "  branch must be cut from the PIN and merged with `--merge` (see web-engine-land.ts).",
-      );
-      process.exit(1);
+      return {
+        status: "fail",
+        message: [
+          `check:web-engine — BLOCKED: the website's synced copy of ${pkg.srcDir} has drifted ` +
+            `(${problems.length} file(s)):\n`,
+          ...problems.map((p) => `  ✗ ${pkg.destDir}/${p.file}: ${p.reason}`),
+          "\nThe parent package changed but the public copy wasn't re-synced.\n" +
+            "  RUN:  pnpm land:web-engine     — it does the whole ceremony: branch the website from the\n" +
+            "                                    PIN, sync, commit, push, open the pull request, wait for\n" +
+            "                                    it to merge, and bump the submodule here.\n" +
+            "  Or by hand: `pnpm sync:web-engine`, commit the web submodule, and bump it here — but the\n" +
+            "  branch must be cut from the PIN and merged with `--merge` (see web-engine-land.ts).",
+        ].join("\n"),
+      };
     }
 
     checkedFiles += plan.length;
     checkedDirs.push(pkg.destDir);
   }
 
-  emit(
-    checkedDirs.length > 0
-      ? judgeEngineCheck({ kind: "compared", files: checkedFiles, dirs: checkedDirs }, { inCi })
-      : judgeEngineCheck({ kind: "no-adopted-package" }, { inCi }),
-  );
+  return checkedDirs.length > 0
+    ? judgeEngineCheck({ kind: "compared", files: checkedFiles, dirs: checkedDirs }, { inCi })
+    : judgeEngineCheck({ kind: "no-adopted-package" }, { inCi });
+}
+
+function runCheck(): void {
+  emit(checkWebEngine(HERE, { inCi: process.env.CI === "true" }));
 }
 
 function runSync(): void {
