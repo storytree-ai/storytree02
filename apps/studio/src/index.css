@@ -1584,11 +1584,16 @@ a.stat:hover {
   inset: 0;
   pointer-events: none;
 }
+/* THE NOTICE SITS IN THE MIDDLE OF THE MAP, where nothing else is. It used to sit top-centre, which
+   is exactly where the growth control (`.act2-intro`, z-index 6) draws — the two overlapped and
+   both read as garbled text. While loading, the map below it is empty by construction (the first
+   growth waits for the land's first drawn frame), so the centre collides with nothing; the corners
+   and the top and bottom edges all carry chrome. */
 .land-view-notice {
   position: absolute;
-  top: 14px;
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   z-index: 5;
   max-width: min(560px, calc(100% - 32px));
   padding: 8px 14px;
@@ -1607,6 +1612,21 @@ a.stat:hover {
 }
 .world-pan-layer.has-land-mount > .land-mount {
   z-index: 0;
+}
+/* THE 3D PLANTS' CLICK TARGETS ARE HIT-TESTED, NEVER PAINTED. They are invisible anyway
+   (`fill="transparent"`), but a PAINTED transparent rect is still a paint chunk, and ~2,800 of
+   them turned every repaint of the map's SVG into ~250 ms of compositor layerisation — measured on
+   a production build 2026-09-24 as the last fifth of the opening growth playing at 3–4 frames a
+   second (docs/research/3d-opening-polish-2026-09-24/). `visibility: hidden` paints nothing;
+   `pointer-events: all` keeps each rect a hit target regardless of paint, so `elementFromPoint`
+   and a real click resolve exactly as before (measured on the same run).
+   ⚠ SCOPED TO AN UNPARKED MAP ROUTE, AND THAT IS LOAD-BEARING. `pointer-events: all` ignores
+   visibility and overrides an inherited `none`, so under a parked `.tree-route` (hidden with
+   `pointer-events: none`) these rects would stay hit targets and catch clicks meant for the page on
+   top. Outside the unparked route the rule does not apply and the rects paint as before. */
+.tree-route:not([data-parked='true']) .world-pan-layer.has-land-mount .native-prop-targets rect {
+  visibility: hidden;
+  pointer-events: all;
 }
 .world-pan-layer.has-land-mount > .world-scene {
   position: relative;
