@@ -163,6 +163,33 @@ test("author => fail-closed on a `success` no model answered (empty modelUsage, 
   assert.equal(author.runs.length, 1, "the slice is still accounted");
 });
 
+test("author => the empty-modelUsage refusal carries no text suffix when the result has no text", async () => {
+  const author = new ClaudeAgentAuthor({
+    cwd: CWD,
+    isWriteAllowed: () => true,
+    queryFn: scripted([
+      { type: "result", subtype: "success", is_error: false, num_turns: 1, total_cost_usd: 0, modelUsage: {} },
+    ]),
+  });
+
+  assert.deepEqual(await author.author("IMPLEMENT", "implement it"), {
+    ok: false,
+    error: "SDK session reported success but no model answered (empty modelUsage)",
+  });
+});
+
+test("author => a null modelUsage is 'no split reported', not 'no model answered'", async () => {
+  const author = new ClaudeAgentAuthor({
+    cwd: CWD,
+    isWriteAllowed: () => true,
+    queryFn: scripted([
+      { type: "result", subtype: "success", is_error: false, num_turns: 1, total_cost_usd: 0, modelUsage: null },
+    ]),
+  });
+
+  assert.deepEqual(await author.author("IMPLEMENT", "implement it"), { ok: true });
+});
+
 test("author => ok on a `success` whose modelUsage names the model that answered", async () => {
   const author = new ClaudeAgentAuthor({
     cwd: CWD,

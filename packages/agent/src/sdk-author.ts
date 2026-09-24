@@ -1017,7 +1017,7 @@ export class ClaudeAgentAuthor implements PhaseAuthor {
     // Only a PRESENT-and-empty split trips this; a result carrying no `modelUsage` at all (an old or
     // scripted runtime) stays additive, never fail-closed.
     if (noModelAnswered(result.modelUsage)) {
-      const text = typeof result.result === "string" ? `: ${result.result.slice(0, 300)}` : "";
+      const text = typeof result.result === "string" ? `: ${result.result}` : "";
       return { ok: false, error: `SDK session reported success but no model answered (empty modelUsage)${text}` };
     }
     return { ok: true };
