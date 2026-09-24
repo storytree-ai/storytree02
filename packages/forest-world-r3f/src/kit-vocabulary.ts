@@ -355,7 +355,18 @@ export const KIT_ROLE_SIZE = {
   // one witnessed passing, and shrinking it would say it were. What tells them apart is
   // {@link KIT_ROLE_TILT}.
   wilt: { axis: 'width', units: 4 },
-  coverageFlora: { axis: 'width', units: 8 },
+  // ⚠⚠ THE COVERAGE PLANT IS SIZED TO THE FLAT MARK IT REPLACES, BY MEASUREMENT — the emphasis the
+  // owner approved (ADR-0608, option A: the flat marks as he saw them). There is one plant per flat
+  // mark, so density already matches and only the width was free. Measured 2026-09-24 on the real
+  // forest (one frozen live snapshot, same camera, `docs/research/flat-forest-retirement-2026-09-24/
+  // coverage-emphasis/`): the flat marks cover 7.1% of the island ground at the opening view and
+  // 5.7% zoomed (6.4% mean); the 3D plants with their shadows cover 15.4% / 16.4% at 8 units and
+  // 7.25% / 7.44% at 4. Share goes as width squared, so `4 x sqrt(6.4 / 7.35) = 3.73` -> 3.75.
+  // The 8 it replaces was a staging width chosen only to clear the widest decorative bush, and on
+  // the real map it carpeted the islands. At 3.75 a coverage plant sits INSIDE the decorative
+  // bush's delivered range (3.23-6.22), so bulk no longer tells the two apart — see the report on
+  // that landing: they share the leafy-plant object and differ by status tint and placement only.
+  coverageFlora: { axis: 'width', units: 3.75 },
   // ⚠⚠ THE BUSH AND THE TUFT ARE THE RECIPE'S OWN DELIVERED WIDTHS — the ROLE size, which
   // `cover-dressing.ts`'s size rung then multiplies. Each is the WIDEST assembly serving the role,
   // at its native kit width, times the MEAN of the scale `build_land.py` sprinkles it at, so rung 1
@@ -774,7 +785,7 @@ export const KIT_FOOTPRINTS_2026_08_29 = {
   // costs is computed in {@link KIT_ROLE_TILT}.
   bud: 2.6,
   wilt: 4,
-  coverageFlora: 8,
+  coverageFlora: 3.75,
   // ⚠ A WIDTH-SIZED ROLE'S FOOTPRINT IS ITS DECLARED WIDTH EXACTLY, by construction — every
   // assembly serving it is scaled TO that width, so the widest is that width. These three restate
   // `KIT_ROLE_SIZE` for the same reason the two pines' heights do, and the test holds them to it.
@@ -818,7 +829,8 @@ export const KIT_HEIGHTS_2026_08_29 = {
   //   wilt  4   x 0.599 / 0.980 = 2.445, the bloom's own — they are the same size upright
   bud: 1.589,
   wilt: 2.445,
-  coverageFlora: 4.535,
+  // `Leafy_Plant_02`, the taller leafy form, at the coverage width: 3.75 x 4.535 / 8 = 2.126.
+  coverageFlora: 2.126,
   // ⚠ THE THREE GROUND-COVER HEIGHTS FALL OUT OF THEIR PROPORTIONS, exactly as the bloom's does —
   // `declared width x (assembly height / assembly width)`, the TALLEST assembly winning, off the
   // 2026-09-03 re-export's own world bounds:
