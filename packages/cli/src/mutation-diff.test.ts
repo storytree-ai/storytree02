@@ -3484,4 +3484,8 @@ test("mutation-diff: unquoteGitPath undoes git's C quoting, and leaves an unquot
   assert.equal(unquoteGitPath('"abc'), '"abc');
   assert.equal(unquoteGitPath('abc"'), 'abc"');
   assert.equal(unquoteGitPath('""'), "");
+  // Whitespace is a character like any other — plain, or after a backslash git never emits but a
+  // reader must not drop.
+  assert.equal(unquoteGitPath('"my \\"odd\\" file.ts"'), 'my "odd" file.ts');
+  assert.equal(unquoteGitPath('"a\\ b"'), "a b");
 });
