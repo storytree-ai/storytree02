@@ -2854,6 +2854,7 @@ export function TreeView({
           world: {
             territories: world.territories.map((territory) => ({
               storyId: territory.story.id,
+              islandId: territory.story.id,
               x: territory.centroid.x + world.offset.x,
               y: territory.centroid.y + world.offset.y,
               radius: territory.radius,

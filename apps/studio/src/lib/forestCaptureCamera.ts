@@ -24,6 +24,7 @@ export type ForestCaptureResult = ForestCaptureReceipt | ForestCaptureRefusal;
 
 export interface ForestCaptureTerritory {
   storyId: string;
+  islandId: string;
   x: number;
   y: number;
   radius: number;
@@ -81,7 +82,9 @@ export function resolveForestCaptureCamera(input: ForestCaptureCameraInput): For
     );
   }
 
-  const territory = world.territories.find((candidate) => candidate.storyId === target.id);
+  const territory = world.territories.find((candidate) =>
+    target.kind === 'story-node' ? candidate.storyId === target.id : candidate.islandId === target.id,
+  );
   if (!territory) return { ok: false, code: 'target-not-found' };
 
   if (target.kind === 'story-node') {

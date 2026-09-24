@@ -1,0 +1,127 @@
+import { describe, expect, it } from 'vitest';
+import {
+  resolveForestCaptureCamera,
+  type ForestCaptureCameraInput,
+  type ForestCaptureTarget,
+  type ForestCaptureWorld,
+} from './forestCaptureCamera.js';
+import { centerOn, fitWorld, restingWorld, worldToScreen, type CameraFrame } from './worldCamera.js';
+
+const frame: CameraFrame = { width: 300, height: 200 };
+const limits = { min: 0.25, max: 4 };
+const resting = { tx: 11, ty: 22, scale: 0.75 };
+const fit = { tx: 33, ty: 44, scale: 0.5 };
+
+// The real layout carries both identities. They deliberately differ here so a story-node lookup
+// cannot accidentally stand in for island resolution.
+const world = {
+  territories: [
+    { storyId: 'story-alpha', islandId: 'island-cedar', x: 40, y: 60, radius: 20 },
+    { storyId: 'story-bravo', islandId: 'island-pine', x: 210, y: 120, radius: 35 },
+  ],
+} as unknown as ForestCaptureWorld;
+
+function resolve(target: ForestCaptureTarget, overrides: Partial<ForestCaptureCameraInput> = {}) {
+  return resolveForestCaptureCamera({
+    target,
+    frame,
+    world,
+    limits,
+    storyNodeScale: 7,
+    resting,
+    fit,
+    ...overrides,
+  });
+}
+
+describe('fccs-square-is-contained-and-centred: finite positive world squares', () => {
+  it('uses the width-limited scale, centres the square, and contains its projected corners', () => {
+    const portraitFrame = { width: 200, height: 300 };
+    const result = resolve({ kind: 'square', x: 10, y: 40, size: 200 }, { frame: portraitFrame });
+    expect(result).toEqual({
+      ok: true,
+      kind: 'square',
+      frame: portraitFrame,
+      camera: centerOn(110, 140, portraitFrame.width, portraitFrame.height, 1, limits),
+      resolved: { bounds: { x: 10, y: 40, width: 200, height: 200 } },
+    });
+    if (!result.ok) return;
+    const topLeft = worldToScreen(result.camera, 10, 40);
+    const bottomRight = worldToScreen(result.camera, 210, 240);
+    expect(topLeft.x).toBeGreaterThanOrEqual(0);
+    expect(topLeft.y).toBeGreaterThanOrEqual(0);
+    expect(bottomRight.x).toBeLessThanOrEqual(portraitFrame.width);
+    expect(bottomRight.y).toBeLessThanOrEqual(portraitFrame.height);
+  });
+
+  it('uses the height-limited scale and refuses every malformed square field', () => {
+    expect(resolve({ kind: 'square', x: 10, y: 20, size: 200 })).toMatchObject({
+      ok: true,
+      camera: centerOn(110, 120, frame.width, frame.height, 1, limits),
+    });
+    for (const target of [
+      { kind: 'square', x: Number.NaN, y: 1, size: 1 },
+      { kind: 'square', x: 1, y: Number.POSITIVE_INFINITY, size: 1 },
+      { kind: 'square', x: 1, y: 1, size: Number.NEGATIVE_INFINITY },
+      { kind: 'square', x: 1, y: 1, size: 0 },
+      { kind: 'square', x: 1, y: 1, size: -1 },
+    ] as ForestCaptureTarget[]) {
+      expect(resolve(target)).toEqual({ ok: false, code: 'invalid-target' });
+    }
+  });
+});
+
+describe('fccs-story-node-and-island-resolve-separately: real layout geometry', () => {
+  it('centres a story node at the configured scale after applying the camera clamp', () => {
+    expect(resolve({ kind: 'story-node', id: 'story-alpha' })).toEqual({
+      ok: true,
+      kind: 'story-node',
+      frame,
+      camera: centerOn(40, 60, frame.width, frame.height, 7, limits),
+      resolved: { id: 'story-alpha' },
+    });
+  });
+
+  it('resolves an island by its island id and fits its diameter as a contained subject', () => {
+    const diameter = 40;
+    const subjectFit = fitWorld(diameter, diameter, frame.width, frame.height, { fit: 'contain', align: 'center' });
+    expect(resolve({ kind: 'island', id: 'island-cedar' })).toEqual({
+      ok: true,
+      kind: 'island',
+      frame,
+      camera: centerOn(40, 60, frame.width, frame.height, subjectFit.scale, limits),
+      resolved: { id: 'island-cedar', bounds: { x: 20, y: 40, width: diameter, height: diameter } },
+    });
+    expect(resolve({ kind: 'story-node', id: 'missing' })).toEqual({ ok: false, code: 'target-not-found' });
+    expect(resolve({ kind: 'island', id: 'missing' })).toEqual({ ok: false, code: 'target-not-found' });
+    expect(resolve({ kind: 'island', id: 'island-cedar' }, {
+      world: { territories: [{ storyId: 'story-alpha', islandId: 'island-cedar', x: 40, y: 60, radius: 0 }] } as unknown as ForestCaptureWorld,
+    })).toEqual({ ok: false, code: 'invalid-target' });
+  });
+});
+
+describe('fccs-named-views-reuse-canonical-camera-policy: resting and fit', () => {
+  it('returns the supplied canonical resting and contain-fit cameras exactly', () => {
+    expect(resolve({ kind: 'resting' })).toEqual({ ok: true, kind: 'resting', frame, camera: resting });
+    expect(resolve({ kind: 'fit' })).toEqual({ ok: true, kind: 'fit', frame, camera: fit });
+    expect(restingWorld(400, 800, frame.width, frame.height, [40])).not.toEqual(fitWorld(400, 800, frame.width, frame.height, { fit: 'contain' }));
+  });
+});
+
+describe('fccs-refusal-preserves-the-current-camera: invalid input', () => {
+  it('refuses invalid frames before reading the world and keeps no mutable camera state', () => {
+    for (const invalidFrame of [
+      { width: 0, height: 20 }, { width: -1, height: 20 }, { width: Number.NaN, height: 20 }, { width: 20, height: Number.POSITIVE_INFINITY },
+    ]) {
+      expect(resolve({ kind: 'square', x: 0, y: 0, size: 1 }, { frame: invalidFrame, world: null })).toEqual({ ok: false, code: 'invalid-frame' });
+    }
+    expect(resolve({ kind: 'square', x: 0, y: 0, size: 1 }, { world: null })).toEqual({ ok: false, code: 'world-unavailable' });
+  });
+});
+
+describe('fccs-live-seam-returns-the-applied-camera-and-cleans-up: resolver receipts', () => {
+  it('returns only the applied transform, not fit-internal camera metadata', () => {
+    const result = resolve({ kind: 'fit' }, { fit: { ...fit, groundWorldY: 900 } });
+    expect(result).toEqual({ ok: true, kind: 'fit', frame, camera: fit });
+  });
+});
