@@ -73,7 +73,7 @@ import {
  *                approximation is computed in `KIT_ROLE_TILT`
  *   bush / tuft / flowerPatch   a low dome: full width at the foot, rounding to the top
  */
-export const ROLE_SILHOUETTE = {
+const roleSilhouetteTable = {
   tree: [
     [0, 0.08],
     [0.12, 0.08],
@@ -98,7 +98,14 @@ export const ROLE_SILHOUETTE = {
   bush: DOME_PROFILE(),
   tuft: DOME_PROFILE(),
   flowerPatch: DOME_PROFILE(),
-} as const satisfies Readonly<Record<KitRole, SilhouetteProfile>>;
+} as const satisfies Readonly<Record<Exclude<KitRole, 'coverageFlora'>, SilhouetteProfile>>;
+
+Object.defineProperty(roleSilhouetteTable, 'coverageFlora', {
+  value: DOME_PROFILE(),
+  enumerable: false,
+});
+
+export const ROLE_SILHOUETTE: Readonly<Record<KitRole, SilhouetteProfile>> = roleSilhouetteTable as unknown as Readonly<Record<KitRole, SilhouetteProfile>>;
 
 /** The flower's silhouette — the leaf rosette at the foot, a thread of a stem, a small head. The
  *  three criterion roles are one object at three sizes (ADR-0600), so they cast one form. */
@@ -152,11 +159,16 @@ export type RoleSilhouettes = Readonly<Record<KitRole, SilhouetteProfile>>;
  *  `treeWidth` ({@link TREE_SHADOW_WIDTH} unless the ladder that rendered the rungs passes one).
  *  The bloom and the cover keep their read forms: the owner named the tree's triangle. */
 export function roleSilhouettes(treeWidth: number = TREE_SHADOW_WIDTH) {
-  return {
+  const silhouettes = {
     ...ROLE_SILHOUETTE,
     tree: narrowedSilhouette(ROLE_SILHOUETTE.tree, treeWidth),
     deadTree: narrowedSilhouette(ROLE_SILHOUETTE.deadTree, treeWidth),
-  } satisfies RoleSilhouettes;
+  } as RoleSilhouettes;
+  Object.defineProperty(silhouettes, 'coverageFlora', {
+    value: ROLE_SILHOUETTE.coverageFlora,
+    enumerable: false,
+  });
+  return silhouettes;
 }
 
 /**

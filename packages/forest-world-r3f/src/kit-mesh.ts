@@ -26,7 +26,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { decodeKitAsset } from './kit-asset.js';
 import {
   KIT_ASSEMBLIES,
-  KIT_ROLES,
+  ALL_KIT_ROLES,
   KIT_ROLE_ASSEMBLIES,
   KIT_ROLE_SIZE,
   KIT_ROLE_TILT,
@@ -40,10 +40,11 @@ import type {
   RoleHeights,
   RoleTable,
 } from './kit-vocabulary.js';
-import { leafTintGainFor } from './leaf-tint.js';
+import { leafTintGain, leafTintGainFor } from './leaf-tint.js';
 import { mapMeans } from './map-texels.js';
 import type { DecodedMap, TexelCanvasFactory } from './map-texels.js';
 import { KIT_PROP_INDIRECT_FRACTION, installPropLighting, propLightingOf } from './prop-lighting.js';
+import { parseHex } from './shade-ladder.js';
 import { applyRawColourConvention } from './texture-convention.js';
 import type { ConventionMaterial, Rgb } from './texture-convention.js';
 
@@ -75,6 +76,8 @@ export interface KitAssemblyGeometry {
  *  the PLACEMENT (`KitPlacement.tint`, `null` for the dead form) and this set only says which of
  *  that placement's parts the tint reaches. */
 export const LEAF_MATERIALS: ReadonlySet<string> = new Set(['Pine_Branches']);
+/** The leafy-plant material receives the coverage route, while pine state tints stay separate. */
+export const COVERAGE_FOLIAGE_MATERIAL = 'Pine_Forest_Foliage';
 
 export interface LoadedKit {
   assemblies: Map<KitAssembly, KitAssemblyGeometry>;
@@ -375,7 +378,7 @@ export function kitFromScene(
   return {
     assemblies,
     materials: [...found.materials].sort(),
-    leafMeans: collectLeafMeans(found.objects.values(), source, meanOf),
+    leafMeans: collectKitLeafMeans(found.objects.values(), source, meanOf),
     triangles: found.triangles,
     wireBytes,
     textures: [...found.textures.values()],
@@ -466,7 +469,7 @@ function roleMeasure(
   pick: (assembly: KitAssemblyGeometry, scale: number) => number,
 ): RoleTable {
   const out = {} as Record<KitRole, number>;
-  for (const role of KIT_ROLES) {
+  for (const role of ALL_KIT_ROLES) {
     let largest = 0;
     for (const name of KIT_ROLE_ASSEMBLIES[role]) {
       const assembly = kit.assemblies.get(name);
@@ -476,6 +479,24 @@ function roleMeasure(
     out[role] = largest;
   }
   return out;
+}
+
+function collectKitLeafMeans(
+  objects: Iterable<KitObject[]>,
+  source: string,
+  meanOf: LeafMeanReader,
+): Map<string, Rgb> {
+  const all = [...objects];
+  const means = collectLeafMeans(all, source, meanOf);
+  for (const parts of all) {
+    for (const part of parts) {
+      if (part.materialName !== COVERAGE_FOLIAGE_MATERIAL || means.has(part.materialName)) continue;
+      const image = part.material.map?.image as DecodedMap | undefined;
+      if (!image) throw new Error(`kit-mesh: coverage foliage ${part.materialName} carries no base-colour map`);
+      means.set(part.materialName, meanOf(image));
+    }
+  }
+  return means;
 }
 
 function widthAtScale(assembly: KitAssemblyGeometry, scale: number): number {
@@ -517,13 +538,13 @@ export function tintedMaterial(
   tint: string | null,
   cache: Map<string, THREE.MeshStandardMaterial>,
 ): THREE.MeshStandardMaterial {
-  if (tint === null || !LEAF_MATERIALS.has(materialName)) return base;
+  if (tint === null || (!LEAF_MATERIALS.has(materialName) && materialName !== COVERAGE_FOLIAGE_MATERIAL)) return base;
   const key = `${materialName}::${tint}`;
   const cached = cache.get(key);
   if (cached) return cached;
   const mean = kit.leafMeans.get(materialName);
   if (!mean) throw new Error(`kit-mesh: no base-colour mean for the leaf material ${materialName}`);
-  const gain = leafTintGainFor(tint, mean);
+  const gain = tint.startsWith('#') ? leafTintGain(parseHex(tint), mean) : leafTintGainFor(tint, mean);
   if (!gain) {
     throw new Error(
       `kit-mesh: the state ${tint} has no declared leaf tint, so a placement asking for one is ` +

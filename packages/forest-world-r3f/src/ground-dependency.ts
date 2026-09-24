@@ -39,7 +39,7 @@ import type { ShadowCaster } from './land-shadow.js';
 import type { KitPlacement, RoleFootprints, RoleHeights } from './kit-vocabulary.js';
 import { dressMapWithCoverAttribution } from './map-dressing.js';
 import { islandGrowthLayout, type IslandGrowthLayout } from './ForestWorldCanvas.causal.js';
-import type { Descriptor3D, InstanceDescriptor, InstanceKind } from './world-to-3d.js';
+import type { CoverageFloraDescriptor, Descriptor3D, InstanceDescriptor, InstanceKind } from './world-to-3d.js';
 
 /**
  * WHAT THE GROUND CANNOT SEE — the two families no reader in the ground chain consumes, and so the
@@ -94,8 +94,8 @@ function list(xs: readonly string[] | undefined): string {
  * `Record<keyof InstanceDescriptor, …>` — so adding a field fails the TYPECHECK first, and a field
  * the digest ignores fails the test second.
  */
-function instanceDigest(d: InstanceDescriptor): string {
-  return [
+function instanceDigest(d: InstanceDescriptor | CoverageFloraDescriptor): string {
+  const common = [
     d.kind,
     String(d.transform.x),
     String(d.transform.y),
@@ -112,7 +112,18 @@ function instanceDigest(d: InstanceDescriptor): string {
     val(d.island),
     val(d.criterion),
     val(d.parcel),
-  ].join(FIELD);
+  ];
+  if (isCoverageFlora(d)) common.push(d.capability, d.theme, val(d.floraScale));
+  return common.join(FIELD);
+}
+
+function isCoverageFlora(
+  descriptor: InstanceDescriptor | CoverageFloraDescriptor,
+): descriptor is CoverageFloraDescriptor {
+  return descriptor.kind === 'coverage-flora'
+    && 'capability' in descriptor
+    && 'theme' in descriptor
+    && 'floraScale' in descriptor;
 }
 
 /** Equal as the key reads them: `String(NaN)` is one spelling, so two NaNs are one ground, and an
@@ -142,9 +153,12 @@ function sameStrings(left: readonly string[] | undefined, right: readonly string
   return left.length === right.length && left.every((entry, index) => entry === right[index]);
 }
 
-function sameInstanceDependency(left: InstanceDescriptor, right: InstanceDescriptor): boolean {
-  return left.kind === right.kind
-    && sameNumber(left.transform.x, right.transform.x)
+function sameInstanceDependency(
+  left: InstanceDescriptor | CoverageFloraDescriptor,
+  right: InstanceDescriptor | CoverageFloraDescriptor,
+): boolean {
+  if (left.kind !== right.kind) return false;
+  if (sameNumber(left.transform.x, right.transform.x)
     && sameNumber(left.transform.y, right.transform.y)
     && sameNumber(left.transform.z, right.transform.z)
     && left.group === right.group
@@ -158,16 +172,25 @@ function sameInstanceDependency(left: InstanceDescriptor, right: InstanceDescrip
     && sameNumber(left.bearing, right.bearing)
     && left.island === right.island
     && left.criterion === right.criterion
-    && left.parcel === right.parcel;
+    && left.parcel === right.parcel) {
+    return !isCoverageFlora(left)
+      || (isCoverageFlora(right)
+        && left.capability === right.capability
+        && left.theme === right.theme
+        && sameNumber(left.floraScale, right.floraScale));
+  }
+  return false;
 }
 
-const isGroundVisible = (descriptor: Descriptor3D): descriptor is InstanceDescriptor =>
+type GroundVisibleDescriptor = InstanceDescriptor | CoverageFloraDescriptor;
+
+const isGroundVisible = (descriptor: Descriptor3D): descriptor is GroundVisibleDescriptor =>
   descriptor.kind !== 'skipped' && !GROUND_BLIND_KINDS.has(descriptor.kind);
 
 /** The descriptors the ground reads, in stream order, produced one at a time so a caller that stops
  *  early never looks at the rest. ⚠ A GENERATOR RATHER THAN TWO INDEX CURSORS: a cursor walk whose
  *  skip loop is broken spins forever, which no test can score, while a broken generator ends. */
-function* groundVisible(stream: readonly Descriptor3D[]): Generator<InstanceDescriptor, void, undefined> {
+function* groundVisible(stream: readonly Descriptor3D[]): Generator<GroundVisibleDescriptor, void, undefined> {
   for (const descriptor of stream) if (isGroundVisible(descriptor)) yield descriptor;
 }
 
