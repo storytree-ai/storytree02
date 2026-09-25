@@ -53,7 +53,7 @@ arc: story-green-monotonicity-arc
 # converted into a cross-story edge, and the test re-run after ADR-0606 is still false both ways — so
 # `cli` stays a pure source and `consumed_by` stays empty. Its sibling `green-gate` did NOT follow it
 # and stays in `ci-cd`.
-capabilities: [unified-command-dispatch, cli-resident-corpus-tools, organism-boundary-tooling, work-hierarchy-camp-fence, guided-setup-repair, verification-decay-instruments, gate-ci-parity, uat-revision-continuity-gate, forest-semantic-capture-cli]
+capabilities: [unified-command-dispatch, cli-resident-corpus-tools, organism-boundary-tooling, work-hierarchy-camp-fence, guided-setup-repair, verification-decay-instruments, gate-ci-parity, uat-revision-continuity-gate, forest-semantic-capture-cli, forest-comparative-semantic-capture-cli]
 # The CLI is the wiring HUB: it imports every organism to surface it. Those outbound edges
 # (cli → drive-machinery / library / notice-board / store / arc) are declared PROVIDER-SIDE on each
 # spoke (their `consumed_by: [cli]`, ADR-0074 §4) so the hub stays de-noised and each organism owns
@@ -125,7 +125,7 @@ authoring primitives (the corpus guard, the ADR frontmatter parser).
   in-memory seed; live writes refuse without `--pg` and a reachable DB (degrade with guidance, never
   a silent no-op).
 
-## Capabilities (9)
+## Capabilities (10)
 
 Lightweight and **expandable** (ADR-0074 §3): the hub's own connective competence, NOT a re-derivation
 of every per-domain command (those belong to the organism that owns the journey). The list grows one
@@ -182,6 +182,7 @@ If anything the arrival WIDENS what the call has to weigh, from one alternative 
 | 7 | [`gate-ci-parity`](gate-ci-parity.md) | A green local `pnpm gate` predicts a green CI `verify`, because both walk the one gate plan — split only by each step's declared placement — and the one difference that remains, the merge ref, is warned about whenever the branch is behind `origin/main`. | proposed | — |
 | 8 | [`uat-revision-continuity-gate`](uat-revision-continuity-gate.md) | A changed existing UAT criterion revision blocks until its candidate binding has an exact signed pass; a new criterion remains additive expansion. | proposed | — |
 | 9 | [`forest-semantic-capture-cli`](forest-semantic-capture-cli.md) | One CLI invocation turns named square, story-node, island, resting or fit targets into settled, attested PNGs and receipts, reusing or owning its Studio/browser session without pointer input. | proposed | [`forest-capture-camera-seam`](../studio/forest-capture-camera-seam.md) |
+| 10 | [`forest-comparative-semantic-capture-cli`](forest-comparative-semantic-capture-cli.md) | One comparative CLI batch runs the same semantic target set against branch and baseline with identical viewport/padding, then publishes only coherent paired evidence, count comparison and a compact contact sheet. | proposed | [`forest-semantic-capture-cli`](forest-semantic-capture-cli.md) |
 
 *(Renumbered 1–5 on 2026-08-14 when three rows left. Safe, and different from the open modeling calls
 below, whose numbers are cited from OTHER files and are therefore never reused or shifted: nothing
@@ -347,6 +348,14 @@ the envelope contract held.
    resolved bounds, applied camera, viewport, served revision and settle attestation. A malformed target,
    absent target, missing seam or unsettled page exits non-zero and leaves no PNG that could be mistaken
    for that capture.
+6. **Comparative forest capture keeps both arms on the same semantic frame.** _(witness: machine)_ _(detail: cli#uat-6)_ _(criterion-id: uatc_4180e6039ee94a0f84dbad98)_ _(revision-id: uatr1:534f0aa9a760c946)_
+   Run one comparative capture batch over a branch and baseline using any repeatable set of `--square`,
+   `--story`, `--island`, `--resting` or `--fit` targets, one viewport and one asymmetric padding value.
+   **Success —** each arm returns the semantic command's applied-camera/resolution receipt for every
+   target, and only then does the batch publish matched image pairs, per-view receipts, the existing
+   corpus element-count comparison, and an index/contact sheet. A target mismatch, refusal, receipt
+   disagreement or unequal frame exits non-zero before any comparative publication, so review never
+   depends on mouse panning, wheel zoom or relaunching a browser per target.
 ## Reliability Gates
 
 The CLI hub is **greenfield**: `packages/cli` has a real, passing, OFFLINE
