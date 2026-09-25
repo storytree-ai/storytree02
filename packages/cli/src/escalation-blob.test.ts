@@ -71,6 +71,9 @@ test("RED: a refused remote (GitHub access revoked) escalates to the owner", () 
   const access = blob.unmet.find((u) => u.probe === "repo-fetchable");
   assert.ok(access, "the access block must be named");
   assert.equal(access.category, "access");
+  // ADR-0622: 0.2 is `storytree-ai/storytree02`; the bare name now belongs to the 0.3 rebuild, so
+  // pointing the owner at `storytree-ai/storytree` would send him to check the wrong repo's grant.
+  assert.match(access.ownerAction, /storytree-ai\/storytree02\b/);
 });
 
 test("the blob carries redacted full environment context and preserves probe order", () => {

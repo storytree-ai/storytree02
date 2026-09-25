@@ -50,15 +50,15 @@ resource "google_project_iam_member" "ci_website_verdict_sql_instance_user" {
   member  = "serviceAccount:${google_service_account.ci_website_verdict.email}"
 }
 
-# Let ONLY storytree-ai/Storytree's workflows impersonate this SA — the same keyless bridge,
+# Let ONLY this repo's workflows (repo id, not name — ADR-0622) impersonate this SA — the same keyless bridge,
 # the same repository-scoped (not ref-scoped) principalSet as ci-presence's binding, and for
 # the same accepted reason (infra/ci-presence-grants.sql): a verify-shaped job runs on PR
 # branches by definition, the repo is private, and a fork PR gets no token at all. Reuses the
 # EXISTING pool resource declared in ci-presence.tf rather than declaring a second pool.
 resource "google_service_account_iam_member" "ci_website_verdict_wif_user" {
   service_account_id = google_service_account.ci_website_verdict.name
-  role                = "roles/iam.workloadIdentityUser"
-  member              = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repository}"
+  role               = "roles/iam.workloadIdentityUser"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository_id/${var.github_repository_id}"
 }
 
 # The Cloud SQL IAM user for the SA. Name is the SA email WITHOUT `.gserviceaccount.com`

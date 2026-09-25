@@ -179,7 +179,7 @@ can read anything in it — including this file. That is a genuine chicken-and-e
 
 ```bash
 gh auth login                                   # device code — a human enters it
-gh repo clone storytree-ai/storytree
+gh repo clone storytree-ai/storytree02 storytree   # 0.2; the bare name is the 0.3 rebuild (ADR-0622)
 cd storytree
 pnpm install
 git submodule update --init web

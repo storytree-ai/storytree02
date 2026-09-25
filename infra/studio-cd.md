@@ -105,7 +105,7 @@ The deploy SA `storytree-studio-deployer` gets:
 
 | Role | Scope | Why |
 | --- | --- | --- |
-| `roles/iam.workloadIdentityUser` | the deploy SA | the keyless bridge — only storytree-ai/Storytree workflows **on `main`** (`attribute.ref/refs/heads/main`) may impersonate it (tighter than ci-presence's repo-wide binding) |
+| `roles/iam.workloadIdentityUser` | the deploy SA | the keyless bridge — only this repo's workflows (repo id 1260888565, ADR-0622) **on `main`** (`attribute.ref/refs/heads/main`) may impersonate it (tighter than ci-presence's repo-wide binding) |
 | `roles/iam.serviceAccountUser` | on `storytree-studio-host` | actAs at deploy → the revision runs as the keyless runtime SA |
 | `roles/run.admin` | the **`storytree-studio` service** only (`google_cloud_run_v2_service_iam_member`) | deploy revisions **and** the `setIamPolicy` that `--iap` performs (binds the IAP service agent as sole invoker) — scoped to this one service so a CD compromise cannot setIamPolicy on / reconfigure any OTHER Cloud Run service |
 | `roles/run.viewer` | project | read-only Run visibility for `gcloud run deploy`'s operation polling + the smoke `describe` (no write, no `setIamPolicy`) |

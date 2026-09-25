@@ -2,6 +2,7 @@
   "name": "storytree",
   "version": "0.0.0",
   "private": true,
+  "license": "PolyForm-Shield-1.0.0",
   "type": "module",
   "description": "An agentic software-builder: a DAG of stories grown by AI coding agents, watched live.",
   "packageManager": "pnpm@9.15.0",

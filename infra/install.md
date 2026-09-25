@@ -40,7 +40,7 @@ In dependency order, each step no-ops when already satisfied (see *Idempotency* 
 4. **gh-cli** — installs the GitHub CLI (drives the device sign-in).
 5. **github-auth** — GitHub device sign-in (the one code the dev enters). Read access comes from
    the owner-granted **Read** role on the `storytree-ai` org (ADR-0207 D2).
-6. **clone** — clones the read-only checkout (`storytree-ai/Storytree`) to `%USERPROFILE%\storytree`.
+6. **clone** — clones the read-only checkout (`storytree-ai/storytree02`, renamed from `Storytree` per ADR-0622) to `%USERPROFILE%\storytree`.
 7. **provision** — `pnpm install` (no-op once `node_modules/.modules.yaml` exists).
 8. **claude-cli** — installs the Claude Code CLI (`irm https://claude.ai/install.ps1 | iex`).
 9. **codex-cli** — installs the global Codex CLI (`npm install -g @openai/codex`). **OPT-IN**:

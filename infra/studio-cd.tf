@@ -24,8 +24,10 @@
 # outputs at the bottom of this file — verify with `terraform output` before undrafting.
 
 locals {
-  # The repo whose Actions OIDC may impersonate the deploy SA — same repo ci-presence.tf trusts.
-  studio_cd_github_repository = "storytree-ai/Storytree"
+  # The repo whose Actions OIDC may impersonate the deploy SA is the one ci-presence.tf's provider
+  # accepts (var.github_repository_id — keyed on the immutable repo id, ADR-0622). The binding below
+  # is pool-level on attribute.ref, and only that provider maps attribute.ref, so no second repo
+  # constant belongs here.
 
   # The github-actions WIF pool's literal resource path (owned by ci-presence.tf). The project
   # NUMBER (not id) is what the pool name embeds; it matches ci.yml's hardcoded provider string.
@@ -50,7 +52,7 @@ resource "google_service_account" "studio_deployer" {
   display_name = "Hosted studio CD — deploy on merge (ADR-0046), keyless WIF"
 }
 
-# Only storytree-ai/Storytree workflows running ON `main` may impersonate the deploy SA. This is
+# Only this repo's workflows running ON `main` may impersonate the deploy SA. This is
 # TIGHTER than ci-presence's repo-wide binding (attribute.ref/refs/heads/main, not
 # attribute.repository) because the deploy SA is more privileged — it can ship a Cloud Run
 # revision. deploy-studio.yml triggers on push:main, so its OIDC token carries this exact ref.

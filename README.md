@@ -1,5 +1,10 @@
 # storytree
 
+> **This is storytree 0.2, frozen.** It is the TypeScript generation (0.1 was the original Rust
+> project, vendored at `legacy/Agentic/`). The repo is `storytree-ai/storytree02`; the rebuild,
+> **storytree 0.3**, lives at [`storytree-ai/storytree`](https://github.com/storytree-ai/storytree)
+> (ADR-0622). Links to `storytree-ai/Storytree` written before the rename now reach 0.3, not this repo.
+
 > **New here? Read [CLAUDE.md](CLAUDE.md) first.** It is the orientation doc for a
 > fresh session — current truth, the active reversals, and where the source lives.
 
@@ -189,3 +194,10 @@ keyless IAM per ADR-0021). DBOS-style durable workflows remain **deferred**
 (ADR-0019, reaffirmed ADR-0020) — a named, reserved future target, not a
 dependency today. Next up: growing outward from the foundation onto the live
 story tree.
+
+## License
+
+Storytree is **source-available**, not open source: it is licensed under the
+[PolyForm Shield License 1.0.0](LICENSE) (ADR-0617). Anyone, businesses included, may
+use, modify and embed it; the one thing the license does not allow is providing a product
+that competes with storytree. Competing use needs a separate grant from the owner.

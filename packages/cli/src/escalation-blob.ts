@@ -151,7 +151,7 @@ function ownerActionFor(probe: Probe, category: EscalationCategory): string {
     return "Grant the dev's Google identity access to the hosted studio (the IAP membership half of the invite ceremony, ADR-0207 D2/D4); re-grant if it was pulled. Their offline checkout still works meanwhile.";
   }
   if (category === "access") {
-    return "Confirm the dev still has GitHub Read access to storytree-ai/Storytree (it may be offline, or the grant may have been revoked); re-invite if it was pulled.";
+    return "Confirm the dev still has GitHub Read access to storytree-ai/storytree02 (it may be offline, or the grant may have been revoked); re-invite if it was pulled.";
   }
   return "No Claude credential reached this machine by EITHER route (ADR-0430), so name which one was expected. On a fleet box the token comes from Google Secret Manager (`claude-code-oauth-token`) — check the dev's access to the vault, or that the value reached `~/.storytree/secrets.json`; do NOT have them mint a fresh one, which can take another machine down (docs/machine-onboarding.md §2.2). Otherwise the dev signs in to their OWN Claude subscription (`claude`), and a lapsed subscription is theirs to renew. Either way storytree never mints or discloses the credential (ADR-0430 D6).";
 }

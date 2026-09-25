@@ -43,8 +43,9 @@
 param(
   # Where the read-only checkout lands. Default: %USERPROFILE%\storytree.
   [string]$CheckoutDir = (Join-Path $HOME 'storytree'),
-  # The read-only clone URL (storytree-ai org - capital S retained after the ADR-0207 D2 transfer).
-  [string]$RepoUrl = 'https://github.com/storytree-ai/Storytree.git',
+  # The read-only clone URL. This is storytree 0.2, renamed `storytree02` (ADR-0622); the bare name
+  # `storytree-ai/storytree` now belongs to the 0.3 rebuild, so never point this back at it.
+  [string]$RepoUrl = 'https://github.com/storytree-ai/storytree02.git',
   # Skip the final desktop-app launch (provision only) - used by re-run/repair flows.
   [switch]$SkipLaunch,
   # Also install the global Codex CLI (the 'codex-cli' step). OPT-IN, deliberately: `pnpm install`
@@ -130,7 +131,8 @@ function Test-GithubAuth {
 function Test-Checkout {
   if (-not (Test-Path (Join-Path $CheckoutDir '.git'))) { return $false }
   $remote = (git -C $CheckoutDir remote get-url origin 2>$null)
-  return ($remote -match 'storytree-ai/Storytree')
+  # Anchored on the full name: an unanchored 'storytree-ai/storytree' would also match the 0.3 repo.
+  return ($remote -match 'storytree-ai/storytree02(\.git)?$')
 }
 # pnpm writes node_modules/.modules.yaml only when an install COMPLETES - the same provisioned
 # marker packages/cli/provision-worktree.mjs keys on. Absence => fresh or truncated => re-provision.
