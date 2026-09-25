@@ -42,7 +42,7 @@ why: >-
  *  - test files — a test's camp is its subject's, and a test builds fixture trees whose `stories`
  *    paths name no real source. Including them would fill the registry with entries that cannot
  *    answer the camp question.
- *  - `legacy/` — the vendored, read-only V1 Rust submodule. Not ours to declare and not ours to edit.
+ *  - `legacy/` — the vendored, read-only storytree 0.1 Rust submodule. Not ours to declare and not ours to edit.
  *  - `web/` — a separate repository behind a gitlink, with its own manifest. This manifest does not
  *    describe it.
  *  - `node_modules`, `dist`, build output, `.git`, `.claude` — not source. `.claude` in particular

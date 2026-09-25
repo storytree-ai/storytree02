@@ -14,7 +14,7 @@ An analysis-only friction reporter over one owned-loop run: it reads the run's t
 
 ## Role
 
-The v2 evolution of V1's `trace-explorer`: take a *single owned-loop run* and produce a structured, evidence-cited account of where it met **friction**. It is **decision-support, not repair**: its output feeds the signal → Library graduation loop (ADR-0014 as refined by ADR-0032, and un-parked by ADR-0168 D5: the `graduation-synthesist` — no longer deferred — chairs friction adjudication and routes accumulated signal to the per-route authors, e.g. an `open-question` on the `adr` route; the `tool` route parks an entry on the owning arc rather than emitting a free-standing `proposal`, ADR-0298), where recurring friction graduates into durable Library guidance curated by the `librarian-curator`.
+The storytree 0.2 evolution of 0.1's `trace-explorer`: take a *single owned-loop run* and produce a structured, evidence-cited account of where it met **friction**. It is **decision-support, not repair**: its output feeds the signal → Library graduation loop (ADR-0014 as refined by ADR-0032, and un-parked by ADR-0168 D5: the `graduation-synthesist` — no longer deferred — chairs friction adjudication and routes accumulated signal to the per-route authors, e.g. an `open-question` on the `adr` route; the `tool` route parks an entry on the owning arc rather than emitting a free-standing `proposal`, ADR-0298), where recurring friction graduates into durable Library guidance curated by the `librarian-curator`.
 
 ## Outcome
 
