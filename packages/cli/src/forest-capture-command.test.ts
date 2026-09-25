@@ -50,10 +50,11 @@ test("a typed child refusal becomes a red CLI envelope", async () => {
       return {
         status: 1,
         stdout: JSON.stringify({ ok: false, code: "target-not-found", message: "story alpha is absent" }),
-        stderr: "",
+        stderr: "[forest-capture] Studio did not become ready",
       };
     },
   });
   assert.equal(envelope.ok, false);
   assert.match(envelope.body, /target-not-found/);
+  assert.match(envelope.body, /Studio did not become ready/);
 });

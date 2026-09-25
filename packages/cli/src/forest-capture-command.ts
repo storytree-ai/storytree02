@@ -99,7 +99,12 @@ export async function forestCaptureCommand(
       next: payload.output ? [`inspect ${payload.output}/forest-1.json beside its PNG`] : [],
     };
   }
-  const detail = payload?.message ?? (result.stderr.trim() || "the Studio capture driver returned no diagnostic");
+  const details = [payload?.message, result.stderr.trim()].filter(
+    (entry): entry is string => typeof entry === "string" && entry.length > 0,
+  );
+  const detail = details.length > 0
+    ? details.join("\n")
+    : "the Studio capture driver returned no diagnostic";
   return {
     ok: false,
     body: `forest capture refused (${payload?.code ?? "driver-failed"}): ${detail}`,

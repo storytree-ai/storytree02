@@ -13,7 +13,6 @@
     "measure:camera-rasterisation": "node --import ../../scripts/tsx-cache-off.mjs --import tsx scripts/measure-camera-rasterisation.mjs",
     "measure:land-view": "node --import ../../scripts/tsx-cache-off.mjs --import tsx scripts/measure-land-view.mjs",
     "capture:comparative": "node --import ../../scripts/tsx-cache-off.mjs --import tsx scripts/comparative-capture.mjs",
-    "capture:semantic": "node --import ../../scripts/tsx-cache-off.mjs --import tsx scripts/semantic-capture.mjs",
     "capture:unwatched": "node --import ../../scripts/tsx-cache-off.mjs --import tsx scripts/capture-unwatched-regrow.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "test": "vitest run src/ server/",

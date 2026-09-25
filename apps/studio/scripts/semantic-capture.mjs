@@ -78,7 +78,7 @@ async function startStudio() {
   const child = spawn(
     process.execPath,
     [
-      '--import', path.join(repoRoot, 'scripts', 'tsx-cache-off.mjs'),
+      '--import', pathToFileURL(path.join(repoRoot, 'scripts', 'tsx-cache-off.mjs')).href,
       '--import', 'tsx', path.join(studioDir, 'node_modules', 'vite', 'bin', 'vite.js'),
       '--port', String(port), '--strictPort', '--host', '127.0.0.1',
     ],
@@ -137,8 +137,8 @@ async function openPage(studioUrl, browserEndpoint, onCaptureRefusal) {
       // The app owns camera state. The second argument is deliberately passed through for the
       // padding-aware seam; older pages ignore extra JS arguments rather than being mutated here.
       const receipt = await page.evaluate(
-        ({ requested, frame, inset }) => window.__storytreeForestCaptureCamera.capture(requested, { viewport: frame, padding: inset }),
-        { requested: target, frame: viewport, inset: padding },
+        ({ requested, inset }) => window.__storytreeForestCaptureCamera.capture(requested, { captureFrame: inset }),
+        { requested: target, inset: padding },
       );
       if (!receipt?.ok) {
         onCaptureRefusal(receipt?.code ?? 'capture-failed');
