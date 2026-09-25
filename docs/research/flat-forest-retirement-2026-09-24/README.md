@@ -4,7 +4,7 @@
 
 Inventory taken against `8ad24c2929025fb40b56d920975a8213387768d4` and the current full live ADR-0608 on 24 September 2026. The static mounted look is approved. **Retirement is not ready:** coverage plants still live in SVG, and neither public website map mounts the 3D consumer. Nothing in this inventory authorizes a partial removal.
 
-The live predecessor arc is closed with no open increments or questions. Its last row, `the-3d-regrow-settles-reduces-and-survives-unwatched`, records [merged PR #2049](https://github.com/storytree-ai/Storytree/pull/2049). The two open rows on `mount-the-land-on-a-real-surface-arc` remain the retirement and coverage-plant work. The entry claim was granted to `laneK-retire`; the separate drive-machinery claims are outside this work.
+The live predecessor arc is closed with no open increments or questions. Its last row, `the-3d-regrow-settles-reduces-and-survives-unwatched`, records [merged PR #2049](https://github.com/storytree-ai/storytree02/pull/2049). The two open rows on `mount-the-land-on-a-real-surface-arc` remain the retirement and coverage-plant work. The entry claim was granted to `laneK-retire`; the separate drive-machinery claims are outside this work.
 
 ## Pieces inventory
 
@@ -60,7 +60,7 @@ The build recorded four of nine declared contracts as signed, including the new 
 
 The full gate passed on 24 September (`/tmp/laneK-retire-2.log`, exit 0), including the package suites and the mutation check. The mutation runner generated one mutant over the changed source spans and reported it killed by this branch's tests. The generated website copy landed through [website PR #154](https://github.com/storytree-ai/storytree-web/pull/154), merged at 01:13:33 UTC. Its branch tip `e73afc7653b8a217736b37f6ff842de6755ade4a` is the parent pin, and the checked-out generated scene is byte-identical to the copy checked by that gate. Main drift is followed by a fresh parent gate before opening its PR.
 
-The parent prerequisite landed in [PR #2055](https://github.com/storytree-ai/Storytree/pull/2055), merged at 01:34:33 UTC after the refreshed full gate and CI passed.
+The parent prerequisite landed in [PR #2055](https://github.com/storytree-ai/storytree02/pull/2055), merged at 01:34:33 UTC after the refreshed full gate and CI passed.
 
 ## Second prerequisite: attributable 3D coverage descriptors
 
@@ -89,7 +89,7 @@ The mapper delivered in #2056 copies each source anchor without its scene ancest
 
 Evidence is in `/tmp/laneK-retire-coverage-capture/run-1/manifest.json`, `comparison.html` and `anchor-translation-diagnosis.json`; the private API snapshot must not be published. The mounted rest PNG hash is `a6489d8206022f10da66d2e213bd823d2bc2d466a3d3b9faa00da7daafc923a3` on both builds. This upstream defect is being repaired in its own fresh worktree and PR after the signed native unit lands, followed by another real-corpus comparison. No visible native coverage, full grounding, clearance, performance or owner appearance approval is claimed here. Both existing increments remain open.
 
-The native placement unit subsequently landed in [PR #2060](https://github.com/storytree-ai/Storytree/pull/2060), merged at 04:47:47 UTC, after the combined full gate passed all 30 checks and all 138 changed-source mutants were killed. [Website PR #157](https://github.com/storytree-ai/storytree-web/pull/157) carries its generated mirror, pinned at `9282fbcaafcb2f2a1c55f271f93c82b7d2089007`. That landing explicitly retained the upstream mapper defect as engineering residue.
+The native placement unit subsequently landed in [PR #2060](https://github.com/storytree-ai/storytree02/pull/2060), merged at 04:47:47 UTC, after the combined full gate passed all 30 checks and all 138 changed-source mutants were killed. [Website PR #157](https://github.com/storytree-ai/storytree-web/pull/157) carries its generated mirror, pinned at `9282fbcaafcb2f2a1c55f271f93c82b7d2089007`. That landing explicitly retained the upstream mapper defect as engineering residue.
 
 ## Fourth prerequisite: coverage anchors reach their world positions
 
