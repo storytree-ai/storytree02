@@ -1,5 +1,6 @@
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import type { Dirent, Stats } from "node:fs";
 
 import { createCodexReplicaActivityReader } from "@storytree/agent";
 
@@ -13,6 +14,11 @@ export interface BuildActivityObserver {
   stop(): Promise<void>;
 }
 
+interface BuildActivityFileSystem {
+  readdir(path: string, options: { withFileTypes: true }): Promise<Dirent[]>;
+  lstat(path: string): Promise<Stats>;
+}
+
 /** Observe work, never elapsed time. The claim store still owns the stale-reclaim clock. */
 export async function createBuildActivityObserver(input: {
   root: string;
@@ -20,7 +26,10 @@ export async function createBuildActivityObserver(input: {
   guard: BuildGuard;
   /** Scheduling seam for deterministic witnesses; a tick is never evidence by itself. */
   timers?: Pick<typeof globalThis, "setInterval" | "clearInterval">;
+  /** Filesystem seam for deterministic race witnesses; production always falls through to node:fs. */
+  fileSystem?: BuildActivityFileSystem;
 }): Promise<BuildActivityObserver> {
+  const fileSystem = input.fileSystem ?? fs;
   async function absentOnEnoent<T>(read: () => Promise<T>): Promise<T | undefined> {
     try {
       return await read();
@@ -32,14 +41,39 @@ export async function createBuildActivityObserver(input: {
 
   async function snapshot(): Promise<Map<string, number>> {
     const files = new Map<string, number>();
+    function notDirectoryError(absolutePath: string): NodeJS.ErrnoException {
+      const error = new Error(`ENOTDIR: not a directory, scandir '${absolutePath}'`) as NodeJS.ErrnoException;
+      error.code = "ENOTDIR";
+      return error;
+    }
     async function visit(relativeDirectory: string): Promise<void> {
-      const entries = await absentOnEnoent(() => fs.readdir(path.join(input.root, relativeDirectory), { withFileTypes: true }));
-      if (entries === undefined) return;
+      const absoluteDirectory = path.join(input.root, relativeDirectory);
+      let entries: Dirent[];
+      try {
+        entries = await fileSystem.readdir(absoluteDirectory, { withFileTypes: true });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        // Windows reports ENOENT, rather than ENOTDIR, when a directory is replaced by a file
+        // between enumeration and descent. A vanished worktree is ordinary absence; a present
+        // non-directory is a corrupt read and must still fail closed on every platform.
+        const present = await absentOnEnoent(() => fileSystem.lstat(absoluteDirectory));
+        if (present?.isFile()) throw notDirectoryError(absoluteDirectory);
+        return;
+      }
       for (const entry of entries) {
         if (EXCLUDED.has(entry.name)) continue;
         const relative = path.posix.join(relativeDirectory, entry.name);
-        const stat = await absentOnEnoent(() => fs.lstat(path.join(input.root, relative)));
-        if (stat === undefined) continue;
+        const absolute = path.join(input.root, relative);
+        const stat = await absentOnEnoent(() => fileSystem.lstat(absolute));
+        if (stat === undefined) {
+          // A child can disappear normally after enumeration. If its parent still exists but has
+          // become a file, Windows reports that child read as ENOENT; retain the fail-closed
+          // ENOTDIR meaning that POSIX reports directly.
+          const parent = path.dirname(absolute);
+          const parentStat = await absentOnEnoent(() => fileSystem.lstat(parent));
+          if (parentStat?.isFile()) throw notDirectoryError(parent);
+          continue;
+        }
         if (stat.isDirectory()) await visit(relative);
         else if (stat.isFile() && input.includes(relative)) files.set(relative, stat.mtimeMs);
       }

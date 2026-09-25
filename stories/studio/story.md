@@ -6,7 +6,7 @@ outcome: "An operator reviews the project record through one browsable forum stu
 status: proposed
 proof_mode: UAT
 arc: story-green-monotonicity-arc
-capabilities: [dev-server-persistence-backbone, read-corpus, annotate-topic, browse-library, author-library-artifact, chat-panel, hud-chrome, verified-attribution, coalesced-camera-pan, map-route-retention, map-payload-cache, map-server-memo, map-boot-independence, compositor-pan-transform, camera-rasterisation-probe, act2-regrow-camera-zoom-out, act2-regrow-camera-frame-delivery, arc-orientation-lens, act2-intro-cursor, store-connection-signal, map-live-hierarchy-read]
+capabilities: [dev-server-persistence-backbone, read-corpus, annotate-topic, browse-library, author-library-artifact, chat-panel, hud-chrome, verified-attribution, coalesced-camera-pan, map-route-retention, map-payload-cache, map-server-memo, map-boot-independence, compositor-pan-transform, camera-rasterisation-probe, act2-regrow-camera-zoom-out, act2-regrow-camera-frame-delivery, arc-orientation-lens, act2-intro-cursor, store-connection-signal, map-live-hierarchy-read, forest-capture-camera-seam]
 # ⚠ TWO CAPABILITIES LEFT THIS LIST ON 2026-08-31 (`prove-unproven-capabilities-arc` inc-25, Group 2).
 # `seed-library-corpus` and `resolve-comment` are `status: retired` and are removed from the array so
 # the tree stops rendering them as live work — the `context-window-meter` precedent next door.

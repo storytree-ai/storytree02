@@ -47,6 +47,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import { flushSync } from 'react-dom';
 import dagre from '@dagrejs/dagre';
 import { describeClaimRuntime, type ClaimRuntime } from '@storytree/notice-board';
 import { api } from '../api';
@@ -116,6 +117,10 @@ import {
   type Camera,
   type ScaleLimits,
 } from '../lib/worldCamera.js';
+import {
+  resolveForestCaptureCamera,
+  type ForestCaptureTarget,
+} from '../lib/forestCaptureCamera.js';
 import {
   cameraCompositorTransform,
   deliverWorldCameraFrame,
@@ -2812,6 +2817,73 @@ export function TreeView({
     : undefined;
   const act2CompositorPromoted =
     act2CompositorTransform !== undefined && act2CompositorTransform !== 'none';
+
+  // The capture driver calls one mounted, deliberately named command rather than simulating input.
+  // It resolves against this map's real layout, then commits through the same camera state as drag,
+  // wheel and keyboard navigation. Keeping the bridge local to the mounted instance prevents a stale
+  // page handle from steering the next map.
+  useEffect(() => {
+    if (!world || typeof window === 'undefined') return;
+    let mounted = true;
+    const captureWindow = window as Window & {
+      __storytreeForestCaptureCamera?: { capture(target: ForestCaptureTarget): ReturnType<typeof resolveForestCaptureCamera> };
+    };
+    const bridge = {
+      capture: (target: ForestCaptureTarget) => {
+        if (!mounted) throw new Error('forest capture camera is unmounted');
+        const frame = { width: frameRef.current?.clientWidth ?? 0, height: frameRef.current?.clientHeight ?? 0 };
+        const fit = fitWorld(world.width, world.height, frame.width, frame.height, {
+          padding: 16,
+          paddingTop: FIT_PADDING_TOP,
+          paddingBottom: FIT_PADDING_BOTTOM,
+          maxScale: 980 / world.width,
+          align: 'bottom',
+          fit: 'contain',
+        });
+        const resting = restingWorld(world.width, world.height, frame.width, frame.height, islandDiametersOf(world), {
+          padding: 16,
+          paddingTop: FIT_PADDING_TOP,
+          paddingBottom: FIT_PADDING_BOTTOM,
+          align: 'bottom',
+        });
+        const opening = readFittedRestingView() ? fit : resting;
+        const limits = limitsForResting(opening.scale, fit.scale);
+        const result = resolveForestCaptureCamera({
+          target,
+          frame,
+          world: {
+            territories: world.territories.map((territory) => ({
+              storyId: territory.story.id,
+              islandId: territory.story.id,
+              x: territory.centroid.x + world.offset.x,
+              y: territory.centroid.y + world.offset.y,
+              radius: territory.radius,
+            })),
+          },
+          limits,
+          storyNodeScale: Math.max(opening.scale, (limits.min / 0.4) * 1.6),
+          resting,
+          fit,
+        });
+        if (result.ok) {
+          atFitRef.current = false;
+          setAnimate(false);
+          // This browser-driver command is outside React's event system. Flush the controller update
+          // before returning so its receipt is the camera the mounted map has actually committed.
+          flushSync(() => {
+            act2Settle();
+            setCam(result.camera);
+          });
+        }
+        return result;
+      },
+    };
+    captureWindow.__storytreeForestCaptureCamera = bridge;
+    return () => {
+      mounted = false;
+      if (captureWindow.__storytreeForestCaptureCamera === bridge) delete captureWindow.__storytreeForestCaptureCamera;
+    };
+  }, [world]);
 
   if (loadError) {
     return (
