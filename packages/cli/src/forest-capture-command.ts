@@ -14,8 +14,19 @@ export interface ForestCaptureCommandDeps {
   readonly invoke: (argv: readonly string[]) => Promise<ForestCaptureProcessResult>;
 }
 
+export type ForestCaptureExecFile = (
+  executable: string,
+  args: readonly string[],
+  options: { readonly cwd: string; readonly windowsHide: boolean; readonly maxBuffer: number },
+  callback: (
+    error: { readonly code?: string | number } | null,
+    stdout: string,
+    stderr: string,
+  ) => void,
+) => void;
+
 export interface ForestCaptureProcessRuntime {
-  readonly execFile: typeof execFile;
+  readonly execFile: ForestCaptureExecFile;
   readonly executable: string;
   readonly cwd: string;
 }
@@ -68,7 +79,7 @@ export function defaultForestCaptureCommandDeps(repoRoot: string): ForestCapture
 /** Exported so the otherwise side-effectful Node adapter can be checked without starting a child. */
 export function defaultForestCaptureProcessRuntime(): ForestCaptureProcessRuntime {
   return {
-    execFile,
+    execFile: execFile as ForestCaptureExecFile,
     executable: process.execPath,
     cwd: process.cwd(),
   };

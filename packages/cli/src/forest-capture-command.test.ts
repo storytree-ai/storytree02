@@ -69,11 +69,10 @@ test("a typed child refusal becomes a red CLI envelope", async () => {
 
 test("the process adapter resolves its imports from the checkout but preserves the caller cwd", async () => {
   const calls: Array<{ executable: string; args: readonly string[]; options: unknown }> = [];
-  const fakeExec = ((executable: string, args: readonly string[], options: unknown, callback: (error: null, stdout: string, stderr: string) => void) => {
+  const fakeExec = (executable: string, args: readonly string[], options: unknown, callback: (error: null, stdout: string, stderr: string) => void) => {
     calls.push({ executable, args, options });
     callback(null, "driver stdout", "driver stderr");
-    return {};
-  }) as unknown as typeof import("node:child_process").execFile;
+  };
   const root = path.resolve("C:/storytree-fixture");
   const deps = forestCaptureProcessDeps(root, {
     execFile: fakeExec,
@@ -105,10 +104,9 @@ test("the process adapter resolves its imports from the checkout but preserves t
 
 test("the process adapter preserves numeric exits and maps non-numeric launch failures to one", async () => {
   const invokeWith = async (error: null | { code?: string | number }) => {
-    const fakeExec = ((_executable: string, _args: readonly string[], _options: unknown, callback: (error: null | { code?: string | number }, stdout: string, stderr: string) => void) => {
+    const fakeExec = (_executable: string, _args: readonly string[], _options: unknown, callback: (error: null | { code?: string | number }, stdout: string, stderr: string) => void) => {
       callback(error, "out", "err");
-      return {};
-    }) as unknown as typeof import("node:child_process").execFile;
+    };
     return forestCaptureProcessDeps("C:/repo", { execFile: fakeExec, executable: "node", cwd: "C:/caller" }).invoke([]);
   };
   assert.equal((await invokeWith({ code: 17 })).status, 17);
