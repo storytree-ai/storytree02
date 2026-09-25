@@ -409,6 +409,11 @@ test("top help and the unknown-area guidance both list the adopt area", async ()
     /^\s*forest capture\s+zoom and screenshot square\/story\/island\/resting\/fit targets without mouse input$/m,
     "top help makes the no-mouse capture workflow discoverable",
   );
+  assert.match(
+    top.body,
+    /^\s*forest compare\s+capture those same semantic views on baseline and branch in one review sheet$/m,
+    "top help makes deterministic comparative capture discoverable",
+  );
   const unknown = await run(["wat"], { store });
   assert.equal(unknown.ok, false);
   // the area roster is consistent — it carries adopt, the new `build` workflow (ADR-0118, with

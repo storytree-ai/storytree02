@@ -11,6 +11,9 @@ import {
   defaultForestCaptureProcessRuntime,
   forestCaptureCommand,
   forestCaptureHelp,
+  forestCompareCommand,
+  forestCompareHelp,
+  forestHelp,
   forestCaptureProcessDeps,
 } from "./forest-capture-command.js";
 
@@ -102,6 +105,23 @@ test("the process adapter resolves its imports from the checkout but preserves t
   });
 });
 
+test("the process adapter selects the comparative Studio runner without changing argv", async () => {
+  const calls: Array<{ args: readonly string[] }> = [];
+  const root = path.resolve("C:/storytree-fixture");
+  const deps = forestCaptureProcessDeps(root, {
+    execFile: (_executable, args, _options, callback) => {
+      calls.push({ args });
+      callback(null, "{}", "");
+    },
+    executable: "node-fixture",
+    cwd: "C:/caller-fixture",
+  });
+  await deps.invoke(["forest", "compare", "--fit"]);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]?.args[4], path.join(root, "apps", "studio", "scripts", "comparative-capture.mjs"));
+  assert.deepEqual(calls[0]?.args.slice(5), ["forest", "compare", "--fit"]);
+});
+
 test("the process adapter preserves numeric exits and maps non-numeric launch failures to one", async () => {
   const invokeWith = async (error: null | { code?: string | number }) => {
     const fakeExec = (_executable: string, _args: readonly string[], _options: unknown, callback: (error: null | { code?: string | number }, stdout: string, stderr: string) => void) => {
@@ -142,6 +162,47 @@ test("forest capture help is an exact runnable contract", () => {
   });
 });
 
+test("forest compare help is an exact runnable contract", () => {
+  assert.deepEqual(forestCompareHelp(), {
+    ok: true,
+    body: [
+      "storytree forest compare — capture identical semantic forest views on baseline and branch.",
+      "",
+      "  storytree forest compare --output <dir> --viewport <WxH> --padding <t,r,b,l> <targets...>",
+      "",
+      "Targets are required, repeatable, and run in the order written:",
+      "  --square <x,y,size>   frame an exact world-space square",
+      "  --story <id>          centre a story node",
+      "  --island <id>         fit a story island",
+      "  --resting             use the designed resting camera",
+      "  --fit                 fit the whole forest",
+      "",
+      "One Chromium process keeps one page per revision across the whole target batch. Publication",
+      "fails closed unless every paired receipt names the same target, frame, padding, and resolved",
+      "subject. The output includes paired PNG/JSON evidence, index.json, and contact-sheet.png.",
+      "Pass --force to run when the branch render-surface trigger would otherwise skip capture.",
+    ].join("\n"),
+    next: [
+      "storytree forest compare --output .gate-logs/forest-compare --viewport 1600x1000 --padding 32,32,32,32 --story <id> --fit --force",
+    ],
+  });
+});
+
+test("forest help is an exact command index", () => {
+  assert.deepEqual(forestHelp(), {
+    ok: true,
+    body: [
+      "storytree forest — deterministic forest framing and review evidence without mouse panning.",
+      "",
+      "  capture   screenshot semantic targets on one served revision",
+      "  compare   screenshot the same semantic targets on baseline and branch",
+      "",
+      "Run storytree forest capture --help or storytree forest compare --help for target syntax.",
+    ].join("\n"),
+    next: ["storytree forest capture --help", "storytree forest compare --help"],
+  });
+});
+
 test("forest dispatch distinguishes capture, help, and an unknown subcommand", async () => {
   let calls = 0;
   const deps = {
@@ -153,11 +214,32 @@ test("forest dispatch distinguishes capture, help, and an unknown subcommand", a
       },
     },
   };
-  assert.deepEqual(await run(["forest", "--help"], deps), forestCaptureHelp());
-  assert.deepEqual(await run(["forest", "other"], deps), forestCaptureHelp());
+  assert.deepEqual(await run(["forest", "--help"], deps), forestHelp());
+  assert.deepEqual(await run(["forest", "other"], deps), forestHelp());
+  assert.deepEqual(await run(["forest", "capture", "--help"], deps), forestCaptureHelp());
+  assert.deepEqual(await run(["forest", "compare", "--help"], deps), forestCompareHelp());
   assert.equal(calls, 0);
   assert.equal((await run(["forest", "capture", "--fit"], deps)).ok, true);
-  assert.equal(calls, 1);
+  assert.equal((await run(["forest", "compare", "--output", "/review", "--viewport", "1440x900", "--padding", "1,2,3,4", "--fit"], deps)).ok, true);
+  assert.equal(calls, 2);
+});
+
+test("forest compare reports its contact-sheet entry point and typed refusal", async () => {
+  const argv = ["forest", "compare", "--output", "/review", "--viewport", "1440x900", "--padding", "1,2,3,4", "--fit"];
+  assert.deepEqual(await forestCompareCommand(argv, {
+    async invoke() { return { status: 0, stdout: JSON.stringify({ ok: true, captures: 1, output: "/review" }), stderr: "" }; },
+  }), {
+    ok: true,
+    body: "compared 1 forest frame(s) in /review",
+    next: ["inspect /review/contact-sheet.png and index.json"],
+  });
+  assert.deepEqual(await forestCompareCommand(argv, {
+    async invoke() { return { status: 1, stdout: JSON.stringify({ ok: false, code: "comparison-failed", message: "receipts differ" }), stderr: "" }; },
+  }), {
+    ok: false,
+    body: "forest compare refused (comparison-failed): receipts differ",
+    next: ["storytree forest compare --help"],
+  });
 });
 
 test("the command reports exact success defaults and refuses malformed or contradictory child envelopes", async () => {

@@ -54,8 +54,9 @@ export const CLI_AREAS = [
   "build",
   "coverage",
   "ownership",
-  // `storytree forest capture` — deterministic camera framing and paired PNG/JSON evidence for
-  // frontend builders. Offline at dispatch; the Studio driver owns any browser/server lifecycle.
+  // `storytree forest capture|compare` — deterministic camera framing and paired PNG/JSON evidence
+  // for one revision or the same semantic views across baseline and branch. Offline at dispatch;
+  // the Studio drivers own browser/server/worktree lifecycle.
   "forest",
   // `storytree own` — this session's inventory of the background work it is still running, and the
   // verified reclaim of it (`shared-box-session-ownership-arc` inc 1-2). Offline, no store: both the
