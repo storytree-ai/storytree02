@@ -78,7 +78,10 @@ function parseOptions(argv: string[]): Options | undefined {
     } else return undefined;
   }
   if (!output || !viewport || !padding || targets.length === 0) return undefined;
-  return { ...(studioUrl === undefined ? {} : { studioUrl }), ...(browser === undefined ? {} : { browser }), output, viewport, padding, targets };
+  const options: Options = { output, viewport, padding, targets };
+  if (studioUrl !== undefined) options.studioUrl = studioUrl;
+  if (browser !== undefined) options.browser = browser;
+  return options;
 }
 
 const sameCamera = (left: Camera, right: Camera) => left.tx === right.tx && left.ty === right.ty && left.scale === right.scale;

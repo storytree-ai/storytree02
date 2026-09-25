@@ -40,11 +40,8 @@ export function defaultForestCaptureCommandDeps(repoRoot: string): ForestCapture
           // though the driver and loader are resolved absolutely from Storytree's own checkout.
           { cwd: process.cwd(), windowsHide: true, maxBuffer: 16 * 1024 * 1024 },
           (error, stdout, stderr) => {
-            const status = typeof (error as NodeJS.ErrnoException & { code?: unknown } | null)?.code === "number"
-              ? (error as unknown as { code: number }).code
-              : error === null
-                ? 0
-                : 1;
+            const code = error?.code;
+            const status = typeof code === "number" ? code : error === null ? 0 : 1;
             resolve({ status, stdout, stderr });
           },
         );

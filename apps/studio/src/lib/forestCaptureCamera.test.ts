@@ -54,7 +54,7 @@ function resolveWithPadding(
   captureFrame?: CapturePadding,
   overrides: Partial<ForestCaptureCameraInput> = {},
 ) {
-  return resolveForestCaptureCamera({
+  const input = {
     target,
     frame,
     world,
@@ -62,9 +62,10 @@ function resolveWithPadding(
     storyNodeScale: 1,
     resting,
     fit,
-    ...(captureFrame === undefined ? {} : { captureFrame }),
-    ...overrides,
-  } as PaddedCaptureInput);
+  } as PaddedCaptureInput;
+  if (captureFrame !== undefined) input.captureFrame = captureFrame;
+  Object.assign(input, overrides);
+  return resolveForestCaptureCamera(input);
 }
 
 function paddedCamera(worldX: number, worldY: number, scale: number) {
