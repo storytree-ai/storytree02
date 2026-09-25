@@ -2859,7 +2859,7 @@ export function TreeView({
         const resting = offsetCamera(restingInUsableFrame);
         const opening = readFittedRestingView() ? fit : resting;
         const limits = limitsForResting(opening.scale, fit.scale);
-        const result = resolveForestCaptureCamera({
+        const captureInput = {
           target,
           frame,
           world: {
@@ -2875,8 +2875,12 @@ export function TreeView({
           storyNodeScale: Math.max(opening.scale, (limits.min / 0.4) * 1.6),
           resting,
           fit,
-          ...(padding === undefined ? {} : { captureFrame: padding }),
-        });
+        };
+        const result = resolveForestCaptureCamera(
+          padding === undefined
+            ? captureInput
+            : { ...captureInput, captureFrame: padding },
+        );
         if (result.ok) {
           atFitRef.current = false;
           setAnimate(false);
