@@ -22,11 +22,14 @@
 //
 // ⚠ FAIL CLOSED ON A HALF-LOADED MAP — the corpus streams in and the world is rebuilt as it does, so
 // an early read exports a forest that is not there yet. Same discipline as `capture-resting-view.mjs`:
-// wait for the island count to stop moving, refuse below a floor, then read.
+// wait for the app's real motion-settled signal, refuse below an island floor, then read.
 //
 // ⚠ THE SERVER MUST BE THIS WORKTREE'S. `/api/health` stamps the directory the server runs from; the
 // export refuses a server that is not this checkout, because the scenes would carry a sibling's
 // packer and the ladder would judge someone else's code.
+//
+// Ordinary composition screenshots belong to `pnpm storytree forest capture`; this script remains
+// for the spacing ladder's exact scene exports, 2D metrics, and trail-survival checks.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -42,6 +45,7 @@ import {
   spacingArmId,
 } from '@storytree/forest-layout';
 import { pruneSceneForMapper } from '../src/lib/sceneExport.ts';
+import { waitForForestMotionAndCamera, waitForStableForest } from './lib/forest-capture-runtime.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..', '..', '..');
@@ -98,25 +102,21 @@ page.on('pageerror', (e) => pageErrors.push(e.message));
 async function capture(arm, view) {
   const url = `${URL_}/?${arm.query}${view.query ? `&${view.query}` : ''}&sceneExport=1#/tree`;
   await page.goto(url, { waitUntil: 'networkidle', timeout: 120_000 });
-  await page.waitForSelector('g.world-camera', { timeout: 90_000 });
-  let last = -1;
-  let stable = 0;
-  for (let i = 0; i < 160 && stable < 4; i += 1) {
-    await page.waitForTimeout(500);
-    const n = await page.evaluate(
-      () => new Set([...document.querySelectorAll('[data-story-id]')].map((e) => e.getAttribute('data-story-id'))).size,
-    );
-    stable = n === last && n > 0 ? stable + 1 : 0;
-    last = n;
+  try {
+    await waitForStableForest(page, {
+      label: `${arm.id}/${view.id}`,
+      minIslands: MIN_ISLANDS,
+      timeout: 90_000,
+    });
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
   }
-  if (last < MIN_ISLANDS) fail(`${arm.id}/${view.id}: only ${last} islands settled (floor ${MIN_ISLANDS}) — the map never finished loading`);
+  // Scene export is a distinct artifact-readiness condition; do not infer it from camera motion.
   await page.waitForFunction(() => window.__storytreeSceneExport !== undefined, null, { timeout: 60_000 });
-  await page.waitForTimeout(1000);
+  const cameraAttestation = await waitForForestMotionAndCamera(page, { timeout: 90_000 });
+  if (!cameraAttestation.settled) fail(`${arm.id}/${view.id}: the camera moved after scene export became ready`);
   const read = await page.evaluate(() => {
     const b = window.__storytreeSceneExport;
-    const g = document.querySelector('g.world-camera');
-    const t = g?.getAttribute('transform') ?? '';
-    const m = /translate\(([-\d.]+)[ ,]+([-\d.]+)\)\s*scale\(([-\d.]+)\)/.exec(t);
     const byId = new Map();
     for (const el of document.querySelectorAll('[data-story-id]')) {
       const id = el.getAttribute('data-story-id');
@@ -126,13 +126,12 @@ async function capture(arm, view) {
     }
     return {
       bridge: JSON.stringify(b),
-      camera: { transform: t, scale: m ? +m[3] : null },
       islands2d: [...byId.values()],
     };
   });
   const png = join(EVIDENCE_OUT, `2d-${arm.id}-${view.id}.png`);
   await page.screenshot({ path: png });
-  return { ...read, png };
+  return { ...read, camera: cameraAttestation.camera, png };
 }
 
 const manifest = {

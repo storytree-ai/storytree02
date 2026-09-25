@@ -11,8 +11,12 @@
 //
 // The two arms differ ONLY in the `?restingView=fit` query param, so the same build, the same
 // corpus and the same paint produce both pictures and the comparison isolates the framing.
+// Ordinary composition screenshots belong to `pnpm storytree forest capture`; this historical
+// instrument remains because it compares fitted/designed framing and reports rendered island metrics.
 import { chromium } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
+
+import { waitForStableForest } from './lib/forest-capture-runtime.mjs';
 
 const OUT = process.env.RESTING_VIEW_OUT ?? '../../docs/research/resting-view-2026-08-28';
 mkdirSync(OUT, { recursive: true });
@@ -30,35 +34,14 @@ page.on('console', (m) => { if (m.type() === 'error') console.error('  page erro
  *  `<g class="world-camera" transform="translate(tx ty) scale(s)">` is what the map actually draws with. */
 async function measure(url, name) {
   await page.goto(url, { waitUntil: 'networkidle', timeout: 90_000 });
-  await page.waitForSelector('g.world-camera', { timeout: 60_000 });
-
-  // ⚠ FAIL CLOSED ON A HALF-LOADED MAP. The corpus streams in, and the resting camera is recomputed
-  // as it does — so a capture taken early reports a confident scale for a forest that is not there
-  // yet. It bit on the first run of this script: the fitted arm measured 9 islands and reported a
-  // scale 14% off its settled value, and nothing about the output said so. Wait for the island
-  // count to stop moving, then REFUSE below a floor rather than publish the number.
-  let last = -1;
-  let stable = 0;
-  for (let i = 0; i < 120 && stable < 4; i++) {
-    await page.waitForTimeout(500);
-    const n = await page.evaluate(
-      () => new Set([...document.querySelectorAll('[data-story-id]')].map((e) => e.getAttribute('data-story-id'))).size,
-    );
-    stable = n === last && n > 0 ? stable + 1 : 0;
-    last = n;
-  }
-  if (last < MIN_ISLANDS) {
-    throw new Error(
-      `${name}: only ${last} islands settled (floor ${MIN_ISLANDS}) — the map never finished loading, ` +
-        `so any framing measured here would be a number for a forest that is not on screen.`,
-    );
-  }
-  // and one more frame for the settled camera's own layout effect
-  await page.waitForTimeout(1000);
+  // ⚠ FAIL CLOSED ON A HALF-LOADED MAP. The shared capture runtime waits for the app's real motion
+  // signal after two animation frames, reads the delivered camera, and checks the live-corpus floor.
+  const settled = await waitForStableForest(page, {
+    label: name,
+    minIslands: MIN_ISLANDS,
+    timeout: 90_000,
+  });
   const data = await page.evaluate(() => {
-    const g = document.querySelector('g.world-camera');
-    const t = g?.getAttribute('transform') ?? '';
-    const m = /translate\(([-\d.]+)[ ,]+([-\d.]+)\)\s*scale\(([-\d.]+)\)/.exec(t);
     // every island's drawn bounding box, in CSS px, as the browser lays it out
     // One entry per island: the OUTERMOST element carrying each story id, measured by the browser's
     // own layout. Several nested nodes carry `data-story-id`, so taking the largest box per id is
@@ -73,10 +56,16 @@ async function measure(url, name) {
       }
     }
     const islands = [...byId.values()];
-    return { transform: t, tx: m ? +m[1] : null, ty: m ? +m[2] : null, scale: m ? +m[3] : null, islands };
+    return { islands };
   });
   await page.screenshot({ path: `${OUT}/${name}.png` });
-  return data;
+  return {
+    ...data,
+    transform: settled.camera.transform,
+    tx: settled.camera.tx,
+    ty: settled.camera.ty,
+    scale: settled.camera.scale,
+  };
 }
 
 const base = 'http://localhost:5173/#/';

@@ -45,6 +45,7 @@ function successfulDeps(overrides: Partial<Deps> = {}) {
   const calls: Array<{ arm: "baseline" | "branch"; target: Target; viewport: unknown; padding: unknown }> = [];
   const writes: Array<{ path: string; content: Uint8Array | string }> = [];
   const published: string[] = [];
+  const countCalls: Array<"baseline" | "branch"> = [];
   const deps = {
     async capture(arm: "baseline" | "branch", target: Target, frame: typeof viewport, inset: typeof padding) {
       calls.push({ arm, target, viewport: frame, padding: inset });
@@ -52,14 +53,17 @@ function successfulDeps(overrides: Partial<Deps> = {}) {
       return { receipt: receipt(target, arm, index), png: new Uint8Array([index, arm === "baseline" ? 0 : 1]) };
     },
     async elementCounts(arm: "baseline" | "branch") {
-      return arm === "baseline" ? { parcels: 5, islands: 2, portals: 1 } : { parcels: 6, islands: 2, portals: 1 };
+      countCalls.push(arm);
+      if (arm === "baseline") return { parcels: 5, islands: 2, portals: 1 };
+      assert.equal(arm, "branch");
+      return { parcels: 6, islands: 2, portals: 1 };
     },
     async writeCandidate(path: string, content: Uint8Array | string) { writes.push({ path, content }); },
     async publish(path: string) { published.push(path); },
     async removeCandidate(_path: string) {},
     ...overrides,
   } satisfies Deps;
-  return { deps, calls, writes, published };
+  return { deps, calls, countCalls, writes, published };
 }
 
 describe("fcsc-cli-replays-one-canonical-target-list-to-both-arms: both revisions receive one ordered semantic frame", () => {
@@ -79,6 +83,54 @@ describe("fcsc-cli-replays-one-canonical-target-list-to-both-arms: both revision
   });
 });
 
+describe("fcsc-cli-refuses-an-incomplete-or-malformed-frame-before-capture", () => {
+  test("requires output, a strict positive-looking WxH token, four finite padding values, and at least one target", async () => {
+    const invalidArguments = [
+      argv.filter((entry) => entry !== "/review" && entry !== "--output"),
+      argv.filter((entry) => entry !== "1440x900" && entry !== "--viewport"),
+      argv.filter((entry) => entry !== "11,23,37,41" && entry !== "--padding"),
+      ["forest", "compare", "--output", "/review", "--viewport", "1440x900", "--padding", "11,23,37,41"],
+      ["--output", "/review", "--viewport", "1440x", "--padding", "11,23,37,41", "--fit"],
+      ["--output", "/review", "--viewport", "x900", "--padding", "11,23,37,41", "--fit"],
+      ["--output", "/review", "--viewport", "1440x900extra", "--padding", "11,23,37,41", "--fit"],
+      ["--output", "/review", "--viewport", "1440x900", "--padding", "11,23,37", "--fit"],
+      ["--output", "/review", "--viewport", "1440x900", "--padding", "11,23,nope,41", "--fit"],
+      ["--output", "/review", "--viewport", "1440x900", "--padding", "11,23,37,41", "--square", "10,20"],
+      ["--output", "/review", "--viewport", "1440x900", "--padding", "11,23,37,41", "--square", "10,nope,30"],
+      ["--output", "/review", "--viewport", "1440x900", "--padding", "11,23,37,41", "--story"],
+      ["--output", "/review", "--viewport", "1440x900", "--padding", "11,23,37,41", "--island"],
+      ["--unknown", "injected-output", "--viewport", "1440x900", "--padding", "11,23,37,41", "--fit"],
+      ["--output", "/review", "--unknown", "1440x900", "--padding", "11,23,37,41", "--fit"],
+      ["--output", "/review", "--viewport", "extra1440x900", "--padding", "11,23,37,41", "--fit"],
+      ["--output", "/review", "--viewport", "1440x900", "--unknown", "11,23,37,41", "--fit"],
+      ["--output", "/review", "--viewport", "1440x900", "--padding", "11,23,37,41", "--unknown", "10,20,30"],
+      [...argv, "--output"],
+      [...argv, "--viewport"],
+      [...argv, "--padding"],
+      [...argv, "--square"],
+    ];
+    for (const invalid of invalidArguments) {
+      const fixture = successfulDeps();
+      assert.deepEqual(await captureComparativeForest(invalid, fixture.deps), { ok: false, code: "comparison-failed" });
+      assert.equal(fixture.calls.length, 0, `capture must not start for ${invalid.join(" ")}`);
+      assert.equal(fixture.countCalls.length, 0);
+      assert.equal(fixture.writes.length, 0);
+      assert.equal(fixture.published.length, 0);
+    }
+  });
+
+  test("requires a resolved subject when both arms agree that a square or named subject is unresolved", async () => {
+    const fixture = successfulDeps({
+      async capture(arm: "baseline" | "branch", target: Target) {
+        return { receipt: { ...receipt(target, arm, 0), resolved: undefined }, png: new Uint8Array([1]) };
+      },
+    });
+    assert.deepEqual(await captureComparativeForest(argv, fixture.deps), { ok: false, code: "comparison-failed" });
+    assert.equal(fixture.writes.length, 0);
+    assert.equal(fixture.published.length, 0);
+  });
+});
+
 describe("fcsc-cli-validates-applied-receipt-pairs-before-output: comparability is established before any review artifact", () => {
   test("refuses mismatched subjects, frame, settlement, or revision before publishing", async () => {
     const broken = [
@@ -88,11 +140,12 @@ describe("fcsc-cli-validates-applied-receipt-pairs-before-output: comparability 
       (value: ReturnType<typeof receipt>) => ({ ...value, viewport: { width: 1, height: 1 } }),
       (value: ReturnType<typeof receipt>) => ({ ...value, padding: { top: 0, right: 0, bottom: 0, left: 0 } }),
       (value: ReturnType<typeof receipt>) => ({ ...value, settled: { ...value.settled, settled: false } }),
+      (value: ReturnType<typeof receipt>) => ({ ...value, settled: { ...value.settled, phase: "moving" } }),
       (value: ReturnType<typeof receipt>) => ({ ...value, revision: "" }),
     ];
     for (const corrupt of broken) {
       const fixture = successfulDeps({
-        async capture(arm: "baseline" | "branch", target: Target, frame: typeof viewport, inset: typeof padding) {
+        async capture(arm: "baseline" | "branch", target: Target, _frame: typeof viewport, _inset: typeof padding) {
           const index = target.kind === "fit" ? 4 : 0;
           const value = receipt(target as Target, arm, index);
           return { receipt: arm === "branch" ? corrupt(value) : value, png: new Uint8Array([1]) };
@@ -121,6 +174,7 @@ describe("fcsc-cli-publishes-a-complete-target-indexed-review-set: several targe
     assert.ok(index, "the review set has a target-indexed entry point");
     const review = JSON.parse(String(index.content));
     assert.deepEqual(review.targets.map((entry: { requested: Target }) => entry.requested), targets);
+    assert.deepEqual(review.targets.map((entry: { order: number }) => entry.order), [1, 2, 3, 4, 5]);
     assert.equal(review.comparison.baseline.parcels, 5);
     assert.equal(review.comparison.branch.parcels, 6);
     assert.ok(paths.includes("/review/contact-sheet.png"));

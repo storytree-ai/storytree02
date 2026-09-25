@@ -14,11 +14,10 @@
 // human never has to eyeball to catch a shrink or a lost connector; the screenshot pair is for the
 // judgment a count cannot make.
 //
-// THE SETTLE IS THE APP'S OWN ATTESTATION, NOT A SLEEP. Both captures are taken through
-// `captureSettledScreenshot` (apps/desktop/e2e/harness.mjs, built for
-// `frontend-settled-signal-from-the-app`) — reused rather than re-derived, so this script waits on
-// `window.__storytreeMotionSettled` exactly the way the desktop E2E harness does, and writes the same
-// `<png>.settled.json` sidecar attestation beside each PNG. There is no plain sleep left here.
+// THE SETTLE IS THE APP'S OWN ATTESTATION, NOT A SLEEP. Every semantic camera command crosses a
+// double requestAnimationFrame boundary, then reuses `waitForForestSettled` / `readMotionSettled`
+// from the desktop E2E harness and verifies the delivered `g.world-camera` transform against the
+// app-owned seam receipt before screenshotting. There is no pointer gesture or plain settle sleep.
 //
 // THE BASELINE IS EXPLICIT, MERGE-BASE STAYS THE DEFAULT. `merge-base(origin/main, HEAD)` answers
 // "did MY BRANCH change the render?" — right for a PR, and the zero-argument behaviour still. It does
@@ -43,7 +42,8 @@
 // about the BRANCH's own diff against `origin/main` — it is unaffected by `--baseline-ref`, which
 // only changes what the baseline capture renders, never whether a capture is worth taking.
 //
-// Usage: pnpm --filter studio capture:comparative [-- --out <dir>] [--settle-timeout-ms <ms>]
+// Usage: storytree forest compare --output <dir> --viewport WxH --padding t,r,b,l <targets...>
+//        (legacy direct script: pnpm --filter studio capture:comparative [-- --out <dir>])
 //        [--viewport WxH] [--branch-url <url>] [--baseline-url <url>] [--baseline-ref <commit-ish>]
 //        [--force] [--clean-worktree] [--branch-port <n>] [--baseline-port <n>]
 // (DB up — `pnpm db:up` — unless both --branch-url and --baseline-url are given.)
@@ -51,6 +51,7 @@
 import { chromium } from '@playwright/test';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -60,6 +61,7 @@ import { ensureLiveDb, loadLocalSecrets } from '@storytree/drive';
 import { discoverWorkspaceProjects } from '../../../packages/cli/src/ci-affected.ts';
 import { gitLines, localAffectedScope } from '../../../packages/cli/src/gate-scope.ts';
 import { renderSurfaceTrigger } from '../../../packages/cli/src/frontend-capture-trigger.ts';
+import { captureComparativeForest } from '../../../packages/cli/src/forest-comparative-capture.ts';
 import {
   CAPTURE_SELECTORS,
   computeCaptureDelta,
@@ -67,12 +69,9 @@ import {
   toRenderElementCounts,
   verifyServedTree,
 } from '../src/lib/comparativeCapture.ts';
-// Reused, not re-derived (frontend-capture-settled-and-explicit-baseline's own design note): the
-// desktop E2E harness's settled-attestation glue operates on any Playwright Page-like object
-// (`.locator`/`.waitForFunction`/`.evaluate`/`.screenshot`) — an Electron window and this script's
-// plain Chromium `page` both satisfy it, so there is no reason to fork a second implementation of the
-// wait.
-import { captureSettledScreenshot } from '../../desktop/e2e/harness.mjs';
+// Shared with the one-arm and export scripts: double-rAF, the app's settle bridge and delivered
+// SVG-camera verification are one runtime contract rather than parallel timing recipes.
+import { waitForForestMotionAndCamera } from './lib/forest-capture-runtime.mjs';
 
 const studioDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = path.resolve(studioDir, '..', '..');
@@ -91,7 +90,24 @@ const DEFAULT_BASELINE_PORT = 5188;
 const READY_TIMEOUT_MS = 60_000;
 
 function log(msg) {
-  console.log(`[capture-comparative] ${msg}`);
+  process.stderr.write(`[capture-comparative] ${msg}\n`);
+}
+
+function parseTargets(argv) {
+  const targets = [];
+  for (let index = 0; index < argv.length; index += 1) {
+    const flag = argv[index];
+    const value = argv[index + 1];
+    if (flag === '--resting' || flag === '--fit') targets.push({ kind: flag.slice(2) });
+    else if (flag === '--story' && value !== undefined) { targets.push({ kind: 'story-node', id: value }); index += 1; }
+    else if (flag === '--island' && value !== undefined) { targets.push({ kind: 'island', id: value }); index += 1; }
+    else if (flag === '--square' && value !== undefined) {
+      const [x, y, size] = value.split(',').map(Number);
+      targets.push({ kind: 'square', x, y, size });
+      index += 1;
+    }
+  }
+  return targets;
 }
 
 function readArgs(argv) {
@@ -117,7 +133,7 @@ function readArgs(argv) {
     return { width: Number(m[1]), height: Number(m[2]) };
   })();
   return {
-    out: values.get('out') ?? path.join(repoRoot, '.gate-logs', 'frontend-capture', new Date().toISOString().replace(/[:.]/g, '-')),
+    out: values.get('output') ?? values.get('out') ?? path.join(repoRoot, '.gate-logs', 'frontend-capture', new Date().toISOString().replace(/[:.]/g, '-')),
     settleTimeoutMs: Number(values.get('settle-timeout-ms') ?? DEFAULT_SETTLE_TIMEOUT_MS),
     viewport,
     branchUrl: values.get('branch-url') ?? null,
@@ -133,15 +149,20 @@ function readArgs(argv) {
 
 function printHelp() {
   console.log(`
-storytree studio comparative capture — branch vs a baseline (default merge-base(origin/main, HEAD)),
+storytree forest compare — branch vs a baseline (default merge-base(origin/main, HEAD)),
 same live corpus, both captures attested settled by the app itself.
 
-  pnpm --filter studio capture:comparative -- [options]
+  storytree forest compare --output <dir> --viewport <WxH> --padding <t,r,b,l> <targets...>
 
-  --out <dir>            output directory (default: .gate-logs/frontend-capture/<timestamp>/)
+  --output <dir>         output directory (legacy direct-script alias: --out)
+  --square <x,y,size>    frame an exact world-space square (repeatable)
+  --story <id>           centre a story node (repeatable)
+  --island <id>          fit a story island (repeatable)
+  --resting              use the designed resting camera (repeatable)
+  --fit                  fit the whole forest (repeatable)
   --settle-timeout-ms <ms>  how long to wait for window.__storytreeMotionSettled to attest settled,
                           per capture (default ${DEFAULT_SETTLE_TIMEOUT_MS}) — this is a timeout on the
-                          real app signal, not a sleep; see captureSettledScreenshot (harness.mjs).
+                          real app signal, not a sleep; see waitForForestSettled (harness.mjs).
   --viewport WxH          capture viewport (default ${DEFAULT_VIEWPORT.width}x${DEFAULT_VIEWPORT.height})
   --branch-url <url>      skip provisioning; capture the branch render from this already-running URL
   --baseline-url <url>    skip provisioning; capture the baseline render from this already-running URL
@@ -295,7 +316,12 @@ async function assertServedTree(url, expectedSha, label) {
   }
   const verdict = verifyServedTree(health, expectedSha, label);
   if (!verdict.ok) throw new Error(`[capture-comparative] ${verdict.reason}`);
-  log(`${label} server confirmed serving ${expectedSha.slice(0, 12)}`);
+  const revision = health?.code?.startedAt;
+  if (typeof revision !== 'string' || !/^[0-9a-f]{40,64}$/i.test(revision)) {
+    throw new Error(`[capture-comparative] ${label}: /api/health has no usable code.startedAt served revision`);
+  }
+  log(`${label} server confirmed serving ${revision.slice(0, 12)}`);
+  return revision;
 }
 
 function killTree(child, label) {
@@ -312,21 +338,7 @@ function killTree(child, label) {
   }
 }
 
-/** Navigate to `#/tree`, skip the Act 2 arrival regrow (same static-map treatment both renders get —
- *  the same flag `launchOffline()` sets), then capture ONLY once the app itself attests it has
- *  settled (`captureSettledScreenshot`, reused from the desktop E2E harness — no sleep here). Writes
- *  the PNG straight to `pngPath` and the `<pngPath>.settled.json` attestation sidecar
- *  `captureSettledScreenshot` stamps beside it, then reads the element counts off the same settled
- *  DOM. Returns the extracted counts + the settle attestation stamp. */
-async function captureOne(browser, url, viewport, settleTimeoutMs, pngPath, label) {
-  const context = await browser.newContext({ viewport, deviceScaleFactor: 1 });
-  await context.addInitScript(() => sessionStorage.setItem('storytree.act2.arrived', '1'));
-  const page = await context.newPage();
-  log(`[${label}] navigating to ${url}#/tree…`);
-  await page.goto(`${url}/#/tree`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-  log(`[${label}] waiting for the app's own settled attestation (window.__storytreeMotionSettled)…`);
-  const stamp = await captureSettledScreenshot(page, pngPath, { timeout: settleTimeoutMs, fullPage: false });
-  log(`[${label}] settled and captured — reasons still open: ${stamp.reasons.join(', ') || 'none'}`);
+async function readElementCounts(page) {
   const raw = await page.evaluate((sel) => {
     const rectOf = (el) => {
       const r = el.getBoundingClientRect();
@@ -339,16 +351,208 @@ async function captureOne(browser, url, viewport, settleTimeoutMs, pngPath, labe
       parcelBlade: document.querySelectorAll(sel.parcelBlade).length,
     };
   }, CAPTURE_SELECTORS);
-  await context.close();
-  return { counts: toRenderElementCounts(raw), stamp };
+  return toRenderElementCounts(raw);
+}
+
+/** One arm owns one page for its whole target list. The app seam owns camera resolution; this
+ * adapter only attests the delivered camera after two rendered frames and the real settle bridge. */
+async function openArm(browser, url, viewport, settleTimeoutMs, label, revision) {
+  const context = await browser.newContext({ viewport, deviceScaleFactor: 1 });
+  await context.addInitScript(() => sessionStorage.setItem('storytree.act2.arrived', '1'));
+  const page = await context.newPage();
+  log(`[${label}] navigating to ${url}#/tree…`);
+  await page.goto(`${url}/#/tree`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+  await page.waitForFunction(
+    () => typeof window.__storytreeForestCaptureCamera?.capture === 'function',
+    undefined,
+    { timeout: 120_000 },
+  );
+  let serial = 0;
+  return {
+    async capture(target, frame, padding) {
+      await page.setViewportSize(frame);
+      const seam = await page.evaluate(
+        ({ requested, inset }) => window.__storytreeForestCaptureCamera.capture(requested, { captureFrame: inset }),
+        { requested: target, inset: padding },
+      );
+      if (!seam?.ok) {
+        const error = new Error(`[${label}] forest camera refused ${target.kind}: ${seam?.code ?? 'unknown refusal'}`);
+        error.captureCode = seam?.code ?? 'capture-failed';
+        throw error;
+      }
+      const attestation = await waitForForestMotionAndCamera(page, {
+        timeout: settleTimeoutMs,
+        expectedCamera: seam.camera,
+      });
+      serial += 1;
+      const settled = {
+        ...attestation,
+        serial,
+      };
+      if (!settled.settled) throw new Error(`[${label}] delivered camera did not match the app receipt`);
+      const png = await page.screenshot({ type: 'png', fullPage: false });
+      return {
+        receipt: {
+          requested: target,
+          resolved: seam.resolved,
+          applied: seam.camera,
+          viewport: frame,
+          padding,
+          revision,
+          settled,
+        },
+        png,
+      };
+    },
+    counts: () => readElementCounts(page),
+    close: () => context.close(),
+  };
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+}
+
+function targetLabel(target) {
+  if (target.kind === 'square') return `square ${target.x},${target.y},${target.size}`;
+  if (target.kind === 'story-node') return `story ${target.id}`;
+  if (target.kind === 'island') return `island ${target.id}`;
+  return target.kind;
+}
+
+async function renderContactSheet(browser, targets, content, viewport) {
+  const thumbWidth = 560;
+  const thumbHeight = Math.max(180, Math.min(420, Math.round(thumbWidth * viewport.height / viewport.width)));
+  const rows = targets.map((target, index) => {
+    const number = index + 1;
+    const baseline = content.get(`baseline/forest-${number}.png`);
+    const branch = content.get(`branch/forest-${number}.png`);
+    if (!(baseline instanceof Uint8Array) || !(branch instanceof Uint8Array)) {
+      throw new Error(`contact sheet is missing target ${number}`);
+    }
+    const image = (bytes) => `data:image/png;base64,${Buffer.from(bytes).toString('base64')}`;
+    return `<section><h2>${number}. ${escapeHtml(targetLabel(target))}</h2><div class="pair"><figure><figcaption>baseline</figcaption><img src="${image(baseline)}"></figure><figure><figcaption>branch</figcaption><img src="${image(branch)}"></figure></div></section>`;
+  }).join('');
+  const sheet = await browser.newPage({ viewport: { width: 1240, height: Math.min(16_000, targets.length * (thumbHeight + 100) + 40) } });
+  try {
+    await sheet.setContent(`<!doctype html><style>html{background:#151711;color:#f4f0df;font:15px system-ui}body{margin:20px}section{margin:0 0 24px}h2{font-size:17px;margin:0 0 8px}.pair{display:grid;grid-template-columns:1fr 1fr;gap:18px}figure{margin:0;background:#24271e;padding:10px}figcaption{font-weight:700;margin-bottom:7px}img{display:block;width:${thumbWidth}px;height:${thumbHeight}px;object-fit:contain;background:#10120d}</style>${rows}`, { waitUntil: 'load' });
+    await sheet.waitForFunction(() => Array.from(document.images).every((image) => image.complete && image.naturalWidth > 0));
+    return await sheet.screenshot({ type: 'png', fullPage: true });
+  } finally {
+    await sheet.close();
+  }
+}
+
+/** The signed core publishes every candidate only after pair validation. This writer adds one final
+ * barrier: all paths rename together, and any failed rename removes the already-visible subset. */
+class ComparativeCaptureFiles {
+  constructor(output, expected, browser, targets, viewport) {
+    this.output = path.resolve(output);
+    this.expected = expected;
+    this.browser = browser;
+    this.targets = targets;
+    this.viewport = viewport;
+    this.candidates = new Map();
+    this.content = new Map();
+    this.publishWaiters = [];
+    this.published = new Set();
+    this.token = `${process.pid}-${Date.now()}`;
+  }
+
+  relative(finalPath) {
+    return path.relative(this.output, path.resolve(finalPath)).replaceAll('\\', '/');
+  }
+
+  async writeCandidate(finalPath, original) {
+    const absolute = path.resolve(finalPath);
+    if (existsSync(absolute)) throw new Error(`refusing to overwrite existing comparative capture ${absolute}`);
+    let content = original;
+    if (this.relative(absolute) === 'contact-sheet.png') {
+      content = await renderContactSheet(this.browser, this.targets, this.content, this.viewport);
+      if (!(content instanceof Uint8Array) || content.byteLength === 0) throw new Error('contact sheet renderer returned an empty PNG');
+    }
+    await mkdir(path.dirname(absolute), { recursive: true });
+    const candidate = `${absolute}.candidate-${this.token}`;
+    await writeFile(candidate, content, { flag: 'wx' });
+    this.candidates.set(absolute, candidate);
+    this.content.set(this.relative(absolute), content);
+  }
+
+  publish(finalPath) {
+    const absolute = path.resolve(finalPath);
+    return new Promise((resolve, reject) => {
+      this.publishWaiters.push({ absolute, resolve, reject });
+      if (this.publishWaiters.length === this.expected) void this.flush();
+    });
+  }
+
+  async flush() {
+    try {
+      for (const { absolute } of this.publishWaiters) {
+        const candidate = this.candidates.get(absolute);
+        if (!candidate) throw new Error(`no comparative candidate exists for ${absolute}`);
+        await rename(candidate, absolute);
+        this.candidates.delete(absolute);
+        this.published.add(absolute);
+      }
+      for (const waiter of this.publishWaiters) waiter.resolve();
+    } catch (error) {
+      for (const finalPath of this.published) await rm(finalPath, { force: true }).catch(() => {});
+      for (const waiter of this.publishWaiters) waiter.reject(error);
+    }
+  }
+
+  async removeCandidate(finalPath) {
+    const absolute = path.resolve(finalPath);
+    const candidate = this.candidates.get(absolute);
+    if (candidate) await rm(candidate, { force: true }).catch(() => {});
+    if (this.published.has(absolute)) await rm(absolute, { force: true }).catch(() => {});
+    this.candidates.delete(absolute);
+    this.published.delete(absolute);
+  }
 }
 
 async function main() {
-  const args = readArgs(process.argv.slice(2));
+  const invocation = process.argv.slice(2);
+  const fromCli = invocation[0] === 'forest' && invocation[1] === 'compare';
+  const driverArgv = fromCli ? invocation.slice(2) : invocation;
+  const args = readArgs(driverArgv);
   if (args.help) {
     printHelp();
     return 0;
   }
+
+  let targets = parseTargets(driverArgv);
+  // Preserve the package script's historical zero-target "opening frame" capture. The public CLI
+  // is deliberately stricter: its semantic target is the whole point of the command.
+  if (targets.length === 0 && !fromCli) targets = [{ kind: 'resting' }];
+  if (targets.length === 0) {
+    process.stdout.write(`${JSON.stringify({ ok: false, code: 'invalid-target', message: 'forest compare needs at least one --square, --story, --island, --resting, or --fit target' })}\n`);
+    return 1;
+  }
+  if (fromCli && (!driverArgv.includes('--output') || !driverArgv.includes('--viewport') || !driverArgv.includes('--padding'))) {
+    process.stdout.write(`${JSON.stringify({ ok: false, code: 'invalid-frame', message: 'forest compare requires --output, --viewport, and --padding' })}\n`);
+    return 1;
+  }
+  const padding = (() => {
+    const index = driverArgv.lastIndexOf('--padding');
+    const raw = index === -1 ? '0,0,0,0' : driverArgv[index + 1];
+    const values = raw?.split(',').map(Number) ?? [];
+    if (values.length !== 4 || values.some((value) => !Number.isFinite(value))) throw new Error(`--padding must be t,r,b,l, got "${raw}"`);
+    return { top: values[0], right: values[1], bottom: values[2], left: values[3] };
+  })();
+  const targetArgv = targets.flatMap((target) => {
+    if (target.kind === 'square') return ['--square', `${target.x},${target.y},${target.size}`];
+    if (target.kind === 'story-node') return ['--story', target.id];
+    if (target.kind === 'island') return ['--island', target.id];
+    return [`--${target.kind}`];
+  });
+  const comparativeArgv = [
+    'forest', 'compare', '--output', args.out,
+    '--viewport', `${args.viewport.width}x${args.viewport.height}`,
+    '--padding', `${padding.top},${padding.right},${padding.bottom},${padding.left}`,
+    ...targetArgv,
+  ];
 
   loadLocalSecrets(); // STORYTREE_DB_USER, for the live pg store both dev servers default to.
 
@@ -360,6 +564,7 @@ async function main() {
     log(`render-surface trigger: ${trigger.affected ? 'FIRES' : 'skips'} — ${trigger.reason}`);
     if (!trigger.affected) {
       log('nothing to capture (pass --force to capture anyway).');
+      process.stdout.write(`${JSON.stringify({ ok: true, output: path.resolve(args.out), captures: 0, skipped: true })}\n`);
       return 0;
     }
   }
@@ -395,13 +600,14 @@ async function main() {
       }
     }
 
+    const branchSha = git(['rev-parse', 'HEAD']);
     let branchUrl = args.branchUrl;
     if (branchUrl === null) {
       branchProc = startDevServer(studioDir, args.branchPort, 'branch');
       branchUrl = `http://127.0.0.1:${args.branchPort}`;
       await waitForReady(branchUrl, READY_TIMEOUT_MS, branchProc);
-      await assertServedTree(branchUrl, git(['rev-parse', 'HEAD']), 'branch');
     }
+    const branchRevision = await assertServedTree(branchUrl, branchSha, 'branch');
 
     let baselineUrl = args.baselineUrl;
     if (baselineUrl === null) {
@@ -418,52 +624,79 @@ async function main() {
       baselineProc = startDevServer(baselineStudioDir, args.baselinePort, 'baseline');
       baselineUrl = `http://127.0.0.1:${args.baselinePort}`;
       await waitForReady(baselineUrl, READY_TIMEOUT_MS, baselineProc);
-      await assertServedTree(baselineUrl, baselineSha, 'baseline');
     }
-
-    const baselinePngPath = path.join(args.out, 'baseline.png');
-    const branchPngPath = path.join(args.out, 'branch.png');
+    const baselineRevision = await assertServedTree(baselineUrl, baselineSha, 'baseline');
 
     const browser = await chromium.launch({ headless: true });
-    let branchResult;
-    let baselineResult;
+    let baselineArm;
+    let branchArm;
+    const counts = {};
+    let lastCaptureCode = null;
     try {
-      baselineResult = await captureOne(browser, baselineUrl, args.viewport, args.settleTimeoutMs, baselinePngPath, 'baseline');
-      branchResult = await captureOne(browser, branchUrl, args.viewport, args.settleTimeoutMs, branchPngPath, 'branch');
+      baselineArm = await openArm(browser, baselineUrl, args.viewport, args.settleTimeoutMs, 'baseline', baselineRevision);
+      branchArm = await openArm(browser, branchUrl, args.viewport, args.settleTimeoutMs, 'branch', branchRevision);
+      const arms = { baseline: baselineArm, branch: branchArm };
+      const files = new ComparativeCaptureFiles(args.out, targets.length * 4 + 2, browser, targets, args.viewport);
+      const result = await captureComparativeForest(comparativeArgv, {
+        async capture(arm, target, viewport, inset) {
+          try {
+            return await arms[arm].capture(target, viewport, inset);
+          } catch (error) {
+            lastCaptureCode = error?.captureCode ?? 'capture-failed';
+            throw error;
+          }
+        },
+        async elementCounts(arm) {
+          counts[arm] = await arms[arm].counts();
+          return counts[arm];
+        },
+        writeCandidate: (file, content) => files.writeCandidate(file, content),
+        publish: (file) => files.publish(file),
+        removeCandidate: (file) => files.removeCandidate(file),
+      });
+      if (!result.ok) {
+        process.stdout.write(`${JSON.stringify({ ok: false, code: lastCaptureCode ?? result.code, message: 'comparative capture refused before publishing a complete review set' })}\n`);
+        return 1;
+      }
     } finally {
+      await baselineArm?.close().catch(() => {});
+      await branchArm?.close().catch(() => {});
       await browser.close();
     }
 
     const branchLabel = `BRANCH (${git(['rev-parse', '--abbrev-ref', 'HEAD']) || 'HEAD'})`;
     const baselineLabel = `BASELINE (${baselineSource} ${baselineSha.slice(0, 10)})`;
-    const rows = computeCaptureDelta(baselineResult.counts, branchResult.counts);
+    const rows = computeCaptureDelta(counts.baseline, counts.branch);
     const table = formatCaptureComparisonTable(baselineLabel, branchLabel, rows);
 
-    // Both PNGs are already written to baselinePngPath/branchPngPath by captureSettledScreenshot
-    // (inside captureOne), along with their `.settled.json` attestation sidecars — nothing left to
-    // write here for the images themselves.
     const report = [
       '# Forest map — corpus-scale comparative capture',
       '',
       `baseline: ${baselineSource} = \`${baselineSha}\` (trigger merge-base: \`${mergeBase}\`) · ` +
         `viewport ${args.viewport.width}x${args.viewport.height} · ` +
-        `settle: app-attested via window.__storytreeMotionSettled (captureSettledScreenshot, timeout ${args.settleTimeoutMs}ms) — ` +
-        `see baseline.png.settled.json / branch.png.settled.json`,
+        `settle: app-attested via window.__storytreeMotionSettled (timeout ${args.settleTimeoutMs}ms)`,
       '',
       table,
       '',
       '## Raw counts',
       '',
       '```json',
-      JSON.stringify({ baseline: baselineResult.counts, branch: branchResult.counts }, null, 2),
+      JSON.stringify(counts, null, 2),
       '```',
       '',
-      'Images: `baseline.png`, `branch.png` (this directory).',
+      `Review set: \`contact-sheet.png\`, \`index.json\`, and ${targets.length} target pair(s) under \`baseline/\` and \`branch/\`.`,
       '',
     ].join('\n');
-    writeFileSync(path.join(args.out, 'comparison.md'), report, 'utf8');
+    try {
+      writeFileSync(path.join(args.out, 'comparison.md'), report, 'utf8');
+    } catch (error) {
+      // The signed transaction has already published its complete index/contact-sheet set. This
+      // legacy prose rendering is a convenience view, not a reason to misreport that transaction.
+      log(`review set published, but comparison.md could not be written: ${error?.message ?? error}`);
+    }
 
-    process.stdout.write(`${table}\n\nWritten to: ${args.out}\n`);
+    process.stderr.write(`${table}\n\nWritten to: ${args.out}\n`);
+    process.stdout.write(`${JSON.stringify({ ok: true, output: path.resolve(args.out), captures: targets.length })}\n`);
     return 0;
   } finally {
     killTree(branchProc, 'branch');
@@ -482,9 +715,11 @@ async function main() {
 }
 
 main().then(
-  (code) => process.exit(code),
+  (code) => { process.exitCode = code; },
   (err) => {
-    console.error(`[capture-comparative] unexpected error: ${err instanceof Error ? err.stack : String(err)}`);
-    process.exit(1);
+    const message = err instanceof Error ? err.message : String(err);
+    process.stdout.write(`${JSON.stringify({ ok: false, code: err?.captureCode ?? 'driver-failed', message })}\n`);
+    log(`unexpected error: ${err instanceof Error ? err.stack : String(err)}`);
+    process.exitCode = 1;
   },
 );

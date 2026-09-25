@@ -74,6 +74,9 @@ import {
   defaultForestCaptureCommandDeps,
   forestCaptureCommand,
   forestCaptureHelp,
+  forestCompareCommand,
+  forestCompareHelp,
+  forestHelp,
   type ForestCaptureCommandDeps,
 } from "./forest-capture-command.js";
 import type { InnerLoopEventDoc } from "@storytree/proof-protocol";
@@ -2001,6 +2004,7 @@ async function topHelp(store: Store): Promise<Envelope> {
       "  arc              the initiative overlay (ADR-0183) — an arc reveals its increments/stories/ADRs by query",
       "  increment        the ephemeral choreography tier (ADR-0183) — increment check <id>: the freshness gate",
       "  forest capture   zoom and screenshot square/story/island/resting/fit targets without mouse input",
+      "  forest compare   capture those same semantic views on baseline and branch in one review sheet",
       "  agents <name>    assemble an agent's system prompt from the Library (ADR-0051)",
       "  orchestrate      run the session-orchestrator agent headlessly: orient + propose (ADR-0108)",
       "  desktop          launch the Electron desktop client + install its Windows shortcut (ADR-0109/0111)",
@@ -3900,11 +3904,15 @@ export async function run(argv: readonly string[], deps: RunDeps): Promise<Envel
   if (area === undefined) return topHelp(deps.store);
 
   if (area === "forest") {
-    if (sub !== "capture" || help) return forestCaptureHelp();
-    return forestCaptureCommand(
-      argv,
-      deps.forestCapture ?? defaultForestCaptureCommandDeps(repoRoot()),
-    );
+    if (sub === "capture") {
+      if (help) return forestCaptureHelp();
+      return forestCaptureCommand(argv, deps.forestCapture ?? defaultForestCaptureCommandDeps(repoRoot()));
+    }
+    if (sub === "compare") {
+      if (help) return forestCompareHelp();
+      return forestCompareCommand(argv, deps.forestCapture ?? defaultForestCaptureCommandDeps(repoRoot()));
+    }
+    return forestHelp();
   }
 
   // `--raw <field>` is REFUSED where it is not read, never ignored (the silent-drop defect below).

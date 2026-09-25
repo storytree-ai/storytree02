@@ -10,7 +10,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { ensureLiveDb, loadLocalSecrets } from '@storytree/drive';
 import { captureForestSemantics } from '../../../packages/cli/src/forest-semantic-capture.ts';
-import { readMotionSettled, waitForForestSettled } from '../../desktop/e2e/harness.mjs';
+import { waitForForestMotionAndCamera } from './lib/forest-capture-runtime.mjs';
 
 const studioDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = path.resolve(studioDir, '..', '..');
@@ -95,17 +95,6 @@ async function startStudio() {
   return { url, child, async close() { stopServer(child); } };
 }
 
-function parseCameraTransform(transform) {
-  const number = '[-+]?(?:\\d+\\.?\\d*|\\.\\d+)(?:e[-+]?\\d+)?';
-  const match = new RegExp(`^translate\\((${number})[ ,]+(${number})\\)\\s*scale\\((${number})\\)$`, 'i').exec(transform ?? '');
-  if (!match) throw new Error(`the delivered g.world-camera transform is not readable: ${String(transform)}`);
-  return { tx: Number(match[1]), ty: Number(match[2]), scale: Number(match[3]) };
-}
-
-function sameCamera(left, right) {
-  return left.tx === right.tx && left.ty === right.ty && left.scale === right.scale;
-}
-
 async function openPage(studioUrl, browserEndpoint, onCaptureRefusal) {
   const suppliedBrowser = browserEndpoint !== undefined;
   let browser;
@@ -149,18 +138,13 @@ async function openPage(studioUrl, browserEndpoint, onCaptureRefusal) {
       return receipt;
     },
     async settledAfter(expected) {
-      // Cross at least one rendered frame after the command, then ask the app's real signal. A
-      // fixed sleep would attest the clock, not the forest.
-      await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-      await waitForForestSettled(page, { timeout: PAGE_TIMEOUT_MS });
-      const delivered = await page.locator('g.world-camera').getAttribute('transform');
-      const camera = parseCameraTransform(delivered);
-      const snapshot = await readMotionSettled(page);
+      const snapshot = await waitForForestMotionAndCamera(page, {
+        timeout: PAGE_TIMEOUT_MS,
+        expectedCamera: expected,
+      });
       serial += 1;
       return {
         ...snapshot,
-        settled: snapshot.settled && sameCamera(expected, camera),
-        camera,
         serial,
       };
     },

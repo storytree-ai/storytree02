@@ -26,6 +26,9 @@
 // ⚠ COMMIT NOTHING WHILE THIS RUNS. The studio banners a checkout that moved under it (`/api/health`
 // stamps HEAD at server start), so a commit mid-run paints a yellow banner across every capture
 // taken afterwards. Sequence: finish the code, commit, RESTART the server, then capture.
+//
+// Ordinary composition screenshots belong to `pnpm storytree forest capture`; this script remains
+// for its same-build parameter ladder, scene-export measurements, and live-store provenance checks.
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -34,6 +37,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 
 import { ISLAND_SPACING_RATIO } from '@storytree/forest-layout';
+import { waitForForestMotionAndCamera, waitForStableForest } from './lib/forest-capture-runtime.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..', '..', '..');
@@ -73,18 +77,12 @@ page.on('pageerror', (e) => pageErrors.push(e.message));
 
 async function settle(url, label) {
   await page.goto(url, { waitUntil: 'networkidle', timeout: 120_000 });
-  await page.waitForSelector('g.world-camera', { timeout: 90_000 });
-  let last = -1;
-  let stable = 0;
-  for (let i = 0; i < 160 && stable < 4; i += 1) {
-    await page.waitForTimeout(500);
-    const n = await page.evaluate(
-      () => new Set([...document.querySelectorAll('[data-story-id]')].map((e) => e.getAttribute('data-story-id'))).size,
-    );
-    stable = n === last && n > 0 ? stable + 1 : 0;
-    last = n;
+  let settled;
+  try {
+    settled = await waitForStableForest(page, { label, minIslands: MIN_ISLANDS, timeout: 90_000 });
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
   }
-  if (last < MIN_ISLANDS) fail(`${label}: only ${last} islands settled (floor ${MIN_ISLANDS}) — the map never finished loading`);
   // ⚠ AND WAIT FOR THE PROVISIONAL-CACHE BADGE TO CLEAR (ADR-0240 D3's "cached paint is never
   // cached truth"). The map paints from the last visit's persisted entry while it revalidates, and
   // says so in a pill across the top. The island count is STABLE the whole time — it is the same
@@ -96,30 +94,47 @@ async function settle(url, label) {
     null,
     { timeout: 60_000 },
   ).catch(() => fail(`${label}: the provisional-cache badge never cleared — the revalidation failed, so every later arm would be captured against a map this one is not`));
-  return last;
+  // Revalidation may repaint the forest. Attest the post-cache camera too; the cache predicate is a
+  // separate truth check and must not be treated as a substitute for the app's motion signal.
+  try {
+    settled = await waitForStableForest(page, { label, minIslands: MIN_ISLANDS, timeout: 90_000 });
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+  }
+  return settled;
 }
 
 async function capture(arm, view) {
   const q = [arm.query, view.query, 'sceneExport=1'].filter(Boolean).join('&');
-  const islands = await settle(`${URL_}/?${q}#/tree`, `${arm.id}/${view.id}`);
+  const settled = await settle(`${URL_}/?${q}#/tree`, `${arm.id}/${view.id}`);
   await page.waitForFunction(() => window.__storytreeSceneExport !== undefined, null, { timeout: 60_000 });
-  await page.waitForTimeout(1000);
+  // Scene-export publication is its own readiness condition. Once present, re-attest the camera
+  // instead of sleeping for a guessed extra second.
+  const cameraAttestation = await waitForForestMotionAndCamera(page, { timeout: 90_000 });
+  if (!cameraAttestation.settled) fail(`${arm.id}/${view.id}: the camera moved after scene export became ready`);
   const read = await page.evaluate(() => {
     const b = window.__storytreeSceneExport;
-    const g = document.querySelector('g.world-camera');
-    const t = g?.getAttribute('transform') ?? '';
-    const m = /translate\(([-\d.]+)[ ,]+([-\d.]+)\)\s*scale\(([-\d.]+)\)/.exec(t);
     const box = document.querySelector('g.world-camera')?.getBBox?.() ?? null;
     return {
       world: b?.world ? { width: b.world.width, height: b.world.height } : null,
       trails: b?.trails ? { edges: b.trails.edges, dropped: b.trails.dropped.length } : null,
-      camera: { scale: m ? +m[3] : null },
-      drawn: box ? { w: Math.round(box.width * (m ? +m[3] : 1)), h: Math.round(box.height * (m ? +m[3] : 1)) } : null,
+      drawn: box ? { width: box.width, height: box.height } : null,
     };
   });
   const png = join(OUT, `2d-${arm.id}-${view.id}.png`);
   await page.screenshot({ path: png });
-  return { ...read, islands, png };
+  return {
+    ...read,
+    islands: settled.islands,
+    camera: cameraAttestation.camera,
+    drawn: read.drawn
+      ? {
+          w: Math.round(read.drawn.width * cameraAttestation.camera.scale),
+          h: Math.round(read.drawn.height * cameraAttestation.camera.scale),
+        }
+      : null,
+    png,
+  };
 }
 
 // The warm-up, on a url NO arm below uses — a same-url navigation is a hash change and keeps the

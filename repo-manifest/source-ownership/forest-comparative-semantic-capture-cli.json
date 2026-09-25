@@ -1,0 +1,8 @@
+{
+  "sourceOwnership": {
+    "subtrees": {
+      "apps/studio/scripts/lib/forest-capture-runtime.mjs": "forest-comparative-semantic-capture-cli",
+      "packages/cli/src/forest-comparative-capture.ts": "forest-comparative-semantic-capture-cli"
+    }
+  }
+}
