@@ -1,0 +1,9 @@
+{
+  "sourceOwnership": {
+    "subtrees": {
+      "apps/studio/scripts/semantic-capture.mjs": "forest-semantic-capture-cli",
+      "packages/cli/src/forest-capture-command.ts": "forest-semantic-capture-cli",
+      "packages/cli/src/forest-semantic-capture.ts": "forest-semantic-capture-cli"
+    }
+  }
+}
