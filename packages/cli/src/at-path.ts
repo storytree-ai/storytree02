@@ -121,6 +121,16 @@ export const LITERAL_FLAGS: ReadonlySet<string> = new Set([
   "file",
   "set",
   "raw",
+  // `forest capture` inputs: numeric tuples, ids, dimensions, paths and endpoints. The command is
+  // read-only and stores none of them as durable prose, so a leading @ is always literal input.
+  "square",
+  "story",
+  "island",
+  "viewport",
+  "padding",
+  "output",
+  "studio-url",
+  "browser",
   // `storytree arc gate <id> --needs <other-id>` / `arc ungate <id> --needs <other-id>` (ADR-0523
   // D5). ONE arc id naming the blocker — a canonical identity, never a durable prose record, and the
   // gate's own `--reason` is the PROSE half of the same command. The pair splitting across the two
