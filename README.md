@@ -17,17 +17,17 @@ grow**: every state change is a typed event rendered live in a game-like
 (city-builder) view, so the system's internals are visible rather than
 buried.
 
-This is **v2**, a greenfield rebuild. The first tree (`C:\code\Agentic`, a
+This is **storytree 0.2**, a greenfield rebuild (now frozen while 0.3 is rebuilt in a fresh repo). The first tree (`C:\code\Agentic`, a
 Rust + Claude-Code corpus) proved the *idea* — stories, contracts, a
 commit-time gate, UAT promotion — but its internals were vibed and are hard
-to see. v2's bet: **design observability up front, go slow, own every layer,
+to see. 0.2's bet: **design observability up front, go slow, own every layer,
 stay model-agnostic.**
 
 ## North star
 
 Set up the building blocks so **storytree can build itself** — agents author,
 test, and UAT-prove stories on the tree, and the tree's own growth is the
-product you watch. v2 is currently being *bootstrapped* by hand (Claude Code
+product you watch. 0.2 is currently being *bootstrapped* by hand (Claude Code
 over the Agentic repo as the midwife harness); the goal is for that scaffolding
 to fall away as the tree becomes self-building.
 
@@ -89,7 +89,7 @@ ChatGPT-subscription Codex leaf through the same proof boundary, and ADR-0555 ma
   state change isn't a typed event the UI can render, it doesn't exist.
 - **Go slow, own the layers.** No vibing the load-bearing parts.
 - **Parallel from day one.** Concurrency-safe state is a foundation, not a
-  retrofit — learned the hard way from v1's store-lock races and story-ID
+  retrofit — learned the hard way from 0.1's store-lock races and story-ID
   collisions.
 - **Model-agnostic, self-hosted.** Subscription-funded leaves behind one seam; your data and traces
   stay in Storytree's own store.
@@ -154,7 +154,7 @@ questions:
 
 ## Development (bootstrap phase)
 
-storytree is built via Claude Code during bootstrap. The v1 tree is vendored as a
+storytree is built via Claude Code during bootstrap. The 0.1 tree is vendored as a
 **read-only submodule** at `legacy/Agentic` (no longer a live sibling repo you
 `--add-dir` into) — it's kept for reference, not edited.
 
