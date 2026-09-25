@@ -27,8 +27,8 @@
 -- events.library_artifact — no proof can be forged and no corpus row authored.
 --
 -- SCOPE OF THE IDENTITY, stated because the grants alone understate it: the WIF binding in
--- ci-presence.tf is keyed on `attribute.repository`, NOT on a ref, so ANY branch's workflow in
--- storytree-ai/Storytree can impersonate this SA — and after this widening that buys corpus READS
+-- ci-presence.tf is keyed on the repository (its immutable id, ADR-0622), NOT on a ref, so ANY
+-- branch's workflow in this repo can impersonate this SA — and after this widening that buys corpus READS
 -- where before it bought only claim-row deletes. The owner considered this on 2026-08-04 and
 -- ACCEPTED it: ref-scoping cannot work when `verify` runs on PR branches by definition, the repo is
 -- private so only people who can already push could reach it, and a fork PR gets no token at all.

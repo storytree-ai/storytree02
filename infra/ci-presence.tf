@@ -31,10 +31,17 @@
 # Until each is done, merge-time claim release degrades but the live guidance checks fail closed.
 # Full runbook: infra/ci-presence.md.
 
-variable "github_repository" {
+# CI's Google sign-in is keyed on the repo's PERMANENT numeric id, never its name (ADR-0622).
+# A name binding breaks on a rename, and worse, it would hand this repo's database access to any
+# NEW repo that later takes the old name — which is exactly what happens when 0.2 is renamed
+# `storytree02` and a fresh `storytree-ai/storytree` is created for 0.3. GitHub's OIDC token carries
+# `repository_id`, which never changes and is never reused. This is 0.2's repo (formerly
+# `storytree-ai/Storytree`, renamed `storytree-ai/storytree02`); read it back with
+# `gh api repos/storytree-ai/storytree02 --jq .id`.
+variable "github_repository_id" {
   type        = string
-  default     = "storytree-ai/Storytree"
-  description = "owner/repo allowed to impersonate the CI service account via WIF (OIDC attribute.repository)."
+  default     = "1260888565"
+  description = "Numeric GitHub repository id allowed to impersonate the CI service accounts via WIF (OIDC attribute.repository_id)."
 }
 
 # STS token exchange + SA impersonation for the OIDC→ADC flow. (iam.googleapis.com backs the
@@ -54,7 +61,7 @@ resource "google_project_service" "iam" {
 resource "google_iam_workload_identity_pool" "github" {
   workload_identity_pool_id = "github-actions"
   display_name              = "GitHub Actions"
-  description               = "OIDC federation for storytree-ai/Storytree CI (presence merge-retire)"
+  description               = "OIDC federation for storytree 0.2 CI (repo id 1260888565)"
   depends_on                = [google_project_service.iam]
 }
 
@@ -63,17 +70,20 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   workload_identity_pool_provider_id = "github"
   display_name                       = "GitHub Actions OIDC"
 
-  # Map the GitHub OIDC claims we key authorization on. `attribute.repository` powers the
-  # principalSet binding below so ONLY this repo's workflows can impersonate the SA.
+  # Map the GitHub OIDC claims we key authorization on. `attribute.repository_id` powers the
+  # principalSet binding below so ONLY this repo's workflows can impersonate the SA; it is the
+  # immutable id, so a rename neither breaks it nor transfers it (see the variable above).
+  # `attribute.repository` stays mapped for readable audit logs only — nothing binds on it.
   attribute_mapping = {
-    "google.subject"       = "assertion.sub"
-    "attribute.repository" = "assertion.repository"
-    "attribute.ref"        = "assertion.ref"
+    "google.subject"          = "assertion.sub"
+    "attribute.repository"    = "assertion.repository"
+    "attribute.repository_id" = "assertion.repository_id"
+    "attribute.ref"           = "assertion.ref"
   }
 
   # Google requires an attribute_condition on new providers — scope token acceptance to this
-  # repo (defence in depth alongside the principalSet binding).
-  attribute_condition = "assertion.repository == '${var.github_repository}'"
+  # repo (defence in depth alongside the principalSet binding). Keyed on the id, never the name.
+  attribute_condition = "assertion.repository_id == '${var.github_repository_id}'"
 
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
@@ -104,8 +114,9 @@ resource "google_project_iam_member" "ci_presence_sql_instance_user" {
   member  = "serviceAccount:${google_service_account.ci_presence.email}"
 }
 
-# Let ONLY storytree-ai/Storytree's workflows impersonate the SA (the keyless bridge). The
-# principalSet is scoped by attribute.repository, so a fork / another repo cannot assume it.
+# Let ONLY this repo's workflows impersonate the SA (the keyless bridge). The principalSet is
+# scoped by attribute.repository_id, so a fork / another repo — including a new repo that later
+# takes this one's old name — cannot assume it.
 #
 # SCOPED BY REPOSITORY, NOT BY REF — so ANY branch's workflow in this repo can impersonate it, and
 # since ADR-0302 D3 widened the grants that buys corpus READS rather than only claim-row deletes.
@@ -120,7 +131,7 @@ resource "google_project_iam_member" "ci_presence_sql_instance_user" {
 resource "google_service_account_iam_member" "ci_presence_wif_user" {
   service_account_id = google_service_account.ci_presence.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repository}"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository_id/${var.github_repository_id}"
 }
 
 # The Cloud SQL IAM user for the SA. Name is the SA email WITHOUT `.gserviceaccount.com`
