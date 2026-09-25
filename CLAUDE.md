@@ -9,14 +9,17 @@ the infra docs.
 
 ## What this is
 
-A v2 rebuild of the AgenticEngineering project: a multi-agent system that grows software as a DAG of
+**storytree 0.2** — the TypeScript rebuild of the AgenticEngineering project (storytree 0.1): a multi-agent system that grows software as a DAG of
 **stories**, watched live. Work hierarchy: **story > capability > contract**, split by proof mode
 (ADR-0002 / ADR-0010; the Library's `definition` artifacts are authoritative — `storytree library
 artifact <term>`).
 
 - **TypeScript + Node 24 + pnpm workspaces** (`corepack enable pnpm`; pnpm@9.15.0). Workspaces:
   `packages/*`, `apps/*`.
-- The V1 Rust repo is vendored **read-only** at `legacy/Agentic/` (a git submodule) — reference only,
+- **0.2 is FROZEN (2026-09-26)** while storytree 0.3 is rebuilt in a fresh `storytree` repo (this one becomes
+  `storytree02`); the plan lives on `storytree-0-3-library-arc` and `trusted-circle-distribution-arc`.
+  Generations are version numbers — 0.1 / 0.2 / 0.3 — never v1/v2/v3.
+- The storytree 0.1 Rust repo is vendored **read-only** at `legacy/Agentic/` (a git submodule) — reference only,
   see "Legacy" below.
 
 ## ⚠️ Current state — calibrate to the live decision log
@@ -648,8 +651,8 @@ kind owes a seed export any more.
 
 ## Legacy — `legacy/Agentic/` is REFERENCE-ONLY
 
-A vendored, read-only V1 Rust submodule (`.gitmodules` → `HuaMick/Agentic`). **Do not edit it.** Its
-own `CLAUDE.md` / ADRs / `assets/` are V1's and are **not authoritative** for storytree. The current
+A vendored, read-only storytree 0.1 Rust submodule (`.gitmodules` → `HuaMick/Agentic`). **Do not edit it.** Its
+own `CLAUDE.md` / ADRs / `assets/` are 0.1's and are **not authoritative** for storytree. The current
 foundation was ported *conceptually* from it (see `docs/research/agentic-foundation-survey.md`), not lifted.
 
 ## The decision log

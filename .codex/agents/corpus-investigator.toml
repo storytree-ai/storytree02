@@ -13,7 +13,7 @@ A read-only, single-claim verification subagent that checks one question about c
 
 ## Role
 
-Given ONE coherent question (which may pack several independent claims), `library-investigator` verifies each claim against the source the system actually enforces and returns a parseable findings/assumption_violations/summary object as its final message. It is single-shot and parallel-fannable: the caller (the deterministic spine, ADR-0004/0005, or a parent session) spawns one investigator per question. Its verify-the-brief-before-acting role is MORE load-bearing in v2 than in V1: artifact state lives in one shared Cloud SQL DB that many sessions mutate concurrently (ADR-0009/0023), so a brief is stale by default, and catching that before the spine or a writer acts on it is the whole point.
+Given ONE coherent question (which may pack several independent claims), `library-investigator` verifies each claim against the source the system actually enforces and returns a parseable findings/assumption_violations/summary object as its final message. It is single-shot and parallel-fannable: the caller (the deterministic spine, ADR-0004/0005, or a parent session) spawns one investigator per question. Its verify-the-brief-before-acting role is MORE load-bearing in storytree 0.2 than in 0.1: artifact state lives in one shared Cloud SQL DB that many sessions mutate concurrently (ADR-0009/0023), so a brief is stale by default, and catching that before the spine or a writer acts on it is the whole point.
 
 ## Outcome
 
