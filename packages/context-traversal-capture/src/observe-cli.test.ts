@@ -610,6 +610,10 @@ test("an area declared to carry no corpus reads observes nothing, and says why",
 
 test("the test area is read-free because it RUNS tests — it spawns package runners and reads no library artifact", () => {
   assert.equal(AREAS_WITHOUT_CORPUS_READS.test, "runs named test files under their packages' own runners");
+  assert.equal(
+    AREAS_WITHOUT_CORPUS_READS.forest,
+    "drives Studio capture from explicit camera targets; it reads the rendered app, not the corpus",
+  );
 });
 
 test("the write-authority area names what the wall is derived from — the manifest's root allow-list, not the aggregate that left Git", () => {

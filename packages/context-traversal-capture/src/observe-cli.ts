@@ -476,6 +476,7 @@ export const AREAS_WITHOUT_CORPUS_READS = {
   adopt: "WRITE — turns a plan into stories and capabilities on disk",
   coverage: "reports surface coverage",
   ownership: "reports source ownership",
+  forest: "drives Studio capture from explicit camera targets; it reads the rendered app, not the corpus",
   desktop: "installs and launches the desktop app",
   factory: "one DERIVED aggregate over the whole corpus (ADR-0316), which is not a traversal — nobody chose the artifacts it counted, so recording them as reads would drown the trace in a report nobody read",
   onboarding: "walks a machine through its setup",

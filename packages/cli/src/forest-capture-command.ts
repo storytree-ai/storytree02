@@ -14,6 +14,12 @@ export interface ForestCaptureCommandDeps {
   readonly invoke: (argv: readonly string[]) => Promise<ForestCaptureProcessResult>;
 }
 
+export interface ForestCaptureProcessRuntime {
+  readonly execFile: typeof execFile;
+  readonly executable: string;
+  readonly cwd: string;
+}
+
 interface ScriptResult {
   readonly ok: boolean;
   readonly code?: string;
@@ -22,8 +28,11 @@ interface ScriptResult {
   readonly message?: string;
 }
 
-/** The Studio driver is the only process that imports Playwright. The CLI owns dispatch, not a browser. */
-export function defaultForestCaptureCommandDeps(repoRoot: string): ForestCaptureCommandDeps {
+/** Build the process boundary separately so its executable, imports and caller-relative cwd are observable. */
+export function forestCaptureProcessDeps(
+  repoRoot: string,
+  runtime: ForestCaptureProcessRuntime,
+): ForestCaptureCommandDeps {
   const studioDir = path.join(repoRoot, "apps", "studio");
   const preload = pathToFileURL(path.join(repoRoot, "scripts", "tsx-cache-off.mjs")).href;
   // Resolve from Studio explicitly. The workspace root intentionally has no `tsx` symlink, while
@@ -32,13 +41,15 @@ export function defaultForestCaptureCommandDeps(repoRoot: string): ForestCapture
   const script = path.join(studioDir, "scripts", "semantic-capture.mjs");
   return {
     invoke: (argv) =>
+      // Stryker disable next-line BlockStatement: NON-TERMINATING — deleting the Promise executor leaves invoke pending forever.
       new Promise((resolve) => {
-        execFile(
-          process.execPath,
+        runtime.execFile(
+          runtime.executable,
           ["--import", preload, "--import", tsxLoader, script, ...argv],
           // Preserve the CLI's path contract: a relative --output is relative to the caller, even
           // though the driver and loader are resolved absolutely from Storytree's own checkout.
-          { cwd: process.cwd(), windowsHide: true, maxBuffer: 16 * 1024 * 1024 },
+          { cwd: runtime.cwd, windowsHide: true, maxBuffer: 16 * 1024 * 1024 },
+          // Stryker disable next-line BlockStatement: NON-TERMINATING — deleting the callback body leaves invoke pending forever.
           (error, stdout, stderr) => {
             const code = error?.code;
             const status = typeof code === "number" ? code : error === null ? 0 : 1;
@@ -46,6 +57,20 @@ export function defaultForestCaptureCommandDeps(repoRoot: string): ForestCapture
           },
         );
       }),
+  };
+}
+
+/** The Studio driver is the only process that imports Playwright. The CLI owns dispatch, not a browser. */
+export function defaultForestCaptureCommandDeps(repoRoot: string): ForestCaptureCommandDeps {
+  return forestCaptureProcessDeps(repoRoot, defaultForestCaptureProcessRuntime());
+}
+
+/** Exported so the otherwise side-effectful Node adapter can be checked without starting a child. */
+export function defaultForestCaptureProcessRuntime(): ForestCaptureProcessRuntime {
+  return {
+    execFile,
+    executable: process.execPath,
+    cwd: process.cwd(),
   };
 }
 

@@ -73,6 +73,13 @@ test("`node build --increment` is LITERAL — an increment id naming the work an
   assert.equal(PROSE_FLAGS.has("increment"), false, "an increment id is an identity, never a record");
 });
 
+test("`forest capture` values are LITERAL camera, session, and output coordinates — never prose", () => {
+  for (const flag of ["square", "story", "island", "viewport", "padding", "output", "studio-url", "browser"]) {
+    assert.equal(LITERAL_FLAGS.has(flag), true, `${flag} must be literal`);
+    assert.equal(PROSE_FLAGS.has(flag), false, `${flag} must never read an @path file`);
+  }
+});
+
 test("`resteer new`'s six flags are classified on the right side of the prose/literal line", () => {
   // ADR-0515. Named rather than left to the generic exhaustiveness sweep above, because that sweep
   // only asks that a flag be classified SOMEHOW — it stays green if a PROSE flag drifts into LITERAL,

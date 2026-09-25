@@ -36,13 +36,19 @@ export type ForestSemanticCaptureDeps = {
 
 export type ForestSemanticCaptureResult = { ok: true } | { ok: false; code: string };
 
-type Options = { studioUrl?: string; browser?: string; output: string; viewport: Viewport; padding: Padding; targets: ForestTarget[] };
+type Options = {
+  studioUrl: string | undefined;
+  browser: string | undefined;
+  output: string;
+  viewport: Viewport;
+  padding: Padding;
+  targets: ForestTarget[];
+};
 
 function parseSquare(value: string): ForestTarget | undefined {
   const values = value.split(",").map(Number);
   if (values.length !== 3 || values.some((entry) => !Number.isFinite(entry))) return undefined;
-  const [x, y, size] = values;
-  if (x === undefined || y === undefined || size === undefined) return undefined;
+  const [x, y, size] = values as [number, number, number];
   return { kind: "square", x, y, size };
 }
 
@@ -53,12 +59,14 @@ function parseOptions(argv: string[]): Options | undefined {
   let viewport: Viewport | undefined;
   let padding: Padding | undefined;
   const targets: ForestTarget[] = [];
+  // Stryker disable next-line AssignmentOperator: NON-TERMINATING — reversing the loop increment hangs every parser test.
   for (let index = 2; index < argv.length; index += 1) {
     const flag = argv[index];
     const value = argv[index + 1];
     if (flag === "--resting") { targets.push({ kind: "resting" }); continue; }
     if (flag === "--fit") { targets.push({ kind: "fit" }); continue; }
     if (value === undefined) return undefined;
+    // Stryker disable next-line AssignmentOperator: NON-TERMINATING — reversing consumption revisits the same value forever.
     index += 1;
     if (flag === "--studio-url") studioUrl = value;
     else if (flag === "--browser") browser = value;
@@ -67,24 +75,29 @@ function parseOptions(argv: string[]): Options | undefined {
     else if (flag === "--story") targets.push({ kind: "story-node", id: value });
     else if (flag === "--island") targets.push({ kind: "island", id: value });
     else if (flag === "--viewport") {
-      const [width, height, ...rest] = value.split("x").map(Number);
-      if (rest.length || !Number.isFinite(width) || !Number.isFinite(height) || width === undefined || height === undefined) return undefined;
+      const values = value.split("x").map(Number);
+      if (values.length !== 2 || values.some((entry) => !Number.isFinite(entry))) return undefined;
+      const [width, height] = values as [number, number];
       viewport = { width, height };
     } else if (flag === "--padding") {
       const values = value.split(",").map(Number);
-      const [top, right, bottom, left] = values;
-      if (values.length !== 4 || values.some((entry) => !Number.isFinite(entry)) || top === undefined || right === undefined || bottom === undefined || left === undefined) return undefined;
+      if (values.length !== 4 || values.some((entry) => !Number.isFinite(entry))) return undefined;
+      const [top, right, bottom, left] = values as [number, number, number, number];
       padding = { top, right, bottom, left };
     } else return undefined;
   }
-  if (!output || !viewport || !padding || targets.length === 0) return undefined;
-  const options: Options = { output, viewport, padding, targets };
-  if (studioUrl !== undefined) options.studioUrl = studioUrl;
-  if (browser !== undefined) options.browser = browser;
-  return options;
+  if (output === undefined || output.length === 0) return undefined;
+  if (viewport === undefined) return undefined;
+  if (padding === undefined) return undefined;
+  if (targets.length === 0) return undefined;
+  return { studioUrl, browser, output, viewport, padding, targets };
 }
 
-const sameCamera = (left: Camera, right: Camera) => left.tx === right.tx && left.ty === right.ty && left.scale === right.scale;
+function sameCamera(left: Camera, right: Camera): boolean {
+  if (left.tx !== right.tx) return false;
+  if (left.ty !== right.ty) return false;
+  return left.scale === right.scale;
+}
 
 export async function captureForestSemantics(argv: string[], deps: ForestSemanticCaptureDeps): Promise<ForestSemanticCaptureResult> {
   const options = parseOptions(argv);

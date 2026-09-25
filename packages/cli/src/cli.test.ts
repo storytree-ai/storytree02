@@ -404,14 +404,19 @@ test("top help and the unknown-area guidance both list the adopt area", async ()
   const top = await run([], { store });
   assert.equal(top.ok, true);
   assert.match(top.body, /^\s*adopt\b/m, "top help lists the adopt area");
+  assert.match(
+    top.body,
+    /^\s*forest capture\s+zoom and screenshot square\/story\/island\/resting\/fit targets without mouse input$/m,
+    "top help makes the no-mouse capture workflow discoverable",
+  );
   const unknown = await run(["wat"], { store });
   assert.equal(unknown.ok, false);
   // the area roster is consistent — it carries adopt, the new `build` workflow (ADR-0118, with
   // node/story as its back-compat aliases), the coverage-honesty check (ADR-0020), the
-  // subtree-ownership report beside it (ADR-0317 D2 — both answer "what does this cover?"), and
-  // `own`, the session's background-work inventory (ADR-0366 — a different question from its
-  // neighbour `ownership`: what am I RUNNING, not what do I OWN in the tree).
-  assert.match(unknown.body, /gate, adopt, build, coverage, ownership, own, node/);
+  // subtree-ownership report beside it (ADR-0317 D2 — both answer "what does this cover?"), the
+  // forest's semantic capture surface, and `own`, the session's background-work inventory
+  // (ADR-0366 — a different question from `ownership`: what am I RUNNING, not what do I OWN).
+  assert.match(unknown.body, /gate, adopt, build, coverage, ownership, forest, own, node/);
   assert.match(unknown.body, /story, drift, adr/);
 });
 

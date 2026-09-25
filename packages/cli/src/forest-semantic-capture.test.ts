@@ -106,17 +106,19 @@ describe("fsc-cli-reuses-or-owns-the-session-explicitly: lifecycle does not chan
   // test-updated (refactor): retain the fixture's live start counter instead of copying its initial getter value.
   test("reuses supplied Studio and compatible browser sessions, while closing only resources it started", async () => {
     const reusedStudio = successfulDeps();
-    await captureForestSemantics([...invocation, "--square", "1,2,3"], reusedStudio);
+    assert.deepEqual(await captureForestSemantics([...invocation, "--square", "1,2,3"], reusedStudio), { ok: true });
     assert.equal(reusedStudio.starts, 0);
+    assert.equal(reusedStudio.requests.length, 1);
     assert.deepEqual(reusedStudio.closed, [], "a supplied Studio URL remains the caller's resource");
 
     const reusedBrowser = successfulDeps();
-    await captureForestSemantics([...invocation.filter((arg) => arg !== "--studio-url" && arg !== "http://served-studio.test"), "--browser", "compatible", "--square", "1,2,3"], reusedBrowser);
+    assert.deepEqual(await captureForestSemantics([...invocation.filter((arg) => arg !== "--studio-url" && arg !== "http://served-studio.test"), "--browser", "compatible", "--square", "1,2,3"], reusedBrowser), { ok: true });
     assert.equal(reusedBrowser.starts, 0);
+    assert.equal(reusedBrowser.requests.length, 1);
     assert.deepEqual(reusedBrowser.closed, [], "a supplied browser remains the caller's resource");
 
     const owned = successfulDeps();
-    await captureForestSemantics(["forest", "capture", "--output", "/captures", "--viewport", "1280x720", "--padding", "18,24,18,24", "--square", "1,2,3"], owned);
+    assert.deepEqual(await captureForestSemantics(["forest", "capture", "--output", "/captures", "--viewport", "1280x720", "--padding", "18,24,18,24", "--square", "1,2,3"], owned), { ok: true });
     assert.equal(owned.starts, 1);
     assert.deepEqual(owned.closed.sort(), ["browser", "server"]);
   });
@@ -168,5 +170,106 @@ describe("fsc-cli-refuses-without-a-misleading-capture: incomplete evidence neve
     assert.deepEqual(refusal, { ok: false, code: "unsettled-page" });
     assert.equal(stale.published.length, 0);
     assert.equal(stale.writes.length, 0, "an unsettled image is never even a candidate artifact");
+  });
+});
+
+describe("fsc-cli-refuses-each-malformed-grammar-branch: invalid syntax never reaches Studio", () => {
+  test("requires every capture option and validates square, viewport and four-sided padding values", async () => {
+    const cases: string[][] = [
+      ["forest", "capture", "--viewport", "1280x720", "--padding", "18,24,18,24", "--square", "1,2,3"],
+      ["forest", "capture", "--output", "", "--viewport", "1280x720", "--padding", "18,24,18,24", "--square", "1,2,3"],
+      ["forest", "capture", "--output", "/captures", "--padding", "18,24,18,24", "--square", "1,2,3"],
+      ["forest", "capture", "--output", "/captures", "--viewport", "1280x720", "--square", "1,2,3"],
+      ["forest", "capture", "--output", "/captures", "--viewport", "1280x720", "--padding", "18,24,18,24"],
+      [...invocation, "--story"],
+      [...invocation, "--unknown", "value"],
+      [...invocation, "--fit", "--unknown", "1,2,3,4"],
+      [...invocation, "--square", "1,2"],
+      [...invocation, "--square", "1,2,3,4"],
+      [...invocation, "--square", "1,nope,3"],
+      [...invocation, "--square", "1,Infinity,3"],
+      [...invocation.slice(0, 7), "1280", ...invocation.slice(8), "--fit"],
+      [...invocation.slice(0, 7), "1280x720x2", ...invocation.slice(8), "--fit"],
+      [...invocation.slice(0, 7), "nopex720", ...invocation.slice(8), "--fit"],
+      [...invocation.slice(0, 7), "1280xInfinity", ...invocation.slice(8), "--fit"],
+      [...invocation.slice(0, 9), "18,24,18", "--fit"],
+      [...invocation.slice(0, 9), "18,24,18,24,0", "--fit"],
+      [...invocation.slice(0, 9), "18,24,nope,24", "--fit"],
+    ];
+    for (const argv of cases) {
+      const deps = successfulDeps();
+      assert.deepEqual(await captureForestSemantics(argv, deps), { ok: false, code: "invalid-target" }, argv.join(" "));
+      assert.equal(deps.requests.length, 0, argv.join(" "));
+    }
+  });
+});
+
+describe("fsc-cli-attests-every-camera-component-and-output-name: receipts cannot drift from pixels", () => {
+  test("rejects a changed translation or scale and numbers each target pair from one", async () => {
+    for (const camera of [
+      { ...CAMERA, tx: CAMERA.tx + 1 },
+      { ...CAMERA, ty: CAMERA.ty + 1 },
+      { ...CAMERA, scale: CAMERA.scale + 1 },
+    ]) {
+      const deps = successfulDeps({
+        async settledAfter() { return { settled: true, phase: "settled", camera, serial: 1 }; },
+      });
+      assert.deepEqual(await captureForestSemantics([...invocation, "--fit"], deps), { ok: false, code: "unsettled-page" });
+      assert.deepEqual(deps.writes, []);
+      assert.deepEqual(deps.published, []);
+    }
+
+    const numbered = successfulDeps();
+    assert.deepEqual(await captureForestSemantics([...invocation, "--story", "alpha", "--fit"], numbered), { ok: true });
+    assert.deepEqual(numbered.writes.map((entry) => entry.path), [
+      "/captures/forest-1.png", "/captures/forest-1.json",
+      "/captures/forest-2.png", "/captures/forest-2.json",
+    ]);
+    assert.deepEqual(numbered.published, [
+      "/captures/forest-1.png", "/captures/forest-1.json",
+      "/captures/forest-2.png", "/captures/forest-2.json",
+    ]);
+  });
+});
+
+describe("fsc-cli-cleans-each-failure-boundary: no partial pair survives", () => {
+  test("maps connection failures separately from pair-publication failures", async () => {
+    const unavailable = successfulDeps({
+      async connect() { throw new Error("Studio unavailable"); },
+    });
+    assert.deepEqual(await captureForestSemantics([...invocation, "--fit"], unavailable), { ok: false, code: "capture-failed" });
+
+    for (const failAt of ["write-json", "publish-png", "publish-json"] as const) {
+      let writes = 0;
+      let publishes = 0;
+      const deps = successfulDeps({
+        async writeCandidate(path, content) {
+          writes += 1;
+          if (failAt === "write-json" && path.endsWith(".json")) throw new Error("write failed");
+          deps.writes.push({ path, content });
+        },
+        async publish(path) {
+          publishes += 1;
+          if (failAt === "publish-png" && publishes === 1) throw new Error("first publish failed");
+          if (failAt === "publish-json" && publishes === 2) throw new Error("second publish failed");
+          deps.published.push(path);
+        },
+      });
+      assert.deepEqual(await captureForestSemantics([...invocation, "--fit"], deps), { ok: false, code: "screenshot-failed" });
+      assert.ok(writes >= 1);
+      assert.deepEqual(deps.closed.filter((entry) => entry.startsWith("remove:")), [
+        "remove:/captures/forest-1.png", "remove:/captures/forest-1.json",
+      ]);
+    }
+  });
+
+  test("owned resources close on an early revision refusal", async () => {
+    const owned = successfulDeps({ async revision() { return null; } });
+    const argv = [
+      "forest", "capture", "--output", "/captures", "--viewport", "1280x720",
+      "--padding", "18,24,18,24", "--fit",
+    ];
+    assert.deepEqual(await captureForestSemantics(argv, owned), { ok: false, code: "revision-ambiguous" });
+    assert.deepEqual(owned.closed.sort(), ["browser", "server"]);
   });
 });

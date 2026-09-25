@@ -80,6 +80,7 @@ function receipt(
   const result: ForestCaptureReceipt = resolved
     ? { ok: true, kind, frame, camera: applied, resolved }
     : { ok: true, kind, frame, camera: applied };
+  // Stryker disable next-line LogicalOperator: EQUIVALENT — this private helper receives both inset values together or neither.
   return padding && usableFrame ? { ...result, padding, usableFrame } : result;
 }
 
