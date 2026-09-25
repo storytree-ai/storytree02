@@ -53,7 +53,7 @@ arc: story-green-monotonicity-arc
 # converted into a cross-story edge, and the test re-run after ADR-0606 is still false both ways — so
 # `cli` stays a pure source and `consumed_by` stays empty. Its sibling `green-gate` did NOT follow it
 # and stays in `ci-cd`.
-capabilities: [unified-command-dispatch, cli-resident-corpus-tools, organism-boundary-tooling, work-hierarchy-camp-fence, guided-setup-repair, verification-decay-instruments, gate-ci-parity, uat-revision-continuity-gate]
+capabilities: [unified-command-dispatch, cli-resident-corpus-tools, organism-boundary-tooling, work-hierarchy-camp-fence, guided-setup-repair, verification-decay-instruments, gate-ci-parity, uat-revision-continuity-gate, forest-semantic-capture-cli]
 # The CLI is the wiring HUB: it imports every organism to surface it. Those outbound edges
 # (cli → drive-machinery / library / notice-board / store / arc) are declared PROVIDER-SIDE on each
 # spoke (their `consumed_by: [cli]`, ADR-0074 §4) so the hub stays de-noised and each organism owns
@@ -125,7 +125,7 @@ authoring primitives (the corpus guard, the ADR frontmatter parser).
   in-memory seed; live writes refuse without `--pg` and a reachable DB (degrade with guidance, never
   a silent no-op).
 
-## Capabilities (8)
+## Capabilities (9)
 
 Lightweight and **expandable** (ADR-0074 §3): the hub's own connective competence, NOT a re-derivation
 of every per-domain command (those belong to the organism that owns the journey). The list grows one
@@ -181,6 +181,7 @@ If anything the arrival WIDENS what the call has to weigh, from one alternative 
 | 6 | [`verification-decay-instruments`](verification-decay-instruments.md) | Every chartered verification instrument reports the decay it locates as a finding charged to the branch that authored it. | proposed | — |
 | 7 | [`gate-ci-parity`](gate-ci-parity.md) | A green local `pnpm gate` predicts a green CI `verify`, because both walk the one gate plan — split only by each step's declared placement — and the one difference that remains, the merge ref, is warned about whenever the branch is behind `origin/main`. | proposed | — |
 | 8 | [`uat-revision-continuity-gate`](uat-revision-continuity-gate.md) | A changed existing UAT criterion revision blocks until its candidate binding has an exact signed pass; a new criterion remains additive expansion. | proposed | — |
+| 9 | [`forest-semantic-capture-cli`](forest-semantic-capture-cli.md) | One CLI invocation turns named square, story-node, island, resting or fit targets into settled, attested PNGs and receipts, reusing or owning its Studio/browser session without pointer input. | proposed | [`forest-capture-camera-seam`](../studio/forest-capture-camera-seam.md) |
 
 *(Renumbered 1–5 on 2026-08-14 when three rows left. Safe, and different from the open modeling calls
 below, whose numbers are cited from OTHER files and are therefore never reused or shifted: nothing
@@ -337,6 +338,15 @@ green on it — the deletion removed a second signature at the story rung, not t
 
 End state — the live store reached through one binary, credentials hydrated without an env prefix, and
 the envelope contract held.
+
+5. **Semantic forest capture is a reproducible, attested artifact.** _(witness: machine)_ _(detail: cli#uat-5)_ _(criterion-id: uatc_87f39877780408266f3541bf)_ _(revision-id: uatr1:34a6fbb96279c4d0)_
+   Run one `pnpm storytree forest capture` invocation with any of `--square x,y,size`, `--story <id>`,
+   `--island <id>`, `--resting`, or `--fit`. **Success —** it reuses the supplied Studio/browser
+   session or starts an owned one, applies the page's semantic camera seam, observes
+   `window.__storytreeMotionSettled`, then writes a PNG and sidecar receipt naming the canonical target,
+   resolved bounds, applied camera, viewport, served revision and settle attestation. A malformed target,
+   absent target, missing seam or unsettled page exits non-zero and leaves no PNG that could be mistaken
+   for that capture.
 ## Reliability Gates
 
 The CLI hub is **greenfield**: `packages/cli` has a real, passing, OFFLINE
