@@ -72,7 +72,7 @@ The removal covers the normal growth-track image, the static baked hero, and pro
 
 ## Road connection repair
 
-**Fixed: defect 3.** The visible sea ribbon now consumes the same clipped-coast dock calculation as the on-island worn path. The helper landed in [PR #2036](https://github.com/storytree-ai/Storytree/pull/2036); the renderer now passes its returned descriptors to the actual road mesh. Routing, road width, palette and vegetation are unchanged.
+**Fixed: defect 3.** The visible sea ribbon now consumes the same clipped-coast dock calculation as the on-island worn path. The helper landed in [PR #2036](https://github.com/storytree-ai/storytree02/pull/2036); the renderer now passes its returned descriptors to the actual road mesh. Routing, road width, palette and vegetation are unchanged.
 
 ![Library: both offshore gaps close](roads-library-comparison.png)
 

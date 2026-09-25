@@ -1,7 +1,7 @@
 # Arc surface — the 08-02 mock options, re-rendered at 2026-08-05 density
 
 **This is not a new mock round.** The four layout options are byte-for-byte the ones increment 2
-delivered in [PR #1087](https://github.com/storytree-ai/storytree/pull/1087)
+delivered in [PR #1087](https://github.com/storytree-ai/storytree02/pull/1087)
 (`../arc-surface-mocks-2026-08-02/`). Only the **data** was swapped, plus the prose facts that the
 swap would otherwise falsify. Increment 2 is done; re-mocking is explicitly not what this is.
 
