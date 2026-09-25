@@ -119,6 +119,7 @@ import {
 } from '../lib/worldCamera.js';
 import {
   resolveForestCaptureCamera,
+  type ForestCapturePadding,
   type ForestCaptureTarget,
 } from '../lib/forestCaptureCamera.js';
 import {
@@ -2826,13 +2827,20 @@ export function TreeView({
     if (!world || typeof window === 'undefined') return;
     let mounted = true;
     const captureWindow = window as Window & {
-      __storytreeForestCaptureCamera?: { capture(target: ForestCaptureTarget): ReturnType<typeof resolveForestCaptureCamera> };
+      __storytreeForestCaptureCamera?: {
+        capture(target: ForestCaptureTarget, options?: { captureFrame?: ForestCapturePadding }): ReturnType<typeof resolveForestCaptureCamera>;
+      };
     };
     const bridge = {
-      capture: (target: ForestCaptureTarget) => {
+      capture: (target: ForestCaptureTarget, options?: { captureFrame?: ForestCapturePadding }) => {
         if (!mounted) throw new Error('forest capture camera is unmounted');
         const frame = { width: frameRef.current?.clientWidth ?? 0, height: frameRef.current?.clientHeight ?? 0 };
-        const fit = fitWorld(world.width, world.height, frame.width, frame.height, {
+        const padding = options?.captureFrame;
+        const usableWidth = padding ? frame.width - padding.left - padding.right : frame.width;
+        const usableHeight = padding ? frame.height - padding.top - padding.bottom : frame.height;
+        const usableX = padding?.left ?? 0;
+        const usableY = padding?.top ?? 0;
+        const fitInUsableFrame = fitWorld(world.width, world.height, usableWidth, usableHeight, {
           padding: 16,
           paddingTop: FIT_PADDING_TOP,
           paddingBottom: FIT_PADDING_BOTTOM,
@@ -2840,15 +2848,18 @@ export function TreeView({
           align: 'bottom',
           fit: 'contain',
         });
-        const resting = restingWorld(world.width, world.height, frame.width, frame.height, islandDiametersOf(world), {
+        const restingInUsableFrame = restingWorld(world.width, world.height, usableWidth, usableHeight, islandDiametersOf(world), {
           padding: 16,
           paddingTop: FIT_PADDING_TOP,
           paddingBottom: FIT_PADDING_BOTTOM,
           align: 'bottom',
         });
+        const offsetCamera = (camera: Camera): Camera => ({ ...camera, tx: camera.tx + usableX, ty: camera.ty + usableY });
+        const fit = offsetCamera(fitInUsableFrame);
+        const resting = offsetCamera(restingInUsableFrame);
         const opening = readFittedRestingView() ? fit : resting;
         const limits = limitsForResting(opening.scale, fit.scale);
-        const result = resolveForestCaptureCamera({
+        const captureInput = {
           target,
           frame,
           world: {
@@ -2864,7 +2875,12 @@ export function TreeView({
           storyNodeScale: Math.max(opening.scale, (limits.min / 0.4) * 1.6),
           resting,
           fit,
-        });
+        };
+        const result = resolveForestCaptureCamera(
+          padding === undefined
+            ? captureInput
+            : { ...captureInput, captureFrame: padding },
+        );
         if (result.ok) {
           atFitRef.current = false;
           setAnimate(false);

@@ -70,6 +70,12 @@ import {
 import { composedBannerFor, decisionRowsOf } from "./adr-composed.js";
 import { FROZEN_ARMS_PATH, parseFrozenArms } from "./decision-composition-trial.js";
 import { expandAtPathFlags, formatAtPathRefusal, PROSE_FLAGS } from "./at-path.js";
+import {
+  defaultForestCaptureCommandDeps,
+  forestCaptureCommand,
+  forestCaptureHelp,
+  type ForestCaptureCommandDeps,
+} from "./forest-capture-command.js";
 import type { InnerLoopEventDoc } from "@storytree/proof-protocol";
 import {
   readNodeAttempts,
@@ -1994,6 +2000,7 @@ async function topHelp(store: Store): Promise<Envelope> {
       "  adr              search the decision log (adr list) + allocate numbers (ADR-0050/0086)",
       "  arc              the initiative overlay (ADR-0183) — an arc reveals its increments/stories/ADRs by query",
       "  increment        the ephemeral choreography tier (ADR-0183) — increment check <id>: the freshness gate",
+      "  forest capture   zoom and screenshot square/story/island/resting/fit targets without mouse input",
       "  agents <name>    assemble an agent's system prompt from the Library (ADR-0051)",
       "  orchestrate      run the session-orchestrator agent headlessly: orient + propose (ADR-0108)",
       "  desktop          launch the Electron desktop client + install its Windows shortcut (ADR-0109/0111)",
@@ -2218,6 +2225,8 @@ function artifactHelp(): Envelope {
 
 export interface RunDeps {
   readonly store: Store;
+  /** Browser work stays in Studio; tests may replace only the process-forwarding seam. */
+  readonly forestCapture?: ForestCaptureCommandDeps;
   /** True when the store persists across sessions (the live --pg store). Writes require it. */
   readonly writable?: boolean;
   /** Recorded as the event `actor` on writes (per-session attribution). Defaults to "cli". */
@@ -3483,6 +3492,18 @@ export const CLI_OPTIONS = {
   file: { type: "string" },
   set: { type: "string", multiple: true },
   raw: { type: "string" },
+  // `forest capture`: semantic targets are repeatable, and the command forwards ORIGINAL argv so
+  // their interleaved order survives the central parse boundary.
+  square: { type: "string", multiple: true },
+  story: { type: "string", multiple: true },
+  island: { type: "string", multiple: true },
+  resting: { type: "boolean", multiple: true },
+  fit: { type: "boolean", multiple: true },
+  viewport: { type: "string" },
+  padding: { type: "string" },
+  output: { type: "string" },
+  "studio-url": { type: "string" },
+  browser: { type: "string" },
   out: { type: "string" },
   // `storytree library artifact <id> --full` (ADR-0533 D4) — the whole record, where a composed
   // decision's bare read now returns its composed statement. BOOLEAN, so it is deliberately absent
@@ -3877,6 +3898,14 @@ export async function run(argv: readonly string[], deps: RunDeps): Promise<Envel
   const rest = positionals.slice(3);
 
   if (area === undefined) return topHelp(deps.store);
+
+  if (area === "forest") {
+    if (sub !== "capture" || help) return forestCaptureHelp();
+    return forestCaptureCommand(
+      argv,
+      deps.forestCapture ?? defaultForestCaptureCommandDeps(repoRoot()),
+    );
+  }
 
   // `--raw <field>` is REFUSED where it is not read, never ignored (the silent-drop defect below).
   if (values.raw !== undefined && !help && !rawIsRead(area, sub)) {
