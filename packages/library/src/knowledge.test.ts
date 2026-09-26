@@ -589,6 +589,48 @@ test("increment kind (ADR-0574 D2): `waitsOn` links the questions the work is he
   );
 });
 
+test("increment kind (ADR-0628): `gatedBy` / `gateReasons` name the increments it waits on, and stay optional", () => {
+  // ZERO MIGRATION: an increment authored before the fields validates unchanged, and validation does
+  // not INVENT a gate — an absent key is what "queued behind nothing" is stored as.
+  const ungated = validateLibraryDoc(minimalDoc("increment")) as Record<string, unknown>;
+  assert.equal(Object.hasOwn(ungated, "gatedBy"), false, "validation must not add a gatedBy nobody wrote");
+  assert.equal(Object.hasOwn(ungated, "gateReasons"), false, "nor a reason map");
+
+  // The edge and its reason, carried verbatim and in author order — the blocker may sit on ANY arc.
+  const gated = validateLibraryDoc({
+    ...minimalDoc("increment"),
+    gatedBy: ["asset:other-arc-inc-02", "asset:same-arc-inc-01"],
+    gateReasons: { "asset:other-arc-inc-02": "reads the agent link's claims" },
+  }) as { gatedBy?: string[]; gateReasons?: Record<string, string> };
+  assert.deepEqual(gated.gatedBy, ["asset:other-arc-inc-02", "asset:same-arc-inc-01"]);
+  assert.deepEqual(gated.gateReasons, { "asset:other-arc-inc-02": "reads the agent link's claims" });
+
+  // The SHAPE fails closed exactly as the arc's does: an increment is a Library artifact, so a
+  // `doc:` pointer or a bare id can never name one.
+  for (const bad of [["doc:docs/something.md"], ["other-arc-inc-02"], [""]]) {
+    assert.throws(
+      () => validateLibraryDoc({ ...minimalDoc("increment"), gatedBy: bad }),
+      `gatedBy ${JSON.stringify(bad)} must be refused`,
+    );
+  }
+  // An EMPTY reason is refused rather than stored — it would render a blank "why:" under the gate.
+  assert.throws(
+    () =>
+      validateLibraryDoc({
+        ...minimalDoc("increment"),
+        gatedBy: ["asset:other-arc-inc-02"],
+        gateReasons: { "asset:other-arc-inc-02": "" },
+      }),
+    "an empty gate reason must be refused",
+  );
+  // Still NOT a knowledge kind's field: a principle carrying one is refused, so no graph reader can
+  // meet a schedule edge outside the arc tier.
+  assert.throws(
+    () => validateLibraryDoc({ ...minimalDoc("principle"), gatedBy: ["asset:other-arc-inc-02"] }),
+    "gatedBy on a knowledge kind must be rejected",
+  );
+});
+
 test("increment kind (ADR-0322): `parked` is what decides whether a closure owes its own prose", () => {
   // The rule used to be unconditional, and that is what forced `arc increment add` to COPY its
   // `--outcome` text into `outcome.note` as well as `body` — the duplication that made an ADR-0139

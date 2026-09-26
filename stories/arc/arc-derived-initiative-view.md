@@ -18,8 +18,9 @@ depends_on: []
 # lifecycle to one durable typed tier (proposal → ready → active → closed); ADR-0314 D5 makes the
 # `open-question` artifact mandatory on escalation, which is why `question new` exists and why its
 # `--arc` is required where the schema's `arcRef` is optional; ADR-0369 D1/D2 moves this organ and
-# its three source files into `@storytree/arc` and fixes the arrow at arc → drive.
-decisions: [183, 267, 305, 314, 369]
+# its three source files into `@storytree/arc` and fixes the arrow at arc → drive; ADR-0628 lets an
+# increment wait on another increment on ANY arc — the arc gate one tier down (contract 11).
+decisions: [183, 267, 305, 314, 369, 628]
 # A greenfield capability registered after its implementation and tests (the arc that authored it:
 # capability-layer-coverage-arc increment 6, 2026-08-08; the arc that re-homed it:
 # arc-tier-extraction-arc increment 1, 2026-08-14). It resolves THREE repo manifest
@@ -193,6 +194,17 @@ took. The link is its own field
 rather than a `cites` entry for the reason `gatedBy` is not `dependsOn` (ADR-0523): a hold is a
 schedule, not support.
 
+**Work queued behind other work reads as queued — derived, never stored (ADR-0628).** An increment can
+wait on another increment on ANY arc through its own `gatedBy` edge: the arc gate one tier down, so
+only that increment waits and the rest of its arc stays takeable. `incrementQueuedBehind` in
+`arc-rollup.ts` is the one rule. A gate holds while the held increment is open and the blocker has not
+LANDED; a blocker that closed any other way, or that cannot be found, keeps holding and says so. The
+rollup carries the reading as `queuedBehind` on the held row and the reverse edge as `holdsUp` on the
+blocker's. `arc show` and `arc list` count queued work apart from takeable work and never offer it;
+`arc increment start` REFUSES while any wait holds, whether the increment's own or its arc's. Both gate
+verbs walk ONE wait graph over both gate kinds before writing, because a loop can close through the two
+together that neither sees alone.
+
 ## Integration test
 
 **Goal —** Seed a store with an arc, stamp each child surface onto it independently — an increment
@@ -206,7 +218,7 @@ the real `loadArcRollup` runs underneath — and since ADR-0369 it runs from the
 than across a package boundary. `question.test.ts` closes the loop explicitly: it imports `arcCommand`
 and asserts a question authored through the write verb is what `arc show` then reports as waiting.
 
-## Contracts (10)
+## Contracts (11)
 
 The test-proven leaf behaviours — each **one isolated automated test** with collaborators stubbed
 (ADR-0002). Test titles are cited rather than line ranges, which rot.
@@ -255,6 +267,10 @@ heading, so nothing was broken — but a reader counting from the heading would 
    - **asserts —** `incrementWaitingOn` reads an increment as waiting only when the increment is open, its `waitsOn` names the question, and that question is unsettled on any arc; a closed increment, a settled question and a link to no known question each hold nothing; `arc list` counts held work apart from open work, and `arc show` removes it from the proposal / ready / active counts, names the question on its row and offers no freshness check on it; and settling the question releases the work with no write to the increment.
    - **covers —** `packages/arc/src/arc-rollup.ts` (`incrementWaitingOn`, `deriveArcRollup`, `summariseArcRollup`), `packages/arc/src/arc.ts` (the `arc list` row, `renderArcRollup`, `arcShowNext`)
    - **proven by —** `packages/arc/src/arc-rollup.test.ts`, *"incrementWaitingOn (ADR-0574): OPEN work, LINKED to an UNSETTLED question — each of the three is required"*, *"incrementWaitingOn: a link it cannot follow holds NOTHING, and an untyped row never throws"* and *"deriveArcRollup resolves waitingOn against EVERY question, onto OPEN work only, and leaks no question"*; `packages/arc/src/arc.test.ts`, *"arc list counts work WAITING ON THE OWNER apart from open work, and settling releases it (ADR-0574)"* and *"arc show marks work waiting on the owner as HELD — counted apart, named, and never offered (ADR-0574)"* (REAL, passing)
+11. **`work-queued-behind-another-increment-is-held-until-it-lands`** — an increment gated on another increment, on any arc, is counted and marked as queued, and cannot be started, until that increment lands (ADR-0628)
+   - **asserts —** `incrementQueuedBehind` holds open work while a blocker it names is open, has closed without landing, or cannot be found, and releases it only when the blocker lands; closed work waits on nothing. The rollup carries `queuedBehind` on the held row and `holdsUp` on the blocker's; `arc show` and `arc list` count queued work apart from takeable work, name the blocker and what releases it, and offer no freshness check on it. `arc increment gate` records the edge on the held increment and refuses a self-gate, a missing or wrong-kind increment, closed work on either side and a cycle; both gate verbs walk one wait graph over increment gates and arc gates together; `arc increment start` refuses while the increment's own gate or its arc's holds; and a landing releases the work with no write to it.
+   - **covers —** `packages/arc/src/arc-rollup.ts` (`incrementQueuedBehind`, `arcGatesOf`, `deriveArcRollup`), `packages/arc/src/arc.ts` (`waitGraphOf`, `arcGate`, `arcIncrementGate`, `arcIncrementUngate`, `arcIncrementPromote`, `incrementHoldLine`, `renderArcRollup`, `arcShowNext`, the `arc list` row)
+   - **proven by —** `packages/arc/src/increment-gate.test.ts`, *"incrementQueuedBehind: an OPEN blocker holds, a LANDED one releases, and one closed any other way KEEPS holding"*, *"deriveArcRollup resolves queuedBehind on the HELD row and holdsUp on the BLOCKER's, across arcs"*, *"waitGraphOf: every implied wait, own gates first — and nothing out of a closed node or through a wrong-kind target"*, *"arc increment gate REFUSES a ring that only closes THROUGH an arc gate — the two kinds walked as one (D4)"*, *"arc gate REFUSES a ring closed through an INCREMENT gate, and names each member's kind (ADR-0628 D4)"*, *"arc increment start REFUSES while the increment is queued, and takes it the moment its blocker LANDS"*, *"arc show marks every QUEUED row with what it waits on and what releases it, and counts it apart"* and *"arc list counts QUEUED work apart from open work, and a landing releases it with no write to the held row"* (REAL, passing)
 
 ## The modeling call this capability raised — RESOLVED (2026-08-14)
 

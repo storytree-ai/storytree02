@@ -1577,7 +1577,7 @@ export const Arc = buildKindSchema("arc").extend({
   gateReasons: z.record(z.string().min(1)).optional(),
 });
 // The `increment` kind (ADR-0183 D2/D3, folded by ADR-0305 D1) — ONE unit of arc work, from the
-// moment it is decided through to the moment it closes. It carries eight structured fields beyond its
+// moment it is decided through to the moment it closes. It carries ten structured fields beyond its
 // KIND_SPECS body table:
 //
 // - `arcRef` is REQUIRED — an increment is born citing its arc (ADR-0183 D3: the containment edge
@@ -1597,6 +1597,9 @@ export const Arc = buildKindSchema("arc").extend({
 //   never refused on write.
 // - `waitsOn` names the open questions this work is held on (ADR-0574 D2) — a SCHEDULE edge, kept
 //   out of `cites` for the reason `Arc.gatedBy` is kept out of `dependsOn`. See the field.
+// - `gatedBy` / `gateReasons` name the increments — on ANY arc — this work cannot start before
+//   (ADR-0628): the arc gate one tier down, kept apart from `dependsOn`, `cites` AND `waitsOn`. See
+//   the field.
 // - `outcome` is the closing record (ADR-0305 D5).
 //
 // Ephemeral (see EPHEMERAL_KINDS): live-store-only. Read that as its LIFECYCLE, not as an exemption —
@@ -1672,6 +1675,40 @@ export const Increment = buildKindSchema("increment").extend({
    * an unsettled question is the read's to answer, not this schema's.
    */
   waitsOn: z.array(AssetRef).optional(),
+  /**
+   * The increments this one CANNOT START before, on ANY arc (ADR-0628) — the increment-to-increment
+   * schedule edge. `A.gatedBy = ["asset:B"]` reads *A cannot start until B lands*.
+   *
+   * THE ARC GATE ONE TIER DOWN, named to match it. `Arc.gatedBy` (ADR-0523) queues a WHOLE arc behind
+   * another; this queues ONE increment, so the rest of its arc stays takeable — which is the
+   * parallelism an arc-wide gate throws away, and the owner's reason for asking. The edge lives on
+   * the HELD increment, pointing at its blocker (`arcRef`'s, `waitsOn`'s and `Arc.gatedBy`'s
+   * direction): a blocker names none of the work queued behind it, so gating touches exactly one
+   * row, and "what does this hold up" is a query.
+   *
+   * WHY NOT `dependsOn`, `cites` or `waitsOn`, all three of which an increment already carries.
+   * `dependsOn` and the `asset:` half of `cites` are KNOWLEDGE support: an increment sits in the
+   * knowledge DAG and the depth instruments walk both, so a schedule stored in either would read as
+   * depth — ADR-0523's argument, unchanged one tier down. `waitsOn` IS a schedule edge, but it means
+   * *held on the OWNER* and draws yellow (ADR-0574 D1). Work waiting on other work is not waiting on
+   * the owner, and drawing it yellow would tell him he owes an answer he does not.
+   *
+   * WHAT RELEASES IT is the blocker LANDING, derived at read time (`incrementQueuedBehind` in
+   * `@storytree/arc`) and never stored — so a landing releases the work with no write to this row,
+   * and the pointer stays behind as the record of what the work once waited on.
+   *
+   * OPTIONAL, absent-by-default, never a KIND_SPECS body section — `waitsOn`'s zero-migration shape,
+   * so every increment authored before the field validates unchanged and reads as held by nothing,
+   * with no `CURRENT_SCHEMA_VERSION` bump. `AssetRef` fences the SHAPE; whether the target really is
+   * an increment is the verb's to refuse and the read's to report.
+   */
+  gatedBy: z.array(AssetRef).optional(),
+  /**
+   * Why each gate exists, keyed by the blocker's `asset:` ref (ADR-0628) — `Arc.gateReasons`' shape
+   * for `Arc.gateReasons`' reason: it renders under the held row, and it is what a session weeks later
+   * reads instead of re-deriving why the wait exists. An absent key is silence, never an invalid edge.
+   */
+  gateReasons: z.record(z.string().min(1)).optional(),
   /** The landing (or other terminal event) that closed it — absent until it does (ADR-0305 D5). */
   outcome: IncrementOutcome.optional(),
 });

@@ -3487,10 +3487,11 @@ test("the cycle walk searches EVERY outgoing edge, not just the first", () => {
   ]);
 });
 
-test("the cycle walk reads ARCS ONLY — a non-arc row carrying gatedBy never joins the graph", async () => {
+test("an increment's gatedBy that names an ARC is no edge — it cannot fence an arc", async () => {
   const store = await gateArcs(new InMemoryStore());
-  // An increment that happens to carry a gatedBy-shaped field. If the edge query stopped filtering
-  // by kind, this row would enter the graph and manufacture a cycle that does not exist.
+  // Since ADR-0628 an increment's `gatedBy` IS a wait edge — but only to another INCREMENT. This row
+  // names an arc there; if the wait graph stopped filtering a target by the kind its field names, the
+  // row would join as `ground-arc-inc-01 → paint-arc` and manufacture a cycle that does not exist.
   await store.upsertDoc({
     id: "ground-arc-inc-01",
     kind: "increment",
@@ -3738,9 +3739,10 @@ test("a non-string reason on the KEPT edge is dropped, so the surviving doc vali
   assert.equal(after["gateReasons"], undefined, "no reason survives, so the map is removed entirely");
 });
 
-test("a NON-ARC row cannot complete a cycle, however its gatedBy is shaped", async () => {
+test("a wrong-kind target completes no cycle — an arc gate naming an increment, an increment gate naming an arc", async () => {
   const store = await gateArcs(new InMemoryStore());
-  // Chain the fake edge so that reading it WOULD close a ring: paint → ground → decoy → paint.
+  // Chain two broken references so that reading them WOULD close a ring: paint → ground → decoy →
+  // paint. Each names the wrong kind for its field, so neither is an edge (ADR-0628 D4).
   await store.upsertDoc({
     id: "decoy-inc",
     kind: "increment",
@@ -3758,7 +3760,7 @@ test("a NON-ARC row cannot complete a cycle, however its gatedBy is shaped", asy
   const ground = (await store.getDoc("ground-arc"))?.doc as Record<string, unknown>;
   await store.upsertDoc({ id: "ground-arc", kind: "arc", doc: { ...ground, gatedBy: ["asset:decoy-inc"] } });
   const res = await arcGate(writeDeps(store), "paint-arc", { needs: "ground-arc" });
-  assert.equal(res.ok, true, "only arcs are edges; an increment's field must not fence an arc");
+  assert.equal(res.ok, true, "a target of the wrong kind is a broken reference, never an edge");
 });
 
 test("an invalid write is explained AS AN ARC, from the doc it would have landed", async () => {

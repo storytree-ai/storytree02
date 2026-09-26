@@ -115,8 +115,10 @@ import {
   arcReopen,
   arcPark,
   arcIncrementClose,
+  arcIncrementGate,
   arcIncrementPromote,
   arcIncrementNew,
+  arcIncrementUngate,
   arcScopeOf,
   type ArcIncrementAddOpts,
   questionCommand,
@@ -4888,6 +4890,13 @@ export async function run(argv: readonly string[], deps: RunDeps): Promise<Envel
         // state and `start` as an act, which is why the verbs are not spelled the same as the values.
         if (third === "ready") return arcIncrementPromote(writeDeps, fourth, "ready");
         if (third === "start") return arcIncrementPromote(writeDeps, fourth, "active");
+        // The INCREMENT gate writes (ADR-0628) — `arc gate`'s two flags, one tier down. They MUST be
+        // matched here: anything unmatched falls through to `increment add` below, which would read
+        // "gate" as an ARC id. Both opts fields admit `undefined`, so the flags pass straight through.
+        if (third === "gate") {
+          return arcIncrementGate(writeDeps, fourth, { needs: values.needs, reason: values.reason });
+        }
+        if (third === "ungate") return arcIncrementUngate(writeDeps, fourth, { needs: values.needs });
       }
       // The SCAFFOLDER (the missing first lifecycle step): the id is an optional positional, matching
       // every other arc verb — omitted, it is derived from --title.

@@ -1643,3 +1643,62 @@ test("arc gate through the dispatch is NOT swallowed by the read path's unknown-
   assert.doesNotMatch(env.body, /unknown arc command/);
   assert.equal(env.ok, true);
 });
+
+/** Three increments across two arcs — the cross-arc shape the increment gate exists for (ADR-0628). */
+async function seedIncrementTrio(store: InMemoryStore): Promise<void> {
+  await seedArc(store);
+  await seedBlockerArc(store);
+  for (const [id, arc] of [
+    ["held-inc", "dispatch-arc"],
+    ["first-inc", "blocker-arc"],
+    ["second-inc", "blocker-arc"],
+  ] as const) {
+    await store.upsertDoc({
+      id,
+      kind: "increment",
+      doc: {
+        kind: "increment",
+        id,
+        title: id,
+        description: "d",
+        objective: "o",
+        body: "b",
+        arcRef: `asset:${arc}`,
+        status: "proposal",
+        parked: "2026-09-26",
+        createdAt: "2026-09-26",
+        updatedAt: "2026-09-26",
+      },
+    });
+  }
+}
+
+test("arc increment gate via dispatch records the cross-arc edge — it is matched BEFORE `increment add`", async () => {
+  const store = await seeded();
+  await seedIncrementTrio(store);
+  const env = await run(
+    ["arc", "increment", "gate", "held-inc", "--needs", "first-inc", "--reason", "reads its claims", "--pg"],
+    { store, writable: true },
+  );
+  // Unmatched, `gate` would fall through to `arc increment add` and be read as an ARC id.
+  assert.equal(env.ok, true, env.body);
+  const got = (await store.getDoc("held-inc"))?.doc as Record<string, unknown>;
+  assert.deepEqual(got["gatedBy"], ["asset:first-inc"]);
+  assert.deepEqual(got["gateReasons"], { "asset:first-inc": "reads its claims" });
+});
+
+test("arc increment ungate via dispatch releases EXACTLY the edge --needs names", async () => {
+  const store = await seeded();
+  await seedIncrementTrio(store);
+  for (const blocker of ["first-inc", "second-inc"]) {
+    await run(["arc", "increment", "gate", "held-inc", "--needs", blocker, "--pg"], { store, writable: true });
+  }
+  const env = await run(["arc", "increment", "ungate", "held-inc", "--needs", "first-inc", "--pg"], {
+    store,
+    writable: true,
+  });
+  assert.equal(env.ok, true, env.body);
+  const got = (await store.getDoc("held-inc"))?.doc as Record<string, unknown>;
+  // --needs reached the verb: one edge went and the other stayed. Without it, ungate releases both.
+  assert.deepEqual(got["gatedBy"], ["asset:second-inc"]);
+});
