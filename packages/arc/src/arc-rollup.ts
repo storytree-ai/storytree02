@@ -84,8 +84,55 @@ export interface ArcRollupIncrement {
    * not the stored `waitsOn` link — the link outlives the answer, this does not.
    */
   waitingOn?: string[];
+  /**
+   * The blockers still holding this OPEN increment back (ADR-0628) — {@link incrementQueuedBehind}'s
+   * reading, resolved here so no surface ever re-derives it.
+   *
+   * ABSENT when nothing holds it, and on every CLOSED increment whatever its stored edge says. A
+   * READING, not the stored `gatedBy` edge: the edge outlives the landing that releases it, this
+   * does not.
+   */
+  queuedBehind?: IncrementHold[];
+  /**
+   * The OPEN increments — on any arc — queued behind this one, while it is itself still open
+   * (ADR-0628). Derived by query, because a blocker names none of the work waiting on it. ABSENT when
+   * nothing waits.
+   */
+  holdsUp?: IncrementDependant[];
   /** Present ⇔ `status` is `closed`: what happened, and why (ADR-0305 D5 / ADR-0564 D1). */
   outcome?: { date?: string; pr?: string; note?: string; disposition?: IncrementDisposition };
+}
+
+/**
+ * WHY ONE GATE STILL HOLDS AN INCREMENT (ADR-0628) — what {@link incrementQueuedBehind} returns for
+ * each blocker that has not released it. A released gate appears nowhere: this is a reading of work
+ * still held back, not a list of edges (the stored `gatedBy` is that list).
+ */
+export interface IncrementHold {
+  /** The blocking increment's id (bare, no `asset:` prefix). */
+  id: string;
+  /** The blocker's title when it resolves, else its id — never an empty name. */
+  title: string;
+  /** The arc the blocker sits on (its `arcRef`), when it names one. */
+  arcId?: string;
+  /** Why this wait exists, as recorded beside the edge; absent when the author recorded none. */
+  reason?: string;
+  /**
+   * - `open` — the blocker has not closed. The ordinary wait, and it releases itself on landing.
+   * - `unlanded` — the blocker CLOSED WITHOUT LANDING, so it never will. It holds until somebody
+   *   re-points the gate at what replaced the blocker, or releases it.
+   * - `missing` — no increment answers to the id: a permanent wait, never a release.
+   */
+  state: "open" | "unlanded" | "missing";
+  /** For `unlanded`: what the close recorded (ADR-0564). Absent when it recorded nothing. */
+  closedAs?: IncrementDisposition;
+}
+
+/** One increment queued behind another, as the blocker's row names it (ADR-0628). */
+export interface IncrementDependant {
+  id: string;
+  /** The arc the dependant sits on — often not the blocker's, which is the whole point of the edge. */
+  arcId: string;
 }
 
 /**
@@ -399,6 +446,106 @@ export function incrementWaitingOn(
     if (questionLifecycles.get(questionId) === "open") waiting.add(questionId);
   }
   return [...waiting];
+}
+
+/** A stored ref as its bare id: `asset:<id>` stripped, a bare id kept — the arc gate reader's leniency. */
+function bareIdOf(ref: string): string {
+  return ref.startsWith(ASSET_REF_PREFIX) ? ref.slice(ASSET_REF_PREFIX.length) : ref;
+}
+
+/**
+ * WORK QUEUED BEHIND OTHER WORK (ADR-0628) — the ONE reading of whether an increment's own gates still
+ * hold it back, and the only place the rule lives. The rollup resolves it per increment; `arc show`,
+ * `arc list` and `arc increment start` all read that result, and nobody re-derives it.
+ *
+ * The answer is one {@link IncrementHold} per blocker still holding the work, in the order the row
+ * names them; EMPTY means nothing holds it. A gate holds while all three are true:
+ *   1. **The increment is OPEN** ({@link isForwardLooking}). Closed work waits on nobody, whatever its
+ *      stored edge says.
+ *   2. **It names the blocker** through `gatedBy` — a machine-readable edge, never prose.
+ *   3. **The blocker has not LANDED.** Open is the ordinary wait. Closed-and-landed releases it, by
+ *      ADR-0564's reading through {@link incrementDisposition}, so the board and this rule cannot
+ *      disagree about what a landing is. Closed ANY OTHER WAY keeps holding: a blocker that failed,
+ *      was withdrawn or closed with no reading delivered nothing, and releasing the work behind it
+ *      would start that work on a premise that is not there.
+ *
+ * ⚠ AN ID NAMING NO INCREMENT HOLDS — THE OPPOSITE OF {@link incrementWaitingOn}'S CALL, ON PURPOSE.
+ * There, a link to no known question holds nothing, because a question that does not exist is not
+ * waiting for an answer. Here the edge says *this needs that work first*, and "I cannot find that
+ * work" is no evidence it happened. Reading it as a release would start work the gate exists to hold
+ * — the falsified-absence error ADR-0523 refuses for a missing blocker ARC. So it is a permanent wait,
+ * reported as one, until the gate is corrected.
+ *
+ * `incrementsById` is EVERY increment in the corpus — the blocker may sit on any arc. Raw stored
+ * values in, because callers hand this untyped rows: a non-array `gatedBy`, a non-string entry or a
+ * reason that is not a non-empty string reads as no edge / no reason. A blocker named twice is
+ * reported once.
+ */
+export function incrementQueuedBehind(
+  status: string,
+  gatedBy: unknown,
+  gateReasons: unknown,
+  incrementsById: ReadonlyMap<string, StoredDoc>,
+): IncrementHold[] {
+  if (!isForwardLooking(status) || !Array.isArray(gatedBy)) return [];
+  // `?? {}` alone is enough: indexing a primitive by a ref answers `undefined`, exactly as the empty
+  // map does, so only a null or absent map needs replacing.
+  const reasons = (gateReasons ?? {}) as Record<string, unknown>;
+  const seen = new Set<string>();
+  const holds: IncrementHold[] = [];
+  for (const ref of gatedBy) {
+    if (typeof ref !== "string") continue;
+    const id = bareIdOf(ref);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const hold = holdOf(id, incrementsById.get(id));
+    if (hold === null) continue;
+    const reason = reasons[ref];
+    if (typeof reason === "string" && reason !== "") hold.reason = reason;
+    holds.push(hold);
+  }
+  return holds;
+}
+
+/** The hold one blocker exerts (ADR-0628) — or `null` when it has LANDED and so holds nothing. */
+function holdOf(id: string, blocker: StoredDoc | undefined): IncrementHold | null {
+  if (blocker === undefined) return { id, title: id, state: "missing" };
+  const bag = bagOf(blocker);
+  // `String()` rather than a typeof-and-fallback: an absent or malformed status becomes an
+  // unrecognised one, and an unrecognised status reads as OPEN work (`isForwardLooking`'s
+  // fail-visible rank) — the safe direction for a wait.
+  const status = String(bag["status"]);
+  const hold: IncrementHold = { id, title: str(bag, "title") || id, state: "open" };
+  const arcId = arcRefOf(blocker);
+  if (arcId !== null) hold.arcId = arcId;
+  if (isForwardLooking(status)) return hold;
+  const closedAs = incrementDisposition(status, bag["outcome"] as ArcRollupIncrement["outcome"]);
+  if (closedAs === "landed") return null;
+  hold.state = "unlanded";
+  if (closedAs !== undefined) hold.closedAs = closedAs;
+  return hold;
+}
+
+/**
+ * PURE: blocker id → the OPEN increments whose `gatedBy` names it, each with its arc (ADR-0628) — the
+ * reverse of the edge, which lives on the HELD row. Built once per derivation from EVERY increment,
+ * since the work waiting on a blocker may sit on any arc. Closed work waits on nothing, so it never
+ * appears; a dependant naming one blocker twice appears once.
+ */
+function heldUpIndex(incrementDocs: readonly StoredDoc[]): Map<string, IncrementDependant[]> {
+  const index = new Map<string, IncrementDependant[]>();
+  for (const doc of incrementDocs) {
+    const bag = bagOf(doc);
+    const refs = bag["gatedBy"];
+    if (!isForwardLooking(String(bag["status"])) || !Array.isArray(refs)) continue;
+    const blockers = new Set(refs.filter((r): r is string => typeof r === "string").map(bareIdOf));
+    for (const blocker of blockers) {
+      const dependants = index.get(blocker) ?? [];
+      dependants.push({ id: doc.id, arcId: arcRefOf(doc) ?? "?" });
+      index.set(blocker, dependants);
+    }
+  }
+  return index;
 }
 
 /**
@@ -916,6 +1063,48 @@ export interface ArcRollupInput {
 }
 
 /**
+ * PURE: one arc's gates as every surface reads them (ADR-0523) — each blocker, why the queue exists,
+ * and whether it still holds — resolved against the arc corpus when the caller has one. Order is the
+ * authored order: a gate list is a set of holds, not a ranking.
+ *
+ * Its own function since ADR-0628 D3, because a second reader arrived: `arc increment start` now
+ * REFUSES while the increment's arc is still queued, and it asks this function rather than carrying a
+ * copy of the rule — so the page that shows a gate and the verb that enforces it cannot disagree.
+ */
+export function arcGatesOf(arc: StoredDoc, arcDocs: readonly StoredDoc[] | undefined): ArcRollupGate[] {
+  const doc = bagOf(arc);
+  const gateRefs = doc["gatedBy"];
+  const gateReasonSource = doc["gateReasons"];
+  const gateReasons: Record<string, unknown> =
+    typeof gateReasonSource === "object" && gateReasonSource !== null && !Array.isArray(gateReasonSource)
+      ? (gateReasonSource as Record<string, unknown>)
+      : {};
+  // Stryker disable next-line ArrayDeclaration: EQUIVALENT — the fallback stands for "the caller
+  // had no arc corpus", and any non-empty stand-in keys the map by `undefined`, which no `get` by a
+  // real blocker id can ever match. Both roads lead to every gate reading as unresolved-and-shut,
+  // which is the behaviour a test already pins.
+  const arcsById = new Map((arcDocs ?? []).map((a) => [a.id, a]));
+  return (Array.isArray(gateRefs) ? gateRefs : [])
+    .filter((r): r is string => typeof r === "string")
+    .map((ref) => {
+      const blockerId = ref.startsWith("asset:") ? ref.slice("asset:".length) : ref;
+      const blocker = arcsById.get(blockerId);
+      const reason = gateReasons[ref];
+      // An UNRESOLVED blocker is shut, never open. Reading "I could not find it" as "it closed"
+      // would start work the queue exists to hold — the same falsified-absence error `workUnits`
+      // is written to avoid.
+      const gate: ArcRollupGate = {
+        id: blockerId,
+        title: blocker ? str(bagOf(blocker), "title") || blockerId : blockerId,
+        shut: blocker === undefined || arcLifecycleOf(blocker) !== "closed",
+        blockerMissing: blocker === undefined,
+      };
+      if (typeof reason === "string" && reason.length > 0) gate.reason = reason;
+      return gate;
+    });
+}
+
+/**
  * PURE: join one arc to its children. No I/O, no store, no fs — every input arrives as data, which
  * is what lets the CLI and the studio server share one join while loading it differently (the CLI
  * from the live `--pg` store or the offline seed, the server from its configured backend).
@@ -929,6 +1118,10 @@ export function deriveArcRollup(input: ArcRollupInput): ArcRollup {
   // question homed on another initiative, so the lookup is corpus-wide while the `questions` leg
   // below stays filtered to this arc.
   const questionLifecycles = new Map(input.questionDocs.map((q) => [q.id, questionLifecycleOf(q)]));
+  // EVERY increment, for the same reason one tier over (ADR-0628): a gate may name a blocker on any
+  // arc, and the work a blocker holds up may sit on any arc too.
+  const incrementsById = new Map(input.incrementDocs.map((d) => [d.id, d]));
+  const heldUpBy = heldUpIndex(input.incrementDocs);
 
   const increments = input.incrementDocs
     .filter((p) => arcRefOf(p) === id)
@@ -972,6 +1165,13 @@ export function deriveArcRollup(input: ArcRollupInput): ArcRollup {
       // the work, the same absent-is-silence shape `danglingCites` uses.
       const waitingOn = incrementWaitingOn(row.status, pd["waitsOn"], questionLifecycles);
       if (waitingOn.length > 0) row.waitingOn = waitingOn;
+      // ADR-0628 — this increment's own gates, resolved once, here, against EVERY increment.
+      const queuedBehind = incrementQueuedBehind(row.status, pd["gatedBy"], pd["gateReasons"], incrementsById);
+      if (queuedBehind.length > 0) row.queuedBehind = queuedBehind;
+      // ...and the work it holds up — only while it is itself open. A closed row renders in the
+      // landing log, where a "holds up" line would read as history.
+      const holdsUp = heldUpBy.get(p.id);
+      if (holdsUp !== undefined && isForwardLooking(row.status)) row.holdsUp = holdsUp;
       return row;
     })
     .sort(compareIncrements);
@@ -1035,36 +1235,9 @@ export function deriveArcRollup(input: ArcRollupInput): ArcRollup {
     .sort((a, b) => a.id.localeCompare(b.id));
 
   // THE GATES (ADR-0523) — this arc's queue, resolved against the arc corpus when the caller has
-  // one. Order is the authored order: a gate list is a set of holds, not a ranking.
-  const gateRefs = doc["gatedBy"];
-  const gateReasonSource = doc["gateReasons"];
-  const gateReasons: Record<string, unknown> =
-    typeof gateReasonSource === "object" && gateReasonSource !== null && !Array.isArray(gateReasonSource)
-      ? (gateReasonSource as Record<string, unknown>)
-      : {};
-  // Stryker disable next-line ArrayDeclaration: EQUIVALENT — the fallback stands for "the caller
-  // had no arc corpus", and any non-empty stand-in keys the map by `undefined`, which no `get` by a
-  // real blocker id can ever match. Both roads lead to every gate reading as unresolved-and-shut,
-  // which is the behaviour a test already pins.
-  const arcsById = new Map((input.arcDocs ?? []).map((a) => [a.id, a]));
-  const gates: ArcRollupGate[] = (Array.isArray(gateRefs) ? gateRefs : [])
-    .filter((r): r is string => typeof r === "string")
-    .map((ref) => {
-      const blockerId = ref.startsWith("asset:") ? ref.slice("asset:".length) : ref;
-      const blocker = arcsById.get(blockerId);
-      const reason = gateReasons[ref];
-      // An UNRESOLVED blocker is shut, never open. Reading "I could not find it" as "it closed"
-      // would start work the queue exists to hold — the same falsified-absence error `workUnits`
-      // above is written to avoid.
-      const gate: ArcRollupGate = {
-        id: blockerId,
-        title: blocker ? str(blocker.doc as Record<string, unknown>, "title") || blockerId : blockerId,
-        shut: blocker === undefined || arcLifecycleOf(blocker) !== "closed",
-        blockerMissing: blocker === undefined,
-      };
-      if (typeof reason === "string" && reason.length > 0) gate.reason = reason;
-      return gate;
-    });
+  // one. One function, shared with `arc increment start` (ADR-0628 D3), so the page that SHOWS a gate
+  // and the verb that ENFORCES it cannot disagree about whether it holds.
+  const gates = arcGatesOf(arc, input.arcDocs);
 
   return {
     id,

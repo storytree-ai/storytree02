@@ -33,11 +33,14 @@ import {
 // CLI-only), and this module OWNS the rendering — turning that rollup into an ADR-0023 envelope —
 // and the arc write verbs. Re-exported so `worktree-create.ts` and the suites keep their path.
 import {
+  arcGatesOf,
   arcIsClosed,
+  arcLifecycleOf,
   arcRefOf,
   bagOf,
   deriveArcLifecycle,
   incrementDisposition,
+  incrementQueuedBehind,
   isCuratedLifecycle,
   isForwardLooking,
   loadArcRollup,
@@ -47,6 +50,7 @@ import {
   type ArcLifecycleDrift,
   type ArcRollup,
   type ArcRollupIncrement,
+  type IncrementHold,
 } from "./arc-rollup.js";
 // ADR-0358 Option 2D — the shared staleness-line renderer, so `arc show` and `question check` never
 // say the same thing two different ways.
@@ -275,7 +279,11 @@ async function arcList(deps: ArcViewDeps, scope: ArcScope): Promise<Envelope> {
     // own (`incrementWaitingOn`), which only ever lights on open work, so the subtraction below can
     // never reach into the terminal rows.
     const waiting = a.increments.filter((inc) => inc.waitingOn !== undefined).length;
-    const open = a.increments.length - terminal.length - waiting;
+    // ADR-0628 D3 — QUEUED behind other work is held too, counted apart on the same precedent and
+    // disjoint from `waiting` (owner-held first). Like `waitingOn`, the reading only ever lights on
+    // open work, so this subtraction stays inside the forward rows as well.
+    const queued = a.increments.filter((inc) => inc.waitingOn === undefined && inc.queuedBehind !== undefined).length;
+    const open = a.increments.length - terminal.length - waiting - queued;
     // The last LANDING, not the last closure: this note answers "when did this arc last deliver", and
     // a later unrecorded row would answer it with a date on which nothing landed.
     const last = landed[landed.length - 1];
@@ -293,6 +301,7 @@ async function arcList(deps: ArcViewDeps, scope: ArcScope): Promise<Envelope> {
       ...(withdrawn > 0 ? [`${withdrawn} withdrawn`] : []),
       ...(unrecorded > 0 ? [`${unrecorded} unrecorded`] : []),
       ...(open > 0 ? [`${open} open`] : []),
+      ...(queued > 0 ? [`${queued} queued behind other work`] : []),
       ...(waiting > 0 ? [`${waiting} waiting on the owner`] : []),
     ].join(", ");
     // The state tag rides every non-active row so `--all` / `--closed` / `--parked` are never the old
@@ -547,6 +556,10 @@ export function renderArcRollup(
   // leaves the per-status counts a session reads as takeable and is counted on its own — only when
   // there is any, so the ordinary arc's heading reads exactly as it did.
   const waiting = forward.filter((i) => i.waitingOn !== undefined).length;
+  // ADR-0628 D3 — work QUEUED BEHIND OTHER WORK is not takeable either, and leaves the takeable counts
+  // on the same precedent. The buckets are DISJOINT, in this order: waiting on the owner, then queued,
+  // then held by a session — so every open increment is counted exactly once.
+  const queued = forward.filter((i) => i.waitingOn === undefined && i.queuedBehind !== undefined).length;
   // WORK A SIBLING IS PROVABLY BUILDING IS NOT TAKEABLE EITHER, so it leaves the takeable counts on
   // exactly ADR-0574 D4's precedent one line up: still listed (it is still this arc's open work), but
   // counted on its own, and only when there IS any — an arc nobody is on reads exactly as it did.
@@ -554,13 +567,15 @@ export function renderArcRollup(
   // UNKNOWN is not evidence of anything; hiding either would under-report an arc's open work and make
   // a busy initiative read as drained, which is a worse falsehood than the silence this closes.
   const held = (i: ArcRollupIncrement): boolean =>
-    i.waitingOn === undefined && claimHoldsWork(claims?.get(i.id));
+    i.waitingOn === undefined && i.queuedBehind === undefined && claimHoldsWork(claims?.get(i.id));
   const heldCount = forward.filter(held).length;
   const byStatus = (s: string): number =>
-    forward.filter((i) => i.status === s && i.waitingOn === undefined && !held(i)).length;
+    forward.filter((i) => i.status === s && i.waitingOn === undefined && i.queuedBehind === undefined && !held(i))
+      .length;
   lines.push(
     "",
     `## Work  (${byStatus("proposal")} proposal · ${byStatus("ready")} ready · ${byStatus("active")} active` +
+      `${queued > 0 ? ` · ${queued} queued behind other work` : ""}` +
       `${heldCount > 0 ? ` · ${heldCount} held by another session` : ""}` +
       `${waiting > 0 ? ` · ${waiting} waiting on the owner` : ""})`,
   );
@@ -581,6 +596,17 @@ export function renderArcRollup(
       lines.push(
         `      waiting on the owner's answer to ${i.waitingOn.join(", ")} — held, not work to take until that is settled (ADR-0574)`,
       );
+    }
+    // ADR-0628 — what it is QUEUED behind, one line per blocker plus the reason recorded beside the
+    // edge, in the same first-thing-a-chooser-needs slot as the owner hold above.
+    for (const hold of i.queuedBehind ?? []) {
+      lines.push(`      ${incrementHoldLine(i.id, hold)}`);
+      if (hold.reason !== undefined) lines.push(`          why: ${hold.reason}`);
+    }
+    // ...and, on a BLOCKER, the work it holds up — the reverse edge, derived by query, which is the
+    // line that tells whoever drives this row that other sessions are waiting on it.
+    if (i.holdsUp !== undefined) {
+      lines.push(`      ↳ holds up ${i.holdsUp.map((d) => `\`${d.id}\` on \`${d.arcId}\``).join(", ")}`);
     }
     // WHO HOLDS IT, in the same slot and for the same reason as the owner-gate line above: whether
     // the work may be TAKEN is the first thing a session choosing work needs, and the measured cost
@@ -734,12 +760,13 @@ export function renderArcRollup(
  * is past the point where a freshness verdict would change anything.
  *
  * And never one WAITING ON THE OWNER (ADR-0574 D4): offering the check is offering the work, and work
- * held on an unanswered question is not there to be taken.
+ * held on an unanswered question is not there to be taken. Nor one QUEUED behind other work
+ * (ADR-0628 D3), for the same reason.
  */
 function arcShowNext(rollup: ArcRollup, pg: boolean): string[] {
   return [
     ...rollup.increments
-      .filter((i) => i.status === "ready" && i.waitingOn === undefined)
+      .filter((i) => i.status === "ready" && i.waitingOn === undefined && i.queuedBehind === undefined)
       .slice(0, 2)
       .map((i) => `storytree increment check ${i.id}${pg ? " --pg" : ""}`),
     `storytree library artifact ${rollup.id}${pg ? " --pg" : ""}`,
@@ -1290,26 +1317,83 @@ export function gateCycleFor(
   return walk(blocker, [gated]);
 }
 
-/** Reads every arc's `gatedBy` as a bare-id adjacency map — the input {@link gateCycleFor} walks. */
-async function gateEdgesOf(deps: ArcWriteDeps): Promise<Map<string, readonly string[]>> {
-  const rows = await deps.store.queryDocs({ kind: "arc" });
-  const edges = new Map<string, readonly string[]>();
-  for (const row of rows) {
-    // Stryker disable next-line ConditionalExpression: EQUIVALENT for the `typeof` half alone — the
-    // `!== null` half is what this guard is FOR (a null doc would throw on the index below, and a
-    // test pins it). Weakening only the `typeof` check admits primitives, whose `["gatedBy"]` is
-    // `undefined` and is skipped one line later, so nothing observable changes.
-    const doc = typeof row.doc === "object" && row.doc !== null ? (row.doc as Record<string, unknown>) : {};
-    const refs = doc["gatedBy"];
-    if (!Array.isArray(refs)) continue;
-    const ids = refs.filter((r): r is string => typeof r === "string").map(gateIdOf);
-    // Stryker disable next-line ConditionalExpression,EqualityOperator: EQUIVALENT — storing an
-    // EMPTY id list under a key is indistinguishable from omitting the key, because the only reader
-    // is `edges.get(at) ?? []` above, which yields the same empty list either way. The guard keeps
-    // the map small; it decides nothing.
-    if (ids.length > 0) edges.set(row.id, ids);
+/**
+ * PURE: the WAIT graph both gate verbs walk before writing (ADR-0628 D4) — every "cannot move until"
+ * edge the two gate kinds imply, over bare ids. Arcs and increments share the store's one id space
+ * (it is the primary key), so one map holds both:
+ *
+ *   arc → arc               its own `gatedBy` — it cannot start until they close (ADR-0523)
+ *   arc → increment         each of its OPEN increments — it closes only when they do (ADR-0347)
+ *   increment → increment   its own `gatedBy` — it cannot start until they land (ADR-0628)
+ *   increment → arc         each gate on its ARC — nothing on a queued arc starts until the blocker closes
+ *
+ * WHY ONE GRAPH. Walked apart, the two gate kinds can each look acyclic while their union deadlocks:
+ * increment A on arc X waits on B on arc Y, and Y is queued behind X. X cannot close until A lands, A
+ * cannot start until B lands, and B cannot start until X closes — yet neither edge set alone holds the
+ * ring. So `arc gate`'s own walk (ADR-0523 D4) reads this graph too, not just `arc increment gate`'s.
+ *
+ * WHAT IS LEFT OUT, and why each omission is safe. A CLOSED node emits nothing: closed work and a
+ * closed arc wait on nobody, so no loop can pass through one. And an edge is kept only when its target
+ * is the kind its field names — an arc gate naming an increment, or an increment gate naming an arc,
+ * is a broken reference the READ reports as unresolved. Nobody can be deadlocked on it, and admitting
+ * it would manufacture rings that do not exist.
+ *
+ * ORDER IS DELIBERATE: every node lists its authored gates BEFORE the edges its arc implies, so a walk
+ * reports the ring somebody wrote ahead of one routed through the increments it implies.
+ */
+export function waitGraphOf(
+  arcRows: readonly StoredDoc[],
+  incrementRows: readonly StoredDoc[],
+): Map<string, readonly string[]> {
+  const arcIds = new Set(arcRows.map((r) => r.id));
+  const incrementIds = new Set(incrementRows.map((r) => r.id));
+  /** A row's own `gatedBy`, bare, keeping only targets of the kind `kinds` holds. */
+  const gatesOf = (row: StoredDoc, kinds: ReadonlySet<string>): string[] =>
+    gatedByOf(bagOf(row)).map(gateIdOf).filter((g) => kinds.has(g));
+  // Keyed `string | null` so an increment whose arcRef names nothing reads as queued behind nothing,
+  // through the same lookup as one whose arc simply carries no gate — no placeholder id is invented.
+  const arcGates = new Map<string | null, readonly string[]>(arcRows.map((row) => [row.id, gatesOf(row, arcIds)] as const));
+  const graph = new Map<string, readonly string[]>();
+  const openByArc = new Map<string | null, string[]>();
+  for (const row of incrementRows) {
+    if (!isForwardLooking(String(bagOf(row)["status"]))) continue;
+    const arc = arcRefOf(row);
+    const siblings = openByArc.get(arc) ?? [];
+    siblings.push(row.id);
+    openByArc.set(arc, siblings);
+    graph.set(row.id, [...gatesOf(row, incrementIds), ...(arcGates.get(arc) ?? [])]);
   }
-  return edges;
+  for (const row of arcRows) {
+    if (arcLifecycleOf(row) === "closed") continue;
+    graph.set(row.id, [...gatesOf(row, arcIds), ...(openByArc.get(row.id) ?? [])]);
+  }
+  return graph;
+}
+
+/** The type guard `find` needs to hand back a ring rather than a ring-or-null. */
+function isRing(ring: readonly string[] | null): ring is readonly string[] {
+  return ring !== null;
+}
+
+/**
+ * The refusal a gate prints when the loop it would close runs through an INCREMENT (ADR-0628 D4).
+ * Arcs and increments share one id space, so a bare `a → b → a` stops saying which is which: each
+ * member is named with its kind. And the way out names BOTH release verbs, because the ring can run
+ * through either kind of gate — the one being written is only where it was noticed.
+ */
+function waitCycleRefusal(
+  gated: string,
+  needs: string,
+  ring: readonly string[],
+  incrementIds: ReadonlySet<string>,
+): string {
+  return [
+    `REFUSED: gating "${gated}" behind "${needs}" would close a cycle —`,
+    `  ${ring.map((n) => `${n} (${incrementIds.has(n) ? "increment" : "arc"})`).join(" → ")}`,
+    "Everything in that ring would wait on the next forever, and no page could show why. Release one edge first:",
+    "  storytree arc increment ungate <increment-id> --needs <other-id> --pg",
+    "  storytree arc ungate <arc-id> --needs <other-id> --pg",
+  ].join("\n");
 }
 
 /** PURE: the `gatedBy` refs on a loaded arc doc, or `[]` when it carries none. */
@@ -1396,12 +1480,31 @@ export async function arcGate(
   const ref = gateRefOf(needs);
   const already = current.some((r) => gateIdOf(r) === needs);
 
-  // ADR-0523 D4 — walk BEFORE writing, and name the ring rather than merely refusing.
-  const cycle = gateCycleFor(await gateEdgesOf(deps), id, needs);
-  if (cycle) {
+  // ADR-0523 D4 — walk BEFORE writing, and name the ring rather than merely refusing. Since ADR-0628
+  // D4 the walk runs over BOTH gate kinds, and from every OPEN increment on this arc as well as from
+  // the arc itself: gating the arc makes each of them wait on the blocker too, so a ring can close
+  // through any one of them without ever passing through the arc's own node.
+  const [arcRows, incrementRows] = await Promise.all([
+    deps.store.queryDocs({ kind: "arc" }),
+    deps.store.queryDocs({ kind: "increment" }),
+  ]);
+  const graph = waitGraphOf(arcRows, incrementRows);
+  const waiters = [
+    id,
+    ...incrementRows
+      .filter((r) => arcRefOf(r) === id && isForwardLooking(String(bagOf(r)["status"])))
+      .map((r) => r.id),
+  ];
+  const cycle = waiters.map((w) => gateCycleFor(graph, w, needs)).find(isRing);
+  if (cycle !== undefined) {
+    const incrementIds = new Set(incrementRows.map((r) => r.id));
     return {
       ok: false,
-      body: `REFUSED: gating "${id}" behind "${needs}" would close a cycle —\n  ${cycle.join(" → ")}\nEvery arc in that ring would wait on the next forever, and no arc's page could show why. Release one edge first: storytree arc ungate <id> --needs <other-id> --pg`,
+      // A ring of ARCS keeps ADR-0523's wording exactly; one that runs through an increment needs
+      // each member's kind named, and both release verbs.
+      body: cycle.some((n) => incrementIds.has(n))
+        ? waitCycleRefusal(id, needs, cycle, incrementIds)
+        : `REFUSED: gating "${id}" behind "${needs}" would close a cycle —\n  ${cycle.join(" → ")}\nEvery arc in that ring would wait on the next forever, and no arc's page could show why. Release one edge first: storytree arc ungate <id> --needs <other-id> --pg`,
       next: [`storytree arc show ${id} --pg`, `storytree arc show ${needs} --pg`],
     };
   }
@@ -1503,6 +1606,280 @@ export async function arcUngate(
     ok: true,
     body: `released: "${id}" no longer waits on ${released}.${kept.length > 0 ? ` Still gated behind: ${kept.map(gateIdOf).join(", ")}.` : " It is startable."}`,
     next: [`storytree arc show ${id} --pg`, `storytree arc list --pg`],
+  };
+}
+
+// ---------------------------------------------------------------------------
+// The INCREMENT GATE verbs (ADR-0628) — the arc gate one tier down, and across arcs.
+//
+// `A.gatedBy = ["asset:B"]` on an INCREMENT reads *A cannot start until B lands* — B on this arc or
+// any other. Only A waits, so the rest of A's arc stays takeable: the parallelism a whole-arc gate
+// gives away, and the owner's reason for asking (2026-09-26). The edge lives on the HELD increment,
+// exactly as the arc gate's does on the gated arc, so a blocker names none of the work behind it.
+// ---------------------------------------------------------------------------
+
+/** An increment loaded for a gate write, with the arc and status its refusals and routes need. */
+interface LoadedIncrement {
+  doc: Record<string, unknown>;
+  /** The keys AS STORED, captured before any mutation — see {@link loadArcForWrite} for why. */
+  storedKeys: readonly string[];
+  arcId: string;
+  status: string;
+}
+
+/**
+ * Where a caller who reached for the wrong KIND should go instead — the two confusions this verb
+ * invites, named rather than left as a bare "not an increment".
+ */
+function gateKindHint(kind: string): string {
+  if (kind === "arc") {
+    return "\n  An arc is queued with its own verb: storytree arc gate <arc-id> --needs <other-arc-id> --pg (ADR-0523). To wait until an arc finishes, gate on the increment that finishes it.";
+  }
+  if (kind === "open-question") {
+    return "\n  Work waits on an owner question through its `waitsOn` link, not a gate (ADR-0574) — that wait reads as the owner's, this one as other work's.";
+  }
+  return "";
+}
+
+/** Load an increment for a gate write, or the honest miss / wrong-kind refusal. */
+async function loadIncrementForGate(deps: ArcWriteDeps, id: string): Promise<LoadedIncrement | { error: Envelope }> {
+  const stored = await deps.store.getDoc(id);
+  if (!stored || stored.kind !== "increment") {
+    return {
+      error: {
+        ok: false,
+        body: stored
+          ? `"${id}" is not an increment (its kind is ${stored.kind}).${gateKindHint(stored.kind)}`
+          : `no increment "${id}".`,
+        next: ["storytree arc list --pg"],
+      },
+    };
+  }
+  const doc = { ...bagOf(stored) };
+  return { doc, storedKeys: Object.keys(doc), arcId: arcRefOf(stored) ?? "?", status: String(doc["status"]) };
+}
+
+/**
+ * `storytree arc increment gate <id> --needs <other-id> [--reason <text|@file>] --pg` — queue one
+ * increment behind another, on ANY arc (ADR-0628 D1).
+ *
+ * Refused BEFORE anything is written: a self-gate, a missing or wrong-kind increment on either side,
+ * a closed held increment (closed work waits on nothing), a blocker that has already closed (landed:
+ * nothing left to wait for; closed any other way: it never will land, so the wait could never
+ * release), and a gate that would close a loop through either gate kind (D4). FIELD-SCOPED like every
+ * other arc mutation (ADR-0352): it names `gatedBy`, `gateReasons` and the stamp, nothing else.
+ */
+export async function arcIncrementGate(
+  deps: ArcWriteDeps,
+  id: string | undefined,
+  opts: { needs?: string | undefined; reason?: string | undefined },
+): Promise<Envelope> {
+  if (!deps.writable) return arcNotWritable("increment gate");
+  if (id === undefined || opts.needs === undefined) {
+    return {
+      ok: false,
+      body: "arc increment gate needs both increments: storytree arc increment gate <id> --needs <other-id> [--reason <text|@file>] --pg\n  <id> is the increment that CANNOT START; --needs names the one that must LAND first — on this arc or any other.",
+      next: ["storytree arc list --pg"],
+    };
+  }
+  const needs = gateIdOf(opts.needs);
+  if (needs === id) {
+    return {
+      ok: false,
+      body: `an increment cannot gate itself — "${id}" would wait on its own landing and could never start.`,
+      next: [`storytree library artifact ${id} --pg`],
+    };
+  }
+  const held = await loadIncrementForGate(deps, id);
+  if ("error" in held) return held.error;
+  if (!isForwardLooking(held.status)) {
+    return {
+      ok: false,
+      body: `increment "${id}" is closed — closed work is terminal and waits on nothing (ADR-0305 D2/D3).`,
+      next: [`storytree arc show ${held.arcId} --pg`],
+    };
+  }
+  const blocker = await loadIncrementForGate(deps, needs);
+  if ("error" in blocker) return blocker.error;
+  if (!isForwardLooking(blocker.status)) {
+    const closedAs = incrementDisposition(blocker.status, blocker.doc["outcome"] as ArcRollupIncrement["outcome"]);
+    return {
+      ok: false,
+      body:
+        closedAs === "landed"
+          ? `"${needs}" has already landed — there is nothing left to wait for, so this gate would hold nothing.`
+          : `"${needs}" closed without landing (${closedAs ?? "no reading recorded"}) — it never will, so a gate on it would hold "${id}" forever. Gate on the increment that replaced it.`,
+      next: [`storytree arc show ${blocker.arcId} --pg`],
+    };
+  }
+
+  // D4 — the walk, over BOTH gate kinds, before anything is written.
+  const [arcRows, incrementRows] = await Promise.all([
+    deps.store.queryDocs({ kind: "arc" }),
+    deps.store.queryDocs({ kind: "increment" }),
+  ]);
+  const cycle = gateCycleFor(waitGraphOf(arcRows, incrementRows), id, needs);
+  if (cycle !== null) {
+    return {
+      ok: false,
+      body: waitCycleRefusal(id, needs, cycle, new Set(incrementRows.map((r) => r.id))),
+      next: [`storytree arc show ${held.arcId} --pg`, `storytree arc show ${blocker.arcId} --pg`],
+    };
+  }
+
+  const current = gatedByOf(held.doc);
+  const ref = gateRefOf(needs);
+  const already = current.some((r) => gateIdOf(r) === needs);
+  const reasons: GateReasonMap = { ...gateReasonsOf(held.doc) };
+  if (opts.reason !== undefined) reasons[ref] = oneLine(opts.reason);
+  const fields: ArcGatePatch = {
+    gatedBy: already ? [...current] : [...current, ref],
+    updatedAt: deps.now,
+  };
+  if (Object.keys(reasons).length > 0) fields.gateReasons = reasons;
+  const base = Object.assign({ ...held.doc }, fields);
+
+  const written = await patchFields(deps, id, "increment", { ...fields });
+  if ("invalid" in written) {
+    return {
+      ok: false,
+      body: `gate would make "${id}" invalid:\n${explainDocValidationError(base, written.invalid, { storedKeys: held.storedKeys })}`,
+      next: [`storytree library artifact ${id} --pg`],
+    };
+  }
+  if ("retired" in written) return retiredUnderfoot("increment", id, "this gate was being prepared");
+  const verb = already ? (opts.reason === undefined ? "already gated" : "reason recorded") : "gated";
+  // The blocker's arc is named only when it is ANOTHER arc — the case the verb exists for, and the one
+  // a reader cannot infer from the held increment's own page.
+  const across = blocker.arcId === held.arcId ? "" : ` on "${blocker.arcId}"`;
+  return {
+    ok: true,
+    body: `${verb}: "${id}" cannot start until "${needs}"${across} lands.${opts.reason === undefined ? "\n  no --reason recorded — a session weeks from now reads that field instead of re-deriving why the wait exists." : ""}`,
+    next: [...new Set([`storytree arc show ${held.arcId} --pg`, `storytree arc show ${blocker.arcId} --pg`])],
+  };
+}
+
+/**
+ * `storytree arc increment ungate <id> [--needs <other-id>] --pg` — release an increment's wait
+ * (ADR-0628 D1): with `--needs` exactly that edge, without it every one. The reason goes with the edge
+ * it explains, and a fully released increment reads identically to one that never waited — absent
+ * fields, not empty ones (the `arc ungate` rule, one tier down).
+ */
+export async function arcIncrementUngate(
+  deps: ArcWriteDeps,
+  id: string | undefined,
+  opts: { needs?: string | undefined },
+): Promise<Envelope> {
+  if (!deps.writable) return arcNotWritable("increment ungate");
+  if (id === undefined) {
+    return {
+      ok: false,
+      body: "arc increment ungate needs an id: storytree arc increment ungate <id> [--needs <other-id>] --pg\n  without --needs it releases EVERY gate on the increment.",
+      next: ["storytree arc list --pg"],
+    };
+  }
+  const held = await loadIncrementForGate(deps, id);
+  if ("error" in held) return held.error;
+  const current = gatedByOf(held.doc);
+  if (current.length === 0) {
+    return {
+      ok: false,
+      body: `"${id}" is not gated — nothing to release.`,
+      next: [`storytree arc show ${held.arcId} --pg`],
+    };
+  }
+  const needs = opts.needs === undefined ? undefined : gateIdOf(opts.needs);
+  if (needs !== undefined && !current.some((r) => gateIdOf(r) === needs)) {
+    return {
+      ok: false,
+      body: `"${id}" is not gated behind "${needs}". It waits on: ${current.map(gateIdOf).join(", ")}.`,
+      next: [`storytree arc show ${held.arcId} --pg`],
+    };
+  }
+  const kept = needs === undefined ? [] : current.filter((r) => gateIdOf(r) !== needs);
+  const reasons = gateReasonsOf(held.doc);
+  const keptReasons: GateReasonMap = {};
+  for (const ref of kept) {
+    const reason = reasons[ref];
+    if (reason !== undefined) keptReasons[ref] = reason;
+  }
+  const fields: ArcGatePatch = {
+    gatedBy: kept.length > 0 ? kept : undefined,
+    gateReasons: Object.keys(keptReasons).length > 0 ? keptReasons : undefined,
+    updatedAt: deps.now,
+  };
+  const base = Object.assign({ ...held.doc }, fields);
+
+  const written = await patchFields(deps, id, "increment", { ...fields });
+  if ("invalid" in written) {
+    return {
+      ok: false,
+      body: `ungate would make "${id}" invalid:\n${explainDocValidationError(base, written.invalid, { storedKeys: held.storedKeys })}`,
+      next: [`storytree library artifact ${id} --pg`],
+    };
+  }
+  if ("retired" in written) return retiredUnderfoot("increment", id, "this ungate was being prepared");
+  const released = needs === undefined ? current.map(gateIdOf).join(", ") : needs;
+  return {
+    ok: true,
+    body: `released: "${id}" no longer waits on ${released}.${kept.length > 0 ? ` Still gated behind: ${kept.map(gateIdOf).join(", ")}.` : " No increment holds it now."}`,
+    next: [`storytree arc show ${held.arcId} --pg`],
+  };
+}
+
+/**
+ * ONE held increment's line for ONE blocker (ADR-0628) — what `arc show` prints under the row and what
+ * `arc increment start`'s refusal lists, worded once so the two cannot drift. Each state says what
+ * releases it: an open blocker releases itself on landing; the other two need a hand.
+ */
+export function incrementHoldLine(heldId: string, hold: IncrementHold): string {
+  const release = `storytree arc increment ungate ${heldId} --needs ${hold.id} --pg`;
+  if (hold.state === "missing") {
+    return `⛔ queued behind \`${hold.id}\` — NO SUCH INCREMENT, so this is a permanent wait until the gate is corrected: ${release}`;
+  }
+  const at = hold.arcId === undefined ? "" : ` on \`${hold.arcId}\``;
+  if (hold.state === "unlanded") {
+    return `⛔ queued behind \`${hold.id}\`${at}, which CLOSED WITHOUT LANDING (${hold.closedAs ?? "no reading recorded"}) — it never will: re-point this gate at what replaced it, or release it: ${release}`;
+  }
+  return `⛔ queued behind \`${hold.id}\`${at} (${hold.title}) — not work to take until it lands`;
+}
+
+/**
+ * Why `arc increment start` may not take this increment yet (ADR-0628 D3), or `null` when nothing
+ * holds it. It asks the SAME two rules the page renders from — {@link incrementQueuedBehind} for the
+ * increment's own gates, {@link arcGatesOf} for its arc's (ADR-0523) — so the verb can never refuse
+ * what `arc show` presents as free, or take what it presents as queued.
+ */
+async function startRefusal(
+  deps: ArcWriteDeps,
+  id: string,
+  arcId: string,
+  status: string,
+  doc: Record<string, unknown>,
+): Promise<Envelope | null> {
+  const [arcRows, incrementRows] = await Promise.all([
+    deps.store.queryDocs({ kind: "arc" }),
+    deps.store.queryDocs({ kind: "increment" }),
+  ]);
+  const own = incrementQueuedBehind(status, doc["gatedBy"], doc["gateReasons"], new Map(incrementRows.map((r) => [r.id, r])));
+  const arcRow = arcRows.find((r) => r.id === arcId);
+  const arcHolds = arcRow === undefined ? [] : arcGatesOf(arcRow, arcRows).filter((g) => g.shut);
+  if (own.length === 0 && arcHolds.length === 0) return null;
+  return {
+    ok: false,
+    body: [
+      `increment "${id}" cannot start — it is queued behind work that has not finished (ADR-0628). Nothing was written.`,
+      // The reason rides under its hold exactly as it does on `arc show`: the refusal is where a
+      // session learns WHY it may not take the work, so it must not have to go and look.
+      ...own.flatMap((h) => [`  ${incrementHoldLine(id, h)}`, ...(h.reason === undefined ? [] : [`      why: ${h.reason}`])]),
+      ...arcHolds.map(
+        (g) =>
+          `  ⛔ its arc \`${arcId}\` is queued behind \`${g.id}\`${g.blockerMissing ? " — NO SUCH ARC, a permanent wait until that gate is corrected" : " until it closes"} (ADR-0523)`,
+      ),
+      ...(own.length > 0 ? [`release a wait that no longer applies:  storytree arc increment ungate ${id} --needs <increment-id> --pg`] : []),
+      ...(arcHolds.length > 0 ? [`an arc's queue is usually the owner's call:  storytree arc ungate ${arcId} --needs <arc-id> --pg`] : []),
+    ].join("\n"),
+    next: [`storytree arc show ${arcId} --pg`],
   };
 }
 
@@ -2264,6 +2641,15 @@ export async function arcIncrementPromote(
           ? [`storytree arc increment new ${arcRef} --id <slug> --title "…" --objective <text|@file> --body <text|@file> --pg`]
           : [`storytree library artifact ${id} --pg`],
     };
+  }
+
+  // ADR-0628 D3 — `start` is the one write that means "I am taking this", so it is where a wait BINDS
+  // rather than merely renders: the increment's own gates, and its arc's (ADR-0523, which nothing
+  // enforced below the arc's own page until now). `ready` is not fenced — readiness is a statement
+  // about the plan, and a queued increment may be fully planned while it waits.
+  if (target === "active") {
+    const refusal = await startRefusal(deps, id, arcRef, status, doc);
+    if (refusal !== null) return refusal;
   }
 
   // FIELD-SCOPED (ADR-0352): a promotion names `status` and the stamp, nothing else. A sibling's
@@ -3130,6 +3516,16 @@ export function arcHelp(): Envelope {
       "        are REQUIRED when there is no `--pr`: ADR-0305 D2 dropped `superseded`/`retired` because the",
       "        difference was a REASON not a state, so a closure that is not a landing has to say why.",
       "        This is what lets a wrong or duplicate entry close honestly instead of reading as landed.",
+      "  storytree arc increment gate <id> --needs <other-increment-id> [--reason <text|@file>] --pg",
+      "        QUEUE one increment behind another — on this arc or ANY other (ADR-0628). <id> CANNOT",
+      "        START until <other-increment-id> LANDS. Only <id> waits, so the rest of its arc stays",
+      "        takeable: the parallelism a whole-arc gate (`arc gate`) gives away. The edge lives on the",
+      "        HELD increment; the blocker's row derives what it holds up. A blocker that closes WITHOUT",
+      "        landing keeps holding, and says so. A gate that would close a loop — through increment",
+      "        gates and arc gates together — is REFUSED at write time, and `arc increment start`",
+      "        REFUSES while any wait holds, the increment's own or its arc's.",
+      "  storytree arc increment ungate <id> [--needs <other-increment-id>] --pg",
+      "        Release one wait, or (without --needs) every wait on the increment.",
       "",
       "  storytree arc close <id> --outcome <text|@file> [--pr <ref>] [--date <YYYY-MM-DD>] --pg",
       "        The terminal increment AND lifecycle: closed (ADR-0239 D2). It REFUSES while any",
