@@ -15,6 +15,7 @@ import {
   arcIncrementGate,
   arcIncrementPromote,
   arcIncrementUngate,
+  incrementHoldLine,
   renderArcRollup,
   waitGraphOf,
   type ArcWriteDeps,
@@ -469,6 +470,11 @@ test("arc increment ungate releases one edge, keeps the rest, and drops only tha
   await arcIncrementGate(w, "inc-a", { needs: "inc-b", reason: "claims first" });
   await arcIncrementGate(w, "inc-a", { needs: "inc-b2", reason: "schema first" });
   await arcIncrementGate(w, "inc-a", { needs: "inc-a2" });
+  // Each gate write CARRIES the reasons already recorded — a second edge never erases the first's why.
+  assert.deepEqual((await docOf(store, "inc-a"))["gateReasons"], {
+    "asset:inc-b": "claims first",
+    "asset:inc-b2": "schema first",
+  });
   const one = await arcIncrementUngate(w, "inc-a", { needs: "asset:inc-b" });
   assert.deepEqual(one, {
     ok: true,
@@ -479,6 +485,8 @@ test("arc increment ungate releases one edge, keeps the rest, and drops only tha
   assert.deepEqual(after["gatedBy"], ["asset:inc-b2", "asset:inc-a2"]);
   // The kept edge with no reason contributes none — the map carries only what was said.
   assert.deepEqual(after["gateReasons"], { "asset:inc-b2": "schema first" });
+  // The release is written AS AN INCREMENT: the row keeps its kind, so every verb can still find it.
+  assert.equal((await store.getDoc("inc-a"))?.kind, "increment");
 });
 
 test("a fully ungated increment reads IDENTICALLY to one that never waited — absent, not []", async () => {
@@ -519,6 +527,10 @@ test("arc increment ungate refuses offline, without an id, on a missing incremen
     body: '"inc-a" is not gated — nothing to release.',
     next: ["storytree arc show x-arc --pg"],
   });
+  // A row that names no arc (schema-invalid, but the verbs must still answer it) routes at "?"
+  // rather than at an empty arc id.
+  await store.upsertDoc({ id: "homeless", kind: "increment", doc: incRow("homeless", null).doc });
+  assert.deepEqual((await arcIncrementUngate(writeDeps(store), "homeless", {})).next, ["storytree arc show ? --pg"]);
   await arcIncrementGate(writeDeps(store), "inc-a", { needs: "inc-b" });
   await arcIncrementGate(writeDeps(store), "inc-a", { needs: "inc-a2" });
   assert.deepEqual(await arcIncrementUngate(writeDeps(store), "inc-a", { needs: "inc-b2" }), {
@@ -645,8 +657,16 @@ test("arc increment start REFUSES on a QUEUED ARC — ADR-0523's gate binds belo
 
 test("arc increment start lists BOTH kinds of hold together, names the unresolvable ones, and lets an orphan start", async () => {
   const store = await storeOf(
-    arcRow("x-arc", { gatedBy: ["asset:gone-arc"] }),
-    incRow("inc-a", "x-arc", { gatedBy: ["asset:gone-inc"], gateReasons: { "asset:gone-inc": "the old plan" } }),
+    // Each gate names a row that EXISTS but is the wrong kind for its field — an arc gate naming an
+    // increment, an increment gate naming an arc. Both must read as no such blocker: the verb looks
+    // each kind up among its own kind only, exactly as the page does.
+    arcRow("x-arc", { gatedBy: ["asset:inc-a2"] }),
+    arcRow("y-arc"),
+    incRow("inc-a", "x-arc", {
+      gatedBy: ["asset:y-arc", "asset:inc-a2"],
+      gateReasons: { "asset:y-arc": "the old plan" },
+    }),
+    incRow("inc-a2", "x-arc"),
     incRow("orphan", "no-such-arc"),
   );
   const refused = await arcIncrementPromote(writeDeps(store), "inc-a", "active");
@@ -654,9 +674,11 @@ test("arc increment start lists BOTH kinds of hold together, names the unresolva
     refused.body,
     [
       'increment "inc-a" cannot start — it is queued behind work that has not finished (ADR-0628). Nothing was written.',
-      "  ⛔ queued behind `gone-inc` — NO SUCH INCREMENT, so this is a permanent wait until the gate is corrected: storytree arc increment ungate inc-a --needs gone-inc --pg",
+      "  ⛔ queued behind `y-arc` — NO SUCH INCREMENT, so this is a permanent wait until the gate is corrected: storytree arc increment ungate inc-a --needs y-arc --pg",
       "      why: the old plan",
-      "  ⛔ its arc `x-arc` is queued behind `gone-arc` — NO SUCH ARC, a permanent wait until that gate is corrected (ADR-0523)",
+      // A hold with no recorded reason carries no "why:" line at all.
+      "  ⛔ queued behind `inc-a2` on `x-arc` (Inc inc-a2) — not work to take until it lands",
+      "  ⛔ its arc `x-arc` is queued behind `inc-a2` — NO SUCH ARC, a permanent wait until that gate is corrected (ADR-0523)",
       "release a wait that no longer applies:  storytree arc increment ungate inc-a --needs <increment-id> --pg",
       "an arc's queue is usually the owner's call:  storytree arc ungate x-arc --needs <arc-id> --pg",
     ].join("\n"),
@@ -728,6 +750,18 @@ test("arc show marks every QUEUED row with what it waits on and what releases it
       "      do q-missing",
       "      read/edit it:  storytree library artifact q-missing --pg",
     ].join("\n"),
+  );
+});
+
+test("incrementHoldLine names the blocker's arc only when it HAS one — never `on undefined`", () => {
+  // A blocker row that names no arc is schema-invalid, but the line must still read as English.
+  assert.equal(
+    incrementHoldLine("held", { id: "b", title: "The blocker", state: "open" }),
+    "⛔ queued behind `b` (The blocker) — not work to take until it lands",
+  );
+  assert.equal(
+    incrementHoldLine("held", { id: "b", title: "The blocker", state: "unlanded", closedAs: "failed" }),
+    "⛔ queued behind `b`, which CLOSED WITHOUT LANDING (failed) — it never will: re-point this gate at what replaced it, or release it: storytree arc increment ungate held --needs b --pg",
   );
 });
 
@@ -814,6 +848,32 @@ test("arc list counts QUEUED work apart from open work, and a landing releases i
     assert.doesNotMatch(released.body, /queued behind other work/);
     // DERIVED, NEVER STORED: the release cost the held increment no write at all.
     assert.equal((await store.readEvents({ id: "inc-a" })).length, writesToHeld);
+  } finally {
+    rmSync(fx.root, { recursive: true, force: true });
+  }
+});
+
+test("arc list counts work that is BOTH waiting on the owner and queued ONCE — as waiting", async () => {
+  const fx = storiesFixture();
+  try {
+    const store = await storeOf(
+      arcRow("x-arc"),
+      arcRow("y-arc"),
+      incRow("queued-only", "x-arc", { gatedBy: ["asset:blocker"] }),
+      incRow("asked-and-queued", "x-arc", { gatedBy: ["asset:blocker"], waitsOn: ["asset:oq-open"] }),
+      incRow("blocker", "y-arc"),
+      {
+        id: "oq-open",
+        kind: "open-question",
+        doc: { kind: "open-question", id: "oq-open", lifecycle: "open" },
+        createdAt: STAMP,
+        updatedAt: STAMP,
+      },
+    );
+    const listed = await arcCommand("list", undefined, { store, storiesDir: fx.storiesDir, pg: true, now: NOW });
+    // Two open rows, two buckets: the owner hold names the row it shares with a queue, and the open
+    // count never goes below what is actually there.
+    assert.match(listed.body, /x-arc {2}0 landed, 1 queued behind other work, 1 waiting on the owner, no landings yet/);
   } finally {
     rmSync(fx.root, { recursive: true, force: true });
   }
